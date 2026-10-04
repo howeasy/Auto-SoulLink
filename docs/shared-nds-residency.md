@@ -18,7 +18,7 @@ differ, the pitfalls do not:
 - aliased overlays (Gen 5 B2W2 ov11 / ov12 at `0x021503C0` (Black 2) / `0x02150400` (White 2; White 2 is +0x40, `rom_structure.md`), any pair sharing RAM) can put other bytes where a
   site was registered.
 
-The Gen 4 `NDS.resident` (`lua/nds/hook_binding.lua`, Gen 4 branch) hard-asserts the HGSS geometry
+The Gen 4 `NDS.resident` (`lua/nds/hook_binding.lua`, which arrives with the Gen 4 branch and is NOT part of this change set) hard-asserts the HGSS geometry
 (`regions == 3`, `per_region == 8`, `entry_size == 8`). That cannot serve Gen 5. The Gen 4 coordinator replaces
 the assert by injecting a strategy that passes `assert_strategy`.
 

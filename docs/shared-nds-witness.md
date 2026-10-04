@@ -95,7 +95,7 @@ The token must be nonzero and must come from the caller's server-token/visit
 mapping; the reader does not derive it from a Pokémon identity. Mon identity
 interpretation/decoding belongs to the binder, not this module.
 
-Rules carried from `lua/gen3/native.lua:613-654`:
+Rules carried from `lua/gen3/native.lua:628-669`:
 
 - Milestones use only bits 0–4; visit flags only bits 0–1; result is 0–3.
 - Previously observed milestone bits cannot disappear.

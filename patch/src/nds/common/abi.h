@@ -1,6 +1,6 @@
 /* NDS companion ABI: platform-neutral lift of patch/src/trade_targets/abi.h (v2).
  * NOT a capability/admission claim. No target addresses and no GBA/NDS includes
- * beyond <stdint.h>/<stddef.h>; per-title pin headers supply every address.
+ * beyond compat.h and <stddef.h>; per-title pin headers supply every address.
  *
  * Mailbox, witness struct layout, revision protocol, milestone ORDER and success
  * predicate are the Gen 3 v2 contract. The NDS ABI is nevertheless VERSION 3,
@@ -31,7 +31,7 @@
 #ifdef SLINK_COMPANION_ABI_H
 #error "NDS companion ABI and the Gen 3 trade_targets ABI must not share a translation unit"
 #endif
-#include <stdint.h>
+#include "compat.h"   /* fixed-width types + SLINK_STATIC_ASSERT: mwccarm and C11 alike */
 #include <stddef.h>
 
 #define SLINK_SIGNATURE 0x4B4E4C53u
@@ -60,6 +60,14 @@
 #define SLINK_CONTROL_OFFSET 0x800u
 #define SLINK_CONTROL_SIZE 0x600u
 #define SLINK_RESERVED_OFFSET 0xE00u  /* Gen 3 call region: reserved, unused on NDS v1 */
+/* Title-private region: the FIRST 64 BYTES of the reserved region, written by the
+ * per-title ROM and read by the host. Its layout and its version number are owned
+ * per title (version the field before publishing, publish it LAST), and shared code
+ * never interprets or writes it (a shared host-side reader may hand out an UNINTERPRETED
+ * raw copy of the extent; magic/version/size validation and every field name stay per title). It is state, never a rules channel and never a write
+ * permission. 0xE40..SLINK_ARENA_SIZE stays free for a future shared region. */
+#define SLINK_TITLE_OFFSET 0xE00u
+#define SLINK_TITLE_SIZE 0x40u
 
 /* Maximum staged Pokemon record on any NDS binding (PK4 party 0xEC, PK5 party 0xDC). */
 #define SLINK_MAX_RECORD 256u
@@ -85,6 +93,10 @@ enum SlinkOpcode {
     SLINK_OP_TRADE_STATUS = 31,
     SLINK_OP_MATCH_CALL = 32
 };
+/* Capability bits. 0..6 are the shared set defined here. 7..15 are reserved for
+ * future SHARED capabilities and must read 0 until a shared id is added below.
+ * 16..31 are TITLE-PRIVATE: ROM-owned, documented per title, and never read,
+ * written or interpreted by shared code. */
 enum SlinkCapability {
     SLINK_CAP_DURABLE_TRADE = 1u << 0,
     SLINK_CAP_INFO_PANEL = 1u << 1,
@@ -97,6 +109,10 @@ enum SlinkCapability {
 enum SlinkStatus { SLINK_ST_BUSY = 1, SLINK_ST_OK = 2, SLINK_ST_FAIL = 3 };
 /* CLIENT_TOO_OLD means session_epoch is zero (no handshake); a nonzero
  * mismatched epoch is IDENTITY. */
+/* Reasons 2..15 are the shared set. 16..31 are reserved for future SHARED reasons
+ * and must read 0 until a shared id is added below. 32..63 are TITLE-PRIVATE:
+ * documented per title and decoded through the title adapter only, never by
+ * shared code. */
 enum SlinkFailureReason {
     SLINK_REASON_BAD_ARGS = 2,
     SLINK_REASON_WINDOW_CLOSED = 8,
@@ -155,7 +171,8 @@ typedef struct {
     uint32_t capabilities;          /* 0x40: only implemented/qualified features */
     uint32_t session_epoch;         /* 0x44: client handshake; zero unarmed, reset clears */
     uint32_t producer_phase;        /* 0x48: native-only atomic phase, not epoch-retagged */
-    uint32_t reserved;              /* 0x4C */
+    uint32_t reserved;              /* 0x4C: title-private opaque word (ROM-written, host-read; Gen 4 stores its
+                                     * session epoch here); shared code never interprets or writes it */
 } SlinkMailboxV2;
 
 /* Every milestone shares immutable epoch/visit/token identity and has its own
@@ -211,7 +228,8 @@ typedef struct {
     uint8_t lines, page, pages, enable; /* INFO+0x08..0x0B, host */
     uint16_t closed_seq;             /* INFO+0x0C, native */
     uint8_t state, result;           /* INFO+0x0E/F, native; state 0 closed/1 opening/2 drawn;
-                                       result 0 A/more, 0x7F B/close, valid at closed_seq */
+                                       result 0 A/more (only when a next page exists),
+                                       0x7F close (B, or A on the last page), valid at closed_seq */
     uint32_t reserved[4];            /* INFO+0x10..0x1F */
     uint8_t text[8][32];             /* INFO+0x20; each row requires bounded terminator */
 } SlinkInfoV2;
@@ -247,8 +265,9 @@ static inline int slink_trade_success_is_durable(const SlinkTradeWitnessV2 *w,
                                                 uint16_t prepare_seq, uint16_t scene_seq,
                                                 uint32_t expected_pid, uint32_t expected_otid)
 {
+    unsigned i;
     if (w->milestone_seq[SLINK_PRE_SAVE_OK] != prepare_seq) return 0;
-    for (unsigned i = SLINK_COMMIT_ENTERED; i <= SLINK_FINAL_RESULT; i++)
+    for (i = SLINK_COMMIT_ENTERED; i <= SLINK_FINAL_RESULT; i++)
         if (w->milestone_seq[i] != scene_seq) return 0;
     return w->final_result == SLINK_TRADE_COMMITTED
         && (w->visit_flags & (SLINK_VISIT_ACCEPTED | SLINK_PRE_SAVE_CONSENT))
@@ -258,30 +277,34 @@ static inline int slink_trade_success_is_durable(const SlinkTradeWitnessV2 *w,
         && w->received_pid == expected_pid && w->received_otid == expected_otid;
 }
 
-_Static_assert(offsetof(SlinkMailboxV2, producer_phase) == 0x48, "producer phase ABI offset");
-_Static_assert(sizeof(SlinkMailboxV2) == 0x50, "mailbox ABI size");
-_Static_assert(offsetof(SlinkMailboxV2, capabilities) == 0x40, "capability ABI offset");
-_Static_assert(sizeof(SlinkTradeWitnessV2) == 0x50, "witness ABI size");
-_Static_assert(offsetof(SlinkTradeWitnessV2, milestone_seq) == 0x20, "milestone ABI offset");
-_Static_assert(SLINK_MAILBOX_OFFSET + sizeof(SlinkMailboxV2) <= SLINK_WITNESS_OFFSET, "mailbox/witness overlap");
-_Static_assert(SLINK_WITNESS_OFFSET + sizeof(SlinkTradeWitnessV2) <= SLINK_BLOB_OFFSET, "witness/blob overlap");
-_Static_assert(sizeof(SlinkRecordStageV1) == 0x10 + SLINK_MAX_RECORD, "record stage ABI size");
-_Static_assert(offsetof(SlinkRecordStageV1, record) == 0x10, "record stage payload offset");
-_Static_assert(offsetof(SlinkRecordStageV1, claimed_pid) == 0x08, "record stage identity offset");
-_Static_assert(offsetof(SlinkRecordStageV1, stage_len) == 0x04, "record stage length offset");
-_Static_assert(SLINK_BLOB_OFFSET + sizeof(SlinkRecordStageV1) <= SLINK_BLOB_OFFSET + SLINK_BLOB_SIZE, "stage exceeds blob");
-_Static_assert(SLINK_BLOB_OFFSET + SLINK_BLOB_SIZE <= SLINK_TEXT_OFFSET, "blob/text overlap");
-_Static_assert(SLINK_TEXT_OFFSET + SLINK_TEXT_SIZE <= SLINK_MENU_OFFSET, "text/menu overlap");
-_Static_assert(SLINK_MENU_OFFSET + SLINK_MENU_SIZE <= SLINK_INFO_OFFSET, "menu/info overlap");
-_Static_assert(SLINK_INFO_OFFSET + SLINK_INFO_SIZE <= SLINK_CONTROL_OFFSET, "info/control overlap");
-_Static_assert(sizeof(SlinkInfoV2) == SLINK_INFO_SIZE, "info ABI size");
-_Static_assert(offsetof(SlinkInfoV2, text) == SLINK_INFO_TEXT_FIELD, "info text ABI offset");
-_Static_assert(offsetof(SlinkInfoV2, closed_seq) == SLINK_INFO_CLOSED_FIELD, "info closed ABI offset");
-_Static_assert(sizeof(SlinkControlV2) == 16, "control prefix ABI size");
-_Static_assert(offsetof(SlinkControlV2, pi_count) == SLINK_PI_COUNT_FIELD, "NPC counter ABI offset");
-_Static_assert(SLINK_CONTROL_OFFSET + SLINK_CONTROL_SIZE == SLINK_RESERVED_OFFSET, "control/reserved overlap");
-_Static_assert(SLINK_RESERVED_OFFSET < SLINK_ARENA_SIZE, "arena ABI extent");
-_Static_assert(SLINK_ABI_VERSION == 3u, "NDS witness semantics are ABI 3 (Gen 3 is 2)");
-_Static_assert(SLINK_SAVE_PENDING != SLINK_SAVE_OK && SLINK_SAVE_PENDING != SLINK_SAVE_FAILED, "pending is neither success nor failure");
-_Static_assert(SLINK_INFO_ROW_COUNT * SLINK_INFO_LINE_WIDTH <= sizeof(((SlinkInfoV2 *)0)->text), "info rows");
+SLINK_STATIC_ASSERT(offsetof(SlinkMailboxV2, producer_phase) == 0x48, "producer phase ABI offset");
+SLINK_STATIC_ASSERT(sizeof(SlinkMailboxV2) == 0x50, "mailbox ABI size");
+SLINK_STATIC_ASSERT(offsetof(SlinkMailboxV2, capabilities) == 0x40, "capability ABI offset");
+SLINK_STATIC_ASSERT(sizeof(SlinkTradeWitnessV2) == 0x50, "witness ABI size");
+SLINK_STATIC_ASSERT(offsetof(SlinkTradeWitnessV2, milestone_seq) == 0x20, "milestone ABI offset");
+SLINK_STATIC_ASSERT(SLINK_MAILBOX_OFFSET + sizeof(SlinkMailboxV2) <= SLINK_WITNESS_OFFSET, "mailbox/witness overlap");
+SLINK_STATIC_ASSERT(SLINK_WITNESS_OFFSET + sizeof(SlinkTradeWitnessV2) <= SLINK_BLOB_OFFSET, "witness/blob overlap");
+SLINK_STATIC_ASSERT(sizeof(SlinkRecordStageV1) == 0x10 + SLINK_MAX_RECORD, "record stage ABI size");
+SLINK_STATIC_ASSERT(offsetof(SlinkRecordStageV1, record) == 0x10, "record stage payload offset");
+SLINK_STATIC_ASSERT(offsetof(SlinkRecordStageV1, claimed_pid) == 0x08, "record stage identity offset");
+SLINK_STATIC_ASSERT(offsetof(SlinkRecordStageV1, stage_len) == 0x04, "record stage length offset");
+SLINK_STATIC_ASSERT(SLINK_BLOB_OFFSET + sizeof(SlinkRecordStageV1) <= SLINK_BLOB_OFFSET + SLINK_BLOB_SIZE, "stage exceeds blob");
+SLINK_STATIC_ASSERT(SLINK_BLOB_OFFSET + SLINK_BLOB_SIZE <= SLINK_TEXT_OFFSET, "blob/text overlap");
+SLINK_STATIC_ASSERT(SLINK_TEXT_OFFSET + SLINK_TEXT_SIZE <= SLINK_MENU_OFFSET, "text/menu overlap");
+SLINK_STATIC_ASSERT(SLINK_MENU_OFFSET + SLINK_MENU_SIZE <= SLINK_INFO_OFFSET, "menu/info overlap");
+SLINK_STATIC_ASSERT(SLINK_INFO_OFFSET + SLINK_INFO_SIZE <= SLINK_CONTROL_OFFSET, "info/control overlap");
+SLINK_STATIC_ASSERT(sizeof(SlinkInfoV2) == SLINK_INFO_SIZE, "info ABI size");
+SLINK_STATIC_ASSERT(offsetof(SlinkInfoV2, text) == SLINK_INFO_TEXT_FIELD, "info text ABI offset");
+SLINK_STATIC_ASSERT(offsetof(SlinkInfoV2, closed_seq) == SLINK_INFO_CLOSED_FIELD, "info closed ABI offset");
+SLINK_STATIC_ASSERT(sizeof(SlinkControlV2) == 16, "control prefix ABI size");
+SLINK_STATIC_ASSERT(offsetof(SlinkControlV2, pi_count) == SLINK_PI_COUNT_FIELD, "NPC counter ABI offset");
+SLINK_STATIC_ASSERT(SLINK_CONTROL_OFFSET + SLINK_CONTROL_SIZE == SLINK_RESERVED_OFFSET, "control/reserved overlap");
+SLINK_STATIC_ASSERT(SLINK_RESERVED_OFFSET < SLINK_ARENA_SIZE, "arena ABI extent");
+SLINK_STATIC_ASSERT(SLINK_TITLE_OFFSET == SLINK_RESERVED_OFFSET && SLINK_TITLE_SIZE == 0x40u
+                    && SLINK_TITLE_OFFSET + SLINK_TITLE_SIZE == 0xE40u
+                    && SLINK_TITLE_OFFSET + SLINK_TITLE_SIZE <= SLINK_ARENA_SIZE,
+                    "title-private region starts at the reserved base and fits the arena");
+SLINK_STATIC_ASSERT(SLINK_ABI_VERSION == 3u, "NDS witness semantics are ABI 3 (Gen 3 is 2)");
+SLINK_STATIC_ASSERT(SLINK_SAVE_PENDING != SLINK_SAVE_OK && SLINK_SAVE_PENDING != SLINK_SAVE_FAILED, "pending is neither success nor failure");
+SLINK_STATIC_ASSERT(SLINK_INFO_ROW_COUNT * SLINK_INFO_LINE_WIDTH <= sizeof(((SlinkInfoV2 *)0)->text), "info rows");
 #endif

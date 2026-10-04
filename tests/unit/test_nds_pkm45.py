@@ -31,10 +31,9 @@ from tools import nds_pkm45 as oracle
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = ROOT / "lua/nds/pkm45_crypto.lua"
 GEN4, GEN5 = oracle.PARTY_LEN_GEN4, oracle.PARTY_LEN_GEN5
-GEN4_WT = Path(
-    os.environ.get("SLINK_GEN4_WT")
-    or "E:/Google Drive/SLink/.claude/worktrees/gen4-support-framework-dfd5e2"
-)
+# The Gen 4 oracle lives in this tree once Gen 4 lands (server/adapters/gen4_codec.py); until then these
+# tests skip with a named reason. SLINK_GEN4_WT may point at another checkout that carries it.
+GEN4_WT = Path(os.environ.get("SLINK_GEN4_WT") or ROOT)
 ROM_DIR = Path(os.environ.get("SLINK_NDS_ROMS") or "E:/Google Drive/SLink")
 SAVE_DIR = Path("E:/Howard/Bizhawk/NDS/SaveRAM")
 

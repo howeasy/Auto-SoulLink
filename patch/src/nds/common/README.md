@@ -5,8 +5,9 @@ machines (`patch/src/trade_targets/`), with **record bindings** so the same
 lifecycle serves Gen 3 PK3, Gen 4 PK4 and Gen 5 PK5. Header-only, plain C11,
 host-falsifiable (`tests/unit/test_nds_common_producers.py`). Nothing here is an
 admission or qualification claim; no title, address or pin lives in this
-directory. The Gen 3 sources and `patch/tools/build.py` are untouched
-(byte-identical, guarded by a test), so the Gen 3 payload sha cannot change.
+directory. The Gen 3 trade sources (`patch/src/trade_targets`) and `patch/tools/build.py` are
+untouched (byte-identical, guarded by a test); nothing else under the Gen 3 payload build is
+touched by this change set either, but only those paths are guarded.
 
 Do not include these headers together with `trade_targets/abi.h` (an `#error`
 enforces it). Per-title code goes in `patch/src/nds/gen4/` and `patch/src/nds/gen5/`.
@@ -16,16 +17,49 @@ enforces it). Per-title code goes in `patch/src/nds/gen4/` and `patch/src/nds/ge
 | File | Role |
 |---|---|
 | `abi.h` | mailbox, witness, revision protocol, milestone model, success predicate, `SlinkRecordStageV1`, static asserts |
+| `compat.h` | toolchain shim: fixed-width types and `SLINK_STATIC_ASSERT` (mwccarm 2.0/sp2p2), `<stdint.h>`/`_Static_assert` elsewhere |
 | `record_binding.h` | `SlinkRecordBinding`, `SlinkDecoder`, text spec, PK3/PK4/PK5 reference bindings, bounded text copy |
 | `trade_producer.h` | PREPARE / SCENE / WITHDRAW / STATUS state machine, async post-save with watchdog |
 | `panel_producer.h` | owned info-panel lifecycle, terminator from the binding |
 | `sound_producer.h` | SE / fanfare dispatch |
 
+## Toolchains
+
+* **Host gcc / clang — plain C11.** `abi.h` includes `compat.h`, which includes
+  `<stdint.h>` and maps `SLINK_STATIC_ASSERT(cond, msg)` onto `_Static_assert`.
+  Nothing else about the stack changes.
+* **mwccarm 2.0/sp2p2 — the NDS titles.** This toolchain predates C99
+  `<stdint.h>` and parses C11 `_Static_assert` as a declaration, so `abi.h` could
+  not be compiled on target at all. `compat.h` supplies the fixed-width types
+  itself, using the Nitro SDK spellings so `uint32_t` *is* `u32`, and maps
+  `SLINK_STATIC_ASSERT` onto the C89 negative-array-size typedef. It is included
+  with a quoted, relative `#include "compat.h"`, so it travels with `abi.h` and
+  needs no include path of its own.
+* **The per-title build still has to glue the include dir.** Its mwcc compile line
+  needs `-I<dir containing patch/src/nds/common>` so `#include "abi.h"` resolves
+  from the per-title sources, exactly as the host build passes `-I`.
+* **Every header here is C89-style for mwcc** (no `_Static_assert`/`_Alignas`/`<stdint.h>`
+  outside compat.h's C11 arm; declarations at block top, no for-loop-head
+  declarations). The word alignment of the trade producer's two stage buffers is
+  proved by `offsetof` asserts instead of `_Alignas`. `static inline` stays (the real
+  mwccarm accepted it in the Gen 4 build); `tests/unit/test_nds_c89_scan.py` enforces
+  the rest on host gcc with `-std=gnu89 -Wdeclaration-after-statement`.
+* **Host seq discipline is part of the contract.** `tp_ack` (shared with the panel and sound
+  producers) compares only `seq`, never the opcode, so a host must not reuse the seq of an
+  outstanding trade command for another opcode (the inherited Gen 3 assumption); a foreign
+  command that does collide can be consumed by a poll-side ack. Gating `tp_ack` on trade
+  opcodes was tried and rejected: it breaks the panel/sound acks that reuse it.
+* **No u32 divide in the producers.** The text helpers use shifts (width is 1 or 2), so the
+  mwccarm link needs no `_u32_div_f` runtime helper (found by the Gen 4 real-compiler run).
+* **Title dispatchers MUST route by opcode.** `slink_trade_service` ignores any opcode
+  that is not a trade opcode (so sound/panel commands are never FAIL-acked), but it
+  must still be called on every visit: the save and scene polls live inside it.
+
 ## ABI version 3 and the reader rule
 
 The struct layouts, constants and milestone order are the Gen 3 v2 contract, but
 the **witness semantics diverge**, so the NDS ABI is **version 3** and a Gen 3
-reader must not be pointed at an NDS arena (`lua/gen3/native.lua:631` rejects a
+reader must not be pointed at an NDS arena (`lua/gen3/native.lua:646` rejects a
 witness with PRE_SAVE_OK set unless `save_status` is 1 or 255; NDS publishes 2
 while an asynchronous save is in flight). The NDS reader is `lua/nds/native_witness.lua` (ABI 2 keeps the Gen 3 rule, ABI 3 accepts SAVE_PENDING); see `docs/shared-nds-witness.md`.
 
@@ -83,10 +117,23 @@ not the opcode (an inherited Gen 3 assumption; the async save widens the window)
    `save_timeout_frames` (REQUIRED nonzero, else PREPARE is refused with
    BAD_ARGS) is FAIL, so UNCERTAIN stays reachable after COMMIT_ENTERED. The
    bound is a shared invariant, the number is the adapter's: the host's own
-   TRADE_SCENE budget is 6000 frames (`lua/gen3/native.lua:177-181`), so an
+   TRADE_SCENE budget is 6000 frames (`lua/gen3/native.lua:189-194`), so an
    adapter bound that is longer would let the host poison the module before the
    native side reaches UNCERTAIN. A synchronous engine still finishes in one
    service call (begin, then one immediate poll).
+   The pre-trade save leg is bounded too, fail closed: the engine field
+   `pre_save_timeout_frames` (0 = use the REQUIRED `save_timeout_frames`, so there is
+   no unbounded configuration; set it below the host's 6000-frame budget, larger than
+   the human response time of a save dialog if the pre-save waits for the player).
+   The producer stamps `pre_save_start_frame` just before it calls `start_pre_save`;
+   any poll that has neither saved (1) nor refused (negative) past the bound (still
+   waiting 0, consented 2, or an out-of-contract value) finishes the visit UNCHANGED
+   (nothing is mutated before the save; when the poll had consented a cartridge save
+   may already have been written, which is a host-journal obligation, and
+   `save_status` stays 0). A poll that returns saved (1) wins over the timeout, even on
+   the first frame past the bound. `e->frame()` must be monotonic. A NDS engine struct
+   must be zero-initialised (a Gen 3 style positional initialiser would put a pointer
+   in these fields).
 5. **Observed identity**: `received_pid/otid` in the witness are the identity the
    engine returned at the same_identity check, not the host-staged claim.
 6. **Must-not-alias**: bindings flagged `SLINK_RB_COMMIT_MUTATES_INPUT` (PK4 box
@@ -104,8 +151,48 @@ not the opcode (an inherited Gen 3 assumption; the async save widens the window)
 8. **Engine struct**: `validate_incoming` is gone (binding), `start_scene` also
    takes the length, `post_save` split in two, and the engine carries `binding`,
    `decoder` and `save_timeout_frames`.
-9. **Not lifted**: Emerald-only call/Match Call records and reasons 16..18, and
+9. **UNCERTAIN is terminal for the arena lifetime.** Neither the producer nor any
+   opcode clears it; the clear is arena reinitialisation (a reset/reboot) after the
+   host has proven, out of band, that the transaction reconciled. A `TRADE_PREPARE`
+   refused while `TP_UNCERTAIN` therefore answers **`UNCERTAIN` (11)**, not
+   `IDENTITY` (12): Gen 3 answers 12 there, and 12 reads as "wrong token, retry"
+   for a retry that must never be attempted. Every other non-IDLE/non-DONE phase
+   keeps 12, and either answer leaves the witness and the accepted identity
+   untouched. The verdict is the **witness**, never the mailbox — `TRADE_STATUS`
+   acks OK and writes `m->reason = 0`, erasing the FAIL/11 evidence, so a host that
+   reads the mailbox loses the one fact that matters. The witness is volatile, so
+   the durable obligation (a host-side journal and a per-title reload proof) is the
+   host's alone; no NDS trade host exists yet to discharge it.
+10. **Not lifted**: Emerald-only call/Match Call records and reasons 16..18, and
    rival/carrier/call producers. Opcode 32 keeps its id, never advertised.
+
+## Title-private space
+
+The arena tail is split so a title can own state that shared code never touches.
+`SLINK_TITLE_OFFSET 0xE00` / `SLINK_TITLE_SIZE 0x40` are the first 64 bytes of the
+former reserved region — asserted to start exactly at `SLINK_RESERVED_OFFSET` and
+to fit inside `SLINK_ARENA_SIZE` — and `0xE40..0x1000` stays free for a future
+shared region.
+
+* **Ownership.** The per-title ROM writes the region, the host reads it. Its
+  layout and its version number are owned per title and documented there: version
+  the field yourself, then publish it **last**, so a reader can never meet a new
+  layout under an old version.
+* **What it is not.** Never a rules channel and never a write permission. Shared
+  code — producers, bindings, `abi.h` — never reads or writes it. It is state, not
+  authority.
+* **Capability bits.** 0..6 are the shared set defined in `abi.h`. 7..15 are
+  reserved for future *shared* capabilities and read 0 until a shared id is added
+  there. 16..31 are *title-private*: ROM-owned, documented per title, never read by
+  shared code.
+* **Failure reasons.** 2..15 are the shared set. 16..31 are reserved for future
+  *shared* reasons and read 0 until a shared id is added there. 32..63 are
+  *title-private* and decoded through the title adapter only.
+
+A title dispatcher **must route by opcode**: a producer acks only an opcode it
+owns, and an opcode it does not own is not a command to reject — it is not its
+command. A dispatcher that acks everything it is handed turns an unimplemented
+title opcode into a false OK.
 
 ## Reference bindings
 
@@ -152,5 +239,21 @@ remove/compact. The party commit primitive resets the slot's extra itself.
   timeout number belongs to the adapter.
 - Host-C tests prove state-machine behaviour against fake engines, not flash
   durability, ARM codegen, volatile access widths, or ARM9/ARM7 cache coherence.
-- The shared Lua witness reader (NDS-3) has not been shown to implement the
-  reader rule above.
+- The shared Lua witness reader (`lua/nds/native_witness.lua`, committed on this branch, 71 tests
+  driven by the real C producer) implements and pins the reader rule above; no per-title binder
+  uses it yet.
+- **`abi.h` has never been through a real mwccarm 2.0/sp2p2.** The MWERKS path is
+  walked on host gcc with `-D__MWERKS__` (`tests/unit/test_nds_abi_compat.py`),
+  which proves no `<stdint.h>` include, that the asserts still evaluate and that
+  the layouts survive. It cannot prove that compiler accepts the
+  negative-array-size typedef, nor that `<stddef.h>` (for `offsetof`) exists in
+  the pret lib/include — `<stdint.h>`'s absence is the ruling, `<stddef.h>`'s
+  presence is inferred. If the first on-target build rejects `<stddef.h>`,
+  `compat.h` is where `size_t`/`offsetof` must be provided.
+- **Real-compiler evidence is the Gen 4 coordinator's run, not ours:** all six headers, an
+  all-includes TU, instantiations of every `static inline` and Gen 4's own beacon/dispatch
+  compiled clean on pret mwccarm 2.0/sp2p2 (`-W error`, no shim) at 78c2a0a0, with no undefined
+  symbols and the negative `SLINK_STATIC_ASSERT` control failing as intended. Re-run it after any
+  header change; this repo still vendors no mwccarm.
+- **The title-private region's layout is undefined.** Only its extent is pinned;
+  a title card owns the 64 bytes and must document them.

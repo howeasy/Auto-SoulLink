@@ -2,7 +2,7 @@
 
 The engine and memory I/O are boundary simulations. The producer, record
 bindings, ABI layout and C durability predicate are the committed implementation.
-Gen 3 compatibility references lua/gen3/native.lua:613-654, not a rewritten oracle.
+Gen 3 compatibility references lua/gen3/native.lua:628-669, not a rewritten oracle.
 """
 from __future__ import annotations
 
@@ -133,6 +133,7 @@ int main(int argc,char **argv) {
   engine.start_scene=scene_start;engine.poll_scene=scene_poll;engine.post_save_begin=save_begin;
   engine.post_save_poll=save_poll;engine.received_key=received;engine.frame=frame;
   engine.save_timeout_frames=mode==2 ? 4 : 50;
+  engine.pre_save_timeout_frames=mode==9 ? 7 : 0;
   stage.layout_version=SLINK_NDS_STAGE_LAYOUT;stage.binding_id=engine.binding->id;
   stage.stage_len=engine.binding->party_len;stage.generation=engine.binding->generation;
   stage.flags=SLINK_STAGE_RAW_ENCRYPTED;stage.claimed_pid=NEW_PID;stage.claimed_otid=NEW_OT;
@@ -144,6 +145,15 @@ int main(int argc,char **argv) {
   for(unsigned i=0;i<16;i++)image.m.args[16+i]=(uint8_t)(i+9);
   service("prepare");
   if(mode==4){pre_result=-1;service("refused");return 0;}
+  /* mode 9: the pre-save leg consents, then the host's own bound expires with the save still
+     unfinished. Nothing was mutated, so the producer finishes UNCHANGED from TP_PRE_SAVE:
+     FINAL_RESULT only, bound to the PREPARE sequence, save_status 0, phase DONE. */
+  if(mode==9){
+    pre_result=2;service("consent");
+    for(unsigned i=0;i<64 && image.m.producer_phase==SLINK_PHASE_PRE_SAVE;i++)service("expire");
+    if(image.m.producer_phase==SLINK_PHASE_PRE_SAVE)return 94;
+    return 0;
+  }
   pre_result=2;service("consent");pre_result=1;service("ready");
   if(mode==5){image.m.seq=3;image.m.opcode=SLINK_OP_TRADE_WITHDRAW;service("withdrawn");return 0;}
   image.m.seq=2;image.m.opcode=SLINK_OP_TRADE_SCENE;service("scene");
@@ -264,11 +274,12 @@ def test_abi3_accepts_real_pending_save_and_abi2_rejects_same_witness(producer, 
 @pytest.mark.parametrize("generation", [4, 5])
 @pytest.mark.parametrize("mode,outcome", [(0, "COMMITTED"), (1, "UNCERTAIN"), (2, "UNCERTAIN"),
                                          (3, "UNCERTAIN"), (4, "UNCHANGED"), (5, "UNCHANGED"),
-                                         (6, "UNCERTAIN"), (7, "UNCHANGED"), (8, "UNCERTAIN")])
+                                         (6, "UNCERTAIN"), (7, "UNCHANGED"), (8, "UNCERTAIN"),
+                                         (9, "UNCHANGED")])
 def test_every_producer_service_snapshot_and_terminal_predicate(producer, generation, mode, outcome):
     rows = trace(producer, generation, mode)
     seen = 0
-    final_seq = 1 if mode == 4 else 3 if mode == 5 else 2
+    final_seq = 1 if mode in (4, 9) else 3 if mode == 5 else 2
     for label, c_success, raw in rows:
         lua, module, obj, _ = reader(raw)
         ctx = context(lua)
@@ -293,6 +304,43 @@ def test_every_producer_service_snapshot_and_terminal_predicate(producer, genera
         assert (why is None) is bool(success)
     assert classification == outcome
     assert rows[-1][1] == (1 if outcome == "COMMITTED" else 0)
+
+
+def test_pre_save_timeout_witness_is_accepted_and_classified_unchanged(producer, layout):
+    # The host's own pre-save bound expiring is a refusal BEFORE any mutation, so the producer
+    # finishes the visit UNCHANGED out of TP_PRE_SAVE: FINAL_RESULT only, bound to the PREPARE
+    # sequence, save_status 0, phase DONE -- never UNCERTAIN, which the reader reserves for a
+    # commit the engine may already have performed. Distinct from the engine's own pre-save
+    # refusal (mode 4): consent was recorded first, so the visit still carries PRE_SAVE_CONSENT.
+    rows = trace(producer, mode=9)
+    assert [label for label, _, _ in rows][:2] == ["prepare", "consent"]
+    assert [label for label, _, _ in rows][-1] == "expire"
+    for _, c_success, raw in rows:
+        assert c_success == 0
+        lua, _, obj, _ = reader(raw)
+        snapshot, reason = obj.read(context(lua), 1)
+        assert snapshot is not None and reason is None, reason
+    base = layout["witness_offset"]
+    raw = rows[-1][2]
+    assert int.from_bytes(raw[base + layout["witness_milestones"]:][:4], "little") == layout["final_result"]
+    assert raw[base + layout["witness_final_result"]] == layout["result_unchanged"]
+    assert raw[base + layout["witness_save_status"]] == 0
+    assert int.from_bytes(raw[base + layout["witness_visit_flags"]:][:2], "little") == layout["visit_flags"]
+    lua, module, obj, _ = reader(raw)
+    snapshot, reason = obj.read(context(lua), 1)
+    assert reason is None
+    assert snapshot["bits"] == layout["final_result"] and snapshot["flags"] == layout["visit_flags"]
+    assert snapshot["result"] == layout["result_unchanged"] and snapshot["saved"] == 0
+    assert snapshot["phase"] == layout["phase_done"] and snapshot["pending"] is False
+    assert snapshot["classification"] == "UNCHANGED" and snapshot["durable_success"] is False
+    assert snapshot["milestone_seq"][5] == 1
+    assert module.success(snapshot, 1, 2, 0xFEDCBA98, 0x87654321)[0] is False
+    # The timeout is bound to the PREPARE's sequence, so reading it as the scene sequence is
+    # refused: a consumer cannot re-label the visit by guessing which command finished it.
+    assert obj.read(context(lua), 2) == (None, "sequence:milestone")
+    # Consent without PRE_SAVE_OK is not durability: it records that a save was agreed to, not
+    # that one happened, and classify() must not read it as progress.
+    assert module.classify(lua.table_from({"bits": layout["final_result"], "result": layout["result_unchanged"]}), 0) == ("UNCHANGED", None)
 
 
 def test_all_offsets_constants_and_sizes_equal_compiled_header(layout):
@@ -425,7 +473,7 @@ def test_revert_control_removing_final_bit_clause_accepts_corrupt_producer_dump(
 def legacy_accepts(raw, layout, final_seq):
     """Execute the actual Gen 3 reader body, without modifying or importing its module.
 
-    SOURCE: lua/gen3/native.lua:613-654; integer :28-30 and word :468-472.
+    SOURCE: lua/gen3/native.lua:628-669; integer :28-30 and word :483-487.
     Only its I/O/mailbox/context boundary dependencies are injected here.
     """
     native = (ROOT / "lua/gen3/native.lua").read_text(encoding="utf-8")

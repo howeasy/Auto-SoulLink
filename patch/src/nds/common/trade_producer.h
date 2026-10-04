@@ -1,7 +1,9 @@
 /* Shared native transaction controller, NDS lift of trade_targets/trade_producer.h.
- * Same lifecycle, milestone ordering and refusals as Gen 3. Game addresses/calls
- * and the record format belong to the engine + SlinkRecordBinding. No allocator,
- * encoder, raw-swap fallback or Lua dependency. Callers must provide
+ * Same lifecycle, milestone ordering and refusals as Gen 3, bar two: a PREPARE
+ * refused while UNCERTAIN answers UNCERTAIN (11), where Gen 3 answers IDENTITY, and
+ * the pre-save leg is bounded (see the pre-save watchdog below).
+ * Game addresses/calls and the record format belong to the engine + SlinkRecordBinding.
+ * No allocator, encoder, raw-swap fallback or Lua dependency. Callers must provide
  * engine-verified terminal observations, not time guesses.
  *
  * Changes vs Gen 3: the staged record is sized by SLINK_MAX_RECORD and handled via
@@ -9,11 +11,25 @@
  * SlinkRecordStageV1; post-save is post_save_begin()+post_save_poll() so that
  * initiating a save can never be recorded as POST_SAVE_OK, and a native watchdog
  * (save_timeout_frames) turns an unbounded PENDING into FAIL/UNCERTAIN.
+ * A PREPARE refused while UNCERTAIN answers UNCERTAIN (11) instead of IDENTITY (12):
+ * the trade may already be in the save, so the phase, not the request, is the reason.
  *
  * Save-timeout invariant: the BOUND is shared, the NUMBER is the adapter. The
  * host's own TRADE_SCENE budget is 6000 frames (lua/gen3/native.lua:177-181); an
  * adapter bound that outlasts it would let the host declare the module poisoned
  * before the native side reaches UNCERTAIN, so adapters should pick a smaller one.
+ *
+ * Pre-save watchdog (fail closed): a poll_pre_save() that has neither saved (1) nor
+ * refused (negative) -- still waiting (0), consented (2) or returning any
+ * out-of-contract value -- used to leave the producer in TP_PRE_SAVE forever, so a
+ * stalled pre-save outlasted the host budget above and the module ended poisoned
+ * rather than unchanged. The wait is now bounded from the frame stamped just before
+ * start_pre_save() by pre_save_timeout_frames, or, when that is 0, by the REQUIRED
+ * save_timeout_frames (so there is no unbounded configuration). A poll that returns 1
+ * on the frame the bound expires still wins. Nothing is mutated before the save
+ * completes, so the timeout ends the visit UNCHANGED, exactly like an engine
+ * refusal; if the poll had consented (2) a cartridge save may already have been
+ * written, which is a host-journal obligation. e->frame() must be monotonic.
  */
 #ifndef SLINK_NDS_TRADE_PRODUCER_H
 #define SLINK_NDS_TRADE_PRODUCER_H
@@ -34,6 +50,8 @@ static inline void slink_trade_advertise(volatile SlinkMailboxV2 *m)
 typedef struct {
     void *context;
     uint32_t save_timeout_frames;      /* REQUIRED nonzero: PENDING longer than this is FAIL */
+    uint32_t pre_save_timeout_frames;  /* OPTIONAL, 0 = use save_timeout_frames: a pre-save that has neither
+                                        * saved nor refused within this many frames is UNCHANGED */
     const SlinkRecordBinding *binding; /* record length/validation/identity */
     const SlinkDecoder *decoder;       /* decoded-body access; NULL for PK3 */
     int (*safe_field)(void *);
@@ -53,11 +71,16 @@ typedef struct {
     uint8_t slot, cancel_scene, saving, reserved;
     uint16_t incoming_len, reserved2;
     uint32_t save_start_frame;        /* stamped from e->frame at post_save_begin */
+    uint32_t pre_save_start_frame;    /* stamped from e->frame just BEFORE start_pre_save */
     SlinkIdentity incoming_id;        /* binding identity of the staged record (host claim, checked) */
     SlinkIdentity received_id;        /* identity OBSERVED by the engine after the swap */
-    _Alignas(4) uint8_t incoming[SLINK_MAX_RECORD]; /* native getters use word loads */
-    _Alignas(4) uint8_t scratch[SLINK_MAX_RECORD];  /* handed to engines whose commit mutates input */
+    uint8_t incoming[SLINK_MAX_RECORD]; /* native getters use word loads: 4-aligned by layout, asserted below */
+    uint8_t scratch[SLINK_MAX_RECORD];  /* handed to engines whose commit mutates input */
 } SlinkTradeProducer;
+/* _Alignas is C11-only and mwccarm has none, so the word alignment of the two buffers is
+ * guaranteed by layout (every preceding member is a 4-aligned run) and proved here. */
+SLINK_STATIC_ASSERT(offsetof(SlinkTradeProducer, incoming) % 4u == 0u, "incoming word alignment");
+SLINK_STATIC_ASSERT(offsetof(SlinkTradeProducer, scratch) % 4u == 0u, "scratch word alignment");
 
 static inline uint32_t tp_word(const volatile uint8_t *p)
 {
@@ -84,10 +107,11 @@ static inline void tp_mark(volatile SlinkTradeWitnessV2 *w, unsigned kind, uint1
 static inline int tp_identity(const volatile SlinkMailboxV2 *m,
                               const volatile SlinkTradeWitnessV2 *w)
 {
+    unsigned i;
     if (!m->session_epoch || m->session_epoch != w->session_epoch
         || tp_word(m->args+12) != w->visit_id
         || tp_word(m->args+4) != w->old_pid || tp_word(m->args+8) != w->old_otid) return 0;
-    for (unsigned i=0;i<16;i++) if (m->args[16+i] != w->token[i]) return 0;
+    for (i=0;i<16;i++) if (m->args[16+i] != w->token[i]) return 0;
     return 1;
 }
 static inline void tp_ack(volatile SlinkMailboxV2 *m, uint16_t seq, int ok, uint16_t reason)
@@ -121,8 +145,9 @@ static inline void tp_finish(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
 static inline int slink_trade_commit_entered(SlinkTradeProducer *s,
     volatile SlinkTradeWitnessV2 *w, unsigned actual_slot, const SlinkTradeEngine *e)
 {
+    int slot;
     if (s->phase != TP_SCENE) return 1; /* ordinary cartridge trades are not ours */
-    int slot = e->locate(e->context,w->old_pid,w->old_otid);
+    slot = e->locate(e->context,w->old_pid,w->old_otid);
     if (slot < 0 || (unsigned)slot != actual_slot || actual_slot != s->slot) {
         s->cancel_scene = 1;
         return 0;
@@ -143,12 +168,13 @@ static inline int tp_accept_stage(SlinkTradeProducer *s, const volatile SlinkRec
     uint16_t layout = st->layout_version, id = st->binding_id, len = st->stage_len;
     uint8_t gen = st->generation, flags = st->flags;
     SlinkIdentity claimed = { st->claimed_pid, st->claimed_otid }, actual = {0,0};
+    unsigned i;
     if (!slink_binding_ok(b) || layout != SLINK_NDS_STAGE_LAYOUT || id != b->id
         || gen != b->generation || len != slink_binding_stage_len(b,op) || len > b->max_len
         || len > SLINK_MAX_RECORD || (flags & ~(unsigned)SLINK_STAGE_RAW_ENCRYPTED)
         || ((flags & SLINK_STAGE_RAW_ENCRYPTED) != 0) != ((b->flags & SLINK_RB_RAW_ENCRYPTED) != 0))
         return 0;
-    for (unsigned i=0;i<SLINK_MAX_RECORD;i++) s->incoming[i] = i < len ? st->record[i] : 0;
+    for (i=0;i<SLINK_MAX_RECORD;i++) s->incoming[i] = i < len ? st->record[i] : 0;
     s->incoming_len = len;
     if (!b->validate(e->decoder,s->incoming,len)) return 0;
     if (!b->identity(e->decoder,s->incoming,len,&actual)) return 0;
@@ -174,8 +200,9 @@ static inline int tp_save_poll(const SlinkTradeProducer *s, const SlinkTradeEngi
 static inline void tp_save_resolve(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
     volatile SlinkTradeWitnessV2 *w, int polled, const SlinkTradeEngine *e)
 {
+    int ok;
     if (polled == SLINK_SAVEPOLL_PENDING) return;
-    int ok = polled == SLINK_SAVEPOLL_OK;
+    ok = polled == SLINK_SAVEPOLL_OK;
     tp_open(w);
     w->save_status = ok ? SLINK_SAVE_OK : SLINK_SAVE_FAILED;
     if (ok) {
@@ -191,6 +218,10 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
     volatile SlinkTradeWitnessV2 *w, const volatile SlinkRecordStageV1 *stage,
     const SlinkTradeEngine *e)
 {
+    uint16_t op, seq;
+    unsigned i, token;
+    int slot;
+    const uint8_t *handed;
     if (s->phase == TP_PRE_SAVE) {
         int result = e->poll_pre_save(e->context);
         if (result == 2) {
@@ -204,6 +235,13 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
             s->phase = TP_READY;
             tp_ack(m,s->prepare_seq,1,0);
         } else if (result < 0) {
+            tp_finish(s,m,w,s->prepare_seq,SLINK_TRADE_UNCHANGED,e);
+        }
+        if (s->phase == TP_PRE_SAVE
+            && (uint32_t)(e->frame(e->context) - s->pre_save_start_frame) > (e->pre_save_timeout_frames ? e->pre_save_timeout_frames : e->save_timeout_frames)) {
+            /* The post-save leg's bound, same shape, same unsigned wrap. result == 1 wins: a
+             * save that completes on the frame the bound expires is still a completion. The
+             * phase guard keeps the earlier result < 0 / result == 1 exits from finishing twice. */
             tp_finish(s,m,w,s->prepare_seq,SLINK_TRADE_UNCHANGED,e);
         }
     } else if (s->phase == TP_SCENE && s->saving) {
@@ -246,34 +284,46 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
             }
         }
     }
-    uint16_t op=m->opcode,seq=m->seq;
+    op=m->opcode; seq=m->seq;
     if (!op) return;
-    /* Foreign opcodes (sound/panel producers) are theirs; the state machine above ran anyway
-     * so the async save watchdog keeps ticking. */
-    if (op != SLINK_OP_TRADE_PREPARE && op != SLINK_OP_TRADE_SCENE
-        && op != SLINK_OP_TRADE_WITHDRAW && op != SLINK_OP_TRADE_STATUS) return;
+    /* Mailbox ownership: the sound and panel producers share this mailbox, so only
+     * the four trade opcodes dispatched below are ours. FAIL-acking a foreign opcode
+     * consumes that command and publishes a status/ack_seq it never earned. The
+     * polls above must still run on every visit, so the gate sits after them, never
+     * around them. Same predicate as rr_trade_owned() (patch/src/rr_trade_relay.h). */
+    if (op!=SLINK_OP_TRADE_PREPARE && op!=SLINK_OP_TRADE_SCENE
+        && op!=SLINK_OP_TRADE_WITHDRAW && op!=SLINK_OP_TRADE_STATUS) return;
     if ((s->phase==TP_PRE_SAVE && op==SLINK_OP_TRADE_PREPARE && seq==s->prepare_seq)
         || (s->phase==TP_SCENE && op==SLINK_OP_TRADE_SCENE && seq==s->scene_seq)) return;
     if (op==SLINK_OP_TRADE_PREPARE) {
         if (s->phase==TP_READY && seq==s->prepare_seq && tp_identity(m,w)) { tp_ack(m,seq,1,0); return; }
-        unsigned token=0;
-        for (unsigned i=0;i<16;i++) token |= m->args[16+i];
+        token=0;
+        for (i=0;i<16;i++) token |= m->args[16+i];
         if ((s->phase!=TP_IDLE && s->phase!=TP_DONE) || !m->session_epoch
             || !tp_word(m->args+12) || !token || !e->safe_field(e->context)
-            || (s->phase==TP_DONE && tp_identity(m,w))) { tp_ack(m,seq,0,12); return; }
+            || (s->phase==TP_DONE && tp_identity(m,w))) {
+            /* UNCERTAIN is terminal for the arena lifetime: nothing in the producer and no
+             * opcode clears it, only arena reinitialisation after a host-proven reconciliation
+             * does. Answering IDENTITY (12) would read as "wrong token, retry" for a retry
+             * that must never be made; every other non-IDLE/non-DONE phase keeps 12, and
+             * either answer leaves the witness and the accepted identity untouched. */
+            tp_ack(m,seq,0,s->phase==TP_UNCERTAIN ? SLINK_REASON_UNCERTAIN : SLINK_REASON_IDENTITY);
+            return;
+        }
         if (!slink_binding_ok(e->binding) || !e->save_timeout_frames) { tp_ack(m,seq,0,SLINK_REASON_BAD_ARGS); return; }
-        int slot=e->locate(e->context,tp_word(m->args+4),tp_word(m->args+8));
+        slot=e->locate(e->context,tp_word(m->args+4),tp_word(m->args+8));
         if (slot<0 || slot>5 || (unsigned)slot!=m->args[0] || m->args[1]>1) { tp_ack(m,seq,0,2); return; }
         tp_open(w);
         w->session_epoch=m->session_epoch;w->visit_id=tp_word(m->args+12);
-        for (unsigned i=0;i<16;i++) w->token[i]=m->args[16+i];
+        for (i=0;i<16;i++) w->token[i]=m->args[16+i];
         w->old_pid=tp_word(m->args+4);w->old_otid=tp_word(m->args+8);
         w->received_pid=0;w->received_otid=0;w->milestones=0;
-        for (unsigned i=0;i<5;i++) { w->milestone_seq[i]=0;w->milestone_frame[i]=0; }
+        for (i=0;i<5;i++) { w->milestone_seq[i]=0;w->milestone_frame[i]=0; }
         w->visit_flags=SLINK_VISIT_ACCEPTED;w->save_status=0;w->final_result=SLINK_TRADE_PENDING;
         tp_close(w);
         s->prepare_seq=seq;s->slot=(uint8_t)slot;s->cancel_scene=0;s->saving=0;s->phase=TP_PRE_SAVE;
         m->status=SLINK_ST_BUSY;
+        s->pre_save_start_frame = e->frame(e->context);  /* the bound starts when we ask */
         if (!e->start_pre_save(e->context)) tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);
     } else if (!tp_identity(m,w)) {
         tp_ack(m,seq,0,12);
@@ -288,19 +338,26 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
         }
         if (s->phase!=TP_READY) { tp_ack(m,seq,0,12); return; }
         if (!e->safe_field(e->context)) { tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e); return; }
-        int slot=e->locate(e->context,w->old_pid,w->old_otid);
+        slot=e->locate(e->context,w->old_pid,w->old_otid);
         if (slot<0 || slot>5 || (unsigned)slot!=m->args[0]) { tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e); return; }
         if (!tp_accept_stage(s,stage,e,SLINK_STAGE_OP_TRADE)) { tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e); return; }
         s->scene_seq=seq;s->slot=(uint8_t)slot;s->phase=TP_SCENE;s->cancel_scene=0;s->saving=0;
         m->status=SLINK_ST_BUSY;
-        const uint8_t *handed = s->incoming;
+        handed = s->incoming;
         if (e->binding->flags & SLINK_RB_COMMIT_MUTATES_INPUT) {
             /* must-not-alias: the engine may scribble on its argument */
-            for (unsigned i=0;i<s->incoming_len;i++) s->scratch[i] = s->incoming[i];
+            for (i=0;i<s->incoming_len;i++) s->scratch[i] = s->incoming[i];
             handed = s->scratch;
         }
         if (!e->start_scene(e->context,(unsigned)slot,handed,s->incoming_len))
             tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);
+    } else {
+        /* Unreachable: the gate above admits exactly the four opcodes handled in this chain.
+         * Kept as the fail-closed tail; widening the gate must add a branch above. NOTE tp_ack is
+         * shared with the panel and sound producers and compares only seq, so a foreign command
+         * whose seq collides with an outstanding trade seq could still be consumed by a poll-side
+         * ack: that is the inherited Gen 3 host-side seq-discipline assumption (see README). */
+        tp_ack(m,seq,0,2);
     }
 }
 /* Publish ownership after every service path, including an identity rejection.
