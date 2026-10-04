@@ -11,7 +11,9 @@
 
 <br><br>
 
-<img src="docs/images/board.png" width="900" alt="The run board: both players' current area and battle, a damage preview, linked pairs and the event log">
+<img src="docs/images/title-screens.png" width="900" alt="SoulLink title screens on Red, Blue, PureGreen, Gold, Silver, Crystal, FireRed, LeafGreen, Emerald and Radical Red">
+
+<sub>Every patched game boots into its own SoulLink title screen, drawn in that game's logo style.</sub>
 
 </div>
 
@@ -19,9 +21,25 @@
 
 A Soul Link Nuzlocke is two players, two copies of the same game, and one rule: the first Pokémon you each catch in an area become a pair. If one of them dies, so does the other.
 
-SLink reads both games while you play and applies that rule for you. Your first catches in an area are paired as soon as both land. When one Pokémon faints, its partner faints in the other game, mid-battle if need be. A shared board and stream overlays keep track of everything, so nobody has to.
+SLink plays that rule for you, live, inside both games. Your first catches in an area are paired the moment both land. When one Pokémon faints, its partner faints in the other game, mid-battle if need be. Each cartridge gets a companion patch that puts SoulLink into the game itself: its own title screen, a SLINK page in the START menu, trades between linked partners, and, in Gold, Silver and Crystal, calls from your partner on the Pokégear. A shared board and stream overlays keep score, so nobody has to.
 
 Both games run in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a small Lua client that reports to a Python server, which enforces the rules and serves the web pages.
+
+## Inside the game
+
+<img src="docs/images/slink-panel.png" width="900" alt="Red's START menu with a SLINK row and the SLINK page listing pairs, badges and dead zones; Radical Red's START menu with Soul Link and its page of linked pairs with HP bars">
+
+Open the START menu and there's a SLINK entry. It shows your pairs, badges and dead zones, and on Gen 3 every linked pair with live HP and status, without leaving the game or alt-tabbing to a browser.
+
+- Linked Pokémon can be traded through the game's own trade, at the Cable Club receptionist on Gen 1 and Gen 2, or with a trader in any Pokémon Center on Gen 3, where the real trade animation plays on both screens and trade evolutions happen. You can only trade a Pokémon for its own partner.
+- In Gold, Silver and Crystal your partner rings your Pokégear when a pair links, an area closes or a Pokémon falls. With Native Sounds on, those moments also play through the game's own sound engine.
+- With Explode Mode on, a partner's death mid-battle makes your Pokémon use Explosion.
+- With Rival Swap on, your rival shows up with your partner's actual team.
+- On Radical Red, the Battle Calc shows how hard the highlighted move hits.
+
+<img src="docs/images/version-menus.png" width="720" alt="New Game / Continue menus on Red, PureRed, Crystal and FireRed showing the SoulLink patch version">
+
+The patch version sits on the Continue screen, so you can tell at a glance whether both players are on the same build.
 
 ## The rules
 
@@ -93,17 +111,11 @@ SLink is tested in BizHawk, but not every game has been played start to finish. 
 
 Every game in the list except Yellow and the Emerald Expansion needs the SLink companion patch, and a clean cartridge of those games won't connect. The Manager patches each cartridge it prepares, so you only need to think about it if you bring your own. In that case, use `/patcher` on the Manager.
 
-The patch puts SLink inside the game:
-
-- a SoulLink title screen, with the patch version on the main menu;
-- the SLINK panel in the START menu, so you can check the run without leaving the game;
-- in-game trades between linked Pokémon, at the Cable Club receptionist on Gen 1 and Gen 2, or a trader in the Pokémon Center on Gen 3. You can only trade a Pokémon for its own partner.
-
 More in the [companion patch guide](patch/README.md).
 
 ## The board
 
-<img src="docs/images/linked-pairs.png" width="900" alt="Five linked pairs in the party, each showing both Pokémon, their encounter route, HP, ability and held item">
+<img src="docs/images/board.png" width="900" alt="The run board: both players' current area and battle, a damage preview, linked pairs and the event log">
 
 Each player gets a card showing their area, their lead or current battle, and HP and moves. In battle, it also previews how much damage each move will do. Below that, pairs are sorted into in party, waiting for a partner, boxed and fallen. The event log runs down the side.
 
