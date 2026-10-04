@@ -35,6 +35,7 @@ RAM = (
     "wBattleMonNickname", "wEnemyMonNickname", "wPlayerStatLevels", "wEnemyStatLevels",
     "wOTPlayerName", "wOTPlayerID", "wOTPartyCount", "wOTPartyMons", "wOTPartyMonOTs",
     "wOTPartyMonNicknames", "wOTPartyDataEnd", "wMirrorHerbPendingBoosts",
+    "wMapStatus", "wGameLogicPaused",  # hello gate (docs/polished/HELLO_GATE.md)
 )
 # (id+quantity) pockets: count byte, data, End label (capacity = (End - data - 1) / 2), source constant
 POCKETS = {"items": ("wNumItems", "wItems", "wItemsEnd", "MAX_ITEMS"),

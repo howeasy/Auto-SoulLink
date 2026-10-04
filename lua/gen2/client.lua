@@ -1372,9 +1372,13 @@ function Client.new(p)
                 local sig = {identity}
                 for _, m in ipairs(reads.read_party().mons) do sig[#sig + 1] = tostring(mon_key(m)) end
                 sig = table.concat(sig, ";")
-                if battle.mode ~= 0 or sig ~= hello_sig then hello_polls = 0 end
+                -- docs/polished/HELLO_GATE.md: the overworld loop must be RUNNING (not the Continue screen at frame ~286)
+                local gate = reads.read_overworld_gate and reads.read_overworld_gate()
+                local gate_ok = gate ~= nil and gate.running == true
+                if battle.mode ~= 0 or not gate_ok or sig ~= hello_sig then hello_polls = 0 end
                 hello_sig = sig
                 if battle.mode ~= 0 then return false, "waiting for the battle to end" end
+                if not gate_ok then return false, "waiting for the overworld to run" end
                 hello_polls = hello_polls + 1
                 if hello_polls < HELLO_UNHELD_POLLS then return false, "waiting for a stable party" end
                 return hello_identity() == identity, "identity changed while checking readiness"

@@ -498,6 +498,23 @@ function P.new(profile, io, decode_name)
         return value
     end
 
+    -- docs/polished/HELLO_GATE.md: is the overworld loop RUNNING (not the main menu, not a map load, not a script/pause)?
+    -- wMapStatus: START 0 / ENTER 1 / HANDLE 2 / DONE 3 (constants/ram_constants.asm:207-210). OverworldLoop returns on
+    -- DONE, so steady overworld is HANDLE; EnterMap sets it only after the map entry finished (events.asm:84-85).
+    function r.read_overworld_gate()
+        local status, script, paused, link, why
+        status, why = byte_symbol("wMapStatus")
+        if status == nil then return nil, why end
+        script, why = byte_symbol("wScriptRunning")
+        if script == nil then return nil, why end
+        paused, why = byte_symbol("wGameLogicPaused")
+        if paused == nil then return nil, why end
+        link, why = byte_symbol("wLinkMode")
+        if link == nil then return nil, why end
+        return raw({map_status=status, script_running=script, logic_paused=paused, link_mode=link,
+                    running=(status == 2 and script == 0 and paused == 0 and link == 0)})
+    end
+
     function r.read_battle()
         if c.WILD_BATTLE ~= 1 or c.TRAINER_BATTLE ~= 2 or not integer(c.BATTLERESULT_BITMASK, 0, 255) then
             return nil, "unsupported/missing battle-context facts"

@@ -97,6 +97,7 @@ def _memory(mons):
     put("wNumBalls", [1, 1, 5, 0xFF])  # one stack: 5 Poke Balls, then the terminator
     put("wJohtoBadges", [0x03, 0x00])
     put("wMapGroup", [24, 4, 5, 6])
+    put("wMapStatus", [2])  # MAPSTATUS_HANDLE: the overworld loop is running (docs/polished/HELLO_GATE.md)
     # the companion's mailbox signature (patch/polished/src/slink.asm): 'SLNK', ABI 3 at +4, caps 0, cookie $A5 at +31
     put("wSlinkMailbox", [0x53, 0x4C, 0x4E, 0x4B, 3, 0, 0, 0, 0])
     put("wSlinkMailbox", [0xA5], 31)

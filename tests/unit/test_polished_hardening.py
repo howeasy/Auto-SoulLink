@@ -96,6 +96,31 @@ def test_no_first_hello_in_a_battle_then_one_once_it_ends(roms):  # noqa: F811
     assert len(log.writes) == 0
 
 
+MAP_STATUS, SCRIPT_RUNNING, LOGIC_PAUSED = (SYM[n][1] for n in ("wMapStatus", "wScriptRunning", "wGameLogicPaused"))
+
+
+@pytest.mark.parametrize("label, extra", [
+    ("main menu / title (wMapStatus START)", {MAP_STATUS: 0}),
+    ("map load (wMapStatus ENTER)", {MAP_STATUS: 1}),
+    ("script running", {SCRIPT_RUNNING: 1}),
+    ("game logic paused (native save / hall of fame)", {LOGIC_PAUSED: 1}),
+])
+def test_no_first_hello_until_the_overworld_loop_runs(roms, label, extra):  # noqa: F811
+    """Live finding: the first hello went out from the CONTINUE screen (frame 286), with a perfectly stable party,
+    before the overworld took input. The gate is wMapStatus == HANDLE (2) with no script and no pause
+    (docs/polished/HELLO_GATE.md). Red control (applied): drop the gate from the readiness predicate -> every case sends."""
+    _, parts, io, log, mem = _build(roms, extra)
+    client = parts.client
+    client.start(client)
+    _run(io, client, 60)
+    assert _hellos(log) == [], (label, list(log.lines.values()))
+    for address in extra:
+        mem[address] = 2 if address == MAP_STATUS else 0
+    _run(io, client, 20)
+    assert len(_hellos(log)) == 1, label
+    assert len(log.writes) == 0
+
+
 def test_no_first_hello_while_the_party_keeps_changing(roms):  # noqa: F811
     """A party signature that changes every poll never reads stable. Red control (applied): drop the signature
     comparison (hello_sig reset) -> the hello goes out while the party still flips."""
