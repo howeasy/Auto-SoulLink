@@ -62,29 +62,29 @@ Vanilla column = `profile.json` `ram` + `ram_bank`. Polished column = measured `
 | `wPartyMonNicknames` | `01:DD9A` | `wPartyMonNicknames` | `01:DE38` *(derived)* | moved | `+ 6×11` further. Not read from the `.sym` — UNVERIFIED. |
 | `wPartyMon1Status` | `01:DCFF` | `wPartyMon1Status` | `01:DCF6` | moved | struct offset `+32` in **both** games — unchanged. |
 | `wPartyMon1HP` | `01:DD01` | `wPartyMon1HP` | `01:DCF8` | moved | `+34` both. |
-| `wCurBox` | `01:DB2A` | `wCurBox` | `01:DB7A` | moved | Polished `NUM_BOXES` = 20, not 14 (`pokemon_data_constants.asm:304`), so the `reads.lua:244` `>= c.NUM_BOXES` gate changes meaning. |
-| `wBattleMode` | `01:D24D` | `wBattleMode` | `01:D233` | moved | |
+| `wCurBox` | `01:DB72` | `wCurBox` | `01:DB7A` | moved | Polished `NUM_BOXES` = 20, not 14 (`pokemon_data_constants.asm:304`), so the `reads.lua:244` `>= c.NUM_BOXES` gate changes meaning. |
+| `wBattleMode` | `01:D22D` | `wBattleMode` | `01:D233` | moved | |
 | `wScriptRunning` | `01:D438` | `wScriptRunning` | `01:D437` | moved | `-1`. Safe-state predicate still exists. |
 | `wMapGroup` | `01:DCB5` | `wMapGroup` | `01:DCAC` | moved | `-9`. |
 | `wMapNumber` | `01:DCB6` | `wMapNumber` | `01:DCAD` | moved | `-9`. |
 | `wPlayerID` | `01:D47B` | `wPlayerID` | `01:D478` | moved | `-3`. |
 | `wPlayerName` | `01:D47D` | `wPlayerName` | `01:D47B` | moved | `-2`. |
 | `wTextboxFlags` | `00:CFCF` | `wTextboxFlags` | `00:CFF4` | moved | corrected 2026-10-04: both cells previously read `01:CFF4`/same (wrong bank); vanilla data/gen2/pokecrystal.sym:55480, Polished sym:65521. |
-| `wNumItems` | `01:D89E` | `wNumItems` | `01:D827` | moved | `-0x77`. Pocket capacities all changed — §3.2. |
-| `wItems` | `01:D8A1` | `wItems` | `01:D828` | moved | `ds MAX_ITEMS*2+1`, MAX_ITEMS 20→75. |
-| `wNumKeyItems` | `01:D8C8` | `wNumKeyItems` | `01:D7FF` | moved | |
-| `wKeyItems` | `01:D8CD` | `wKeyItems` | `01:D800` | moved | `ds NUM_KEY_ITEMS+1`, NUM_KEY_ITEMS 27 (vanilla `MAX_KEY_ITEMS` 25). |
-| `wNumBalls` | `01:D8CF` | `wNumBalls` | `01:D90B` | moved | MAX_BALLS 12→25. |
+| `wNumItems` | `01:D892` | `wNumItems` | `01:D827` | moved | `-0x77`. Pocket capacities all changed — §3.2. |
+| `wItems` | `01:D893` | `wItems` | `01:D828` | moved | `ds MAX_ITEMS*2+1`, MAX_ITEMS 20→75. |
+| `wNumKeyItems` | `01:D8BC` | `wNumKeyItems` | `01:D7FF` | moved | vanilla cell corrected 2026-10-04 (`test_polished_ram_doc.py`: profile `titles.crystal.ram.wNumKeyItems` = `$D8BC`, RAM.md said `$D8C8`). The Polished NAME is unverified: Polished has no `wNumKeyItems` symbol, and `$01:D7FF` is unlabelled space between `wPokemonJournalsEnd` ($01:D7F5) and `wKeyItems` ($01:D800). |
+| `wKeyItems` | `01:D8BD` | `wKeyItems` | `01:D800` | moved | `ds NUM_KEY_ITEMS+1`, NUM_KEY_ITEMS 27 (vanilla `MAX_KEY_ITEMS` 25). |
+| `wNumBalls` | `01:D8D7` | `wNumBalls` | `01:D90B` | moved | MAX_BALLS 12→25. |
 | `wBalls` | `01:D8D8` | `wBalls` | `01:D90C` | moved | |
-| `wTMsHMs` | `01:D8C1` | `wTMsHMs` | `01:D7F5` | moved | Both are `flag_array`; Polished uses `NUM_TMS + NUM_HMS` (`wramx.asm:1006`), vanilla `NUM_TM_HM` = 57. |
+| `wTMsHMs` | `01:D859` | `wTMsHMs` | `01:D7F5` | moved | Both are `flag_array`; Polished uses `NUM_TMS + NUM_HMS` (`wramx.asm:1006`), vanilla `NUM_TM_HM` = 57. |
 | `wBattleMon` / `wBattleMonSpecies` | `00:C62C` | `wBattleMon` / `wBattleMonSpecies` | `00:C4A5` | moved | struct layout also changed — §2.3. |
 | `wBattleMonMoves` | `00:C62E` | `wBattleMonMoves` | `00:C4A7` | moved | |
 | `wBattleMonDVs` | `00:C632` | `wBattleMonDVs` | `00:C4AB` | moved | |
 | `wBattleMonPP` | `00:C634` | `wBattleMonPP` | `00:C4B0` | moved | **struct offset changed** `+8` → `+11`. |
-| `wBattleMonHP` | `00:C644` | `wBattleMonHP` | `00:C4B8` | moved | offset `+16` → `+19`. |
-| `wBattlePlayerAction` | `01:D0F4` | `wBattlePlayerAction` | `01:D0F4` | same | |
+| `wBattleMonHP` | `00:C63C` | `wBattleMonHP` | `00:C4B8` | moved | offset `+16` → `+19`. |
+| `wBattlePlayerAction` | `01:D0EC` | `wBattlePlayerAction` | `01:D0F4` | moved | |
 | `wJohtoBadges` / `wKantoBadges` | `01:D8B7` / `01:D8B8` | `wJohtoBadges` / `wKantoBadges` | `01:D7EE` / `01:D7EF` | moved | Both 8 badges; `wBadges` = 2 bytes, `flag_array` layout. |
-| `wEventFlags` | `01:DA92` | `wEventFlags` | `01:DA5A` | moved | `flag_array NUM_EVENTS`, NUM_EVENTS = 2303 → 288 bytes. |
+| `wEventFlags` | `01:DA72` | `wEventFlags` | `01:DA5A` | moved | `flag_array NUM_EVENTS`, NUM_EVENTS = 2303 → 288 bytes. |
 | `wMonType` | `01:CF9F` | `wMonType` | *(see UNVERIFIED)* | UNVERIFIED | not measured. |
 | `wJoypadDisable` | *(not in profile `ram`)* | `wJoypadDisable` | *(not measured)* | UNVERIFIED | `copilot-instructions.md` says it reads `00` in overworld and with START open — it is **not** the safe-state predicate; `wScriptRunning` is. |
 
