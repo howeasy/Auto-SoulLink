@@ -13,14 +13,17 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shlex
 import subprocess
 import sys
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 ROOT = Path(__file__).resolve().parents[1]
-PRET_ROOT = Path("E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold")
+# The pinned pokeheartgold checkout: SLINK_PRET_HGSS overrides the owner-machine default (the same
+# variable tests/unit/test_gen4_sound_binding.py reads); absent => the planner refuses by name.
+PRET_ROOT = Path(os.environ.get("SLINK_PRET_HGSS", "E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold"))
 PRET_PIN = "ad7a3afa0cfc144fe6837c410cb95b2727217f54"
 CARDS = ("sound", "panel", "trade")
 BUILD_FILES = ("Makefile", "common.mk", "config.mk")
@@ -88,16 +91,26 @@ def _tokens(text: str) -> list[str]:
 
 
 def _out_dir(out: str | Path) -> str:
-    path = PureWindowsPath(str(out))
-    if path.drive.upper() != "F:" or not path.is_absolute() or ".." in path.parts:
-        raise Refused("OUT_MUST_BE_ABSOLUTE_F_DRIVE")
-    if any(":" in part for part in path.parts[1:]):
-        raise Refused("OUT_INVALID_PATH")
-    # Existing junctions/symlinks must not redirect writes to C: (or elsewhere).
-    resolved = PureWindowsPath(str(Path(str(path)).resolve()))
-    if sys.platform == "win32" and resolved.drive.upper() != "F:":
-        raise Refused("OUT_RESOLVES_OUTSIDE_F_DRIVE")
-    return path.as_posix()
+    # Owner rule: lanes and temps never live on C:. The rule is "absolute, no traversal, and (on a
+    # drive-lettered path) not C:" rather than "exactly F:", so the same planner runs on a Linux CI
+    # checkout whose absolute temp dirs have no drive letter. Relative, traversal, UNC and C: refuse.
+    text = str(out)
+    if os.name == "nt" or re.match(r"^[A-Za-z]:", text):
+        path = PureWindowsPath(text)
+        if (not re.fullmatch(r"[A-Za-z]:", path.drive) or not path.is_absolute()
+                or path.drive.upper() == "C:" or ".." in path.parts):
+            raise Refused("OUT_MUST_BE_ABSOLUTE_NON_C_DRIVE")
+        if any(":" in part for part in path.parts[1:]):
+            raise Refused("OUT_INVALID_PATH")
+        # Existing junctions/symlinks must not redirect writes to C: (or elsewhere).
+        resolved = PureWindowsPath(str(Path(text).resolve()))
+        if sys.platform == "win32" and resolved.drive.upper() == "C:":
+            raise Refused("OUT_RESOLVES_TO_C_DRIVE")
+        return path.as_posix()
+    posix = PurePosixPath(text)
+    if not posix.is_absolute() or text.startswith("//") or ".." in posix.parts or ":" in text:
+        raise Refused("OUT_MUST_BE_ABSOLUTE_NON_C_DRIVE")
+    return posix.as_posix()
 
 
 def _strip(text: str) -> str:

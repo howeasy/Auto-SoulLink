@@ -32,7 +32,9 @@ ABI_ASSERT_COUNT = 27
 STDINT_MARKER = "SLINK_ABI_COMPAT_STDINT_WAS_INCLUDED"
 # gcc >= 9 names the array in that diagnostic, older gcc does not; either way the only
 # negative-size array in the translation unit is one this macro created.
-NEGATIVE_ARRAY = re.compile(r"size of array '?slink_static_assert_\d+'? is negative"
+# A UTF-8 locale (Linux CI) prints the identifier in curly quotes, a C locale in straight ones.
+_Q = "[`'‘’\"]?"
+NEGATIVE_ARRAY = re.compile(rf"size of array {_Q}slink_static_assert_\d+{_Q} is negative"
                             r"|size of array is negative")
 
 
