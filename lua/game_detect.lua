@@ -14,17 +14,15 @@
 local game_detect = {}
 
 -- Clear stale cached modules from previous script loads (BizHawk reuses Lua state).
-package.loaded["games.gen4_hgsspt"]   = nil
 package.loaded["games.gen5_bw"]       = nil
 
 -- Registry of game modules (add future games here).
 -- pcall protects against load-time errors (e.g., missing dependencies on wrong platform).
 local game_modules = {}
 local _module_names = {
-    -- Gen 1, Gen 2 and Gen 3 are routed (or refused) by lua/slink.lua before game_detect runs,
+    -- Gen 1, Gen 2, Gen 3 and Gen 4 are routed (or refused) by lua/slink.lua before game_detect runs,
     -- so no Game Boy or GBA module is a candidate here (the legacy gen2_crystal one went with
-    -- P3b.8, the old Gen 3 one with C5-6).
-    "games.gen4_hgsspt",
+    -- P3b.8, the old Gen 3 one with C5-6, gen4_hgsspt with G3a). Gen 5 is the only NDS route left.
     "games.gen5_bw",
 }
 for _, name in ipairs(_module_names) do
@@ -70,7 +68,8 @@ function game_detect.detect()
         end
     end
     error("[game_detect] No game module matched the loaded ROM. " ..
-          "Ensure the ROM is a supported game (Gen 1: Red / Blue / Yellow, Gen 2: Gold / Silver / Crystal, Gen 3: FireRed / LeafGreen / Radical Red, Gen 4: HGSS / Platinum, Gen 5: BW / BW2).")
+          "The only route left here is NDS Gen 5 (Black / White / Black 2 / White 2); " ..
+          "Gen 1, Gen 2, Gen 3 and Gen 4 are routed or refused by lua/slink.lua.")
 end
 
 return game_detect

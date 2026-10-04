@@ -125,10 +125,10 @@ end
 -- The routed set lives in entry.lua (Entry.ROUTED); the launcher keeps no copy of it.
 do
     local sys_ok, sys = pcall(function() return emu.getsystemid() end)
-    -- Fail closed: an unidentifiable system must never fall through to game_detect (the
-    -- Gen 2/4/5 registry), which could silently misroute a GBA cartridge that briefly failed
-    -- to identify itself. GB/GBC/SGB (Gen 1 and Gen 2, handled above) and NDS (Gen 4/5) are the only
-    -- known non-GBA systems game_detect is ever asked to route.
+    -- Fail closed: an unidentifiable system must never fall through to game_detect (the Gen 5
+    -- registry), which could silently misroute a GBA cartridge that briefly failed to identify
+    -- itself. GB/GBC/SGB (Gen 1 and Gen 2) and NDS (Gen 4, refused or routed above; Gen 5, the only
+    -- row left in that registry) are the only known systems it is ever asked to route.
     if not sys_ok then
         error("[SLink] could not determine the loaded system (emu.getsystemid failed): "
               .. tostring(sys), 0)
@@ -176,17 +176,91 @@ do
     end
 end
 
+-- ── Gen 4 route ──────────────────────────────────────────────────────────────
+-- HeartGold and SoulSilver (pack gen4_hgss) and the hg-engine HeartGold build (pack gen4_hge),
+-- admitted by HASH, run under lua/gen4/, the rewritten client. The legacy Gen 4 client is deleted
+-- (G3a, docs/gen4/reviews/DECISIONS_2026-10-03_launcher.md), so a recognised-but-unpinned
+-- cartridge -- a hack, another region, or a bad dump that still carries a Gen 4 header -- is
+-- REFUSED here by name and never handed to game_detect: after G3a no module there can route it
+-- (the games.gen4_hgsspt row is gone), and "no module matched" is not an admission decision.
+--
+-- No Gen 4 header code is listed here: the set is read out of Entry.admission_table, the same
+-- table Entry.admit_routed consults, so the packs stay the only place a Gen 4 cartridge is named.
+-- That costs a second decode of the packs, so it is built only on the refusal path -- an admitted
+-- cartridge decodes them once, inside admit_routed.
+--
+-- Gen 5 (Black / White / BW2) is the one NDS route still delegated to game_detect, and only
+-- Gen 5: an NDS cartridge that pins no Gen 4 header is not this block's to judge. game_detect
+-- routes it, or refuses it by name without advertising Platinum.
+do
+    local sys_ok, sys = pcall(function() return emu.getsystemid() end)
+    if sys_ok and sys == "NDS" then
+        local json = dofile(_dir .. "json_codec.lua")
+        -- Where the NDS boot leaves the cartridge header copy, and which bus the vanilla anchor
+        -- bytes are read over, are PLATFORM facts: take them from the client's own table (run.lua
+        -- reads them the same way) instead of repeating an address in the launcher.
+        local ok_admit, Entry, admitted, why, header_code = pcall(function()
+            local E = dofile(_dir .. "gen4/entry.lua")
+            assert(E, "lua/gen4/entry.lua did not load")
+            local Client = dofile(_dir .. "gen4/client.lua")
+            local plat = assert(Client and Client.PLATFORM,
+                                "lua/gen4/client.lua ships no platform facts")
+            local function ram_read(addr, len)
+                local out = {}
+                for i = 1, len do out[i] = memory.read_u8(addr + i - 1, plat.bus_domain) end
+                return out
+            end
+            local ok_hc, hc = pcall(E.header_code, function(off, len)
+                return ram_read(plat.header_copy + off, len)
+            end)
+            local code = ok_hc and hc or ""
+            local hash = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or ""
+            local a, reason = E.admit_routed({ root = _dir .. "..", json = json, rom_hash = hash,
+                                               header_code = code, read_ram = ram_read })
+            return E, a, reason, code
+        end)
+        if ok_admit and Entry and admitted then
+            -- The Gen 4 hooks are the same on_bus_exec path the Gen 1 live run found silently
+            -- latching on 2.9.1 (the Gen 1 block above): refuse an emulator we have never seen
+            -- carry them rather than start a client that reports nothing. Gen 4 itself has never
+            -- run, so this floor is inherited from that run, not measured here.
+            local ver = tostring(client.getversion and client.getversion() or "?")
+            local maj, min = ver:match("^(%d+)%.(%d+)")
+            if not maj or tonumber(maj) * 100 + tonumber(min) < 211 then
+                error("[SLink] BizHawk " .. ver .. " is too old for Gen 4 -- install BizHawk 2.11 or newer", 0)
+            end
+            dofile(_dir .. "gen4/run.lua")
+            return
+        end
+        local code = header_code or ""
+        local what = ok_admit and tostring(why) or ("admission failed (" .. tostring(Entry) .. ")")
+        local ok_codes, codes = pcall(function()
+            local set = {}
+            for _, row in pairs(Entry.admission_table({ root = _dir .. "..", json = json })) do
+                -- a set, not header -> pack: two packs pin the same header (IPKE is HGSS and hge
+                -- both), and a table's iteration order must not decide what the message says.
+                if row.header_code then set[row.header_code] = true end
+            end
+            return set
+        end)
+        if ok_codes and codes[code] then
+            error("[SLink] Unsupported Gen 4 cartridge (header " .. code .. "): " .. what
+                  .. ". Supported on NDS: HeartGold, SoulSilver and the hg-engine HeartGold build.", 0)
+        end
+    end
+end
+
 -- Detect which game is loaded
 package.loaded["game_detect"]       = nil
 local game_detect = require("game_detect")
 local detected    = game_detect.detect()
 
 -- Map game_id to client script path
--- No Game Boy or GBA rows: the Gen 1, Gen 2 and Gen 3 routes above return or refuse for every
--- GB/GBC/SGB/GBA core before this table is reached (the legacy gen2_crystal row went with P3b.8,
--- the old gen3_frlge row with C5-6).
+-- No Game Boy or GBA rows, and no Gen 4 row: the Gen 1, Gen 2, Gen 3 and Gen 4 routes above return
+-- or refuse for every GB/GBC/SGB/GBA core and for every Gen 4 NDS cartridge before this table is
+-- reached (the legacy gen2_crystal row went with P3b.8, the old gen3_frlge row with C5-6, the
+-- gen4_hgsspt row with G3a). Gen 5 is the only route game_detect still owns.
 local _CLIENT_MAP = {
-    gen4_hgsspt   = "clients/gen4_hgsspt_client.lua",
     gen5_bw       = "clients/gen5_bw_client.lua",
 }
 
