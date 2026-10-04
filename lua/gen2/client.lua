@@ -63,6 +63,17 @@ local BATTLE_BENCH = "battle_bench"
 Client.BURIAL_NAG_FRAMES = 1200
 local BURIAL_TEXT = "SAVE TO FINISH BURIAL"
 
+-- A mon key's evolution-stable identity: (DV:OT, species). Vanilla DDDD:OOOO:SS -> ("DDDD:OOOO", SS);
+-- Polished DDDDDD:OOOO:SSS:TT -> ("DDDDDD:OOOO", SSS). Evolution changes only the species field; the
+-- Polished traits byte (shiny/female/form) is left out of the stable part, so a form or trait change on
+-- evolution cannot make the evolved mon look like a new one. nil for a non-key.
+function Client.key_identity(key)
+    if type(key) ~= "string" then return nil end
+    local stable, species = key:match("^(%x+:%x+):(%x+)")
+    if not stable then return nil end
+    return stable, tonumber(species, 16)
+end
+
 local function nick_label(key, nickname)
     if nickname and nickname ~= "" then return nickname end
     return key and key:sub(1, 8) or "?"
@@ -447,7 +458,8 @@ function Client.new(p)
     -- max-HP gain to a fainted mon's HP, so a death owed past the battle would otherwise escape
     -- (A2). The DV word + OT id
     -- (key fields 1-2) must name exactly one party mon, and its species must descend from the
-    -- key's (evolutions.json), so a DV/OT collision never kills another mon.
+    -- key's (evolutions.json), so a DV/OT collision never kills another mon. Client.key_identity
+    -- parses both key shapes; `old` is the key's species field, the pre-evolution species.
     local evolutions = p.evolutions or {}
     local function descends(from, to)
         for _, nxt in ipairs(evolutions[string.format("%d", from)] or {}) do
@@ -467,9 +479,9 @@ function Client.new(p)
             end
         end
         if slot or not death then return slot, mon, party end
-        local stable, old = target:sub(1, 9), tonumber(target:sub(11), 16)
+        local stable, old = Client.key_identity(target)
         for _, m in ipairs(party.mons) do
-            if not m.is_egg and mon_key(m):sub(1, 9) == stable then
+            if stable and not m.is_egg and Client.key_identity(mon_key(m)) == stable then
                 if mon then return nil, nil, party, "ambiguous evolved match" end
                 mon = m
             end

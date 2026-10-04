@@ -14,6 +14,7 @@ import pytest
 
 from server.adapters import polished_codec as pc
 from server.adapters.gen2_polished import Gen2PolishedAdapter
+from tests.unit.test_gen2_signals import World, evolve
 
 lupa = pytest.importorskip("lupa")
 
@@ -313,3 +314,109 @@ def test_the_overlay_is_admitted_and_the_clean_release_refused(lua, entry):
     # the vanilla production gate never admits the Polished overlay
     deps = lua.table_from({"root": ROOT, "rom_size": len(overlay), "read_rom_u8": lambda a: overlay[int(a)]})
     assert "unknown artifact SHA-1" in _pair(entry.admit(deps))[1]
+
+
+# ── C-KEY: one injectable key builder (signals key_fn, client.lua Client.key_identity) ─────
+
+VANILLA = [({"species": 0xFB, "ot": 0x0001, "dvs": 0xFFFF}, "FFFF:0001:FB"),
+           ({"species": 0x01, "ot": 0x0000, "dvs": 0x0000}, "0000:0000:01"),
+           ({"species": 0x19, "ot": 0xABCD, "dvs": 0x1234}, "1234:ABCD:19")]
+# party-slot overrides onto the World's vanilla records: the Polished identity fields polished.lua decodes
+POLISHED = [{"species_id": 511, "dv_bytes": 0xFFFFFF, "ot_id": 0x0001, "shiny": True, "gender": "female", "form": 1},
+            {"species_id": 25, "dv_bytes": 0x000000, "ot_id": 0x0000, "shiny": False, "gender": "male", "form": 0},
+            {"species_id": 0x123, "dv_bytes": 0x123456, "ot_id": 0xABCD, "shiny": False, "gender": "female", "form": 31}]
+OLD_SLICE = "function(t) return t:sub(1, 9), tonumber(t:sub(11), 16) end"
+
+
+def _faint_keys(world, binder, count):
+    keys = []
+    for slot in range(count):
+        world.field("wCurBattleMon", slot)
+        world.fire("battle_faint")
+        (event,) = world.events(binder)
+        keys.append(event.mon.key)
+    return keys
+
+
+def _polished_world(overrides):
+    """The signals World with polished.lua P.mon_key injected and its reads decorated per slot."""
+    world = World()
+    reads = world.reads
+    world.reads = world.lua.eval("""function(reads, over)
+        return {read_active_box=reads.read_active_box, read_party=function()
+            local party, why = reads.read_party()
+            if party then for i, mon in ipairs(party.mons) do
+                for k, v in pairs(over[i] or {}) do mon[k] = v end
+            end end
+            return party, why
+        end}
+    end""")(reads, world.lua.table_from([world.lua.table_from(o) for o in overrides]))
+    options = world.options
+    key_fn = world.lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")').mon_key
+    world.options = lambda: _with(options(), key_fn=key_fn)
+    return world
+
+
+def _with(table, **fields):
+    for name, value in fields.items():
+        table[name] = value
+    return table
+
+
+def _client(lua):
+    return lua.eval("dofile")(f"{ROOT}/lua/gen2/client.lua")
+
+
+def test_vanilla_keys_are_byte_identical_through_every_site(lua):
+    world = World()
+    binder = world.bind()  # default builder: no key_fn
+    world.party([world.mon(**m) for m, _ in VANILLA])
+    expected = [k for _, k in VANILLA]
+    wire = world.lua.eval("dofile")(f"{ROOT}/lua/gen2/wire.lua")
+    party = world.reads.read_party()
+    assert [wire.mon_key(party.mons[i]) for i in (1, 2, 3)] == expected
+    assert _faint_keys(world, binder, 3) == expected
+    old_slice, client = lua.eval(OLD_SLICE), _client(lua)
+    for k in expected:
+        assert client.key_identity(k) == old_slice(k)  # the replaced positional slice, value for value
+
+
+def test_injected_polished_key_builder_matches_the_codec():
+    world = _polished_world(POLISHED)
+    binder = world.bind()
+    world.party([world.mon(species=1 + i) for i in range(3)])
+    assert _faint_keys(world, binder, 3) == [pc.key(o) for o in POLISHED]
+    assert [pc.key(o) for o in POLISHED] == ["FFFFFF:0001:1FF:C1", "000000:0000:019:00", "123456:ABCD:123:5F"]
+    # evolution: the old key is the same record (DV bytes, OT, traits) under the pre-evolution species
+    evo = dict(POLISHED[2], species_id=26, form=3)
+    world = _polished_world([POLISHED[1], evo])
+    binder = world.bind()
+    world.party([world.mon(species=133, dvs=0x3AAA), world.mon(species=26)])
+    evolve(world, 1, 26)
+    (event,) = world.events(binder)
+    assert (event.old_key, event.new_key) == (pc.key(dict(evo, species_id=25)), pc.key(evo))
+
+
+def _identity_ok(client):
+    """A Polished key parses to (DV:OT, 9-bit species), never nil; evolution (species, and a form change)
+    keeps the stable part, so the client's evolved-death fallback can still find the mon."""
+    before = pc.key(POLISHED[2])
+    after = pc.key(dict(POLISHED[2], species_id=0x124, form=0))
+    pairs = [client.key_identity(k) for k in (pc.key(POLISHED[0]), before, after)]
+    return pairs == [("FFFFFF:0001", 511), ("123456:ABCD", 0x123), ("123456:ABCD", 0x124)]
+
+
+def test_client_parses_a_polished_key_into_a_valid_pair(lua):
+    client = _client(lua)
+    assert _identity_ok(client)
+    assert client.key_identity("not a key") is None and client.key_identity(None) is None
+
+
+def test_reverting_to_the_positional_slice_fails_the_polished_parse(lua):
+    source = (REPO / "lua/gen2/client.lua").read_text(encoding="utf-8")
+    body = 'local stable, species = key:match("^(%x+:%x+):(%x+)")'
+    assert source.count(body) == 1
+    mutant = lua.eval('function(s) return load(s, "=client_mutant")() end')(
+        source.replace(body, "do return key:sub(1, 9), tonumber(key:sub(11), 16) end local stable, species"))
+    assert mutant.key_identity("1234:ABCD:19") == ("1234:ABCD", 25)  # the mutant is the old vanilla behaviour
+    assert not _identity_ok(mutant)

@@ -52,7 +52,8 @@ local function same_source(left, right)
         assert(type(left[key]) == "string" and left[key] == right[key], "Gen 2 source mismatch: " .. key)
     end
 end
-local function key(mon)
+-- The vanilla Gen 2 key (wire.mon_key, gen2_codec.key). options.key_fn replaces it per binder (build).
+local function vanilla_key(mon)
     need(type(mon) == "table" and integer(mon.species_id,1,251) and integer(mon.ot_id,0,65535)
          and integer(mon.dv_word,0,65535), "complete decoded Gen 2 identity required")
     return string.format("%04X:%04X:%02X",mon.dv_word,mon.ot_id,mon.species_id)
@@ -551,6 +552,19 @@ function build(options, proven)
         same_source(gifts.source,pack.source)
     end
     local reads = assert(options.reads,"independent Gen 2 reads binding required")
+    -- options.key_fn (e.g. polished.lua P.mon_key): mon -> key | nil, why. It owns its own field and species
+    -- bounds; the vanilla 1..251 bound applies only to the default builder.
+    local key, max_species = vanilla_key, 251
+    if options.key_fn ~= nil then
+        local key_fn = options.key_fn
+        assert(callable(key_fn), "key_fn must be callable")
+        max_species = 0x1FF -- ponytail: the widest injected key's species field (polished_codec.key, 9-bit)
+        key = function(mon)
+            local k, why = key_fn(mon)
+            need(type(k) == "string", "complete decoded Gen 2 identity required: " .. tostring(why))
+            return k
+        end
+    end
     assert(callable(reads.read_party) and callable(reads.read_active_box),"party/active-box readers required")
     local Registry, GB = assert(options.Registry), assert(options.GB)
     assert(type(Registry.new) == "function" and type(GB.new) == "function","shared hook factories required")
@@ -939,9 +953,11 @@ function build(options, proven)
         local mon = copy(party.mons[slot+1])
         need(mon.is_egg == false and mon.species_id == new,"evolved record does not carry the published species")
         local old = site.identity_migration.old_species_by_new[tostring(new)]
-        need(integer(old,1,251),"species has no source pre-evolution")
+        need(integer(old,1,max_species),"species has no source pre-evolution")
         mon.key = key(mon)
-        local old_key = key({species_id=old,ot_id=mon.ot_id,dv_word=mon.dv_word})
+        local prior = copy(mon)   -- the same record under its pre-evolution species: every other key field kept
+        prior.species_id = old
+        local old_key = key(prior)
         for i,other in ipairs(party.mons) do
             if i ~= slot+1 then
                 local k = key(other)
