@@ -52,7 +52,7 @@ SPAN = (0x01FFEC00, 0x01FFFC00)
 # The whole directory's headers: the C2 invariants are whole-directory rules, so a file-scope
 # object or an in-span literal in any card header moves 0x021E5900 or fails census W2.
 C_SOURCES = ("beacon.c", "beacon.h", "dispatch.c", "dispatch.h", "sound.h", "sound_policy.h",
-             "panel.h", "panel_policy.h", "trade.h", "trade_policy.h")
+             "panel.h", "panel_policy.h", "trade.h", "trade_policy.h", "sound.c")
 TITLE_OFFSET = 0xE00
 TITLE_SIZE = 0x40
 
