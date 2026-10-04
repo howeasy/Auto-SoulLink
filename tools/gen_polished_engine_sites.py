@@ -45,11 +45,10 @@ SCHEMA_SIGNALS = "polished-engine-signals-v1"
 SCHEMA_CHECKPOINT = "polished-write-checkpoint-v1"
 GENERATOR = "tools/gen_polished_engine_sites.py"
 
-# Byte count read from the ROM per site. 6 matches the vanilla pack; the two tiny
-# hand-placed boundaries read only their own instruction.
+# Bytes read from the ROM per site. 6 matches the vanilla pack. A row pinned by `find_hex`
+# reads exactly its own byte sequence, so no row needs a hand-typed length any more.
 DEFAULT_HEX_LEN = 6
-HEX_LEN_OVERRIDE = {"battle_faint": 2, "rival_swap_commit": 2, "rival_swap_gate": 3,
-                    "rival_swap_last_consumption": 1}
+
 
 # CPU-instruction proof for the sites a client binds (lua/gen2/signals.lua S.new_polished demands `instructions`
 # and `point_symbols` of its site, as build() does of a vanilla one). Each instruction is RE-ENCODED from the .sym and
@@ -140,27 +139,42 @@ UNRESOLVED = "UNRESOLVED"
 # `signal` and `phase`; the Polished verdict and evidence live in docs/polished/ENGINE_SITES.md.
 SITES: tuple[dict, ...] = (
     # ---- battle / faint ----
-    S("battle_faint", "player_faint", "ldh [hBattleTurn], a", "before_party_copyback",
-      "Polished's before_party_copyback boundary: the last instruction before "
-      "UpdateBattleMonInParty copies the battle struct into the party record. The battle "
-      "struct (wBattleMonHP) is authoritative here; the party record is stale until the "
-      "next two instructions run. docs/polished/BATTLE_FLOW.md 1.2.",
-      bank=0x0F, addr=0x44C8, anchor="ResolveFaints.no_fainted_mons"),
-    S("battle_faint_copyback_call", "player_faint", "call UpdateBattleMonInParty",
-      "copyback_entry", "The instruction that consumes a write made at battle_faint. "
-      "0f:480d-equivalent ordering is documented for the enemy side in rival_swap_last_consumption.",
-      bank=0x0F, addr=0x44CA, anchor="ResolveFaints.no_fainted_mons"),
+    # Every boundary below is pinned by BYTE SEQUENCE (`find_hex`) inside its named .sym routine, never by a
+    # hand-typed offset: find_in_extent requires exactly one match in that routine's extent and aborts
+    # otherwise, and expected_hex is read out of the release ROM here. The pinned PC is the INSTRUCTION, and
+    # each one is checked to be reachable only on the path it names (see each row).
+    S("battle_faint", "player_faint", "ResolveFaints.no_fainted_mons", "before_party_copyback",
+      "Polished's before_party_copyback boundary: `ldh [hBattleTurn], a` = `e0 d1`, the last instruction "
+      "before `call UpdateBattleMonInParty` copies the battle struct into the party record. The battle "
+      "struct (wBattleMonHP) is authoritative here; the party record is stale until the next two "
+      "instructions run. docs/polished/BATTLE_FLOW.md 1.2. NOT a faint-only path: ResolveFaints reaches "
+      ".no_fainted_mons every turn end, faint or not, so a consumer keys on the battle-struct HP it reads "
+      "here, never on the site firing.",
+      symbol_offset=None, anchor="ResolveFaints.no_fainted_mons", find_hex="E0D1"),
+    S("battle_faint_copyback_call", "player_faint", "ResolveFaints.no_fainted_mons", "copyback_entry",
+      "`cd b0 34` = call UpdateBattleMonInParty (sym 00:34b0): the instruction that consumes a write made "
+      "at battle_faint, immediately followed by `cd c3 34` = call UpdateEnemyMonInParty. The enemy side's "
+      "ordering is documented for rival_swap_last_consumption.",
+      symbol_offset=None, anchor="ResolveFaints.no_fainted_mons", find_hex="CDB034"),
     S("battle_end", "battle_end_result", "ExitBattle", "before_end_processing",
-      "Battle exit, before end processing.", bank=0x0F, addr=0x72E0),
+      "Battle exit, before end processing: ExitBattle's first instruction. Fires on EVERY battle exit, wild "
+      "and trainer alike -- it brackets the encounter, it does not classify it.",
+      symbol_offset=None, find_hex="CD3054"),
     S("wild_ready", "wild_battle_start", "InitEnemy.wildmon", "after_enemy_load",
-      "Enemy wild mon staged. Polished folds the vanilla InitEnemyWildmon/InitEnemyTrainer "
-      "pair into one InitEnemy; .wildmon is the wild branch.",
-      bank=0x0F, addr=0x72BC),
-    S("trainer_ready", "trainer_battle_start", "InitEnemy", "return_after_trainer_setup",
-      "Trainer party is built here by farcall ReadTrainerParty (engine/battle/core.asm:8040). "
-      "NOTE: InitEnemy.partyloop is the boss-trainer player-party happiness walk, NOT the "
-      "enemy build -- see docs/polished/BATTLE_FLOW.md 3.2.",
-      bank=0x0F, addr=0x7260),
+      "Enemy wild mon staged: InitEnemy branches here (`jr z, .wildmon` at 0f:7264, +$56) only when "
+      "`wOtherTrainerClass` reads 0, so the row is wild-only. `3e 01 ea 33 d2` = ld a,$01 / ld [wBattleMode],a.",
+      symbol_offset=None, find_hex="3E01EA33D2"),
+    S("trainer_ready", "trainer_battle_start", "InitEnemy", "trainer_party_build_entry",
+      "TRAINER branch of InitEnemy: `d7 00 40 07` = `farcall ReadTrainerParty` (sym 07:4000), the fall-through "
+      "after the `jr z, .wildmon` above. NOT the routine head (0f:7260), which fires on the wild path too.",
+      symbol_offset=None, find_hex="D7004007"),
+    S("explode_hold", "turn_order", "BattleTurn", "before_turn_ordering",
+      "THE Explode Mode write window: `cd 35 42` = call DetermineMoveOrder (sym 0f:4235) inside BattleTurn "
+      "(sym 0f:4109, core.asm:190). Reached once per turn after ParsePlayerAction committed an action and "
+      "CheckOpponentForfeit did not return early -- never from the .loop1 menu path. Priority resolves through "
+      "GetBattleVar(BATTLE_VARS_MOVE) -> BattleVarPairs[18] -> BattleVarLocations[12] = wCurPlayerMove, so the "
+      "vanilla explode rule transfers. docs/polished/EXPLODE_RIVAL.md 6.",
+      symbol_offset=None, find_hex="CD3542"),
     S("poison_faint", "poison_faint", "DoPoisonStep.DamageMonIfPoisoned", "after_poison_hp_zero",
       "Poison damage applied and MON_STATUS cleared for a party slot.", bank=0x13, addr=0x68CB),
     # ---- boot / save / map ----
@@ -286,19 +300,20 @@ SITES: tuple[dict, ...] = (
       "after_party_species_list_publish",
       "Vanilla .skip_unown sub-label is gone; the routine head survives.", bank=0x06, addr=0x4020),
     # ---- Rival Team Swap window (docs/polished/EXPLODE_RIVAL.md section 10) ----
-    S("rival_swap_commit", "rival_window", "ld [hl], a", "ot_mon_index_committed",
-      "SendInUserPkmn commits wCurOTMon here: ld hl,$c4dd / ld a,[de] / dec a / ld [hl],a / "
-      "ld [$d10c],a. The commit runs 65 bytes BEFORE the copy, so wCurOTMon != $FF does NOT "
-      "mean the window closed.", bank=0x0F, addr=0x47CC, anchor="SendInUserPkmn"),
-    S("rival_swap_gate", "rival_window", "ld hl, wOTPartyMon1Species", "enemy_party_ptr_selected",
-      "THE rival-swap write gate. At this instant the party pointer is not yet resolved and "
-      "no CopyBytes has run, so a write to wOTPartyMons[0] is guaranteed consumed. "
-      "Next instructions: ld a,[wCurPartyMon] / call GetPartyLocation / ld de,wBattleMonSpecies.",
-      bank=0x0F, addr=0x47DD, anchor="SendInUserPkmn"),
-    S("rival_swap_last_consumption", "rival_window", "rst CopyBytes", "after_party_to_battle_copy",
-      "Last instruction that consumes wOTPartyMons: ld bc,$11 (PARTYMON_STRUCT_LENGTH - "
-      "MON_LEVEL) then rst CopyBytes. A write after this is lost.",
-      bank=0x0F, addr=0x480D, anchor="SendInUserPkmn"),
+    S("rival_swap_commit", "rival_window", "SendInUserPkmn", "ot_mon_index_committed",
+      "SendInUserPkmn commits wCurOTMon here: ld hl,$c4dd / ld a,[de] / dec a / ld [hl],a / ld [$d10c],a. "
+      "The commit runs 65 bytes BEFORE the copy, so wCurOTMon != $FF does NOT mean the window closed.",
+      symbol_offset=None, anchor="SendInUserPkmn", find_hex="21DDC41A3D77EA0CD1"),
+    S("rival_swap_gate", "rival_window", "SendInUserPkmn", "enemy_party_ptr_selected",
+      "THE rival-swap write gate: `21 8b d2` = ld hl, wOTPartyMon1Species. The sibling instruction 5 bytes "
+      "earlier (0f:47d8, `21 d6 dc` = ld hl, wPartyMon1) is followed by `jr +3` that SKIPS this one when "
+      "hBattleTurn reads 0, so the row is the ENEMY send-out only. At this instant the party pointer is not "
+      "resolved and no copy has run, so a write to wOTPartyMons[0] is guaranteed consumed.",
+      symbol_offset=None, anchor="SendInUserPkmn", find_hex="218BD2"),
+    S("rival_swap_last_consumption", "rival_window", "SendInUserPkmn", "after_party_to_battle_copy",
+      "Last instruction that consumes wOTPartyMons: `e7` = rst CopyBytes after `01 11 00` (ld bc,$11 = "
+      "PARTYMON_STRUCT_LENGTH - MON_LEVEL). A write after this is lost.",
+      symbol_offset=None, anchor="SendInUserPkmn", find_hex="E7D1F0D1A7212CD2"),
     S("send_in_user_pkmn", "rival_window", "SendInUserPkmn", "routine_entry",
       "The side-neutral party->battle struct copy routine. Also drives player send-out.",
       bank=0x0F, addr=0x4748),
@@ -363,7 +378,7 @@ def build_site(site: dict, rom: bytes, sym: dict, spans: list[tuple[int, int]]) 
         out["reason"] = site["reason"]
         return out
     bank, addr, symoff = site["bank"], site["addr"], site["symbol_offset"]
-    n = HEX_LEN_OVERRIDE.get(site["id"], DEFAULT_HEX_LEN)
+    n = DEFAULT_HEX_LEN
     if site["find_hex"]:
         seq = bytes.fromhex(site["find_hex"])
         bank, addr, symoff = find_in_extent(rom, sym, site["symbol"], seq)
