@@ -14,6 +14,13 @@
  * host's own TRADE_SCENE budget is 6000 frames (lua/gen3/native.lua:177-181); an
  * adapter bound that outlasts it would let the host declare the module poisoned
  * before the native side reaches UNCERTAIN, so adapters should pick a smaller one.
+ *
+ * Pre-save watchdog: poll_pre_save() returning neither 1 (saved) nor negative
+ * (refused) left the producer in TP_PRE_SAVE forever, so a stalled pre-save dialog
+ * outlasted the host budget above and the module ended poisoned rather than
+ * unchanged. pre_save_timeout_frames bounds that wait; 0 leaves the bound off.
+ * Nothing is mutated before the save completes, so the timeout ends the visit
+ * UNCHANGED, exactly like an engine refusal.
  */
 #ifndef SLINK_NDS_TRADE_PRODUCER_H
 #define SLINK_NDS_TRADE_PRODUCER_H
@@ -34,6 +41,8 @@ static inline void slink_trade_advertise(volatile SlinkMailboxV2 *m)
 typedef struct {
     void *context;
     uint32_t save_timeout_frames;      /* REQUIRED nonzero: PENDING longer than this is FAIL */
+    uint32_t pre_save_timeout_frames;  /* OPTIONAL, 0 = no watchdog: a pre-save that neither
+                                        * saves nor refuses within this many frames is UNCHANGED */
     const SlinkRecordBinding *binding; /* record length/validation/identity */
     const SlinkDecoder *decoder;       /* decoded-body access; NULL for PK3 */
     int (*safe_field)(void *);
@@ -53,6 +62,7 @@ typedef struct {
     uint8_t slot, cancel_scene, saving, reserved;
     uint16_t incoming_len, reserved2;
     uint32_t save_start_frame;        /* stamped from e->frame at post_save_begin */
+    uint32_t pre_save_start_frame;    /* stamped from e->frame at start_pre_save */
     SlinkIdentity incoming_id;        /* binding identity of the staged record (host claim, checked) */
     SlinkIdentity received_id;        /* identity OBSERVED by the engine after the swap */
     uint8_t incoming[SLINK_MAX_RECORD]; /* native getters use word loads: 4-aligned by layout, asserted below */
@@ -218,6 +228,14 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
         } else if (result < 0) {
             tp_finish(s,m,w,s->prepare_seq,SLINK_TRADE_UNCHANGED,e);
         }
+        if (s->phase == TP_PRE_SAVE && (result == 0 || result == 2)
+            && e->pre_save_timeout_frames
+            && (uint32_t)(e->frame(e->context) - s->pre_save_start_frame) > e->pre_save_timeout_frames) {
+            /* The post-save leg's bound, same shape, same unsigned wrap. result == 1 wins: a
+             * save that completes on the frame the bound expires is still a completion. The
+             * phase guard keeps the earlier result < 0 / result == 1 exits from finishing twice. */
+            tp_finish(s,m,w,s->prepare_seq,SLINK_TRADE_UNCHANGED,e);
+        }
     } else if (s->phase == TP_SCENE && s->saving) {
         /* Native save in flight: only the poll can resolve it. */
         tp_save_resolve(s,m,w,tp_save_poll(s,e),e);
@@ -289,6 +307,7 @@ static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
         tp_close(w);
         s->prepare_seq=seq;s->slot=(uint8_t)slot;s->cancel_scene=0;s->saving=0;s->phase=TP_PRE_SAVE;
         m->status=SLINK_ST_BUSY;
+        s->pre_save_start_frame = e->frame(e->context);  /* the bound starts when we ask */
         if (!e->start_pre_save(e->context)) tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);
     } else if (!tp_identity(m,w)) {
         tp_ack(m,seq,0,12);

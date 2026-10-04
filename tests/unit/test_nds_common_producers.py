@@ -112,7 +112,7 @@ int main(void) {
   if (m.capabilities != 3) return 31;
   observed=&w;
   SlinkTradeEngine e;memset(&e,0,sizeof e);
-  e.binding=b;e.save_timeout_frames=100000;e.safe_field=safe;e.locate=locate;e.start_pre_save=pre_start;e.poll_pre_save=pre_poll;
+  e.binding=b;e.save_timeout_frames=100000;e.pre_save_timeout_frames=0;e.safe_field=safe;e.locate=locate;e.start_pre_save=pre_start;e.poll_pre_save=pre_poll;
   e.start_scene=scene_start;e.poll_scene=scene_poll;e.post_save_begin=save_begin;e.post_save_poll=save_poll;
   e.received_key=received;e.frame=clock_frame;
   m.session_epoch=7;m.seq=1;m.opcode=SLINK_OP_TRADE_PREPARE;
@@ -538,7 +538,7 @@ static SlinkRecordStageV1 stage; static SlinkTradeEngine e; static SlinkDecoder 
 static uint8_t rec[SLINK_MAX_RECORD], last_rec[SLINK_MAX_RECORD];
 static uint16_t last_len;
 static int pre_result, scene_result, begin_result, script[16], script_n;
-static int polls, begins, starts, old_present, safe_flag, verify_ok, decodes, misaligned, recv_ok, bad_begin_state;
+static int polls, begins, starts, old_present, safe_flag, verify_ok, decodes, misaligned, recv_ok, bad_begin_state, pre_polls;
 static uint32_t recv_pid, recv_ot, frame, frame_step;
 static int mutate_arg, start_ret;
 static const uint8_t *arg_ptr;
@@ -547,7 +547,7 @@ static uint8_t entry_rec[2][SLINK_MAX_RECORD];
 static int safe(void *p) { (void)p; return safe_flag; }
 static int locate(void *p,uint32_t pid,uint32_t ot) { (void)p; return old_present && pid==OLD_PID && ot==OLD_OT ? 0 : -1; }
 static int pre_start(void *p) { (void)p; return 1; }
-static int pre_poll(void *p) { (void)p; return pre_result; }
+static int pre_poll(void *p) { (void)p; pre_polls++; return pre_result; }
 static int scene_start(void *p,unsigned slot,const uint8_t *r,uint16_t n) {
   (void)p;(void)slot;starts++;
   if (((uintptr_t)r & 3u) != 0) misaligned = 1;
@@ -594,11 +594,11 @@ static void reset(void) {
   memset(&s,0,sizeof s);memset(&m,0,sizeof m);memset(&w,0,sizeof w);memset(&e,0,sizeof e);
   memset(last_rec,0,sizeof last_rec);last_len=0;
   pre_result=0;scene_result=0;begin_result=1;script[0]=SP_OK;script_n=1;
-  polls=begins=starts=decodes=misaligned=bad_begin_state=0;frame=0;frame_step=1;
+  polls=begins=starts=decodes=misaligned=bad_begin_state=pre_polls=0;frame=0;frame_step=1;
   mutate_arg=0;start_ret=1;arg_ptr=0;memset(entry_rec,0,sizeof entry_rec);B=&BIND;
   old_present=1;safe_flag=1;verify_ok=1;recv_ok=1;recv_pid=NEW_PID;recv_ot=NEW_OT;
   dec.context=0;dec.read_u32=dec_read;dec.verify=dec_verify;
-  e.save_timeout_frames=1000000u;e.binding=B;e.decoder=&dec;e.safe_field=safe;e.locate=locate;e.start_pre_save=pre_start;e.poll_pre_save=pre_poll;
+  e.save_timeout_frames=1000000u;e.pre_save_timeout_frames=0u;e.binding=B;e.decoder=&dec;e.safe_field=safe;e.locate=locate;e.start_pre_save=pre_start;e.poll_pre_save=pre_poll;
   e.start_scene=scene_start;e.poll_scene=scene_poll;e.post_save_begin=save_begin;e.post_save_poll=save_poll;
   e.received_key=received;e.frame=clk;
   build();
@@ -924,6 +924,61 @@ static int sc_foreign(int var) {
   return 0;
 }
 
+/* The pre-save leg carries no frame bound of its own: a poll that returned neither
+ * 1 (saved) nor negative (refused) parked the producer in TP_PRE_SAVE forever while
+ * the host's own 6000-frame budget ran out. pre_save_timeout_frames bounds that wait;
+ * 0 keeps the unbounded behaviour. Nothing is mutated before the save completes, so
+ * the timeout ends the visit UNCHANGED, exactly like an engine refusal. */
+static int sc_presave(int var) {
+  reset();
+  e.pre_save_timeout_frames=var==1 ? 0u : 50u;   /* 0 = no watchdog (pre-existing behaviour) */
+  frame_step=0;frame=0;                          /* deterministic clock, set by hand */
+  pre_result=var==2 ? 2 : 0;                     /* never completes: waiting, or consented */
+  send_prepare(7,1);svc();
+  CHECK(m.producer_phase==SLINK_PHASE_PRE_SAVE && s.phase==TP_PRE_SAVE && m.status==SLINK_ST_BUSY);
+  CHECK(w.visit_flags==SLINK_VISIT_ACCEPTED && !w.milestones && w.final_result==SLINK_TRADE_PENDING);
+  CHECK(!m.ack_seq && !m.reason && m.opcode==SLINK_OP_TRADE_PREPARE);
+  CHECK(s.pre_save_start_frame==0u && pre_polls==0);
+  for (unsigned elapsed=10; elapsed<=50u; elapsed+=10u) {
+    frame=elapsed;svc();
+    CHECK(m.producer_phase==SLINK_PHASE_PRE_SAVE && pre_polls==(int)(elapsed/10u));
+    CHECK(!m.ack_seq && !m.reason && !w.milestones && w.save_status==0);
+    if (var==2) CHECK(w.visit_flags==(SLINK_VISIT_ACCEPTED|SLINK_PRE_SAVE_CONSENT));
+    else CHECK(w.visit_flags==SLINK_VISIT_ACCEPTED);
+  }
+  if (var==1) {        /* unbounded: waited out past the host's own 6000-frame trade budget */
+    for (unsigned elapsed=1000u; elapsed<=6000u; elapsed+=1000u) { frame=elapsed;svc(); }
+    CHECK(s.phase==TP_PRE_SAVE && m.producer_phase==SLINK_PHASE_PRE_SAVE);
+    CHECK(pre_polls==11 && !m.ack_seq && !w.milestones && w.final_result==SLINK_TRADE_PENDING);
+    return 0;
+  }
+  if (var==3) pre_result=1;   /* the save completes exactly when the bound is first exceeded */
+  frame=51;svc();
+  if (var==3) {        /* a save that lands past the bound is still a save: the poll result wins over the timeout */
+    CHECK(m.producer_phase==SLINK_PHASE_READY && m.status==SLINK_ST_OK && m.ack_seq==1 && !m.opcode);
+    CHECK(w.milestones==(1u<<SLINK_PRE_SAVE_OK) && w.final_result==SLINK_TRADE_PENDING);
+    CHECK(w.save_status==SLINK_SAVE_OK && pre_polls==6 && starts==0 && begins==0);
+    return 0;
+  }
+  /* the bound is exceeded with the save still unfinished: the whole visit is refused */
+  CHECK(m.producer_phase==SLINK_PHASE_DONE && s.phase==TP_DONE && pre_polls==6);
+  CHECK(w.final_result==SLINK_TRADE_UNCHANGED && w.milestones==(1u<<SLINK_FINAL_RESULT));
+  CHECK(!(w.milestones&(1u<<SLINK_PRE_SAVE_OK)) && w.save_status==0);
+  CHECK(m.status==SLINK_ST_FAIL && m.ack_seq==1 && !m.reason && !m.opcode);
+  CHECK(starts==0 && begins==0 && polls==0 && last_len==0);
+  CHECK(!slink_trade_success_is_durable(&w,1,2,NEW_PID,NEW_OT));
+  /* the bound is armed per visit, not inherited: a new PREPARE stamps its own frame */
+  send_prepare(7,10);word(m.args+12,77);m.args[16]=3;svc();
+  CHECK(m.producer_phase==SLINK_PHASE_PRE_SAVE && s.pre_save_start_frame==51u);
+  CHECK(w.final_result==SLINK_TRADE_PENDING && !w.milestones);
+  frame=100u;svc();                       /* 49 frames into the new visit: inside its own bound */
+  CHECK(m.producer_phase==SLINK_PHASE_PRE_SAVE && m.ack_seq==1 && !w.milestones);   /* ack_seq is still the previous visit's */
+  frame=102u;svc();                       /* 51: the new visit's own bound expires */
+  CHECK(m.producer_phase==SLINK_PHASE_DONE && w.final_result==SLINK_TRADE_UNCHANGED);
+  CHECK(m.status==SLINK_ST_FAIL && m.ack_seq==10 && !m.opcode && pre_polls==8);
+  return 0;
+}
+
 int main(int argc,char **argv) {
   int sc=argc>1?atoi(argv[1]):1,var=argc>2?atoi(argv[2]):0;
   switch (sc) {
@@ -938,6 +993,7 @@ int main(int argc,char **argv) {
     case 9: return sc_mutate(var);
     case 10: return sc_stagelen(var);
     case 11: return sc_foreign(var);
+    case 12: return sc_presave(var);
   }
   return 99;
 }
@@ -957,6 +1013,8 @@ SCENARIOS = (
     + [(f"stage-len-arm{v}", 10, v) for v in range(2)]
     + [(f"foreign-{n}", 11, v) for v, n in enumerate(
         ["play-se", "show-info", "play-fanfare", "play-se-idle"])]
+    + [(f"presave-{n}", 12, v) for v, n in enumerate(
+        ["wait-times-out", "no-watchdog", "consented-times-out", "completion-after-bound-wins"])]
 )
 
 
@@ -1001,6 +1059,9 @@ MUTANTS = {
                                                     "  if (!recv_ok || !dec_read(0,last_rec,B->party_len,B->otid_logical_off,&ot_)) return 0; memcpy(pid,last_rec,4);*ot=ot_;return 1; }")]),
     # sound/panel opcodes posted while a trade save is in flight must survive the visit
     "ack-foreign-opcode": ((11, 0), [(TP, FOREIGN_GATE, "")]),
+    # the pre-save leg had no frame bound: without it a poll that never saves and never refuses
+    # parks the producer in TP_PRE_SAVE forever while the host's own budget expires.
+    "no-pre-save-watchdog": ((12, 0), [(TP, "(uint32_t)(e->frame(e->context) - s->pre_save_start_frame) > e->pre_save_timeout_frames", "((void)s, 1)")]),
 }
 
 
