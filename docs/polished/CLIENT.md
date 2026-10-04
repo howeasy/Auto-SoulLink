@@ -351,9 +351,154 @@ hello payload with a non-null `pc_boxes_generation`.
 
 ---
 
+## 4b. Open items settled
+
+Closed by reading the source and, where the question is a Lua behaviour, by **executing the real module under lupa
+(Lua 5.5)** with the stubs the composition would supply. Method for U1-U3: `dofile` the shipped
+`lua/gen2/client.lua`, `lua/gen2/wire.lua`, `lua/hello_session.lua`, `lua/reply_dispatch.lua`,
+`lua/owed_reports.lua`, construct with `trade=nil`, `contest_mask=nil`, `checkpoint_pc=nil`, `battle_hold=nil`,
+and a stub `reads`/`io`/`net`; then call the real methods. Printed results verbatim below.
+
+### U1 — `trade_live()` with `trade == nil`: **returns `false`, does not raise**. SETTLED.
+Source: `lua/gen2/client.lua:663-664`
+```lua
+function self:trade_live()
+    return trade ~= nil and self.artifact_kind == "overlay" and trade:advertised()
+```
+`trade ~= nil` short-circuits, so `trade:advertised()` is never evaluated.
+Execution:
+```
+construct=ok  trade=nil contest_mask=nil checkpoint_pc=nil battle_hold=nil
+U1  pcall=true  trade_live()=false  type=boolean
+```
+Confidence: **certain** (read + executed).
+
+### U2 — `contest_masked()` with no `contest_mask`: **returns `false`**, never indexes `io`. SETTLED.
+Source: `lua/gen2/client.lua:487-490`
+```lua
+local contest = p.contest_mask
+local function contest_masked()
+    if not contest or io.bank_valid(contest.bank, contest.address, 1) ~= true then return false end
+```
+`not contest` is true when `p.contest_mask` is nil, so `io.bank_valid` is never reached.
+**Risk removed:** the C-COMPOSE card can leave `contest_mask=nil` with no guard.
+
+### U3 — `awaiting_save_field()` with no checkpoint: **returns `nil` (field absent)**. SETTLED.
+Source: `lua/gen2/client.lua:1001` calls `burial_waiting()` (`lua/gen2/client.lua:994`), which only iterates
+`self.settle` — a client-local table that exists regardless of checkpoint. So `awaiting_save` is simply **omitted
+from the tick**, which is the documented idle-tick behaviour.
+
+U2 and U3 together, one execution (`send_tick` on the real client):
+```
+U2U3 send_tick pcall=true  (NO RAISE)
+U2U3 messages=0
+```
+`messages=0` is correct and is not a failure: `send_tick` builds the payload table (so `contest_masked()` and
+`awaiting_save_field()` both **run** — they are table-constructor arguments at `lua/gen2/client.lua:1417-1418`,
+evaluated before `send`), and only then hits the pre-hello hold, because a fresh `HelloSession` is not `ready`.
+That is the pre-hello gate doing its job, not a swallow.
+
+### U4 — `AREA_BATTLE_TYPES = {0,4,8}` does **NOT** match Polished. **Real bug.** SETTLED.
+`BATTLETYPE_*` are bare `const`s, so their values are their ordinal within the `const_def` block.
+**Vanilla pokecrystal** (`E:/Google Drive/SLink/.cache/pret/pokecrystal/constants/battle_constants.asm:90-102`):
+`NORMAL=0 CANLOSE=1 DEBUG=2 TUTORIAL=3 FISH=4 ROAMING=5 CONTEST=6 FORCESHINY=7 TREE=8 TRAP=9 ...`
+⇒ `{0,4,8}` = **{NORMAL, FISH, TREE}**. Correct.
+
+**Polished** (`F:/slink-work/cache/polished/src/constants/battle_constants.asm:106-123`):
+`NORMAL=0 CANLOSE=1 TUTORIAL=2 FISH=3 TREE=4 ROAMING=5 CONTEST=6 SAFARI=7 GHOST=8 GROTTO=9 INVERSE=10 TRAP=11 ...`
+⇒ `{0,4,8}` on Polished = **{NORMAL, TREE, GROTTO}**.
+
+So on Polished the set is wrong in **both directions**: a **FISH (3)** battle does not resolve its area, and a
+**GROTTO (8)** battle falsely resolves one. The single consumer is
+`lua/gen2/client.lua:1177` `resolves = battle ~= nil and AREA_BATTLE_TYPES[battle.battle_type] == true`.
+A false resolve consumes a real encounter slot — a **dead-zone defect**, not cosmetic.
+
+**Amplifier:** `data/games/polished_crystal/profile.json`'s `constants` carries `WILD_BATTLE=1` and
+`TRAINER_BATTLE=2` but **no `BATTLETYPE_*` at all** (verified: the filtered dict is empty), so the fix cannot
+read them from the profile today. `tools/gen_polished_profile.py` must emit them, then `AREA_BATTLE_TYPES` moves
+into the profile like `NUM_BOXES` already did in the C-SIGNALS card.
+Confidence: **certain** (ordinals read from both pinned sources).
+
+### U5 — field sets: the **only** missing decoded-mon field is `dv_word`. SETTLED.
+Mechanically extracted by regex over the two modules:
+- `wire.lua` reads on a decoded mon: `dv_word, held_item, hp, is_egg, level, max_hp, moves, nickname, ot_id, pp, pp_ups, slot, species_id, status`
+- `client.lua` reads on a decoded mon: `held_item, hp, is_egg, key, level, max_hp, nickname, slot, species_id`
+
+`lua/gen2/polished.lua`'s `decode_record` (`lua/gen2/polished.lua:268-301`) plus `traits`/`dvs_of`/`pp_of`/`decode_party_block`
+supplies **all thirteen** of `wire.lua`'s reads **except `dv_word`** — it supplies `dv_bytes` (24-bit,
+`lua/gen2/polished.lua:249`) instead. All nine of `client.lua`'s reads are present.
+
+The **wire entry shapes are identical**: `polished.lua`'s `common()` emits
+`species_id, level, hp, maxHP, status_cond, held_item_id, moves, pp, pp_ups` — exactly the set
+`wire.foe_entry` emits — and `P.party_entry` adds the same `key, slot, blob_hex, active, nickname, stat_stages`
+that `wire.party_entry` adds.
+
+**Conclusion: the field-diff risk is not "many missing fields", it is exactly one — `dv_word` — and it is the key
+input.** That is the whole of C-KEY. Confidence: **certain**.
+
+### U6 — the three key sites, as a proposal (**not applied**)
+
+The unifying rule: **one key builder, injected; the stable prefix is parsed, not sliced.**
+
+**Site 1 — `lua/gen2/wire.lua:73-79`.** `M.mon_key` keeps today's body as the default and delegates when the
+record is Polished. Minimal shape: add an optional builder parameter (`M.mon_key(mon, builder)`) or a
+`M.set_key_builder(fn)`; `P.wire()` supplies the Polished builder.
+```lua
+-- PROPOSED, not applied
+function M.mon_key(mon, builder)
+    builder = builder or M.mon_key            -- recursion guard: default path is today's body verbatim
+    ...
+```
+Executed proof — the proposed dispatcher on the three vanilla records, against the **real** `wire.lua` output:
+```
+== BEFORE (real lua/gen2/wire.lua M.mon_key) ==
+  sample1 -> 1234:ABCD:19
+  sample2 -> 0000:0000:01
+  sample3 -> FFFF:0001:FB
+== AFTER (proposed_key) on the same 3 vanilla records ==
+  sample1 -> 1234:ABCD:19   byte-identical=true
+  sample2 -> 0000:0000:01   byte-identical=true
+  sample3 -> FFFF:0001:FB   byte-identical=true
+  VANILLA OUTPUT PRESERVED = true
+```
+
+**Site 2 — `lua/gen2/signals.lua:55-58`.** Delete the module-private `key()` and take `options.key_builder`.
+Proposed output on three Polished records (3 DV bytes, 9-bit species, trait byte):
+```
+  polished1 -> 123456:ABCD:019:80
+  polished2 -> 000000:0000:001:00
+  polished3 -> FFFFFF:0001:1FF:C1
+```
+Each matches the 4-group shape of `server/adapters/gen2_polished.py:35`.
+
+**Site 3 — `lua/gen2/client.lua:470-472`.** Replace `sub(1,9)` / `tonumber(sub(11),16)` with a parse. The **old**
+code on a Polished key, executed:
+```
+  123456:ABCD:019:80   -> sub(1,9)=123456:AB  tonumber(sub(11),16)=nil
+```
+— `stable` is wrong **and** `old` is `nil`, so `if not (old and descends(old, mon.species_id))` can never pass and
+the evolved-death match silently never fires. The **proposed** parse:
+```
+  1234:ABCD:19         -> stable=1234:ABCD     species=25   fields=3
+  123456:ABCD:019:80   -> stable=123456:ABCD   species=25   fields=4
+  FFFF:0001:FF         -> stable=FFFF:0001     species=255  fields=3
+  FFFFFF:0001:1FF:C1   -> stable=FFFFFF:0001   species=511  fields=4
+```
+Both shapes parse; the 3-group case is byte-for-byte what `sub(1,9)` produced.
+Confidence: **certain** (executed).
+
+**Rollback:** all three are single-function edits inside files with existing callers; reverting restores today's
+behaviour exactly, and the vanilla-output proof above is the regression net.
+
+---
+
 ## 5. CLAIMS
 
-All 73 verified by reading the cited line of the cited file.
+All 89 verified by reading the cited line of the cited file.
+
+## Coordinator correction (2026-10-04) to U4
+
+Counting the Polished `const_def` block (`constants/battle_constants.asm:106-123`): NORMAL 0, CANLOSE 1, TUTORIAL 2, FISH 3, TREE 4, ROAMING 5, CONTEST 6, SAFARI 7, GHOST 8, GROTTO 9, INVERSE 10. So on Polished `{0,4,8}` = {NORMAL, TREE, GHOST}; the helper's text calling 8 "GROTTO" is a miscount. The defect stands (FISH 3 is missed, GHOST 8 would falsely resolve); the area-resolving set to emit from the profile is {NORMAL 0, FISH 3, TREE 4}, with GROTTO 9 an owner/design question.
 
 ```json
 [
@@ -721,6 +866,86 @@ All 73 verified by reading the cited line of the cited file.
   "path": "F:/slink-work/wt/polished/docs/gen2/gen2_engine_sites.md",
   "line": 6,
   "expect": "It does **not** complete F3, arm hooks, grant runtime"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 88,
+  "expect": "local arr = json.array"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 664,
+  "expect": "return trade ~= nil and self.artifact_kind == \"overlay\" and trade:advertised()"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 487,
+  "expect": "local contest = p.contest_mask"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 488,
+  "expect": "local function contest_masked()"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 489,
+  "expect": "if not contest or io.bank_valid(contest.bank, contest.address, 1) ~= true then return false end"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 994,
+  "expect": "local function burial_waiting()"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 1177,
+  "expect": "resolves = battle ~= nil and AREA_BATTLE_TYPES[battle.battle_type] == true"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 249,
+  "expect": "mon.dv_bytes = hp_atk * 65536 + def_spe * 256 + sat_sdf"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/constants/battle_constants.asm",
+  "line": 106,
+  "expect": "const_def"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/constants/battle_constants.asm",
+  "line": 107,
+  "expect": "const BATTLETYPE_NORMAL"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/constants/battle_constants.asm",
+  "line": 110,
+  "expect": "const BATTLETYPE_FISH"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/constants/battle_constants.asm",
+  "line": 111,
+  "expect": "const BATTLETYPE_TREE"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/constants/battle_constants.asm",
+  "line": 116,
+  "expect": "const BATTLETYPE_GROTTO"
+ },
+ {
+  "path": "E:/Google Drive/SLink/.cache/pret/pokecrystal/constants/battle_constants.asm",
+  "line": 90,
+  "expect": "const_def"
+ },
+ {
+  "path": "E:/Google Drive/SLink/.cache/pret/pokecrystal/constants/battle_constants.asm",
+  "line": 95,
+  "expect": "const BATTLETYPE_FISH"
+ },
+ {
+  "path": "E:/Google Drive/SLink/.cache/pret/pokecrystal/constants/battle_constants.asm",
+  "line": 99,
+  "expect": "const BATTLETYPE_TREE"
  }
 ]
 ```
