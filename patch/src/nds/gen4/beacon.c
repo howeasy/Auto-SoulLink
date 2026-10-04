@@ -86,6 +86,17 @@ static u32 Slink_NDS_Base(void)
     return Slink_NDS_ArenaLo() + SLINK_GEN4_ARENA_DELTA;
 }
 
+/* The ONE exported accessor, for beacon.c and for C3/C4/C5 alike (beacon.h). The rule
+ * itself lives in beacon.h so it is host-testable with a fake arena value; this is only
+ * the binding of it to the linker symbol. The helpers below keep deriving the base the
+ * cheap way because they are reachable only from a service visit, and registration
+ * already failed closed on exactly this check. */
+uint32_t Slink_NDS_ArenaBase(void)
+{
+    return Slink_NDS_SpanBase(Slink_NDS_ArenaLo(), SLINK_GEN4_ARENA_START,
+                              SLINK_GEN4_ARENA_DELTA);
+}
+
 static volatile SlinkMailboxV2 *Slink_NDS_Mailbox(void)
 {
     return (volatile SlinkMailboxV2 *)(void *)Slink_NDS_Base();
@@ -316,7 +327,7 @@ void Slink_NDS_Register(void)
     u32 prev_cookie;
     u32 identity;
 
-    if (Slink_NDS_ArenaLo() != SLINK_GEN4_ARENA_START) {
+    if (Slink_NDS_ArenaBase() == 0u) {
         /* Fail closed and say nothing: the arena moved, so the accepted span is not
          * where the host reads it. Leaving the arena untouched keeps every pinned
          * address intact and the host reads no beacon, which is the correct reading
@@ -354,6 +365,15 @@ void Slink_NDS_Register(void)
         registrations = 1u;
         prev_cookie = 0u;
     }
+
+    /* OS_AllocFromArenaLo hands back arena memory, not cleared memory. Every field above
+     * is written by the latch below, but the three per-card sub-structs are not: a card
+     * that is compiled out must leave nothing behind, and a card that runs must see
+     * layout == 0 -- "never stamped" -- so it initialises its own sub-struct on first use
+     * (beacon.h, the per-card state section). */
+    Slink_NDS_Zero((volatile u8 *)&st->sound, (u32)sizeof st->sound);
+    Slink_NDS_Zero((volatile u8 *)&st->panel, (u32)sizeof st->panel);
+    Slink_NDS_Zero((volatile u8 *)&st->trade, (u32)sizeof st->trade);
 
     st->magic = 0;
     st->prev_cookie = prev_cookie;

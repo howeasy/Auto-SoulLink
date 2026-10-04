@@ -20,6 +20,10 @@ detector measures nothing.
   no DTCM / OS_ARENA_ITCM     DTCM is the launcher stack; census W2 FAILs an ITCM alloc
   no 7-8 hex span literal     census W2 FAILs a literal inside the span, and this source
                               is compiled into the tree the census scans
+  scanned scope              beacon.c/.h, dispatch and the C3 sound headers: the C2
+                              invariants are whole-directory rules, so a file-scope
+                              object or an in-span literal in sound_policy.h moves
+                              0x021E5900 or fails census W2 exactly as one in beacon.c
 
 Run:  pytest tests/unit/test_gen4_c2_beacon_source.py -v
 """
@@ -42,7 +46,7 @@ C_SOURCES = ("beacon.c", "beacon.h", "dispatch.c", "dispatch.h")
 # tools/gen4_mailbox_census.py:40,44 and abi.h:40
 ARENA_SIZE = 0x1000
 SPAN = (0x01FFEC00, 0x01FFFC00)
-# D-C2-1 (C2_BEACON_SPEC.md:6-12)
+C_SOURCES = ("beacon.c", "beacon.h", "dispatch.c", "dispatch.h", "sound.h", "sound_policy.h")
 TITLE_OFFSET = 0xE00
 TITLE_SIZE = 0x40
 
@@ -428,7 +432,9 @@ def test_dispatcher_is_wired_into_every_service_visit():
         if name == "dispatch.c":
             continue
         for module in ("Sound", "Panel", "Trade"):
-            assert f"Slink_NDS_{module}_Service(" not in text, f"{name} calls a producer directly"
+            # the CALL form, not the declaration: a producer's own header is allowed to
+            # declare Slink_NDS_<X>_Service(st, m); dispatch.c is the only caller.
+            assert f"Slink_NDS_{module}_Service(st, m)" not in text, f"{name} calls a producer directly"
 
 
 def test_dispatcher_carries_every_module_call_site():
@@ -518,6 +524,15 @@ _MUTATIONS = [
      "void Slink_NDS_Dispatch(SlinkGen4State *st, volatile SlinkMailboxV2 *m)\n"
      "{ if (m->opcode == SLINK_OP_PLAY_SE) { return; } }\n\nvoid Slink_NDS_DispatchOld(",
      "opcode pre-route"),
+    # The two detectors above are whole-directory rules, so a control must prove they now
+    # reach the C3 headers too: a mutant in beacon.c alone would pass even if the scan
+    # silently stopped at dispatch.
+    ("sound.h", "#define SLINK_GEN4_SE_BOO 1536u",
+     "#define SLINK_GEN4_SE_BOO 1536u\n\nstatic const uint16_t slink_sound_codes[4] = {1501u, 1694u, 1536u, 1500u};",
+     "file-scope objects"),
+    ("sound_policy.h", "static inline void slink_gen4_sound_release(",
+     "static const uint32_t slink_sound_span = 0x01FFEC00u;\n\n"
+     "static inline void slink_gen4_sound_release(", "in-span literal"),
 ]
 
 
