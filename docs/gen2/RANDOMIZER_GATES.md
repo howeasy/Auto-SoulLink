@@ -425,3 +425,31 @@ Each entry names an absolute path, a line and an exact substring on that line.
  }
 ]
 ```
+
+
+---
+
+## C-5 evidence status (2026-10-04, coordinator)
+
+Run by `tools/c5_runner.py` on real BizHawk, randomized overlay ROMs from the real Manager pipeline (pinned jar db4bc65c),
+digest `e5b0c5c6` at lane commit `e2620f64` + `3c2f504f`. **10 of the 11 planned cells PASS, each on its first attempt**
+(three reds along the way were oracle/runner assumptions, each diagnosed and fixed before any rerun):
+
+| cell | gate | result |
+|---|---|---|
+| c5/cc/link, c5/gs/link, c5/cg/link | G-a, G-b | PASS (rand_overlay at the contract sha1 on both sides) |
+| c5/cc/gen2_reconnect, c5/gs/gen2_reconnect | G-d | PASS (same_save and wrong_save legs) |
+| c5/cc/gen2_gift, c5/gs/gen2_gift | G-e, G-f | PASS (Bill's species read from the contracted ROM) |
+| c5/ct/gen2_npc_trade | G-h | PASS (Kyle's request/OT read from the ROM; pair provisioned trades=given) |
+| c5/cc/gen2_c5_wrong_rom | G-c | PASS (server refused B: 'this is not the ROM built for player b') |
+| c5/cc/gen2_c5_no_contract | G-i | PASS (both sides refused: no randomized-ROM contract) |
+
+**G-g (randomized roamer): owner ruling 2026-10-04 = NAMED LIMIT, fail-safe.** The overlay client registers no
+`roamer_party_finalized` / `roamer_box_finalized` site on ANY cart (vanilla included; they are not among the 27 sites proven by
+the PHYSICAL overlay receipts), so `lua/gen2/signals.lua` cannot classify a roamer catch on an overlay cart, randomized or not.
+Same-species roamer slots already fail safe. C-5 closes on the 10 passing cells.
+
+Open: (1) the evidence is at a digest that moves when the Polished lane merges (`lua/gen2/**`, `server/**` edits); re-run
+`python tools/c5_runner.py run` after the merge (resumable, about 20 minutes); (2) `tools/verify_gen2_release.py` has no reader for
+these receipts (its duo checks pin the PUBLISHED overlay sha1, `:1113`): a `--c5` lane or the release-evidence lane must read the
+`gen2-c5-duo-cell-v1` manifests; (3) the receipts are PHYSICAL with SYNTH/HARNESS/NATIVE disclosures per cell.
