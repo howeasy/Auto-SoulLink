@@ -602,9 +602,10 @@ end
 --   signals a binder that registers NOTHING: engine_signals.json is SOURCE_CANDIDATE / physical_firing OPEN with no
 --           receipt, so no engine-site hook is ever placed (no capture/PC/evolution events: milestone B, C-SITES)
 --   safety  refuses every write kind, so writes/boxes/phone/trade/checkpoint/battle holds are all absent (nil)
---   pc_boxes [] and no generation: lua/gen2/polished_boxes.lua is not composed. Its CartRAM/WRAM domain mappings are
---           unexercised on a Polished save (docs/polished/NEWBOX.md 7), and a wrong WRAM flag mapping reads every
---           slot as empty -- a COMPLETE empty census, worse than none
+--   pc_boxes the READ-ONLY newbox census (P.census over lua/gen2/polished_boxes.lua, C-BOX): a scan counts only with
+--           a real save (sSaveVersion + sChecksum anchors) and all 20 boxes decoded, else pc_boxes stays [] with no
+--           generation. NEWBOX 7's WRAM-domain mapping is still unexercised on a Polished save, so an unflagged
+--           pointer, a Bad Egg or an all-zero image never reads as a (possibly empty) COMPLETE census. No box write.
 --   hello   p.hello_unheld: with no checkpoint PC to hold, the first hello waits only for a live game (party +
 --           player readable, not the title screen), not the OWPlayerInput checkpoint
 --   areas   no area_map.json yet (C-AREA): area_id "" and loc_name map_G_N
@@ -635,9 +636,11 @@ local function compose_polished(deps, decision)
             glyphs=charmap.glyphs, terminator=charmap.terminator, max_length=profile.derived.name_length,
             unknown=function(byte) return string.format("<$%02X>", byte) end})
         local base = assert(P.new(profile, io_, decode_name))
-        local no_census = "Polished box census not composed"
-        local reads = setmetatable({read_active_box=function() return nil, no_census end,
-                                    read_storage_box=function() return nil, no_census end}, {__index=base})
+        local census, census_why = P.census(load("lua/gen2/polished_boxes.lua"), io_, decode_name, deps.log)
+        assert(census, census_why)
+        local reads = setmetatable({read_current_box_num=census.read_current_box_num,
+                                    read_active_box=census.read_active_box,
+                                    read_storage_box=census.read_storage_box}, {__index=base})
         local hud = assert(deps.hud, "explicit hud required")
         local Panel = load("lua/gen2/panel.lua")
         local panel = assert(Panel.new(profile, charmap, io_, Panel.writes(io_, load("lua/write_permit.lua")),

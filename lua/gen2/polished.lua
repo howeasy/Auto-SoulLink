@@ -196,10 +196,29 @@ function P.foe_entry(mon, stages)
     return entry
 end
 
---- The wire.lua-shaped table lua/gen2/client.lua takes by injection (p.wire). box_entry refuses: the newbox
---- census is not composed into the client yet (lua/gen2/entry.lua compose_polished says why).
-P.wire = {mon_key=P.mon_key, party_entry=P.party_entry, foe_entry=P.foe_entry,
-          box_entry=function() return nil, "Polished box entries are not composed" end}
+--- docs/protocol.md S4.4 (element of `pc_boxes`) in lua/gen2/wire.lua box_entry's shape over Polished's 20 boxes:
+--- `box` is 0-based (gen2_polished memorial_box_index 19 = box 20), `slot` 0..19. An egg is refused (the client
+--- omits it, as in the party).
+function P.box_entry(mon, box_index)
+    if type(mon) ~= "table" then return nil, "mon record required" end
+    if mon.is_egg then return nil, "egg record: no defined Gen 2 box wire shape" end
+    local key, why = P.mon_key(mon)
+    if not key then return nil, why end
+    if not integer(box_index, 0, 19) then return nil, "invalid or missing box_index" end
+    if not integer(mon.slot, 0, 19) then return nil, "invalid or missing slot" end
+    if not integer(mon.level, 1, 100) then return nil, "invalid or missing level" end
+    local moves = four(mon.moves)
+    if not moves then return nil, "invalid or missing moves" end
+    if not integer(mon.held_item, 0, 255) then return nil, "invalid or missing held_item" end
+    if mon.nickname ~= nil and type(mon.nickname) ~= "string" then return nil, "nickname must be a decoded string" end
+    local entry = {box=box_index, slot=mon.slot, key=key, species_id=mon.species_id, level=mon.level,
+                   held_item_id=mon.held_item, moves=moves}
+    if mon.nickname ~= nil then entry.nickname = mon.nickname end
+    return entry
+end
+
+--- The wire.lua-shaped table lua/gen2/client.lua takes by injection (p.wire).
+P.wire = {mon_key=P.mon_key, party_entry=P.party_entry, foe_entry=P.foe_entry, box_entry=P.box_entry}
 
 --- Reads over the generated profile. io: read_range(address, length, domain), bank_valid(bank, address, length).
 function P.new(profile, io, decode_name)
@@ -551,6 +570,107 @@ function P.new(profile, io, decode_name)
     end
 
     return r
+end
+
+-- ── C-BOX: the read-only newbox census (docs/polished/CLIENT.md C-BOX, docs/polished/NEWBOX.md) ─────────────
+-- Coordinates are the pinned .sym {bank, address} pairs (data/polished/polished_slink.sym;
+-- tests/unit/test_polished_boxes_census.py re-derives every one from it). The profile does not carry them yet.
+local SYM = {sBoxMons1A={2, 0xA000}, sBoxMons1B={0, 0xA000}, sBoxMons1C={1, 0xB60C},
+             sBoxMons2A={3, 0xA000}, sBoxMons2B={0, 0xABF1}, sBoxMons2C={1, 0xB858},
+             wPokeDB1UsedEntries={2, 0xD8B7}, wPokeDB2UsedEntries={2, 0xD8D1},
+             wGameLogicPaused={0, 0xCEB9}, sWritingBackup={0, 0xABE5},
+             sSaveVersion={0, 0xABE2}, sGameData={1, 0xA008}, sGameDataEnd={1, 0xAB83}, sChecksum={1, 0xAD0D}}
+local NEWBOX_AT, BACKUP_NEWBOX_AT, NEWBOX_STRIDE, SAVE_VERSION = {1, 0xB0E4}, {1, 0xB378}, 0x21, 10
+
+--- {[label] = {bank, address}} for polished_boxes.lua B.COORD_LABELS plus the save anchors.
+function P.newbox_coords()
+    local out = {}
+    for label, at in pairs(SYM) do out[label] = {at[1], at[2]} end
+    for n = 1, 20 do
+        out["sNewBox" .. n] = {NEWBOX_AT[1], NEWBOX_AT[2] + NEWBOX_STRIDE * (n - 1)}
+        out["sBackupNewBox" .. n] = {BACKUP_NEWBOX_AT[1], BACKUP_NEWBOX_AT[2] + NEWBOX_STRIDE * (n - 1)}
+    end
+    return out
+end
+
+--- The census as the client box readers. Boxes = lua/gen2/polished_boxes.lua; io = the production io (read_u8 with
+--- a domain, domain_size, cart_ram_linear); decode_text optional; log optional (called once per distinct refusal).
+--- Returns {read_current_box_num, read_active_box, read_storage_box}: client.lua rescan_boxes walks boxes 0..19
+--- through read_storage_box (no volatile active shadow here, so the current box is -1) and read_storage_box(0)
+--- takes the one fresh scan the other 19 are served from. NEVER writes.
+---
+--- FAIL CLOSED (a refusal returns nil, why and the client treats it as not a census, client.lua:322): a scan counts
+--- only when (1) CartRAM and WRAM are the flat 32 KiB images, (2) no native save is running, (3) the SAVE is real:
+--- sSaveVersion == 10 big-endian and the 16-bit byte sum of sGameData (01:A008..AB82) equals sChecksum, so a zeroed,
+--- never-saved or mis-mapped image can never read as an empty census, and (4) every one of the 20 boxes decoded:
+--- no corrupt pointer, no invalid record, no Bad Egg (checksum mismatch) and no pointer whose WRAM allocation flag is
+--- clear (the engine never leaves a referenced entry unflagged, so that means the flag mapping is wrong).
+--- UNPROVEN without a Polished cartridge: the WRAM-domain flat mapping of bank 2 (NEWBOX 7) and the flag semantics.
+function P.census(Boxes, io, decode_text, log)
+    if type(Boxes) ~= "table" or type(io) ~= "table" or type(io.read_u8) ~= "function" then
+        return nil, "Boxes module and explicit read_u8 required"
+    end
+    local boxes, why = Boxes.new(P.newbox_coords(), io, P.mon_key, decode_text)
+    if not boxes then return nil, why end
+    local CART, WRAM = "CartRAM", "WRAM"
+    local function rd(domain, offset)
+        local value = io.read_u8(offset, domain)
+        if not integer(value, 0, 255) then error("unavailable or malformed " .. domain .. " read", 0) end
+        return value
+    end
+    local function cart(label, plus) return SYM[label][1] * 0x2000 + SYM[label][2] - 0xA000 + (plus or 0) end
+    local function scan()
+        if io.cart_ram_linear ~= true or type(io.domain_size) ~= "function" then
+            return nil, "qualified linear CartRAM binding required"
+        end
+        local sram, wram = io.domain_size(CART), io.domain_size(WRAM)
+        if not integer(sram, 0x8000, 0x80000) or not integer(wram, 0x8000, 0x8000) then
+            return nil, "CartRAM must be the 32 KiB SRAM image and WRAM the 32 KiB CGB image"
+        end
+        if rd(WRAM, SYM.wGameLogicPaused[2] - 0xC000) ~= 0 then return nil, "native save running (game logic paused)" end
+        if rd(CART, cart("sWritingBackup")) == 1 then return nil, "backup save in progress" end
+        local version = rd(CART, cart("sSaveVersion")) * 256 + rd(CART, cart("sSaveVersion", 1))
+        if version ~= SAVE_VERSION then return nil, string.format("no valid Polished save (sSaveVersion %04X)", version) end
+        local sum = 0
+        for at = cart("sGameData"), cart("sGameDataEnd") - 1 do sum = (sum + rd(CART, at)) & 0xFFFF end
+        if sum ~= rd(CART, cart("sChecksum")) + 256 * rd(CART, cart("sChecksum", 1)) then
+            return nil, "save checksum mismatch (SRAM mapping or save invalid)"
+        end
+        local snap
+        snap, why = boxes.read_boxes("gameplay")
+        if not snap then return nil, why end
+        if not snap.complete then return nil, "box census incomplete (corrupt pointer or invalid record)" end
+        if #snap.bad_eggs > 0 then return nil, "box census incomplete (Bad Egg entry)" end
+        if #snap.unflagged > 0 then return nil, "box census incomplete (referenced entry with a clear WRAM flag)" end
+        return snap
+    end
+
+    local c, snapshot, last, last_reason = {}, nil, nil, nil
+    local function guarded()
+        local ok, snap, reason = pcall(scan)
+        if not ok then snap, reason = nil, tostring(snap) end
+        if not snap and log and reason ~= last then log("[SLink-gen2] polished box census withheld: " .. tostring(reason)) end
+        last = (not snap) and reason or nil
+        return snap, reason
+    end
+    function c.read_current_box_num() return -1 end
+    function c.read_active_box() return nil, "Polished has no active box shadow" end
+    function c.read_storage_box(index)
+        if not integer(index, 0, 19) then return nil, "storage box index outside 0..19" end
+        if index == 0 then snapshot, last_reason = guarded() end -- the client always walks 0..19: one scan per pass
+        if not snapshot then return nil, last_reason or "census scan starts at box 0" end
+        local mons = {}
+        for _, mon in ipairs(snapshot.boxes[index + 1].mons) do
+            local copy = {}
+            for k, v in pairs(mon) do copy[k] = v end
+            copy.slot = mon.slot - 1
+            copy.moves = {}
+            for i = 0, 3 do copy.moves[i + 1] = tonumber(mon.raw_hex:sub(5 + 2 * i, 6 + 2 * i), 16) end -- savemon bytes 2..5
+            mons[#mons + 1] = copy
+        end
+        return {mons=mons}
+    end
+    return c
 end
 
 return P
