@@ -1040,3 +1040,226 @@ Withdraws the "53 + 11 + 11 = 75" statement in section 8.2 and the earlier coord
 48 bytes (`wPartyMon1 01:dcd6` .. `wPartyMon1End 01:dd06`), so the preimage is 48 + 11 + 11 = 70 bytes; the 53-byte trademon is the STAGED struct
 (`wPlayerTrademon 00:c51c`..`00:c551`), a different thing. What does differ is which bytes Polished legitimately rewrites on a trade (personality
 word +20, form word +21): T4 stays open as a re-derivation of that mutation list, not a size change. Verified by the coordinator against the sym.
+
+---
+
+## 10. Design note (peer round 2, 2026-10-04): what the Polished dispatcher must actually check
+
+**Nothing here was measured live in this pass** — the session had no shell, so no build, no
+pytest and no EmuHawk run was possible. Everything below is derived from committed source and
+from `data/polished/polished_slink.sym` (the linked overlay symbols), and every claim names its
+source. The live confirmation is still owed; §10.6 is the exact probe that would settle it.
+
+### 10.1 The dispatcher is not the service's own wait gate — it is the responder's pickup gate
+
+The card asked for a probe "at the point where `callasm SlinkTradeEntry` would run … sample
+`sp+0..31` on the frame waits the service would park in". Those are the wrong frames.
+
+`SlinkTradeDispatch` is called from inside `SlinkService`
+(`patch/gen2/src/slink.asm:117-119`), and `SlinkService` runs on **every** patched `DelayFrame`
+(`patch/polished/src/slink.asm:29-48` replaces DelayFrame's 7-byte lead-in with
+`call SlinkDelayFrameBridge`, which arms the wait, pushes, bankswitches and calls the service).
+Its own header says so: `patch/gen2/src/trade_dispatch.asm:1-2` — "Only pick up a partner prompt
+at the idle overworld's own frame wait" — and `trade_service.asm:135-136` — "Dispatcher has
+already checked safe overworld context".
+
+So the two frame populations are opposites:
+
+| population | what it is | what the dispatcher must do |
+|---|---|---|
+| `SlinkTradeWaitFrame`'s own `call DelayFrame` (`trade_service.asm:463-480`) | the service parking for a host reply | **refuse** — it is inside the overlay's own bank |
+| the ordinary idle-overworld frame wait | a player standing in the overworld with a partner `PROMPT` sitting in the lease | **accept**, and open the native prompt (`SlinkTradePromptEntry`, `trade_service.asm:135`) |
+
+Run 2 Stage B already measured the accept population (item 1, 300 samples on the overlay ROM,
+idle Pokemon Center 2F): `SP $C0DE`, `hROMBank $25`, "byte-for-byte run 1's Route 29 chain".
+So **T1's live measurement is largely already in hand**; what is missing is §10.6's confirmation
+that the *dispatch entry* offsets derived below match those bytes, on a build that actually
+contains the dispatcher.
+
+### 10.2 The vanilla `sp+5` check is `hROMBank`, not a return address
+
+Vanilla bridge (`patch/gen2/src/slink.asm:32-41`): `ld a,1 / ld [wVBlankOccurred],a`, then
+`push af`, `push bc`, `push hl`, `ldh a,[hROMBank] / push af`, then `call SlinkService`. Then
+`SlinkService` does `call SlinkTradeDispatch` (`:118`).
+
+Unwinding that from `SlinkTradeDispatch`'s first instruction:
+
+| sp+ | frame | value in the idle overworld |
+|---|---|---|
+| 0-1 | return into `SlinkService` | — |
+| 2-3 | return into the bridge | — |
+| 4-5 | saved `AF` from `ldh a,[hROMBank] / push af` | **`[sp+5]` = `hROMBank` = `$25`** |
+| 6-7 | saved HL | varies |
+| 8-9 | saved BC | varies |
+| 10-11 | saved `AF` from `ld a,1 … push af` | — |
+| 12-13 | bridge-entry `sp+0` | `$0DAB` = `DelayFrame + 3` |
+| 14-15 | bridge-entry `sp+2` | `$51C2` |
+| 16-17 | bridge-entry `sp+4` | `$FE00`/`$FE20` — a **register**, not an address |
+| 24-25 | bridge-entry `sp+12` | `$516B` = `HandleMap + $15` |
+
+This matches `trade_dispatch.asm:5-6`'s own comment ("service return, bridge return, saved bank
+AF, HL, BC, AF, patched DelayFrame return, DelayFrames return, NextOverworldFrame return" —
+two-byte items, so the three return addresses are at sp+12/14/16) and makes `cp BANK(NextOver-
+worldFrame)` at `:9` a **bank** test, which is what `[sp+5]` actually holds. Worth stating
+plainly because §8.3 and HOOKS.md row 18 both describe `sp+5` as "the bank byte of the frame-wait
+caller", which is right in effect and wrong about the byte's provenance.
+
+**The Polished bridge pushes the identical 8 bytes in the identical order**
+(`patch/polished/src/slink.asm:41-48`: `push af`, `push bc`, `push hl`, `ldh a,[hROMBank] /
+push af`), and `SlinkService` is a single `call` away from where `call SlinkTradeDispatch` will
+go. **So the offset arithmetic carries over unchanged**: dispatch-entry `sp+12+k` == bridge-entry
+`sp+k`. The only bridge difference is `xor a` (`slink.asm:39`) where vanilla has `ld a,1`
+(`gen2/slink.asm:32`), i.e. `sp+10` is `$00` in Polished, `$01` in vanilla. It carries no weight.
+
+### 10.3 The Polished fingerprint, with the constants that express it
+
+`sp+12..17` cannot be used as one window: Polished has no `DelayFrames` link in this chain
+(§8.3, settled negative), and `sp+16..23` are **pushed registers**, two of which Stage B and
+Stage 4 both record as varying (`sp+4`, `sp+8..9` at bridge-entry depth). The third link has to be
+taken from further up, where the measurement is stable.
+
+Derived from the pinned source and the linked overlay sym
+(`data/polished/polished_slink.sym:22904-22907,22902,22890`, `F:/slink-work/cache/polished/src/
+engine/overworld/events.asm:157-160`):
+
+```asm
+; engine/overworld/events.asm:157-160
+.gfx_done
+	ldh a, [hDelayFrameLY]
+	and a
+	call z, DelayFrame
+```
+
+`call z` is 3 bytes, so the return address pushed into DelayFrame is `NextOverworldFrame.gfx_done
++ 3 + 3` = **+6**. The sym puts `NextOverworldFrame.gfx_done` at `25:51bc`; `25:51bc + 6 =
+25:51C2` — exactly the word Stage B measured at bridge-entry `sp+2`. The chain therefore closes
+symbolically, not by pasting constants.
+
+Proposed dispatcher fingerprint (all five values are `LOW`/`HIGH` of an exported Polished label —
+Polished assembles with `-E`, `patch/polished/src/slink.asm:23-24`):
+
+| sp+ | expected | symbol form | measured at bridge entry |
+|---|---|---|---|
+| 5 | `$25` | `BANK(NextOverworldFrame)` | hROMBank `$25` (Stage B #1) |
+| 12-13 | `$0DAB` | `LOW/HIGH(DelayFrame + 3)` | sp+0..1 (tautology: every call through the patched lead-in) |
+| 14-15 | `$51C2` | `LOW/HIGH(NextOverworldFrame.gfx_done + 6)` | sp+2..3 ✓ |
+| 24-25 | `$516B` | `LOW/HIGH(HandleMap + $15)` (`HandleMap` = `25:5156`) | sp+12..13 ✓ |
+| 26-27 | `$50E2` | `LOW/HIGH(OverworldLoop.loop + 9)` (`25:50d9`) | sp+14..15 ✓ |
+
+**Refusal cases, from the same Stage B data:**
+
+* **Script frames** (`$62B5` `ScriptEvents.loop+9` at bridge-entry `sp+12`) → dispatch `sp+24 =
+  $62B5` ≠ `$516B`. **Refused.** This is the check that keeps the service out of every ordinary
+  NPC script, and it is the one vanilla does not need (vanilla's `sp+16..17` already fails there).
+* **The service's own wait**: `SlinkTradeWaitFrame` calls DelayFrame from bank `$7E`, so
+  `hROMBank = $7E` at `sp+5`, and `sp+14..15` returns into the overlay, not `25:51C2`.
+  **Refused twice over.**
+* **The idle overworld is the only accept case measured.** Stage B #1 is the known-positive
+  control, identical on Route 29 and in the Pokemon Center — the fingerprint is map-independent
+  in both games, which is what makes it safe to key on.
+
+### 10.4 The unit test must mask, not pin
+
+The card asks for "a unit test replaying the exact stack bytes (positive and negative: a stack
+differing by one byte refused)". **As literally stated that test is wrong**, and it would fail on
+the game's own noise: Stage B records `sp+4` and `sp+8..9` varying between runs and between the
+poke and warp fixtures, and run 1 vs run 2 saw `sp+8..9` = `3e00` vs `4446`. A test that pins all
+32 bytes pins a register.
+
+The window is: **assert the six pinned byte positions (§10.3) match; assert one flipped byte at
+any of those positions is refused; assert a flipped byte at any other position changes nothing.**
+The second clause is the negative the card wants; the third is the one that would otherwise have
+shipped a gate that fails on a different overworld frame.
+
+Positive vector — dispatch-entry `sp+12..31` is Stage B #1 verbatim, with 12 bytes of
+overlay/service frame prepended (of which only `sp+5` is pinned):
+
+```
+sp+0..11   ?? ?? ?? ?? ?? 25 ?? ?? ?? ?? ?? 00     ; service ret, bridge ret, hROMBank, HL, BC, AF
+sp+12..13  ab 0d                                    ; DelayFrame + 3
+sp+14..15  c2 51                                    ; NextOverworldFrame.gfx_done + 6
+sp+16..23  00 fe 86 d6 44 46 22 d1                  ; registers (masked out)
+sp+24..25  6b 51                                    ; HandleMap + $15
+sp+26..27  e2 50                                    ; OverworldLoop.loop + 9
+sp+28..29  14 00                                    ; FarCall + 4
+sp+30..31  01 8a
+```
+
+### 10.5 Two blockers S2 hits before it writes a line of asm
+
+**(a) `verify_overlay` will reject the E2 source edit.** `tools/build_polished_companion.py:159-166`
+enumerates the *only* spans a changed byte may fall in: the DelayFrame lead-in, the ROM0 bridge,
+the bank-`$7E` service, the header checksums, the ROM0 phone bridge, and the five bank-`$24`
+phone-hook operands. An edit to `maps/PokeCenter2F.asm` changes **other** bank-`$24` bytes (the
+script stream shifts) and hits `raise RuntimeError(f"unexpected change at …")` at `:171`. The
+span class has to be added deliberately, with the script's own byte range computed from the two
+syms — widening the gate with a derived range, not loosening it.
+
+**(b) E2 is not size-neutral, and the size delta is knowable from the source.**
+`macros/scripts/events.asm:97-100` gives `callasm` = `db` + `dba` = **4 bytes**; `:103-106` gives
+`special` = `db` + `db` = **2 bytes**. There is no 4-byte script command other than `callasm`, so
+there is no same-size substitution available: branching into `SlinkTradeEntry` costs **+2 bytes in
+bank `$24`'s script stream**. TRADE.md E2 ("branch after `:101`") and E1/E3 (a wholesale
+replacement script in a new bank-`$24` section) therefore *both* consume bank-`$24` slack, and
+HOOKS.md §10 states only that "No ROMX free space outside bank `$7E` is used" — which describes
+overlay placement, not the map bank's headroom. **UNVERIFIED: how many bytes bank `$24` has free.**
+That number decides E1 vs E2 and is the first thing to measure.
+
+### 10.6 The probe that closes T1 (for whoever has a shell)
+
+Same shape as Run 2 Stage B: an `event.on_bus_exec` on `SlinkDelayFrameBridge` (ROM0 `$0070`),
+sampling `sp+0..31` plus `hROMBank` on the frames where `wMapStatus = 2` and `wScriptRunning = 0`
+(the accept population), then the same sample **from inside the receptionist script** after the
+YES prompt (the refuse population). The derived table in §10.3 predicts accept = `$25 / $0DAB /
+$51C2 / $516B / $50E2` at `sp+5/12/14/24/26`, and refuse (script) = `$25 / $0DAB / <not $51C2> /
+$62B5 / $50E2`. A second run with `POL_STAGES` reaching one frame **inside** the service's own
+`SlinkTradeWaitFrame` is the third population and must show `hROMBank = $7E`.
+
+### 10.7 One more name change the port must absorb
+
+`trade_dispatch.asm:49-51` and `trade_service.asm:466-468` compare `cp VBLANK_NORMAL`.
+Polished's `hVBlank` is a **0-7 mode selector**, not a flag: `engine/link/link.asm:2276-2278`
+(`xor a / ldh [hVBlank],a` on the link-success path), `home/decompress.asm:17` (`cp 4`),
+`engine/menus/credits.asm:67` (`ld a,5`), `gfx/copy_tilemap_at_once.asm:60-61`
+(`ld a, 1 << 7 | 7 ; execute actual VBlank7`). The port is `cp 0`, and unlike vanilla — where
+`hVBlank` has a single value and the check is `and a` in disguise — **the Polished check is
+load-bearing**. (UNVERIFIED: vanilla's `VBLANK_NORMAL` value; no pokecrystal checkout was
+reachable in this session.)
+
+### 10.8 Do not derive struct sizes from `macros/ram.asm` by counting labels
+
+The macro and the linked sym disagree on `party_struct`, and the sym is right.
+`macros/ram.asm:42-55` declares `EggCycles db`, `Happiness db` (`:31-32`) and
+`CaughtData db`, `CaughtTime db`, `CaughtBall db` (`:34-36`) as **five separate bytes**, which
+counts to 51. The linked sym shows them collapsing onto **three** addresses
+(`data/polished/polished_slink.sym:67567-67572`): `wPartyMon1EggCycles` = `wPartyMon1Happiness` =
+`01:dcf0`, `wPartyMon1PokerusStatus` = `01:dcf1`, `wPartyMon1CaughtBall` =
+`wPartyMon1CaughtData` = `wPartyMon1CaughtTime` = `01:dcf2`. So
+`wPartyMon1 01:dcd6` .. `wPartyMon1End 01:dd06` = **0x30 = 48 bytes**, and the coordinator's
+70-byte preimage (48 + 11 + 11) stands.
+
+The aliasing is the *same* shape the trademon uses for its two attribute bytes
+(`macros/ram.asm:262-269`, `Personality`/`Gender`/`IsEgg`/`ExtSpecies`/`Form`), and it is exactly
+what produced §2.1's wrong "52" arithmetic: the macro lists seven labels where the layout spends
+two bytes. **Measured sizes, for the record** (sym is authoritative in both rows):
+
+| struct | macro label count | sym span | size |
+|---|---|---|---|
+| `trademon` | 53 bytes (no aliasing) | `wPlayerTrademon 00:c51c` .. `wPlayerTrademonEnd 00:c551` | **53** |
+| `party_struct` | 51 bytes (three aliases) | `wPartyMon1 01:dcd6` .. `wPartyMon1End 01:dd06` | **48** |
+| `wPartyMonOTs` stride | — | `wPartyMon1OT 01:ddf6` .. `wPartyMon2OT 01:de01` | **11** |
+| `wPartyMonNicknames` stride | — | `wPartyMon1Nickname 01:de38` .. `wPartyMon2Nickname 01:de43` | **11** |
+
+`server/adapters/polished_codec.py:39-42,255-258` already encodes exactly these numbers
+(`PARTY_SIZE = 48`, `TRADEMON_SIZE = 53`, `NAME_SIZE = NICKNAME_SIZE = 11`) and keeps the two
+structs distinct — `decode_party_blob` is the 70-byte wire blob (`:239-242`) and
+`trademon_from_party_blob` converts it to the 53-byte staged struct (`:348-353`). Round 1's codec
+is correct as it stands; this note only records why the macro must not be used to re-derive it.
+
+The mutation set T4 still has to re-derive is confirmed in the same table:
+`wPartyMon1Personality 01:dcea` = struct offset **20** and `wPartyMon1Form 01:dceb` = offset
+**21**, i.e. exactly the two words the coordinator named. Nothing else in `wPartyMon1`..`End` is
+engine-written during a hand-over — but **UNVERIFIED**: which of the two the trade path rewrites
+(the engine regenerates the personality word from DVs on load, and the overlay's snapshot window
+closes between the snapshot and the commit, so a rewrite landing in that window is the exact bug
+class T4 exists to catch).
