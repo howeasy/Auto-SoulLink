@@ -166,7 +166,12 @@ def find_expansions(rom: bytes, syms: list[tuple[int, str]], label: str, kind: s
     """Flat offsets of every matching expansion between the label and its window end."""
     opcode = OPCODES[kind]
     low = species & 0xFF
-    high = ((species >> 8) << EXTSPECIES_F) | (form & ((1 << EXTSPECIES_F) - 1))
+    # `dp` emits `db LOW(sp), HIGH(sp) << MON_EXTSPECIES_F | form` (macros/data.asm:89-91) and the
+    # `| form` term is a full assembly-time OR, NOT a 5-bit field: FEMALE is %10000000
+    # (constants/pokemon_data_constants.asm:274) and the variant forms are ext_const values such as
+    # MAGIKARP_MASK1_FORM = 157 (constants/pokemon_constants.asm:418). Masking to 5 bits silently
+    # drops both, so the second byte is masked to a byte, not to a nibble.
+    high = (((species >> 8) << EXTSPECIES_F) | form) & 0xFF
     end = window_end(syms, label, start)
     return [i for i in range(start, min(end, len(rom) - 3))
             if rom[i] == opcode and rom[i + 1] == low and rom[i + 2] == high]
@@ -193,10 +198,26 @@ def resolve(sites: list[dict], rom: bytes, syms: list[tuple[int, str]], species:
         hits = find_expansions(rom, syms, label, kind, head["label_offset"],
                                head["species"], head["form"])
         if len(hits) != len(members):
+            # A zero count is not a window problem: search the WHOLE cartridge with the same
+            # byte rule. If the pattern is absent everywhere, the expansion is simply not in this
+            # build (debug-only script text), and no window would have found it. Only a count
+            # mismatch inside a window that DOES contain matches is genuinely ambiguous.
+            opcode = OPCODES[kind]
+            low = head["species"] & 0xFF
+            form_byte = (((head["species"] >> 8) << EXTSPECIES_F) | head["form"]) & 0xFF
+            anywhere = [i for i in range(len(rom) - 3)
+                        if rom[i] == opcode and rom[i + 1] == low and rom[i + 2] == form_byte]
+            if not anywhere:
+                why = (f"no ${opcode:02X} expansion for {sp_const}/{form_const} "
+                       f"(bytes ${opcode:02X} ${low:02X} ${form_byte:02X}) anywhere in the release "
+                       f"ROM, so the command behind {label} is not in this build; no window can "
+                       f"locate it")
+            else:
+                why = (f"{len(hits)} matching {kind} expansion(s) for {sp_const}/{form_const} in "
+                       f"{label}, but {len(members)} site(s) ask for it "
+                       f"({len(anywhere)} such expansion(s) exist cartridge-wide)")
             for member in members:
-                member["reason"] = (
-                    f"{len(hits)} matching {kind} expansion(s) for {sp_const}/{form_const} in "
-                    f"{label}, but {len(members)} site(s) ask for it")
+                member["reason"] = why
             continue
         for member, at in zip(sorted(members, key=lambda s: s["order"]), hits):
             member["offset"] = at + 1                      # the species LOW byte

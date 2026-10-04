@@ -44,7 +44,7 @@
       "label_offset": 564691,
       "level": null,
       "offset": null,
-      "reason": "0 matching givepoke expansion(s) for MAGIKARP/MAGIKARP_MASK1_FORM in CeladonUniversityHyperTestRoomWestwoodScript, but 1 site(s) ask for it",
+      "reason": "no $2F expansion for MAGIKARP/MAGIKARP_MASK1_FORM (bytes $2F $81 $9D) anywhere in the release ROM, so the command behind CeladonUniversityHyperTestRoomWestwoodScript is not in this build; no window can locate it",
       "source": "maps/CeladonUniversityHyperTestRoom.asm:136",
       "species": 129,
       "species_const": "MAGIKARP"
@@ -284,7 +284,7 @@
       "label_offset": 872372,
       "level": null,
       "offset": null,
-      "reason": "0 matching loadwildmon expansion(s) for GYARADOS/GYARADOS_RED_FORM in LakeOfRageRedGyaradosScript, but 1 site(s) ask for it",
+      "reason": "no $5C expansion for GYARADOS/GYARADOS_RED_FORM (bytes $5C $82 $0F) anywhere in the release ROM, so the command behind LakeOfRageRedGyaradosScript is not in this build; no window can locate it",
       "source": "maps/LakeOfRage.asm:239",
       "species": 130,
       "species_const": "GYARADOS"
@@ -320,7 +320,7 @@
       "label_offset": 928648,
       "level": null,
       "offset": null,
-      "reason": "0 matching loadwildmon expansion(s) for URSALUNA/URSALUNA_BLOODMOON_FORM in MurkySwampBloodmoonUrsaluna, but 2 site(s) ask for it",
+      "reason": "no $5C expansion for URSALUNA/URSALUNA_BLOODMOON_FORM (bytes $5C $1D $BD) anywhere in the release ROM, so the command behind MurkySwampBloodmoonUrsaluna is not in this build; no window can locate it",
       "source": "maps/MurkySwamp.asm:201",
       "species": 285,
       "species_const": "URSALUNA"
@@ -332,7 +332,7 @@
       "label_offset": 928648,
       "level": null,
       "offset": null,
-      "reason": "0 matching loadwildmon expansion(s) for URSALUNA/URSALUNA_BLOODMOON_FORM in MurkySwampBloodmoonUrsaluna, but 2 site(s) ask for it",
+      "reason": "no $5C expansion for URSALUNA/URSALUNA_BLOODMOON_FORM (bytes $5C $1D $BD) anywhere in the release ROM, so the command behind MurkySwampBloodmoonUrsaluna is not in this build; no window can locate it",
       "source": "maps/MurkySwamp.asm:204",
       "species": 285,
       "species_const": "URSALUNA"
@@ -416,7 +416,7 @@
       "label_offset": 689397,
       "level": null,
       "offset": null,
-      "reason": "0 matching givepoke expansion(s) for MEWTWO/PLAIN_FORM in PlayersHouseRadio, but 1 site(s) ask for it",
+      "reason": "no $2F expansion for MEWTWO/PLAIN_FORM (bytes $2F $96 $01) anywhere in the release ROM, so the command behind PlayersHouseRadio is not in this build; no window can locate it",
       "source": "maps/PlayersHouse2F.asm:217",
       "species": 150,
       "species_const": "MEWTWO"
@@ -428,7 +428,7 @@
       "label_offset": 689397,
       "level": null,
       "offset": null,
-      "reason": "0 matching givepoke expansion(s) for MEW/PLAIN_FORM in PlayersHouseRadio, but 1 site(s) ask for it",
+      "reason": "no $2F expansion for MEW/PLAIN_FORM (bytes $2F $97 $01) anywhere in the release ROM, so the command behind PlayersHouseRadio is not in this build; no window can locate it",
       "source": "maps/PlayersHouse2F.asm:239",
       "species": 151,
       "species_const": "MEW"
@@ -440,7 +440,7 @@
       "label_offset": 689397,
       "level": null,
       "offset": null,
-      "reason": "0 matching givepoke expansion(s) for TYPHLOSION/HISUIAN_FORM in PlayersHouseRadio, but 1 site(s) ask for it",
+      "reason": "no $2F expansion for TYPHLOSION/HISUIAN_FORM (bytes $2F $9D $04) anywhere in the release ROM, so the command behind PlayersHouseRadio is not in this build; no window can locate it",
       "source": "maps/PlayersHouse2F.asm:250",
       "species": 157,
       "species_const": "TYPHLOSION"
@@ -452,7 +452,7 @@
       "label_offset": 689397,
       "level": null,
       "offset": null,
-      "reason": "0 matching givepoke expansion(s) for URSALUNA/URSALUNA_BLOODMOON_FORM in PlayersHouseRadio, but 1 site(s) ask for it",
+      "reason": "no $2F expansion for URSALUNA/URSALUNA_BLOODMOON_FORM (bytes $2F $1D $BD) anywhere in the release ROM, so the command behind PlayersHouseRadio is not in this build; no window can locate it",
       "source": "maps/PlayersHouse2F.asm:254",
       "species": 285,
       "species_const": "URSALUNA"
@@ -464,7 +464,7 @@
       "label_offset": 689397,
       "level": null,
       "offset": null,
-      "reason": "0 matching givepoke expansion(s) for DUDUNSPARCE/DUDUNSPARCE_THREE_SEGMENT_FORM in PlayersHouseRadio, but 1 site(s) ask for it",
+      "reason": "0 matching givepoke expansion(s) for DUDUNSPARCE/DUDUNSPARCE_THREE_SEGMENT_FORM in PlayersHouseRadio, but 1 site(s) ask for it (6 such expansion(s) exist cartridge-wide)",
       "source": "maps/PlayersHouse2F.asm:255",
       "species": 288,
       "species_const": "DUDUNSPARCE"
@@ -476,7 +476,7 @@
       "label_offset": 689397,
       "level": null,
       "offset": null,
-      "reason": "0 matching givepoke expansion(s) for PUPITAR/PLAIN_FORM in PlayersHouseRadio, but 1 site(s) ask for it",
+      "reason": "no $2F expansion for PUPITAR/PLAIN_FORM (bytes $2F $F7 $01) anywhere in the release ROM, so the command behind PlayersHouseRadio is not in this build; no window can locate it",
       "source": "maps/PlayersHouse2F.asm:257",
       "species": 247,
       "species_const": "PUPITAR"
@@ -524,7 +524,7 @@
       "label_offset": 339229,
       "level": null,
       "offset": null,
-      "reason": "0 matching givepoke expansion(s) for SPEAROW/PLAIN_FORM in RandyScript, but 1 site(s) ask for it",
+      "reason": "no $2F expansion for SPEAROW/PLAIN_FORM (bytes $2F $15 $01) anywhere in the release ROM, so the command behind RandyScript is not in this build; no window can locate it",
       "source": "maps/Route35GoldenrodGate.asm:41",
       "species": 21,
       "species_const": "SPEAROW"

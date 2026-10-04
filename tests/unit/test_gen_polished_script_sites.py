@@ -155,7 +155,7 @@ def test_every_row_states_a_reason_and_only_resolved_rows_carry_data(document):
         if row["offset"] is None:
             assert row["level"] is None, row
             assert row["reason"].startswith(("species constant", "form constant",
-                                             "0 matching", "decoded level")), row
+                                             "0 matching", "no $", "decoded level")), row
         else:
             assert row["reason"].startswith("resolved:"), row
 
@@ -174,9 +174,12 @@ def test_every_resolved_offset_decodes_back_to_its_source_species_and_level(docu
         at = row["offset"] - 1
         opcode = gen.OPCODES[row["kind"]]
         assert rom[at] == opcode, row
-        species = rom[at + 1] | (rom[at + 2] & 0xE0) << 3
+        # `dp` = db LOW(sp), HIGH(sp)<<5 | form  (macros/data.asm:89-91). The second byte carries
+        # BOTH the species high bits and the form OR'd in whole -- FEMALE is %10000000 and the
+        # variant forms are ext_const values like 157 -- so the form is not a 5-bit field.
+        species = rom[at + 1] | ((rom[at + 2] & 0xE0) << 3)
         assert species == row["species"], row
-        assert rom[at + 2] & 0x1F == row["form"], row
+        assert rom[at + 2] & 0xFF == row["form"] & 0xFF, row
         assert rom[at + 3] == row["level"], row
         assert 1 <= row["level"] <= 100, row
 
@@ -230,3 +233,27 @@ def test_the_output_is_deterministic(document):
     first = json.dumps(gen.build(), indent=2, sort_keys=True) + "\n"
     second = json.dumps(gen.build(), indent=2, sort_keys=True) + "\n"
     assert first == second
+
+
+def test_the_form_byte_is_a_whole_byte_not_a_five_bit_field(document):
+    """Regression guard for the encoding fix.
+
+    `dp` ORs the form in as a full assembly-time value: FEMALE is %10000000
+    (constants/pokemon_data_constants.asm:274) and MAGIKARP_MASK1_FORM is ext_const 157
+    (:418). Masking the second byte to 0x1F drops both, so a variant-form site can never match.
+
+    MUTATION: reintroduce `form & 0x1F` in find_expansions -- every variant-form site silently
+    stops matching again, which is exactly the 11-site regression this guard was written for.
+    """
+    syms = gen.load_syms(gen.RELEASE / gen.SYM_NAME)
+    forms = gen.load_forms()
+    rom = gen.load_rom(gen.RELEASE / gen.ROM_NAME)
+    # a form above 0x1F must produce a byte above 0x1F, not a truncated one
+    species, form = gen.load_species()["MAGIKARP"], forms["MAGIKARP_MASK1_FORM"]
+    assert form > 0x1F, "MAGIKARP_MASK1_FORM must be a wide form constant for this guard to bite"
+    byte = (((species >> 8) << gen.EXTSPECIES_F) | form) & 0xFF
+    assert byte & 0x1F != form, "the form must not survive a 5-bit mask"
+    assert byte == 0x9D
+    # and FEMALE | PLAIN_FORM, the shape maps/Route35GoldenrodGate.asm:41 uses
+    assert (0x80 | forms["PLAIN_FORM"]) & 0xFF == 0x81
+    assert rom is not None and syms is not None
