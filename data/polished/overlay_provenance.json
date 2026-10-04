@@ -1,6 +1,6 @@
 {
   "schema": "polished-overlay-provenance-v1",
-  "generated": "2026-10-04T13:13:00Z",
+  "generated": "2026-10-04T13:45:37Z",
   "source": {
     "url": "https://github.com/Rangi42/polishedcrystal",
     "tag": "v3.2.3",
@@ -21,8 +21,8 @@
       "main.asm"
     ],
     "sources_sha256": {
-      "patch/polished/src/slink.asm": "aa57677d00436d8ef1cf0edde06d128365241991c1b886c354dbc8be58558e1a",
-      "patch/polished/src/slink_mailbox.asm": "7e6d58ebfe51949044a95615d99871b503bfda7e5fee4b2963dbe10c20048456",
+      "patch/polished/src/slink.asm": "892c1aaf9a8ff31cb0c1804e6694d4e8af8beaba3d63882260ac2f84b17ba22c",
+      "patch/polished/src/slink_mailbox.asm": "04593e4a687f65f1f6f4a0023f07149f5f97e29d25486ccd40879e56c7c129bb",
       "patch/gb/slink_abi.inc": "be0ee30a84330c794a1b5f3a2cf4c1435bdfdf3bf63fa4f010deb02a0291181e"
     },
     "mailbox": "WRAM0 $C60B (40 bytes)",

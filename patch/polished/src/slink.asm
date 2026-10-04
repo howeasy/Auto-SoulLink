@@ -29,8 +29,11 @@ ASSERT BANK(Link_SaveGame) != 0 && BANK(NextOverworldFrame) != 0
 SECTION "SLink DelayFrame Bridge", ROM0[$0070]
 SlinkDelayFrameBridge::
 	; DelayFrame's native 7-byte lead-in, moved here verbatim. It arms the native wait
-	; BEFORE servicing: a VBlank during the service must satisfy this DelayFrame, not be
-	; discarded by rearming the flag afterward. hDelayFrameLY keeps the entry LY.
+	; BEFORE servicing, so a VBlank during the service is not erased by rearming the flag
+	; afterward. Cost (review cx-4c455434): that VBlank is already serviced when the wait's
+	; halt starts, so this DelayFrame sleeps to the NEXT one -- the window between the flag
+	; clear and the halt grows from ~10 to ~200 T-cycles (about 0.3% of calls take a frame
+	; longer). Order kept on purpose; a live gate is still owed. hDelayFrameLY keeps the entry LY.
 	ldh a, [rLY]
 	ldh [hDelayFrameLY], a
 	xor a ; ld a, FALSE
@@ -51,7 +54,7 @@ SlinkDelayFrameBridge::
 	ret
 SlinkDelayFrameBridgeEnd::
 ASSERT SlinkDelayFrameBridgeEnd <= $0100
-; Eight local stack bytes (AF, BC, HL, bank); the service preserves DE.
+; Four local stack bytes (push af/bc/hl + the saved bank = 4 one-byte pushes); the service preserves DE.
 
 SECTION "SLink Service", ROMX[$4000], BANK[SLINK_SERVICE_BANK]
 SlinkService::

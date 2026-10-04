@@ -258,7 +258,7 @@ Proposed layout of that single 69-byte reservation:
 
 | offset | size | use |
 |---|---|---|
-| `$C60B` | 40 | `wSlinkMailbox` (public 30 + phone-private 2 + trade lease 16 + 2 private sample = 34 used; 40 reserved to keep the vanilla span's shape) |
+| `$C60B` | 40 | `wSlinkMailbox` (core 14 + trade lease 16 + 2 private sample = 32 used (the "public 30" already contains the lease); 40 reserved to keep the vanilla span's shape) |
 | `$C633` | 24 | PHONE-NAMES staging record (replaces `wUnusedMapBuffer`, §3.4) |
 | `$C64B`-`$C64F` | 5 | spare |
 
@@ -347,7 +347,7 @@ A hook table alone will not tell you these.
 | `SFX_ITEM` / `SFX_WRONG` / `SFX_BUMP` / `SFX_READ_TEXT_2` still `$01/$19/$24/$08` | read `src/constants/sound_constants.asm` |
 | `rgblink` accepts `BANK[$7E]` with no `layout.link` entry | run the Polished build; `tools/bankends $(ROM).map` |
 | exact free bytes per bank (the `$FF` scan is a **lower bound**; real data can be `$FF`) | `tools/bankends` on a real `.map`; none is in the cache |
-| `ResetWRAM 01:5f4d`'s clear span vs `$C60B`-`$C64F` | read the new-game reset path |
+| ~~`ResetWRAM 01:5f4d`'s clear span vs `$C60B`-`$C64F`~~ SETTLED (review cx-4c455434): span 1 is `[$C100,$CB7E)`, so New Game clears the mailbox | - |
 | nothing writes `$C633`-`$C64A` between boots (the phone-stage sub-span) | rgblink `.map` section extents for `$C60B`-`$C64F` |
 | `trade_dispatch.asm`'s `sp+5` / `sp+12` stack fingerprint against Polished's overworld call chain | instrument or disassemble a Polished build |
 | `OpenSRAM`'s replacement (only `CloseSRAM 00:2a94` exists) | grep Polished's `home/sram.asm` for the enable path |
@@ -766,3 +766,7 @@ A hook table alone will not tell you these.
   }
 ]
 ```
+
+## 8. Review addendum (2026-10-04, cx-4c455434): two frame waits
+
+`hVBlankOccurred` is written at exactly five sites tree-wide; the Pokedex input poll (`engine/pokedex/pokedex.asm:3124-3129`) re-implements the lead-in and calls `MaybeDelayFrame` directly, past the 7 bytes the overlay replaces. So the overlay's `FRAME_COUNTER` stops advancing while the Pokedex polls input. Latent: P5a publishes caps 0 and nothing consumes the counter yet. Decide before any capability gates on elapsed frames: sample from the VBlank handler instead (covers every wait), hook `MaybeDelayFrame` too, or scope `FRAME_COUNTER` as not a frame index.

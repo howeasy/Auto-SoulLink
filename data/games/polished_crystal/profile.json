@@ -10,7 +10,7 @@
     "generator": "tools/gen_polished_profile.py",
     "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
     "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
-    "overlay_provenance_sha256": "8d41ab215df6090dd1b4f6f8b74c1a8e8dfc15eb0e5908af5d45a5ad3ee5ebe6",
+    "overlay_provenance_sha256": "c35d7e3f34d0c2fe5c3414f35134f61d258a6187e7a3c37a1fd0194e5c0fa041",
     "overlay_sha1": "29ea04c24a46d9210c899355fe752f32d2880de8",
     "overlay_sym_sha256": "19e7cd59562b15b5d38b4ab813d160d4e26dba519a6ae316635f7ca5a55f8253",
     "repo": "https://github.com/Rangi42/polishedcrystal",
