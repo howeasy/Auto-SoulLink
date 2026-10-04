@@ -32,6 +32,7 @@
 --       apart; a driver answering with one value reads as "complete unknown" here and is never
 --       rescan-driven); rescan_boxes() (called once per tick while the last scan was incomplete
 --       -- lua/gen1/client.lua:2309 -- and at once on a "box census unavailable" refusal).
+-- battle_write contract: a player popup for an entry comes with its "done" -- never on a hold/deferred entry, or the retry shows it twice.
 --
 -- Nothing semantic precedes hello (docs/protocol.md §9 item 4): an event emitted while the
 -- connection has not sent its hello yet (a frame hook, a hello_fields side effect) is held in
