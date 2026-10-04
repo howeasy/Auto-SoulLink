@@ -59,7 +59,10 @@ GENERATORS: list[tuple[str, str]] = [
     ("tools/gen_area_map.py",      "Gen 3 FRLGE area tables"),
     # Note: gen_area_map.py --game emerald regenerates the separate gen3_emerald area tables;
     # it is not run by this generator loop (Emerald's tables ship as static manifest entries).
-    ("tools/gen_gen4_area_map.py", "Gen 4 HGSS/Platinum area tables"),
+    # Writes data/games/gen4_hgss/{area_map,locations}.json -- the files lua/gen4/inputs.lua
+    # opens for area ids and location names. gen4_hge gets NOTHING from it, by proof (the fork
+    # declares no MAPSEC_*), so there is no hge row here; same shape as the Emerald note above.
+    ("tools/gen_gen4_area_map.py", "Gen 4 HGSS area/location tables (data/games/gen4_hgss)"),
     ("tools/gen_gen5_area_map.py", "Gen 5 BW/BW2 area tables"),
 ]
 
@@ -71,7 +74,6 @@ _LUA_ROOT = [
     "slink.lua",
     "slink_gen1.lua",
     "slink_gen3.lua",
-    "slink_gen4.lua",
     "slink_gen5.lua",
     "connector.lua",
     "game_detect.lua",
@@ -163,17 +165,66 @@ _LUA_GEN2 = [
     "trade_overlay.lua",  # P4.3b: entry.lua composes it on a trade build; dofiles ../gb_trade_lease.lua
 ]
 
-# lua/clients/
+# lua/gen4/ — the rewritten Gen 4 client (HGSS + hg-engine). run.lua is what lua/slink.lua's Gen 4
+# route dofiles; entry.lua's composition root pulls in the rest (mirrors _LUA_GEN3). That is the
+# WHOLE directory, and deliberately so: a missing module here is a dofile error in BizHawk's
+# console, not a degraded feature, so the directory ships or none of it does.
+_LUA_GEN4 = [
+    "run.lua",
+    "entry.lua",
+    "client.lua",
+    "inputs.lua",
+    "reads.lua",
+    "pk4.lua",
+    "safety.lua",
+    "poll_events.lua",
+]
+
+# lua/nds/ — the shared NDS modules the Gen 4 graph loads. entry.lua Entry.build binds the
+# binding/phase pair and injects pkm45_crypto as Pk4.crypto; hook_binding.lua dofiles
+# residency_contract.lua off its own directory (the one edge no static path scan can see).
+# native_witness.lua is NOT here: it is the Gen 3 companion mailbox reader (docs/shared-nds-witness.md)
+# and nothing in the Gen 4 graph loads it.
+_LUA_NDS = [
+    "hook_binding.lua",
+    "phase_signals.lua",
+    "pkm45_crypto.lua",
+    "residency_contract.lua",
+]
+
+# lua/clients/ -- the retired Gen 4 client (clients/gen4_hgsspt_client.lua) is DELETED; lua/slink.lua's
+# Gen 4 route dofiles lua/gen4/run.lua instead.
 _LUA_CLIENTS = [
-    "gen4_hgsspt_client.lua",
     "gen5_bw_client.lua",
 ]
 
-# lua/games/
+# lua/games/ -- likewise lua/games/gen4_hgsspt.lua, the only requirer of the gen4_hgsspt_*.lua tables.
 _LUA_GAMES = [
-    "gen4_hgsspt.lua",
     "gen5_bw.lua",
 ]
+
+# Every lua/ subtree the release ships, in ONE table. build_release's pre-flight and its ZIP
+# writer both walk this, so a row can never be pre-flighted and then forgotten at zip time (or the
+# reverse). Key "" is lua/'s own root; the others are the directory under lua/.
+# NOT named _LUA_*: tests/unit/test_check_release_zip.py::_every_make_release_lua_list_is_an_expected_member
+# globs `_LUA_[A-Z0-9]+` and iterates each one's values as FILENAMES, which a dir->files map is not.
+_MANIFEST_TREES: dict[str, list[str]] = {
+    "": _LUA_ROOT,
+    "gen1": _LUA_GEN1,
+    "gen3": _LUA_GEN3,
+    "core": _LUA_CORE,
+    "gen2": _LUA_GEN2,
+    "gen4": _LUA_GEN4,
+    "nds": _LUA_NDS,
+    "clients": _LUA_CLIENTS,
+    "games": _LUA_GAMES,
+}
+
+
+def _lua_rel(sub: str, fname: str) -> str:
+    """Repo-relative path of one manifest row: `lua/<sub>/<fname>`, or `lua/<fname>` for the root."""
+    return f"lua/{sub}/{fname}" if sub else f"lua/{fname}"
+
 
 # data/games/<gen>/ — data files loaded at runtime via _proj_root path.
 # Mostly area/location .lua tables; the Gen 1 NEW client reads five JSONs directly
@@ -364,11 +415,36 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "area_map.json",
         "gen3_exp_locations.lua",
     ],
-    "gen4_hgsspt": [
-        "gen4_hgsspt_areas.lua",
-        "gen4_hgsspt_areas_pt.lua",
-        "gen4_hgsspt_locations.lua",
-        "gen4_hgsspt_locations_pt.lua",
+    "gen4_hgss": [
+        # Entry.PACKS.gen4_hgss.profile (lua/gen4/entry.lua:26) -- opened by Entry.admission_table
+        # for EVERY cartridge, routed or not, and by inputs.lua's has_pokeballs producer for the
+        # bag array (inputs.lua:173).
+        "profile.json",
+        # inputs.lua area_of: `.maps[map_id]` -> area_id, `.locations[map_id].name` -> loc_name
+        # (inputs.lua:80,85). Same file also carries `.gift_areas.ids` for the gift-area seam.
+        "area_map.json",
+        "locations.json",
+        # inputs.lua charmap: the u16 code -> glyph table the client's text seam decodes names with
+        # (inputs.lua:146); written by tools/gen_gen4_names.py alongside the (dev-only) names.json.
+        "charmap.json",
+    ],
+    "gen4_hge": [
+        # Same profile + charmap (Entry.PACKS.gen4_hge.profile, entry.lua:27).
+        "profile.json",
+        "charmap.json",
+        # NO area_map.json / locations.json, and that is a SOURCE fact, not an omission: the
+        # hg-engine fork keeps the vanilla MAP_* ids but declares no MAPSEC_*, has no
+        # map_headers.h and no msg tree, so an area (a map section) and its display name are not
+        # derivable from its own source (tools/gen_gen4_area_map.py HGE_NOT_EMITTED). inputs.lua
+        # refuses the area_of producer for this pack rather than borrowing gen4_hgss's.
+    ],
+    "gen4_pt": [
+        # Bind-only (Entry.BIND_ONLY, D3): never admitted, never routed. It ships anyway for the
+        # same reason gen3_emerald/gen3_exp ship above: Entry.admission_table loads EVERY registered
+        # pack's profile.json before it can refuse one (entry.lua:76-80) and load_json asserts on a
+        # missing file (entry.lua:37), so withholding this makes the release refuse EVERY Gen 4
+        # cartridge at "cannot open data/games/gen4_pt/profile.json".
+        "profile.json",
     ],
     "gen5_bw": [
         "gen5_bw_areas.lua",
@@ -435,7 +511,6 @@ _GEN3_COMPANION_FILES = ("SLink-FireRed.ups", "SLink-LeafGreen.ups", "SLink-Emer
 _LAUNCHER_SCRIPTS: set[str] = {
     "slink_gen1.lua",
     "slink_gen3.lua",
-    "slink_gen4.lua",
     "slink_gen5.lua",
 }
 
@@ -707,13 +782,7 @@ def build_release(
     # ── Pre-flight: verify all required files exist ───────────────────────────
     game_data = data_game_files(REPO_ROOT)
     required: list[Path] = (
-        [REPO_ROOT / "lua" / f for f in _LUA_ROOT]
-        + [REPO_ROOT / "lua" / "gen1" / f for f in _LUA_GEN1]
-        + [REPO_ROOT / "lua" / "gen3" / f for f in _LUA_GEN3]
-        + [REPO_ROOT / "lua" / "core" / f for f in _LUA_CORE]
-        + [REPO_ROOT / "lua" / "gen2" / f for f in _LUA_GEN2]
-        + [REPO_ROOT / "lua" / "clients" / f for f in _LUA_CLIENTS]
-        + [REPO_ROOT / "lua" / "games" / f for f in _LUA_GAMES]
+        [REPO_ROOT / _lua_rel(sub, f) for sub, files in _MANIFEST_TREES.items() for f in files]
         + [
             REPO_ROOT / "data" / "games" / gen / f
             for gen, files in game_data.items()
@@ -773,39 +842,17 @@ def build_release(
             zf.writestr(prefix + launcher[0], launcher[1])
             say(f"  [added]   {prefix}{launcher[0]}")
 
-        for fname in _LUA_ROOT:
-            src = REPO_ROOT / "lua" / fname
-            arc = prefix + f"lua/{fname}"
-            if do_patch and fname in _LAUNCHER_SCRIPTS:
-                zf.writestr(arc, patch_launcher(src.read_text("utf-8"), host, port, player))
-                say(f"  [patched] {arc}")
-            else:
-                zf.write(src, arc)
-                say(f"  [added]   {arc}")
-
-        for fname in _LUA_GEN1:
-            zf.write(REPO_ROOT / "lua" / "gen1" / fname, prefix + f"lua/gen1/{fname}")
-            say(f"  [added]   {prefix}lua/gen1/{fname}")
-
-        for fname in _LUA_GEN3:
-            zf.write(REPO_ROOT / "lua" / "gen3" / fname, prefix + f"lua/gen3/{fname}")
-            say(f"  [added]   {prefix}lua/gen3/{fname}")
-
-        for fname in _LUA_CORE:
-            zf.write(REPO_ROOT / "lua" / "core" / fname, prefix + f"lua/core/{fname}")
-            say(f"  [added]   {prefix}lua/core/{fname}")
-
-        for fname in _LUA_GEN2:
-            zf.write(REPO_ROOT / "lua" / "gen2" / fname, prefix + f"lua/gen2/{fname}")
-            say(f"  [added]   {prefix}lua/gen2/{fname}")
-
-        for fname in _LUA_CLIENTS:
-            zf.write(REPO_ROOT / "lua" / "clients" / fname, prefix + f"lua/clients/{fname}")
-            say(f"  [added]   {prefix}lua/clients/{fname}")
-
-        for fname in _LUA_GAMES:
-            zf.write(REPO_ROOT / "lua" / "games" / fname, prefix + f"lua/games/{fname}")
-            say(f"  [added]   {prefix}lua/games/{fname}")
+        for sub, files in _MANIFEST_TREES.items():
+            for fname in files:
+                src = REPO_ROOT / _lua_rel(sub, fname)
+                arc = prefix + _lua_rel(sub, fname)
+                # Only the lua/ ROOT carries launchers, so only it can be one.
+                if do_patch and not sub and fname in _LAUNCHER_SCRIPTS:
+                    zf.writestr(arc, patch_launcher(src.read_text("utf-8"), host, port, player))
+                    say(f"  [patched] {arc}")
+                else:
+                    zf.write(src, arc)
+                    say(f"  [added]   {arc}")
 
         for p in dll_files:
             zf.write(p, prefix + f"lua/x64/{p.name}")
