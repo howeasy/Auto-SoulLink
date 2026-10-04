@@ -518,13 +518,13 @@
       "species_const": "PIDGEY"
     },
     {
-      "form": 1,
+      "form": 129,
       "kind": "givepoke",
       "label": "RandyScript",
       "label_offset": 339229,
-      "level": null,
-      "offset": null,
-      "reason": "no $2F expansion for SPEAROW/PLAIN_FORM (bytes $2F $15 $01) anywhere in the release ROM, so the command behind RandyScript is not in this build; no window can locate it",
+      "level": 10,
+      "offset": 339269,
+      "reason": "resolved: exactly one matching expansion in the window",
       "source": "maps/Route35GoldenrodGate.asm:41",
       "species": 21,
       "species_const": "SPEAROW"

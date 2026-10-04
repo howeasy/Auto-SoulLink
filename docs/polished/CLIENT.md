@@ -500,6 +500,10 @@ All 89 verified by reading the cited line of the cited file.
 
 Counting the Polished `const_def` block (`constants/battle_constants.asm:106-123`): NORMAL 0, CANLOSE 1, TUTORIAL 2, FISH 3, TREE 4, ROAMING 5, CONTEST 6, SAFARI 7, GHOST 8, GROTTO 9, INVERSE 10. So on Polished `{0,4,8}` = {NORMAL, TREE, GHOST}; the helper's text calling 8 "GROTTO" is a miscount. The defect stands (FISH 3 is missed, GHOST 8 would falsely resolve); the area-resolving set to emit from the profile is {NORMAL 0, FISH 3, TREE 4}, with GROTTO 9 an owner/design question.
 
+## Amendment (2026-10-04, from omp 01a1072c via the overlord; coordinator spot-checked reads.lua:60-70, :244, :292-294, entry.lua:459-467): decode layer is under-covered
+
+`lua/gen2/rom.lua` is a full ROM encounter-table reader (BaseData, Grass/WaterMonProbTable, TreeMons/TreeMonMaps/RockMonMaps, FishGroups/TimeFishGroups, RoamMaps) built in `Entry.compose` from `profile.rom`; Polished's generated profile has no `rom`, `sram_bank`, `storage_boxes` or `constant_sources` (checked). `reads.lua` cannot be satisfied by that profile as it stands: its dimensions assert (`:60-70`) demands NUM_POKEMON=251, EGG=253, PARTYMON/BOXMON_STRUCT_LENGTH=48/32, BOX_LENGTH=1104, NUM_BOXES=14; `storage_boxes` (`:292`), the `NUM_BOXES/2` bank split (`:294`) and the literal "0..13" (`:244`) are vanilla-only. Accepted card: **C-ROMTABLES** between C-PACK and C-SITES: emit the Polished `rom` table coordinates (and `BATTLETYPE_*`, folding in U4 with the corrected set {0,3,4}) from the overlay sym in `gen_polished_profile.py`, and make `compose` take the Polished reads (`polished.lua`) instead of `reads.lua`, so no vanilla assert is ever asked to hold for Polished. UNVERIFIED: whether Polished's table layouts match vanilla's `rom.lua` readers.
+
 ```json
 [
  {

@@ -36,6 +36,19 @@ _KEY = re.compile(r"([0-9A-F]{6}):([0-9A-F]{4}):([0-9A-F]{3}):([0-9A-F]{2})")
 _GENDERLESS, _ALL_FEMALE, _ALL_MALE = 15, 8, 0   # GENDER_UNKNOWN / GENDER_F100 / GENDER_F0, pokemon_data_constants.asm:39-49
 
 
+def _type_display(name):
+    """The one display name for a type id, whichever row declared it (species, variant or move).
+
+    `Unknown_T` is the pack's marker for a type with no name and must render as '???' in BOTH
+    loops: move_data() has always rewritten it for moves, so a species row typed Unknown_T used to
+    pin type_name(id) to 'Unknown_T' while the same id showed '???' on the move side. The parent
+    Gen2GSCAdapter requires the two loops to agree ('conflicting type names',
+    server/adapters/gen2_gsc.py:181), so Polished routes both through this function.
+    """
+    name = name.removesuffix("_TYPE")
+    return "???" if name == "Unknown_T" else _display(name)
+
+
 def _require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -83,6 +96,18 @@ def _form_label(row):
 class Gen2PolishedAdapter(Gen2GSCAdapter):
     """Game facts only for Polished Crystal; constructing it cannot activate a runtime route."""
 
+    def _record_type(self, number, display):
+        """Register one type id's display name, refusing a second, different name for it.
+
+        Mirrors Gen2GSCAdapter's 'conflicting type names' rule (server/adapters/gen2_gsc.py:181);
+        setdefault() would keep the first writer silently and let a species row and a move row
+        disagree about the same id.
+        """
+        existing = self._types.get(number)
+        _require(existing is None or existing == display,
+                 f"conflicting type names for id {number}: {existing!r} and {display!r}")
+        self._types[number] = display
+
     def __init__(self, title: str | None = None, *, rom_type: str | None = None,
                  is_rr: bool = False, artifact_kind: str | None = None, data_root: Path | None = None):
         if rom_type is not None:
@@ -117,7 +142,7 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
                      "invalid species name or gender ratio")
             for number, name in zip(row["type_ids"], row["types"], strict=True):
                 _require(_integer(number, 0, 31), "invalid type id")
-                self._types.setdefault(number, _display(name))
+                self._record_type(number, _type_display(name))
         evolution = load("evolutions", "polished-evolutions-v1")
         self._families = {int(k): v for k, v in evolution["family"].items()}
         _require(self._families.keys() == self._species.keys()
@@ -130,7 +155,7 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         _require(set(self._moves) == set(range(1, 256)), "incomplete/duplicate move pack")
         for row in moves:
             _require(row.get("split") in _SPLIT and _integer(row.get("type_id"), 0, 31), "invalid move type or split")
-            self._types.setdefault(row["type_id"], "???" if row["type"] == "Unknown_T" else row["type"])
+            self._record_type(row["type_id"], _type_display(row["type"]))
 
         # Areas: Polished's pack has no area_map, so the area id is derived the way
         # tools/gen_gen2_area_map.py derives vanilla's -- the map's landmark constant, lowercased, with the
@@ -427,11 +452,17 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
 
     @property
     def mons_per_box(self):
-        return 20                # MONS_PER_BOX, pokemon_data_constants.asm:298
+        return 20                # 20 entry indices per sNewBox record: `\1Entries:: ds MONS_PER_BOX`
+                                  # (macros/ram.asm:143, the `newbox` macro at sram.asm:141), which
+                                  # docs/polished/NEWBOX.md §1.1 tabulates as a 20-byte `Entries`
+                                  # field and §1.1 (slot coordinates) puts slots at 1..20.
 
     @property
     def memorial_box_index(self):
-        return 19                # NUM_BOXES 20 - 1 (:304). P3: the newbox writer (NEWBOX.md §6.2) honours it.
+        # The memorial is the LAST box: docs/polished/NEWBOX.md §1.1 has sNewBox1..20 with
+        # sNewBoxEnd after sNewBox20 (data/polished/polishedcrystal.sym sNewBox1 = 01:b0e4,
+        # sNewBox20 = 01:b357), and §1.1 makes box/slot coordinates 1-based, so box 20 is index 19.
+        return 19                # P3: the newbox writer (NEWBOX.md §6.2) honours it.
 
     def sprite_src(self, species_id):
         # Gen 2 art exists only for the 251 national-dex species; newer Polished species have none pinned.

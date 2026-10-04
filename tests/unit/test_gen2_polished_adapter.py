@@ -55,6 +55,9 @@ def test_rival_ids_cover_all_five_classes(adapter):
     rivals = adapter.rival_trainer_ids()
     assert {tid >> 8 for tid in rivals} == {27, 28, 29, 30, 31}     # RIVAL0/1/2, LYRA1/2
     assert 28 * 256 + 1 in rivals and 30 * 256 + 1 in rivals
+    # Pin the SIZE as well as the class set: a class-only assertion passes unchanged if a whole
+    # rival's instances are dropped from the pack, which is the failure this guards.
+    assert len(rivals) == 36
 
 
 def test_trainer_info(adapter):

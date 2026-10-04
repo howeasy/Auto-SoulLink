@@ -119,8 +119,23 @@ def load_forms() -> dict[str, int]:
              for m in re.finditer(r"^DEF\s+(\w+)\s+EQU\s+(\$[0-9A-Fa-f]+|\d+)\s*$", text, re.M)}
     forms.update({m.group(1): int(m.group(2))
                   for m in re.finditer(r"^\s*ext_const\s+(\w+)\s*;\s*(\d+)", text, re.M)})
+    # MALE / FEMALE are gender bits OR'd into a form argument (`FEMALE | PLAIN_FORM`,
+    # constants/pokemon_data_constants.asm:273-274), written as %binary literals.
+    data = (SRC / "constants" / "pokemon_data_constants.asm").read_text(encoding="utf-8")
+    forms.update({m.group(1): int(m.group(2), 2)
+                  for m in re.finditer(r"^DEF\s+(MALE|FEMALE)\s+EQU\s+%([01]+)\s*$", data, re.M)})
     _require(forms, "no form constants found in pokemon_constants.asm")
     return forms
+
+
+def eval_form(expr: str, forms: dict[str, int]) -> int | None:
+    """A form argument: one constant or an `A | B` expression of them (None if any name is unknown)."""
+    value = 0
+    for part in (FORM_ALIASES.get(p.strip(), p.strip()) for p in expr.split("|")):
+        if part not in forms:
+            return None
+        value |= forms[part]
+    return value
 
 
 def parse_ini(path: pathlib.Path) -> list[dict]:
@@ -186,11 +201,12 @@ def resolve(sites: list[dict], rom: bytes, syms: list[tuple[int, str]], species:
             site["reason"] = f"species constant {site['Species']} is not in the species pack"
             continue
         form_const = FORM_ALIASES.get(site["Arg2"], site["Arg2"])
-        if form_const not in forms:
+        form_value = eval_form(site["Arg2"], forms)
+        if form_value is None:
             site["reason"] = f"form constant {site['Arg2']} is not in pokemon_constants.asm"
             continue
         site["species"] = species[site["Species"]]
-        site["form"] = forms[form_const]
+        site["form"] = form_value
         groups[(site["Label"], site["kind"], site["Species"], form_const)].append(site)
 
     for (label, kind, sp_const, form_const), members in groups.items():

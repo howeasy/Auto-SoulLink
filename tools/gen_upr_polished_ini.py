@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import pathlib
 import re
 import sys
@@ -167,8 +166,13 @@ def default_src() -> pathlib.Path | None:
 
 
 # A script-site line: `   givepoke SPECIES, FORM, LEVEL[, ...]` or `loadwildmon SPECIES[, FORM], LEVEL`
+# The form argument may be a bare constant OR an OR-expression -- maps/Route35GoldenrodGate.asm:41
+# is `givepoke SPEAROW, FEMALE | PLAIN_FORM, ...`. The optional group used to be a single
+# [A-Z_0-9]+, so the regex BACKTRACKED past it (skipping the group entirely) whenever a `|` followed,
+# and the site silently recorded Arg2=NONE. The alternation below is greedy and cannot backtrack
+# into "no group", because a `,` must follow the whole expression.
 SITE_RE = re.compile(
-    r"^\s*(givepoke|loadwildmon)\s+([A-Z_0-9]+)\s*(?:,\s*([A-Z_0-9]+))?\s*,(?P<rest>.*)$")
+    r"^\s*(givepoke|loadwildmon)\s+([A-Z_0-9]+)\s*(?:,\s*([A-Z_0-9]+(?:\s*\|\s*[A-Z_0-9]+)*))?\s*,(?P<rest>.*)$")
 LABEL_RE = re.compile(r"^([A-Za-z_][A-Za-z_0-9]*):")
 
 
