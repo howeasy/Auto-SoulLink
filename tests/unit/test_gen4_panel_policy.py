@@ -15,9 +15,11 @@ What is PROVED here (the MODEL half):
   F7   §6       the closed_seq handshake: closed_seq == request_seq, result is the app's
                 byte, state 0 -- and a second close does not re-publish
   F8   §6       nine refusal shapes, each FAIL + SLINK_REASON_BAD_ARGS with the info region
-                and the producer untouched and start() never called
+               and the producer untouched byte-for-byte, and start() never called --
+               except shape 8 (start attempted, then refused)
   F9   §6       both-ends gating: the panel opens only when the fade is finished AND the
-                menu is open, on the posted and the un-posted path alike
+               menu is open, on the posted and the un-posted path alike; an un-posted visit
+               opens nothing when the mailbox carries a foreign opcode or a bad payload
   §3.5          one panel in flight; the A/close result words (Gen 2's no-wrap rule)
   Q7             the Gen 4 text spec is the record binding's own, and the validator's
                 charset member is never consulted (so a wrong charset cannot refuse)
@@ -27,7 +29,14 @@ open/close cycles), F5 (the field overlay is reloaded) and F10 (where a newly ap
 overlay group lands). All four are PHYSICAL or post-link claims (C4_PANEL_SPEC.md:569-578).
 
 Every green scenario below is re-run against a seeded defect (the RED CONTROLS at the
-bottom) and must go red, so no test here measures nothing.
+bottom) and must go red, so no test here measures nothing. Each control's last column names
+the scenario it re-runs, and every scenario 1..8 has at least one:
+  1 the drawn publish (in the shared producer)   2 the mid-panel request_seq guard
+  3 the session-epoch term                       4 the both-ends gate (five controls)
+  5 one panel in flight                          6 the A/close rule
+  7 the layout reset and the caps word           8 the row terminator scan
+A drifted anchor or a mutant that will not compile fails the control itself: a control that
+measures nothing is not a passing control.
 
 Run: pytest tests/unit/test_gen4_panel_policy.py -v
 """
@@ -95,15 +104,17 @@ def test_host_c_compiler_is_discoverable():
     assert done.returncode == 0, done.stderr
 
 
-def _compile(tmp, name, source, defines=(), gen4=None):
-    """Compile `source` against the real headers; `gen4` overrides the per-title directory
-    (a mutated copy), so the same driver runs against a mutant policy."""
+def _compile(tmp, name, source, defines=(), gen4=None, common=None):
+    """Compile `source` against the real headers; `gen4`/`common` override the per-title and
+    the shared header directories (a mutated copy), so the same driver runs against a mutant.
+    Each mutant directory is placed FIRST, so the mutant header really is the one compiled."""
     tmp.mkdir(parents=True, exist_ok=True)
     src = tmp / f"{name}.c"
     src.write_text(source, encoding="utf-8")
     exe = tmp / f"{name}.exe"
     cmd = [_gcc(), *CC_FLAGS, *defines]
-    cmd += ["-I", str(gen4 or GEN4), "-I", str(GEN4), "-I", str(COMMON)]
+    cmd += ["-I", str(gen4 or GEN4), "-I", str(GEN4)]
+    cmd += ["-I", str(common or COMMON), "-I", str(COMMON)]
     cmd += [str(src), "-o", str(exe)]
     done = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     return exe, done
@@ -121,16 +132,20 @@ def _run(exe):
     return done.stdout
 
 
-def _mutant_gen4(tmp, name, filename, anchor, replacement):
-    """A copy of the per-title directory with one anchor rewritten. The copy is placed FIRST
-    on the include path, so the mutant header really is the one that gets compiled."""
-    dst = tmp / f"gen4_{name}"
-    shutil.copytree(GEN4, dst)
+def _mutant_headers(tmp, name, scope, filename, anchor, replacement):
+    """A copy of ONE real header directory -- the per-title one (scope "gen4") or the shared
+    one (scope "common") -- with a single anchor rewritten. An anchor that no longer occurs
+    exactly once is a drifted control, not a control, so it fails here rather than silently
+    mutating nothing (or mutating a second, unintended site)."""
+    src_dir = GEN4 if scope == "gen4" else COMMON
+    dst = tmp / f"mutant_{name}"
+    shutil.copytree(src_dir, dst)
     target = dst / filename
     text = target.read_text(encoding="utf-8")
-    assert anchor in text, f"red-control anchor drifted in {filename}: {anchor!r}"
+    hits = text.count(anchor)
+    assert hits == 1, f"red-control anchor occurs {hits}x in {scope}/{filename}, want 1: {anchor!r}"
     target.write_text(text.replace(anchor, replacement, 1), encoding="utf-8")
-    return dst
+    return (dst if scope == "gen4" else None), (dst if scope == "common" else None)
 
 
 # ------------------------------------------------------------------------------- driver
@@ -181,6 +196,9 @@ static SlinkGen4PanelEngine engine = { NULL, &slink_binding_gen4_pk4.text,
 static const SlinkTextSpec spec_gen3 = { 1, SLINK_CHARSET_GEN3, 0xFFu };
 static const SlinkTextSpec spec_wrong_term = { 2, SLINK_CHARSET_GEN4, 0x00FFu };
 static const SlinkTextSpec spec_wrong_charset = { 2, SLINK_CHARSET_NONE, 0xFFFFu };
+/* A width the row scan cannot step by. The field order is width, charset, terminator
+ * (record_binding.h:44), so this is width 0 and NOT a zero charset. */
+static const SlinkTextSpec spec_bad_width = { 0, SLINK_CHARSET_GEN4, 0xFFFFu };
 
 static SlinkMailboxV2 mailbox;
 static SlinkInfoV2 info; /* non-volatile here; step() adds volatile, which C allows */
@@ -232,13 +250,31 @@ static void reset_world(void)
     next_phase = 0; phase_once = 0;
     engine.text = &slink_binding_gen4_pk4.text;
 }
-static int step(void) { return slink_gen4_panel_step(&state, &mailbox, &info, &engine); }
+/* What a refusal must leave alone, copied BEFORE the visit. step() is the driver's only
+ * door into the policy, so taking the copies here means every refusal below has a pristine
+ * copy to be compared against and none can forget to take one. */
+static SlinkInfoV2 pristine_info;
+static SlinkPanelProducer pristine_producer;
+static void remember_pristine(void)
+{
+    memcpy(&pristine_info, &info, sizeof pristine_info);
+    memcpy(&pristine_producer, &state.producer, sizeof pristine_producer);
+}
+static int step(void)
+{
+    remember_pristine();
+    return slink_gen4_panel_step(&state, &mailbox, &info, &engine);
+}
 static void queue_poll(int phase) { next_phase = phase; phase_once = 1; }
 
 #define CHECK(c, n) do { if (!(c)) { printf("FAIL line %d: %s\n", __LINE__, #c); return (n); } } while (0)
 
 /* every refusal must look identical from outside: FAIL + BAD_ARGS, request consumed, and
- * neither the info region nor the producer touched */
+ * neither the info region nor the producer touched. The last two compare the WHOLE structs
+ * byte-for-byte: reading three header words would pass a producer that scribbled on a text
+ * row, or on the snapshot it copied, and left those words alone. The state block itself is
+ * not compared whole -- the layout stamp and the capability word are rebuilt on every visit
+ * by design (panel_policy.h:198-207) -- so the producer inside it is. */
 static int refused_is_clean(uint16_t seq, int n)
 {
     CHECK(mailbox.status == SLINK_ST_FAIL, n);
@@ -249,6 +285,8 @@ static int refused_is_clean(uint16_t seq, int n)
     CHECK(starts == 0, n + 5);
     CHECK(info.state == 0 && info.drawn_seq == 0 && info.closed_seq == 0, n + 6);
     CHECK(state.producer.active == 0, n + 7);
+    CHECK(memcmp(&info, &pristine_info, sizeof info) == 0, n + 8);
+    CHECK(memcmp(&state.producer, &pristine_producer, sizeof state.producer) == 0, n + 9);
     return 0;
 }
 
@@ -415,7 +453,8 @@ int scen_refuse(void)
     post(99u);
     CHECK(step() == SLINK_PANEL_REFUSED, 24);
     CHECK(refused_is_clean(99u, 90) == 0, 25);
-    /* every shape, in a loop, left the same trace */
+    /* every shape, in a loop, left the same trace -- the ack AND the untouched region, which
+     * is what "identical" has to mean if it means anything */
     for (k = 0; k < 8u; k++) {
         reset_world();
         stage(EPOCH, (uint16_t)(40u + k), 2u, 0u, 1u);
@@ -423,6 +462,7 @@ int scen_refuse(void)
         mailbox.seq = (uint16_t)(40u + k);
         post((uint16_t)(40u + k));
         CHECK(step() == SLINK_PANEL_REFUSED, 30 + (int)k);
+        CHECK(refused_is_clean((uint16_t)(40u + k), 40 + (int)k) == 0, 50 + (int)k);
     }
     return 0;
 }
@@ -445,58 +485,77 @@ int scen_gating(void)
     CHECK(step() == SLINK_PANEL_REFUSED, 3);
     CHECK(refused_is_clean(51u, 10) == 0, 4);
     CHECK(starts == 0, 5);
+    /* A FOREIGN opcode is not "no opcode": while the mailbox is busy with another command
+     * the un-posted arm returns before it validates anything (panel_producer.h:47), so a
+     * staged payload cannot take the START menu out from under an in-flight trade. Nothing
+     * is acked -- the visit was never a request -- and the mailbox is left as it was found. */
+    reset_world();
+    stage(EPOCH, 63u, 2u, 0u, 1u);
+    mailbox.opcode = SLINK_OP_TRADE_PREPARE;
+    CHECK(step() == SLINK_PANEL_IDLE, 6);
+    CHECK(starts == 0 && mailbox.status == 0u && mailbox.ack_seq == 0u, 7);
+    CHECK(mailbox.reason == 0u && mailbox.opcode == SLINK_OP_TRADE_PREPARE, 8);
+    CHECK(state.producer.active == 0, 9);
+    /* and an un-posted INVALID payload opens nothing either: the shared producer acks only
+     * a posted request (panel_producer.h:51), so this is silence, not a refusal. */
+    reset_world();
+    stage(EPOCH, 64u, 2u, 0u, 1u);
+    info.lines = 0u;
+    CHECK(step() == SLINK_PANEL_IDLE, 10);
+    CHECK(starts == 0 && mailbox.status == 0u && mailbox.ack_seq == 0u, 11);
+    CHECK(state.producer.active == 0, 12);
     /* the fade is running: same answer, the other gate */
     reset_world();
     stage(EPOCH, 53u, 2u, 0u, 1u);
     fade_ok = 0;
-    CHECK(step() == SLINK_PANEL_IDLE, 6);
+    CHECK(step() == SLINK_PANEL_IDLE, 13);
     post(53u);
-    CHECK(step() == SLINK_PANEL_REFUSED, 7);
-    CHECK(refused_is_clean(53u, 20) == 0, 8);
+    CHECK(step() == SLINK_PANEL_REFUSED, 14);
+    CHECK(refused_is_clean(53u, 20) == 0, 15);
     /* a child app is already resident */
     reset_world();
     stage(EPOCH, 55u, 2u, 0u, 1u);
     app_live = 1;
     post(55u);
-    CHECK(step() == SLINK_PANEL_REFUSED, 9);
-    CHECK(refused_is_clean(55u, 30) == 0, 10);
+    CHECK(step() == SLINK_PANEL_REFUSED, 16);
+    CHECK(refused_is_clean(55u, 30) == 0, 17);
     /* an ABSENT gate is not an open door: a NULL predicate refuses */
     reset_world();
     stage(EPOCH, 57u, 2u, 0u, 1u);
     engine.fade_finished = NULL;
     post(57u);
-    CHECK(step() == SLINK_PANEL_REFUSED, 11);
-    CHECK(refused_is_clean(57u, 40) == 0, 12);
+    CHECK(step() == SLINK_PANEL_REFUSED, 18);
+    CHECK(refused_is_clean(57u, 40) == 0, 19);
     engine.fade_finished = fade_fn;
     engine.menu_open = NULL;
     stage(EPOCH, 58u, 2u, 0u, 1u);
     post(58u);
-    CHECK(step() == SLINK_PANEL_REFUSED, 13);
-    CHECK(refused_is_clean(58u, 50) == 0, 14);
+    CHECK(step() == SLINK_PANEL_REFUSED, 20);
+    CHECK(refused_is_clean(58u, 50) == 0, 21);
     engine.menu_open = menu_fn;
     /* app_running is OPTIONAL: unbound, it is not a guard and must not block */
     reset_world();
     stage(EPOCH, 60u, 2u, 0u, 1u);
     engine.app_running = NULL;
-    CHECK(step() == SLINK_PANEL_STARTED, 15);
-    CHECK(starts == 1, 16);
+    CHECK(step() == SLINK_PANEL_STARTED, 22);
+    CHECK(starts == 1, 23);
     engine.app_running = app_fn;
     /* both ends open -> the panel opens */
     reset_world();
     stage(EPOCH, 61u, 2u, 0u, 1u);
-    CHECK(step() == SLINK_PANEL_STARTED, 17);
-    CHECK(starts == 1 && info.state == 1, 18);
+    CHECK(step() == SLINK_PANEL_STARTED, 24);
+    CHECK(starts == 1 && info.state == 1, 25);
     /* a null argument fails closed and writes nothing */
     reset_world();
     stage(EPOCH, 62u, 2u, 0u, 1u);
-    CHECK(slink_gen4_panel_step(NULL, &mailbox, &info, &engine) == SLINK_PANEL_REFUSED, 20);
-    CHECK(slink_gen4_panel_step(&state, NULL, &info, &engine) == SLINK_PANEL_REFUSED, 21);
-    CHECK(slink_gen4_panel_step(&state, &mailbox, NULL, &engine) == SLINK_PANEL_REFUSED, 22);
-    CHECK(slink_gen4_panel_step(&state, &mailbox, &info, NULL) == SLINK_PANEL_REFUSED, 23);
-    CHECK(starts == 0 && mailbox.status == 0u, 24);
+    CHECK(slink_gen4_panel_step(NULL, &mailbox, &info, &engine) == SLINK_PANEL_REFUSED, 26);
+    CHECK(slink_gen4_panel_step(&state, NULL, &info, &engine) == SLINK_PANEL_REFUSED, 27);
+    CHECK(slink_gen4_panel_step(&state, &mailbox, NULL, &engine) == SLINK_PANEL_REFUSED, 28);
+    CHECK(slink_gen4_panel_step(&state, &mailbox, &info, NULL) == SLINK_PANEL_REFUSED, 29);
+    CHECK(starts == 0 && mailbox.status == 0u, 30);
     /* the gate itself fails closed on an absent seam: an unbound engine is not an open
      * door. This is the assertion the "treats an absent gate as safe" control attacks. */
-    CHECK(slink_gen4_panel_safe(NULL) == 0, 25);
+    CHECK(slink_gen4_panel_safe(NULL) == 0, 31);
     return 0;
 }
 
@@ -647,6 +706,21 @@ int scen_layout(void)
         CHECK(slink_text_terminator_index(info.text[0], SLINK_INFO_LINE_WIDTH,
                                           &slink_binding_gen4_pk4.text) == -1, 29);
     }
+    /* the caps word is this card's own contribution in BOTH structs: same offset, same
+     * width, and it is the LAST member of each. A C4 sub-struct that could not hold where
+     * beacon.h keeps its caps would silently drift the published word the first time either
+     * layout changed. Real objects, not `((T *)0)->caps`: nothing here depends on an
+     * unevaluated dereference. */
+    {
+        SlinkGen4StatePanel beacon_panel;
+        memset(&beacon_panel, 0, sizeof beacon_panel);
+        CHECK(offsetof(SlinkGen4PanelState, caps)
+              == offsetof(SlinkGen4StatePanel, caps), 30);
+        CHECK(sizeof(state.caps) == sizeof beacon_panel.caps, 31);
+        CHECK(sizeof state.caps == 4u && sizeof beacon_panel.caps == 4u, 32);
+        CHECK(offsetof(SlinkGen4StatePanel, caps) + sizeof beacon_panel.caps
+              == sizeof(SlinkGen4StatePanel), 33);
+    }
     return 0;
 }
 
@@ -680,6 +754,14 @@ int scen_spec(void)
     engine.text = NULL;
     post(104u);
     CHECK(step() == SLINK_PANEL_REFUSED, 7);
+    /* a width outside {1,2} is an INVALID spec, not a lenient one: the terminator scan
+     * cannot step by it (record_binding.h:188), so every row reads unterminated and the
+     * posted request is refused with the one reason this card has. */
+    reset_world();
+    stage(EPOCH, 105u, 2u, 0u, 1u);
+    engine.text = &spec_bad_width;
+    post(105u);
+    CHECK(step() == SLINK_PANEL_REFUSED, 8);
     engine.text = &slink_binding_gen4_pk4.text;
     return 0;
 }
@@ -777,45 +859,72 @@ def test_the_service_call_site_stays_named_and_ungated():
 
 
 # ---------------------------------------------------------------------------- red controls
-# Each mutates a COPY of the real per-title headers and re-runs the SAME scenario the green
-# test above runs. A control that stays green means its detector measures nothing.
+# Each mutates a COPY of one real header directory and re-runs the SAME scenario the green
+# test above runs. A control that stays green means its detector measures nothing, so every
+# scenario 1..8 has at least one (the last column names it).
+#
+# `scope` is which directory owns the anchor: "gen4" is this card's own
+# (panel_policy.h), "common" is the SHARED lifecycle C4 only wraps
+# (patch/src/nds/common/panel_producer.h). The shared producer carries the snapshot, the
+# one-panel-in-flight rule and the drawn/closed publish, so a defect THERE is a defect in
+# the Gen 4 panel's behaviour and has to be falsifiable from the same driver.
 
 _CONTROLS = [
     ("skips the fade gate",
-     "panel_policy.h", "if (!e->fade_finished || !e->fade_finished(e->context)) return 0;",
+     "gen4", "panel_policy.h", "if (!e->fade_finished || !e->fade_finished(e->context)) return 0;",
      "if (0) return 0;", 4),
     ("skips the menu gate",
-     "panel_policy.h", "if (!e->menu_open || !e->menu_open(e->context)) return 0;",
+     "gen4", "panel_policy.h", "if (!e->menu_open || !e->menu_open(e->context)) return 0;",
      "if (0) return 0;", 4),
     ("skips the resident-app gate",
-     "panel_policy.h", "if (e->app_running && e->app_running(e->context)) return 0;",
+     "gen4", "panel_policy.h", "if (e->app_running && e->app_running(e->context)) return 0;",
      "if (0) return 0;", 4),
     # NOTE: forcing the policy's menu_open argument to 1 is deliberately NOT offered as a red
     # control: both it and safe()'s menu gate read the SAME predicate, so with one of them
     # removed the other still refuses and nothing goes red. The line is defence in depth, not
     # a separate rule -- and pretending otherwise would be a control that measures nothing.
     ("collapses the gate to the seam null check",
-     "panel_policy.h", "if (!e->fade_finished || !e->fade_finished(e->context)) return 0;",
+     "gen4", "panel_policy.h", "if (!e->fade_finished || !e->fade_finished(e->context)) return 0;",
      "if (!e) return 0;", 4),
     ("inverts the A/close rule",
-     "panel_policy.h", "(is_a && next < (unsigned)pages) ? SLINK_GEN4_PANEL_RESULT_MORE",
+     "gen4", "panel_policy.h", "(is_a && next < (unsigned)pages) ? SLINK_GEN4_PANEL_RESULT_MORE",
      "(is_a && next >= (unsigned)pages) ? SLINK_GEN4_PANEL_RESULT_MORE", 6),
     ("lets a stale layout keep its active panel",
-     "panel_policy.h", "slink_gen4_panel_clear(&s->producer);", "(void)0;", 7),
+     "gen4", "panel_policy.h", "slink_gen4_panel_clear(&s->producer);", "(void)0;", 7),
     ("publishes no capability",
-     "panel_policy.h", "s->caps = (uint32_t)SLINK_GEN4_PANEL_CAPABILITIES;",
+     "gen4", "panel_policy.h", "s->caps = (uint32_t)SLINK_GEN4_PANEL_CAPABILITIES;",
      "s->caps = 0u;", 7),
     ("treats an absent gate as safe",
-     "panel_policy.h", "if (!e) return 0;", "if (!e) return 1;", 4),
+     "gen4", "panel_policy.h", "if (!e) return 0;", "if (!e) return 1;", 4),
+    # the shared producer, from here on
+    ("drops the drawn publish",
+     "common", "panel_producer.h",
+     "if (phase==1) { i->drawn_seq=s->snapshot.request_seq;i->state=2; }", "(void)0;", 1),
+    ("obeys a mid-panel request_seq rewrite",
+     "common", "panel_producer.h",
+     "&& i->session_epoch==s->snapshot.session_epoch && i->request_seq==s->snapshot.request_seq)",
+     "&& i->session_epoch==s->snapshot.session_epoch)", 2),
+    ("ignores the session epoch",
+     "common", "panel_producer.h",
+     "if (!epoch || i->session_epoch!=epoch || !i->request_seq || !i->enable",
+     "if (!epoch || !i->request_seq || !i->enable", 3),
+    ("takes a second request while one is live",
+     "common", "panel_producer.h", "if (s->active || !e->safe(e->context)",
+     "if (!e->safe(e->context)", 5),
+    ("inverts the row terminator check",
+     "common", "panel_producer.h",
+     "if (slink_text_terminator_index(i->text[row],SLINK_INFO_LINE_WIDTH,text)<0) return 0;",
+     "if (slink_text_terminator_index(i->text[row],SLINK_INFO_LINE_WIDTH,text)>=0) return 0;", 8),
 ]
 
 
-@pytest.mark.parametrize("label,filename,anchor,replacement,scenario",
+@pytest.mark.parametrize("label,scope,filename,anchor,replacement,scenario",
                          _CONTROLS, ids=[c[0] for c in _CONTROLS])
-def test_red_controls(tmp_path, label, filename, anchor, replacement, scenario):
-    gen4 = _mutant_gen4(tmp_path, label.replace(" ", "_"), filename, anchor, replacement)
+def test_red_controls(tmp_path, label, scope, filename, anchor, replacement, scenario):
+    gen4, common = _mutant_headers(tmp_path, label.replace(" ", "_"), scope,
+                                   filename, anchor, replacement)
     exe, done = _compile(tmp_path / f"m{scenario}", "mutant", DRIVER,
-                         defines=[f"-DSCENARIO={scenario}"], gen4=gen4)
+                         defines=[f"-DSCENARIO={scenario}"], gen4=gen4, common=common)
     assert done.returncode == 0, f"control {label!r} does not even compile: {done.stderr}"
 
     run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
