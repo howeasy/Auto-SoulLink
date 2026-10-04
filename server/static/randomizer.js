@@ -114,7 +114,7 @@ function randomizerFields(form) {
       var p = this.pre;
       if (!p) return '';
       if (!p.jar_found) return 'jar not found';
-      if (p.jar_fork) return 'SLink fork jar (vanilla + pureRGB + FireRed / LeafGreen + Emerald + Polished Crystal)';
+      if (p.jar_fork) return 'SLink fork jar (vanilla + pureRGB + FireRed / LeafGreen + Emerald' + (p.jar_polished ? ' + Polished Crystal' : '') + ')';
       return this.family === 'gen3_frlg' || this.family === 'gen3_emerald'
         ? 'stock jar (not accepted for ' + this.familyLabel(this.family) + ')' : 'stock jar (vanilla only)';
     },
