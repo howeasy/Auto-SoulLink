@@ -1,0 +1,698 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: howeasy <howardabudd@gmail.com>
+Date: Sun, 4 Oct 2026 10:45:14 -0400
+Subject: [PATCH] slink: Polished Crystal trainers, starters, statics, trades
+
+PolishedCrystalRomHandler reads and writes trainer parties, the Elm's Lab
+starters, the resolved givepoke/loadwildmon statics and gifts, and the NPC
+trades. Every writer rewrites only a site's two species bytes in place,
+keeping the site's gender and form bits; formed mons are never in the model,
+INVER's WRAM pool is never walked, and a trainer record whose walk does not
+end at its size prefix refuses. A changed party size, level, item, move list,
+or trade nickname/OT/DV/item throws instead of being written. EGG, the unused
+$100, Unown and the variant forms leave the pools. Rival and Lyra triples are
+tagged so "rival carries starter" works. A second INI section (CopyFrom)
+admits the SLink companion overlay (header checksum 0x725C).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ FORK_CHANGES.md                               |  21 +
+ .../pkrandom/config/polished_offsets.ini      |  61 +++
+ .../pkrandom/constants/PolishedConstants.java |  17 +
+ .../PolishedCrystalRomHandler.java            | 474 ++++++++++++++++--
+ 4 files changed, 530 insertions(+), 43 deletions(-)
+
+diff --git a/FORK_CHANGES.md b/FORK_CHANGES.md
+index 429c84f..ac5058c 100644
+--- a/FORK_CHANGES.md
++++ b/FORK_CHANGES.md
+@@ -125,3 +125,24 @@ entries), so a vanilla `[Red (U)]`-style entry executes exactly the original cod
+   Unown and every variant form are banned from wild pools; `hasTimeBasedEncounters` is on. Every other
+   writer still throws.
+ - `config/polished_offsets.ini` supplement: `FishGroupCount`, `TreeMonSetCount`, `ContestMonCount`.
++
++## Patch 18 — Polished Crystal trainers, starters, statics/gifts, NPC trades
++- `PolishedCrystalRomHandler`: readers and writers for trainers, starters, statics/gifts and NPC trades. Every
++  writer rewrites only a site's two species bytes in place (LOW, HIGH<<5 with the site's gender and form bits
++  kept); only NO_FORM/PLAIN_FORM sites are in the model, so formed mons are never read or written. Variant
++  forms fold to their species; EGG, the unused $100 and Unown are refused. `setPokemonPool` drops those (and
++  the variant forms) from the main pools; `bannedForStaticPokemon` / `getBannedFormesForTrainerPokemon` ban them.
++- Trainers: TrainerGroups -> per-class size-prefixed records (`db size`, name@, flags, mons with the flag-selected
++  item/DV/personality/nickname@/EV/moves fields); a walk that does not end at the size prefix refuses. INVER's entry
++  points at WRAM and is never walked; records with no plain mon are left out. A changed party size, double
++  battles, or a changed level/item/move list throws (resetMoves is not honoured: the party keeps its moves).
++  Tags: leaders GYM1-16, Elite Four ELITE1-4, CHAMPION, rival RIVAL1-7 and Lyra FRIEND1-5 triples with
++  `forceStarterPosition` on the last mon, so "rival carries starter" works.
++- Starters: the three Elm's Lab givepoke species (pokepic/cry/name text are not rewritten). Statics/gifts: the
++  resolved givepoke/loadwildmon sites outside Elm's Lab; their level byte changes only under a level setting.
++  NPC trades: both species of each 33-byte record; Jeeves (Galarian Weezing) stays out whole; nickname, DVs,
++  item and OT must come back unchanged. `canChangeStaticPokemon` is on. Every other writer still throws.
++- `config/polished_offsets.ini` supplement: `TrainerClassCounts`, `TrainerClassCount`, `InverTrainerClass`,
++  `TradeCount`, `TradeLength`, `StarterSites`, `StaticSite0..43` (validated at load: a site must be a PLAIN_FORM
++  givepoke/loadwildmon species), and a `[Polished Crystal SLink overlay (U) 3.2.3]` section for the SLink companion
++  overlay (header checksum 0x725C) via the new `CopyFrom=` key.
+diff --git a/src/com/dabomstew/pkrandom/config/polished_offsets.ini b/src/com/dabomstew/pkrandom/config/polished_offsets.ini
+index 93baeb4..9e0f467 100644
+--- a/src/com/dabomstew/pkrandom/config/polished_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/polished_offsets.ini
+@@ -724,3 +724,64 @@ VariantFormCount=46            // NUM_VARIANT_FORMS = $2e: BaseData/EvosAttacksP
+ FishGroupCount=15              // NUM_FISHGROUPS (constants/map_data_constants.asm:68): FishGroups rows
+ TreeMonSetCount=10             // NUM_TREEMON_SETS (constants/pokemon_data_constants.asm:381); the last (ROCK) has no rare list
+ ContestMonCount=12             // (ContestMonsEnd 25:58f0 - ContestMons 25:58b4) / 5; ContestMons has no terminator
++// patch 18: trainers, starters, statics/gifts, NPC trades. Script sites = species-byte offsets from SLink
++// data/polished/script_sites.json (sha256 dcba56b3211d59f2..., 53/63 resolved; formed and unresolved sites omitted);
++// several offsets on one StaticSite = one gift reached by more than one branch. The handler refuses to load
++// if a site is not a PLAIN_FORM givepoke/loadwildmon species on this ROM.
++TrainerClassCounts=1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,3,12,6,12,3,19,17,23,31,14,35,31,36,31,6,14,8,2,3,4,17,5,20,25,14,14,5,11,3,28,6,15,10,8,4,8,4,6,14,7,4,1,6,4,3,16,32,32,5,1,11,5,7,5,11,8,6,9,6,1,6,5,13,3,4,4,5,0,0,0,5,5,4,23,25,12,4,4,2,2,2,2,2,1,4,1,1,1,2,2,1,3,2,2,2,1,3,2,2,3,2,2,1,1,1,1,1,2,2,3,3,2,2,2,1,1,2,2,1,2,3  // trainers per TrainerGroups entry (class 1..147), data/trainers/parties.asm via trainers.json
++TrainerClassCount=147         // NUM_TRAINER_CLASSES
++InverTrainerClass=122         // INVER ($7a): its TrainerGroups entry is wInverGroup in WRAM (party_pointers.asm:127), never walked
++TradeCount=9                  // NUM_NPC_TRADES (constants/npc_trade_constants.asm)
++TradeLength=33                // NPCTRADE_STRUCT_LENGTH: 1+2+2+11+3+1+1+1+2+8+1 (rb_skip)
++StarterSites=0xA48C0,0xA4919,0xA496D  // givepoke species bytes: CyndaquilPokeBallScript, TotodilePokeBallScript, ChikoritaPokeBallScript (maps/ElmsLab.asm:215,255,293)
++StaticSite0=0x7FDF4  // givepoke MR__MIME maps/CeladonGameCornerPrizeRoom.asm:148
++StaticSite1=0x7FE22  // givepoke EEVEE maps/CeladonGameCornerPrizeRoom.asm:165
++StaticSite2=0x7FE50  // givepoke PORYGON maps/CeladonGameCornerPrizeRoom.asm:182
++StaticSite3=0x1AA667  // loadwildmon MEWTWO maps/CeruleanCaveB1F.asm:30
++StaticSite4=0x1127A0  // loadwildmon MOLTRES maps/CinnabarVolcanoB2F.asm:90
++StaticSite5=0x9A9CB,0x9A9D5  // givepoke DRATINI maps/DragonShrine.asm:187, maps/DragonShrine.asm:190
++StaticSite6=0xAC86A  // givepoke EEVEE maps/EcruteakPokeCenter1F.asm:71
++StaticSite7=0x196D31  // loadwildmon MEW maps/FarawayJungle.asm:27
++StaticSite8=0x6D044  // givepoke ABRA maps/GoldenrodGameCorner.asm:216
++StaticSite9=0x6D072  // givepoke CUBONE maps/GoldenrodGameCorner.asm:233
++StaticSite10=0x6D0A0  // givepoke CLEFAIRY maps/GoldenrodGameCorner.asm:250
++StaticSite11=0xA8C93  // loadwildmon CELEBI maps/IlexForest.asm:457
++StaticSite12=0xB0892  // givepoke CHARMANDER maps/IndigoPlateauPokecenter1F.asm:365
++StaticSite13=0xB08A3  // givepoke BULBASAUR maps/IndigoPlateauPokecenter1F.asm:371
++StaticSite14=0xB08B4  // givepoke SQUIRTLE maps/IndigoPlateauPokecenter1F.asm:377
++StaticSite15=0xA6DD8  // givepoke SHUCKLE maps/ManiasHouse.asm:29
++StaticSite16=0x12A244  // givepoke TYROGUE maps/MountMortarB1F.asm:72
++StaticSite17=0xB5A6E  // givepoke BULBASAUR maps/OaksLab.asm:63
++StaticSite18=0xB5A7D  // givepoke CHARMANDER maps/OaksLab.asm:69
++StaticSite19=0xB5A8C  // givepoke SQUIRTLE maps/OaksLab.asm:75
++StaticSite20=0xFF87F  // givepoke OMANYTE maps/PewterMuseumOfScience1F.asm:165
++StaticSite21=0xFF88F  // givepoke KABUTO maps/PewterMuseumOfScience1F.asm:171
++StaticSite22=0xFF89F  // givepoke AERODACTYL maps/PewterMuseumOfScience1F.asm:177
++StaticSite23=0x1011B5  // loadwildmon ELECTRODE maps/RockTunnel2F.asm:34
++StaticSite24=0xBB425  // loadwildmon ZAPDOS maps/Route10North.asm:209
++StaticSite25=0x73B86  // loadwildmon PIDGEY maps/Route29.asm:82
++StaticSite26=0x52D45  // givepoke SPEAROW maps/Route35GoldenrodGate.asm:41
++StaticSite27=0x7813C  // loadwildmon SUDOWOODO maps/Route36.asm:95
++StaticSite28=0x8F954  // loadwildmon SNORLAX maps/Route7.asm:60
++StaticSite29=0xEFA7D  // loadwildmon ARTICUNO maps/SeafoamIslandsB4F.asm:105
++StaticSite30=0x9C463  // givepoke BULBASAUR maps/ShamoutiPokeCenter1F.asm:68
++StaticSite31=0x9C47C  // givepoke CHARMANDER maps/ShamoutiPokeCenter1F.asm:78
++StaticSite32=0x9C495  // givepoke SQUIRTLE maps/ShamoutiPokeCenter1F.asm:88
++StaticSite33=0x6DEC0  // loadwildmon VOLTORB maps/TeamRocketBaseB1F.asm:517
++StaticSite34=0x6DED4  // loadwildmon GEODUDE maps/TeamRocketBaseB1F.asm:528
++StaticSite35=0x6DEE8  // loadwildmon KOFFING maps/TeamRocketBaseB1F.asm:539
++StaticSite36=0x6E488  // loadwildmon ELECTRODE maps/TeamRocketBaseB2F.asm:236
++StaticSite37=0x6E4AE  // loadwildmon ELECTRODE maps/TeamRocketBaseB2F.asm:254
++StaticSite38=0x6E4D4  // loadwildmon ELECTRODE maps/TeamRocketBaseB2F.asm:272
++StaticSite39=0xB3089  // loadwildmon SUICUNE maps/TinTower1F.asm:129
++StaticSite40=0xB3825  // loadwildmon HO_OH maps/TinTowerRoof.asm:44
++StaticSite41=0xEF0D8  // loadwildmon LAPRAS maps/UnionCaveB2F.asm:44
++StaticSite42=0x42897  // loadwildmon SNORLAX maps/VermilionCity.asm:150
++StaticSite43=0x1ACBBB  // loadwildmon LUGIA maps/WhirlIslandLugiaChamber.asm:44
++
++// SLink companion overlay (patch/dist/SLink-Polished.ups over the release): it moves no table; it changes
++// 107 bytes at $0070-$0088, $0DA8-$0DAE, the header checksum $014E-$014F and bank $7E $1F8000-$1F8048.
++[Polished Crystal SLink overlay (U) 3.2.3]
++CopyFrom=Polished Crystal (U) 3.2.3
++CRCInHeader=0x725C             // ROM 0x14E-0x14F of the overlay, read big-endian
++CRC32=0x36A59795
+diff --git a/src/com/dabomstew/pkrandom/constants/PolishedConstants.java b/src/com/dabomstew/pkrandom/constants/PolishedConstants.java
+index 960d607..ae55f9b 100644
+--- a/src/com/dabomstew/pkrandom/constants/PolishedConstants.java
++++ b/src/com/dabomstew/pkrandom/constants/PolishedConstants.java
+@@ -73,4 +73,21 @@ public class PolishedConstants {
+     public static final int grassSlotsPerTime = 7, waterSlots = 3, maxPlainLevel = 100;
+     public static final int fishGroupLength = 8; // FISHGROUP_DATA_LENGTH: 2 chance bytes + 3 rod pointers
+     public static final int fishEntryLength = 4, treeEntryLength = 4, contestEntryLength = 5;
++
++    // trainer parties: data/trainers/macros.asm end_trainer writes "db size" (bytes after it), the name
++    // ending in '@', "db flags", then per mon level, dp, and the flag-selected fields in the order
++    // engine/battle/read_trainer_party.asm reads them: item, DVs, personality, nickname@, EVs, 4 moves.
++    // TRAINERTYPE_* = 1 << TRNTYPE_* (constants/trainer_data_constants.asm:43-59).
++    public static final int trItem = 1 << 1, trEVs = 1 << 2, trDVs = 1 << 3, trPersonality = 1 << 4,
++            trNickname = 1 << 5, trMoves = 1 << 6;
++    public static final int textTerminator = 0x53; // '@' in Polished's charmap (not Gen 2's $50)
++
++    // script commands whose "dp" species is a site, followed by the level byte
++    // (macros/scripts/events.asm givepoke / loadwildmon)
++    public static final int givepokeCommand = 0x2F, loadwildmonCommand = 0x5C;
++
++    // NPCTrades record (constants/npc_trade_constants.asm): dialog, dp wanted, dp given, nickname x11,
++    // DVs x3, personality, ball, item, dw OT id, OT name x8, one skipped byte
++    public static final int tradeWanted = 1, tradeGiven = 3, tradeNickname = 5, tradeNicknameLength = 11,
++            tradeDVs = 16, tradeItem = 21, tradeOTId = 22, tradeOTName = 24, tradeOTNameLength = 8;
+ }
+diff --git a/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java b/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
+index a0ea89d..20040f4 100644
+--- a/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
++++ b/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
+@@ -24,9 +24,10 @@ import com.dabomstew.pkrandom.pokemon.*;
+ /**
+  * Cut 1 loads the release ROM into UPR's model (detection, 291 species + 46 variant forms,
+  * base stats, the 8-byte moves, evolutions and learnsets) and saves it back field-scoped:
+- * with every setting off the output is byte-identical to the input. The only randomization writer
+- * is wild encounters (patch 17: grass/surf by time of day, swarms, fishing, headbutt/rock smash,
+- * the bug contest; species bytes in place, formed slots untouched). Every other setter throws,
++ * with every setting off the output is byte-identical to the input. The randomization writers are
++ * wild encounters (patch 17: grass/surf by time of day, swarms, fishing, headbutt/rock smash,
++ * the bug contest) and trainers, starters, statics/gifts and NPC trades (patch 18); all rewrite
++ * species bytes in place and leave formed mons untouched. Every other setter throws,
+  * every other feature query says "not supported", and names are placeholders because Polished's
+  * names are compressed text that is never written.
+  *
+@@ -89,6 +90,7 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+     // Values that are not numbers (species names, "Unresolved", source cites) are kept as strings
+     // instead of being reported: the generated section carries them on purpose. A section header
+     // naming an existing entry re-opens it, and a later key wins (the hand-kept supplement).
++    // CopyFrom=<section> copies every key of that (earlier) section, as for the companion overlay.
+     private static void loadROMInfo() {
+         roms = new ArrayList<>();
+         RomEntry current = null;
+@@ -123,7 +125,15 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+                 }
+                 String key = r[0].trim(), value = r[1].trim();
+                 Long num = parseNumber(value);
+-                if (num != null) {
++                if (key.equals("CopyFrom")) {
++                    // every key of an earlier section; the keys after this line override (patch 18)
++                    for (RomEntry re : roms) {
++                        if (re.name.equals(value)) {
++                            current.entries.putAll(re.entries);
++                            current.strings.putAll(re.strings);
++                        }
++                    }
++                } else if (num != null) {
+                     current.entries.put(key, num);
+                 } else {
+                     current.strings.put(key, value);
+@@ -198,9 +208,59 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+         loadPokemonStats();
+         loadMoves();
+         loadEvolutionsAndMovesets();
++        loadScriptSites();
+         actualCRC32 = FileFunctions.getCRC32(rom);
+     }
+ 
++    /** A comma-separated INI list ("0xA48C0,0xA4919"); a single number is a one-element list. */
++    private int[] intList(String key) {
++        Long one = romEntry.entries.get(key);
++        if (one != null) {
++            return new int[] { (int) (long) one };
++        }
++        String s = romEntry.strings.get(key);
++        if (s == null) {
++            throw new IllegalStateException("polished_offsets.ini [" + romEntry.name + "] has no " + key);
++        }
++        String[] parts = s.split(",");
++        int[] out = new int[parts.length];
++        for (int i = 0; i < parts.length; i++) {
++            Long v = parseNumber(parts[i].trim());
++            if (v == null) {
++                throw new IllegalStateException("polished_offsets.ini " + key + ": not a number: " + parts[i]);
++            }
++            out[i] = (int) (long) v;
++        }
++        return out;
++    }
++
++    private int[] starterSites;
++    private List<int[]> staticSites; // one StaticEncounter per entry; more than one offset = the same gift in branches
++
++    /**
++     * Script sites are species-byte offsets resolved on the release ROM (SLink data/polished/script_sites.json):
++     * each must sit right after a givepoke/loadwildmon opcode and carry PLAIN_FORM, else the INI is stale for
++     * this ROM and loading stops here instead of writing into script bytecode.
++     */
++    private void loadScriptSites() {
++        starterSites = intList("StarterSites");
++        staticSites = new ArrayList<>();
++        for (int i = 0; romEntry.entries.containsKey("StaticSite" + i) || romEntry.strings.containsKey("StaticSite" + i); i++) {
++            staticSites.add(intList("StaticSite" + i));
++        }
++        List<int[]> all = new ArrayList<>(staticSites);
++        all.add(starterSites);
++        for (int[] sites : all) {
++            for (int off : sites) {
++                int op = rom[off - 1] & 0xFF;
++                if ((op != PolishedConstants.givepokeCommand && op != PolishedConstants.loadwildmonCommand)
++                        || (rom[off + 1] & PolishedConstants.formMask) != PolishedConstants.plainForm || !plainSite(off)) {
++                    throw new IllegalStateException(String.format("Polished Crystal: no plain givepoke/loadwildmon species at 0x%X", off));
++                }
++            }
++        }
++    }
++
+     private int stride() {
+         return romEntry.getValue("BaseStatsEntrySize");
+     }
+@@ -535,11 +595,374 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+         return new ItemList(PolishedConstants.itemCount);
+     }
+ 
+-    // ---- not read in cut 1: empty, so the all-off log and check value see nothing ----
++    // ---- trainers, starters, statics/gifts, NPC trades (patch 18) ----
++    //
++    // Every writer here rewrites only a site's two species bytes, in place: LOW(species), then
++    // HIGH(species) << 5 with the site's own gender and form bits kept. A site is in the model only when
++    // its form is NO_FORM or PLAIN_FORM; formed mons (ALOLAN_FORM, the Magikarp patterns, ...) are never
++    // read, so never written. Anything the model changed that is not a species (a level outside a static,
++    // an item, moves, a party size, a nickname) is refused with an exception, never written.
++
++    /** A "dp" this cut may rewrite: a real species with NO_FORM or PLAIN_FORM (gender bits allowed). */
++    private boolean plainSite(int offset) {
++        int lo = rom[offset] & 0xFF, hi = rom[offset + 1] & 0xFF;
++        int species = PolishedConstants.species9(lo, hi), form = hi & PolishedConstants.formMask;
++        return species >= 1 && species <= speciesCount
++                && (form == PolishedConstants.noForm || form == PolishedConstants.plainForm);
++    }
++
++    private Pokemon pokemonAt(int offset) {
++        return pokes[PolishedConstants.species9(rom[offset] & 0xFF, rom[offset + 1] & 0xFF)];
++    }
++
++    /**
++     * Writes pk at a site unless it is already there. pk must be placeable: a variant form folds to its
++     * species (the site's own form byte stays), and EGG, the unused $100 and Unown are refused.
++     */
++    private void writeSpecies(int offset, Pokemon pk, String what) {
++        if (pk == pokemonAt(offset)) {
++            return;
++        }
++        Pokemon base = pk.baseForme != null ? pk.baseForme : pk;
++        if (bannedForWildEncounters().contains(base) || base.number < 1 || base.number > speciesCount) {
++            throw new IllegalStateException("Polished Crystal: " + pk.fullName() + " cannot be " + what);
++        }
++        rom[offset] = (byte) (base.number & 0xFF);
++        rom[offset + 1] = (byte) ((rom[offset + 1] & ~PolishedConstants.extSpeciesMask) | ((base.number >> 8) << 5));
++    }
++
++    /**
++     * EGG, the unused $100, Unown and the variant forms leave the main pools (starters, trades, type-themed
++     * trainers); statics and trainers also get them as banned lists below, because UPR derives private
++     * legendary/non-legendary lists from the unpruned pool.
++     */
++    @Override
++    public void setPokemonPool(Settings settings) {
++        super.setPokemonPool(settings);
++        List<Pokemon> banned = bannedForWildEncounters();
++        mainPokemonList.removeAll(banned);
++        mainPokemonListInclFormes.removeAll(banned);
++    }
++
++    @Override
++    public List<Pokemon> bannedForStaticPokemon() {
++        return bannedForWildEncounters();
++    }
++
++    /** The trainer pool can come from UPR's no-legendary list, which setPokemonPool cannot prune. */
++    @Override
++    public List<Pokemon> getBannedFormesForTrainerPokemon() {
++        return bannedForWildEncounters();
++    }
++
++    // -- starters: the three Elm's Lab givepoke species (Cyndaquil, Totodile, Chikorita, UPR's Gen 2 order).
++    // The pokepic/cry species a ball shows before the choice and the "Take <name>?" text are not sites.
+ 
+     @Override
+     public List<Pokemon> getStarters() {
+-        return new ArrayList<>();
++        List<Pokemon> starters = new ArrayList<>();
++        for (int site : starterSites) {
++            starters.add(pokemonAt(site));
++        }
++        return starters;
++    }
++
++    @Override
++    public boolean setStarters(List<Pokemon> newStarters) {
++        if (newStarters.size() != starterSites.length) {
++            return false;
++        }
++        for (int i = 0; i < starterSites.length; i++) {
++            writeSpecies(starterSites[i], newStarters.get(i), "a starter");
++        }
++        return true;
++    }
++
++    // -- statics and gifts: resolved givepoke/loadwildmon sites outside Elm's Lab; the level byte follows
++    // the species and changes only under a level setting (writeLevel keeps LEVEL_FROM_BADGES encodings)
++
++    @Override
++    public List<StaticEncounter> getStaticPokemon() {
++        List<StaticEncounter> statics = new ArrayList<>();
++        for (int[] sites : staticSites) {
++            StaticEncounter se = new StaticEncounter(pokemonAt(sites[0]));
++            se.level = rom[sites[0] + 2] & 0xFF;
++            statics.add(se);
++        }
++        return statics;
++    }
++
++    @Override
++    public boolean setStaticPokemon(List<StaticEncounter> staticPokemon) {
++        if (staticPokemon.size() != staticSites.size()) {
++            throw new IllegalStateException("Polished Crystal: static encounters do not match getStaticPokemon()");
++        }
++        for (int i = 0; i < staticSites.size(); i++) {
++            StaticEncounter se = staticPokemon.get(i);
++            int[] sites = staticSites.get(i);
++            int oldLevel = rom[sites[0] + 2] & 0xFF;
++            for (int site : sites) {
++                writeSpecies(site, se.pkmn, "a static Pokemon");
++                if (se.level != oldLevel) {
++                    writeLevel(site + 2, se.level);
++                }
++            }
++        }
++        return true;
++    }
++
++    // -- trainers: TrainerGroups (dba per class) -> per-class groups of size-prefixed records
++
++    private static class TrainerRecord {
++        int trainerClass, instance, start; // instance counts from 0 within the class
++        String name;
++        boolean items, moves;
++        final List<int[]> mons = new ArrayList<>(); // {level, species, item or -1, moves or -1} offsets
++    }
++
++    /** Polished's charmap for trainer names in the log: letters and space; the rest prints as '?'. */
++    private String readName(int offset, int maxLength) {
++        StringBuilder sb = new StringBuilder();
++        for (int i = 0; i < maxLength && (rom[offset + i] & 0xFF) != PolishedConstants.textTerminator; i++) {
++            int c = rom[offset + i] & 0xFF;
++            sb.append(c >= 0x80 && c <= 0x99 ? (char) ('A' + c - 0x80) : c >= 0xA0 && c <= 0xB9
++                    ? (char) ('a' + c - 0xA0) : c == 0x7F ? ' ' : '?');
++        }
++        return sb.toString();
++    }
++
++    /**
++     * Walks every record of every class with TrainerClassCounts. A record is "db size" then size bytes
++     * (data/trainers/macros.asm end_trainer); a walk that does not end exactly there is a hard refusal.
++     * INVER's entry points at WRAM (a party shuffled at run time) and is never walked.
++     */
++    private List<TrainerRecord> walkTrainers() {
++        int table = romEntry.getValue("TrainerDataTableOffset");
++        int[] counts = intList("TrainerClassCounts");
++        int inver = romEntry.getValue("InverTrainerClass");
++        if (counts.length != romEntry.getValue("TrainerClassCount")) {
++            throw new IllegalStateException("Polished Crystal: TrainerClassCounts has " + counts.length + " classes");
++        }
++        List<TrainerRecord> records = new ArrayList<>();
++        for (int c = 0; c < counts.length; c++) {
++            if (c + 1 == inver) {
++                continue;
++            }
++            int bank = rom[table + 3 * c] & 0xFF, addr = readWord(table + 3 * c + 1);
++            if (addr < 0x4000 || addr >= 0x8000) {
++                throw new IllegalStateException(String.format("Polished Crystal: trainer class %d party pointer %02X:%04X", c + 1, bank, addr));
++            }
++            int p = calculateOffset(bank, addr);
++            for (int t = 0; t < counts[c]; t++) {
++                TrainerRecord r = new TrainerRecord();
++                r.trainerClass = c + 1;
++                r.instance = t;
++                r.start = p;
++                int end = p + 1 + (rom[p] & 0xFF);
++                int q = p + 1;
++                r.name = readName(q, end - q);
++                while ((rom[q] & 0xFF) != PolishedConstants.textTerminator) {
++                    q++;
++                }
++                q++;
++                int flags = rom[q++] & 0xFF;
++                r.items = (flags & PolishedConstants.trItem) != 0;
++                r.moves = (flags & PolishedConstants.trMoves) != 0;
++                while (q < end) {
++                    int[] mon = { q, q + 1, -1, -1 };
++                    q += 3;
++                    if (r.items) {
++                        mon[2] = q++;
++                    }
++                    q += ((flags & PolishedConstants.trDVs) != 0 ? 1 : 0) + ((flags & PolishedConstants.trPersonality) != 0 ? 1 : 0);
++                    if ((flags & PolishedConstants.trNickname) != 0) {
++                        while ((rom[q] & 0xFF) != PolishedConstants.textTerminator) {
++                            q++;
++                        }
++                        q++;
++                    }
++                    q += (flags & PolishedConstants.trEVs) != 0 ? 1 : 0;
++                    if (r.moves) {
++                        mon[3] = q;
++                        q += 4;
++                    }
++                    r.mons.add(mon);
++                }
++                if (q != end) {
++                    throw new IllegalStateException(String.format("Polished Crystal: trainer %d/%d at 0x%X parses to 0x%X, its size says 0x%X",
++                            c + 1, t + 1, r.start, q, end));
++                }
++                records.add(r);
++                p = end;
++            }
++        }
++        return records;
++    }
++
++    private List<int[]> plainMons(TrainerRecord r) {
++        List<int[]> mons = new ArrayList<>();
++        for (int[] mon : r.mons) {
++            if (plainSite(mon[1])) {
++                mons.add(mon);
++            }
++        }
++        return mons;
++    }
++
++    /**
++     * One Trainer per record with at least one plain mon (empty parties and all-formed ones are left out);
++     * Trainer.pokemon holds only the plain mons, in party order. Levels are raw bytes (above 100 =
++     * LEVEL_FROM_BADGES-relative). poketype uses UPR's bits: 2 = items, 1 = custom moves.
++     */
++    @Override
++    public List<Trainer> getTrainers() {
++        List<Trainer> trainers = new ArrayList<>();
++        for (TrainerRecord r : walkTrainers()) {
++            Trainer tr = new Trainer();
++            tr.offset = r.start;
++            tr.trainerclass = r.trainerClass;
++            tr.name = r.name;
++            tr.fullDisplayName = "Class " + r.trainerClass + " " + r.name;
++            tr.poketype = (r.items ? 2 : 0) | (r.moves ? 1 : 0);
++            for (int[] mon : plainMons(r)) {
++                TrainerPokemon tp = new TrainerPokemon();
++                tp.level = rom[mon[0]] & 0xFF;
++                tp.pokemon = pokemonAt(mon[1]);
++                tp.heldItem = mon[2] < 0 ? 0 : rom[mon[2]] & 0xFF;
++                for (int m = 0; mon[3] >= 0 && m < 4; m++) {
++                    tp.moves[m] = rom[mon[3] + m] & 0xFF;
++                }
++                tr.pokemon.add(tp);
++            }
++            if (!tr.pokemon.isEmpty()) {
++                tr.index = trainers.size() + 1;
++                tagTrainer(tr, r.instance);
++                trainers.add(tr);
++            }
++        }
++        return trainers;
++    }
++
++    /**
++     * UPR tags by trainer class: Johto/Kanto leaders GYM1-16, Elite Four ELITE1-4, CHAMPION; the rival
++     * (RIVAL0..RIVAL2 classes 27-29) and Lyra (LYRA1/LYRA2, 30-31) fight in triples, one per player
++     * starter, with the starter as the last mon (data/trainers/parties.asm). In a rival triple the
++     * rival holds Chikorita's, Cyndaquil's, Totodile's line: with UPR's starters (Cyndaquil, Totodile,
++     * Chikorita) and "us i => them i+1", the tags are RIVALn-1, -2, -0. Lyra holds the same lines and
++     * takes the one after the rival's ("them i+2"): FRIENDn-0, -1, -2.
++     */
++    private static void tagTrainer(Trainer tr, int k) {
++        int c = tr.trainerclass;
++        if (c >= 4 && c <= 11) {
++            tr.tag = "GYM" + (c - 3);
++        } else if (c >= 17 && c <= 24) {
++            tr.tag = "GYM" + (c - 8);
++        } else if (c >= 12 && c <= 15) {
++            tr.tag = "ELITE" + (c - 11);
++        } else if (c == 16) {
++            tr.tag = "CHAMPION";
++        } else if (c >= 27 && c <= 31) {
++            boolean rival = c <= 29;
++            int battle = k / 3 + 1 + (c == 28 ? 1 : c == 29 ? 5 : c == 31 ? 4 : 0);
++            tr.tag = (rival ? "RIVAL" : "FRIEND") + battle + "-" + (rival ? (k % 3 + 1) % 3 : k % 3);
++            tr.forceStarterPosition = tr.pokemon.size() - 1;
++        }
++    }
++
++    /**
++     * Rewrites only the species bytes of each plain mon whose Pokemon changed. A different trainer or
++     * party size (added mons, double battles) would change a record's size and shift every later record,
++     * so it throws; so does a changed level, held item or move list (resetMoves is not honoured: the
++     * party keeps its moves). Nothing outside the species bytes is ever written.
++     */
++    @Override
++    public void setTrainers(List<Trainer> trainerData, boolean doubleBattleMode) {
++        if (doubleBattleMode) {
++            throw notInCut1("double battle mode");
++        }
++        Iterator<Trainer> it = trainerData.iterator();
++        for (TrainerRecord r : walkTrainers()) {
++            List<int[]> mons = plainMons(r);
++            if (mons.isEmpty()) {
++                continue;
++            }
++            Trainer tr = it.hasNext() ? it.next() : null;
++            if (tr == null || tr.offset != r.start || tr.pokemon.size() != mons.size()) {
++                throw new IllegalStateException(String.format("Polished Crystal: trainer at 0x%X would change size", r.start));
++            }
++            for (int j = 0; j < mons.size(); j++) {
++                TrainerPokemon tp = tr.pokemon.get(j);
++                int[] mon = mons.get(j);
++                boolean movesChanged = false;
++                for (int m = 0; mon[3] >= 0 && m < 4; m++) {
++                    movesChanged |= tp.moves[m] != (rom[mon[3] + m] & 0xFF);
++                }
++                if (tp.level != (rom[mon[0]] & 0xFF) || tp.heldItem != (mon[2] < 0 ? 0 : rom[mon[2]] & 0xFF)
++                        || (mon[3] < 0 && tp.moves[0] != 0) || movesChanged) {
++                    throw notInCut1("trainer level/item/move writing (" + tr.fullDisplayName + ")");
++                }
++                writeSpecies(mon[1], tp.pokemon, "a trainer Pokemon");
++            }
++        }
++        if (it.hasNext()) {
++            throw new IllegalStateException("Polished Crystal: more trainers than getTrainers() returned");
++        }
++    }
++
++    // -- NPC trades: both species of each NPCTrades record; a record with a formed side (Jeeves's Galarian
++    // Weezing) stays out of the model whole. Nickname, DVs, item, OT id and name must come back unchanged.
++
++    private List<Integer> plainTrades() {
++        List<Integer> out = new ArrayList<>();
++        int table = romEntry.getValue("TradeTableOffset"), len = romEntry.getValue("TradeLength");
++        for (int i = 0; i < romEntry.getValue("TradeCount"); i++) {
++            int o = table + i * len;
++            if (plainSite(o + PolishedConstants.tradeWanted) && plainSite(o + PolishedConstants.tradeGiven)) {
++                out.add(o);
++            }
++        }
++        return out;
++    }
++
++    private IngameTrade readTrade(int o) {
++        IngameTrade t = new IngameTrade();
++        t.requestedPokemon = pokemonAt(o + PolishedConstants.tradeWanted);
++        t.givenPokemon = pokemonAt(o + PolishedConstants.tradeGiven);
++        t.nickname = readName(o + PolishedConstants.tradeNickname, PolishedConstants.tradeNicknameLength);
++        t.ivs = new int[6];
++        for (int i = 0; i < 6; i++) {
++            t.ivs[i] = (rom[o + PolishedConstants.tradeDVs + i / 2] >> (i % 2 == 0 ? 4 : 0)) & 0xF;
++        }
++        t.item = rom[o + PolishedConstants.tradeItem] & 0xFF;
++        t.otId = readWord(o + PolishedConstants.tradeOTId);
++        t.otName = readName(o + PolishedConstants.tradeOTName, PolishedConstants.tradeOTNameLength);
++        return t;
++    }
++
++    @Override
++    public List<IngameTrade> getIngameTrades() {
++        List<IngameTrade> trades = new ArrayList<>();
++        for (int o : plainTrades()) {
++            trades.add(readTrade(o));
++        }
++        return trades;
++    }
++
++    @Override
++    public void setIngameTrades(List<IngameTrade> trades) {
++        List<Integer> records = plainTrades();
++        if (trades.size() != records.size()) {
++            throw new IllegalStateException("Polished Crystal: trades do not match getIngameTrades()");
++        }
++        for (int i = 0; i < records.size(); i++) {
++            IngameTrade t = trades.get(i), old = readTrade(records.get(i));
++            if (!t.nickname.equals(old.nickname) || !t.otName.equals(old.otName) || t.otId != old.otId
++                    || t.item != old.item || !Arrays.equals(t.ivs, old.ivs)) {
++                throw notInCut1("trade nickname/OT/DV/item writing");
++            }
++            writeSpecies(records.get(i) + PolishedConstants.tradeWanted, t.requestedPokemon, "a requested trade Pokemon");
++            writeSpecies(records.get(i) + PolishedConstants.tradeGiven, t.givenPokemon, "a traded Pokemon");
++        }
+     }
+ 
+     // ---- wild encounters (patch 17) ----
+@@ -745,21 +1168,6 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+ 
+     // ---- not read yet: empty, so the all-off log and check value see nothing ----
+ 
+-    @Override
+-    public List<Trainer> getTrainers() {
+-        return new ArrayList<>();
+-    }
+-
+-    @Override
+-    public List<StaticEncounter> getStaticPokemon() {
+-        return new ArrayList<>();
+-    }
+-
+-    @Override
+-    public List<IngameTrade> getIngameTrades() {
+-        return new ArrayList<>();
+-    }
+-
+     @Override
+     public List<TotemPokemon> getTotemPokemon() {
+         return new ArrayList<>();
+@@ -909,7 +1317,7 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+ 
+     @Override
+     public boolean canChangeStaticPokemon() {
+-        return false;
++        return true; // patch 18: resolved givepoke/loadwildmon sites
+     }
+ 
+     @Override
+@@ -1017,17 +1425,7 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+         // the Randomizer always calls this; cut 1 changes nothing
+     }
+ 
+-    // ---- writers: wild encounters only (patch 17) ----
+-
+-    @Override
+-    public boolean setStarters(List<Pokemon> newStarters) {
+-        throw notInCut1("starter writing");
+-    }
+-
+-    @Override
+-    public boolean setStaticPokemon(List<StaticEncounter> staticPokemon) {
+-        throw notInCut1("static Pokemon writing");
+-    }
++    // ---- writers: wild encounters (patch 17); trainers, starters, statics, trades are with their readers ----
+ 
+     /**
+      * Same-size, in place: a changed Pokemon rewrites only the slot's two species bytes as
+@@ -1085,16 +1483,6 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+         return banned;
+     }
+ 
+-    @Override
+-    public void setTrainers(List<Trainer> trainerData, boolean doubleBattleMode) {
+-        throw notInCut1("trainer writing");
+-    }
+-
+-    @Override
+-    public void setIngameTrades(List<IngameTrade> trades) {
+-        throw notInCut1("in-game trade writing");
+-    }
+-
+     @Override
+     public void setTotemPokemon(List<TotemPokemon> totemPokemon) {
+         throw notInCut1("totem writing");
+-- 
+2.54.0.windows.1
+
