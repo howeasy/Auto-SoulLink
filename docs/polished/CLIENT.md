@@ -1,0 +1,726 @@
+# Polished Crystal client — what it takes to make the Lua client RUN
+
+Work list for taking `lua/gen2/*` from *admitted but not composed* to *composes and says hello with a party*,
+then *detects a catch*, on **Polished Crystal v3.2.3** (tag `v3.2.3`, commit `3fa43192…`, overlay sha1 `29ea04c2…`).
+
+Sources read, all read-only:
+
+| what | where |
+|---|---|
+| composition root | `lua/gen2/entry.lua` (637 lines) |
+| the Polished binding that already exists | `lua/gen2/polished.lua` (549 lines, committed `e81c87fd`) |
+| the Gen 2 client to be reused | `lua/gen2/client.lua` (1833), `wire.lua` (234), `reads.lua` (576), `boxes.lua` (618), `writes.lua` (312), `signals.lua` (1212), `rom.lua` (339), `panel.lua` (198), `phone.lua` (177), `trade_overlay.lua` (214), `run.lua` (110), `artifact.lua` (73) |
+| shared core | `lua/core/session.lua`, `deferred.lua`, `identity.lua` |
+| server side (already shipped) | `server/adapters/gen2_polished.py` (447), `polished_codec.py`, registry `server/adapters/__init__.py` |
+| data pack | `data/games/polished_crystal/` — **13 files, no `area_map.json`, no `engine_signals.json`, no `write_checkpoint.json`, no `admission.json`** |
+| design docs | `docs/polished/{RAM,HOOKS,NEWBOX,UPR_HANDLER}.md`, `docs/gen2/gen2_engine_sites.md` |
+| pinned source | `F:/slink-work/cache/polished/src` (read-only) |
+
+---
+
+## 0. Executive summary
+
+The blocker is **not** the ROM and **not** the decoder. `lua/gen2/polished.lua` already decodes the party, player, map,
+badges, balls pocket, battle state and stat stages off a generated Polished profile, and the **server already has a
+Polished adapter** registered (`server/adapters/__init__.py:287`). The blocker is that `lua/gen2/entry.lua:596-610`
+short-circuits `polished` before `compose()` ever runs, and that `compose()` is hard-wired to the vanilla Gen 2 pack
+shape: it demands **15 pack files** of which the Polished pack ships **2**, demands `matrix.foundation == "gen2_gsc"` in
+an `admission.json` that does not exist, and demands **physical receipts** that are the only thing that turns on
+runtime admission.
+
+The good news for a `caps=0` first milestone: **the client is far more nil-tolerant than it looks.** `panel`, `phone`,
+`trade` and every SFX path are already guarded (`client.lua:502`, `:1326-1331`, `:663`), and a missing box reader
+degrades `pc_boxes` to an empty list rather than failing the hello (`client.lua:1320`, `:312-317`). So *hello + party +
+link-by-key + faint* need **no new engine-site data at all** — only the composition path and a `wire` shim.
+
+The bad news: **catch detection is not free.** The Gen 2 client resolves an acquisition by diffing a party/box baseline
+that it only *updates* on a signalled frame (`client.lua:196-202`, `lua/gen2/signals.lua`), and Polished has no
+`engine_signals.json`. That is the one milestone-2 item that is not optional.
+
+---
+
+## 1. The hard-bind table
+
+Every row is a place the Gen 2 client binds a **pret/pokecrystal-or-Gold/Silver** fact. "Polished binding needed" is what
+has to replace it. `PROVIDED` means `lua/gen2/polished.lua` already does this and the work is *wiring*, not *authoring*.
+
+### 1.A Composition / admission (the P0 blocker)
+
+| # | vanilla bind | file:line | Polished binding needed | state |
+|---|---|---|---|---|
+| A1 | `Entry.build` refuses `polished` before `compose()` | `lua/gen2/entry.lua:597-603` | route `polished` into a composition | **MISSING** |
+| A2 | `local titles = {"crystal","gold","silver"}` — Polished absent from the admission catalog loop | `lua/gen2/entry.lua:185` | add `polished`, or a separate `admit_polished` catalog (already exists: `lua/gen2/entry.lua:615-619`) | **PROVIDED** (`:615`) |
+| A3 | `Entry.PACK_FILES.polished_crystal` ships **only** `profile` + `charmap` | `lua/gen2/entry.lua:79-82` | 13 more pack files, or a relaxed `order` | **MISSING** |
+| A4 | `load_pack` iterates a 15-key `order` and indexes `files[key]` — `nil` for 13 of them on Polished | `lua/gen2/entry.lua:186-187`, `:202-205` | a Polished `load_pack` that only requires `profile`+`charmap` | **MISSING** |
+| A5 | `load_pack` asserts `matrix.foundation == "gen2_gsc"` on `admission.json` | `lua/gen2/entry.lua:235` | Polished has **no `admission.json`**; its own `P.admit` already asserts the provenance pin instead | **PROVIDED** (`lua/gen2/polished.lua:88-90`) |
+| A6 | `load_pack` asserts `count == 1` title in the profile wrapper | `lua/gen2/entry.lua:210-211` | Polished's wrapper has one title (`polished`); `P.load` checks a different set | **PROVIDED** (`lua/gen2/polished.lua:67-74`) |
+| A7 | `Entry.RECEIPT_FILES` has no `polished_crystal` key → `proofs()` returns nil | `lua/gen2/entry.lua:91`, `:288-290` | receipts, or an explicit dev-grade bypass that does **not** claim `PHYSICAL_RECEIPTED` | **MISSING** |
+| A8 | `proofs()` is the only thing that grants runtime admission, via `S.qualified_sites` + `M.qualified` | `lua/gen2/entry.lua:295-305` | Polished ships none; `qualification="DEV_OVERLAY_SHA1"` is already honest (`lua/gen2/polished.lua:112`) | **PROVIDED** |
+| A9 | `compose()` calls `Reads.new(profile, io_, decode_name)` — the **vanilla** decoder | `lua/gen2/entry.lua:419` | call `P.new(...)` and take its `r` | **PROVIDED** (`lua/gen2/polished.lua:198`) |
+| A10 | `rom_type = def.rom_type` from `Entry.PACKS` | `lua/gen2/entry.lua:553` | `"polished_crystal"` — matches the server's `_ROM_TYPES` | **PROVIDED** (`lua/gen2/polished.lua:16`) |
+| A11 | `client.foundation` is hard-coded `"gen2_gsc"` | `lua/gen2/client.lua:97` | unchanged and correct — the server also says `foundation="gen2_gsc"` | **CLEAN** |
+| A12 | header family `PKPCRYSTAL="polished"` | `lua/gen2/entry.lua:579` | already present | **CLEAN** |
+
+### 1.B Identity / wire shapes
+
+| # | vanilla bind | file:line | Polished binding needed | state |
+|---|---|---|---|---|
+| B1 | `local mon_key = wire.mon_key` — **the client always calls `wire.*`** | `lua/gen2/client.lua:219` | a `wire`-shaped object exposing `mon_key`/`party_entry`/`foe_entry`/`box_entry` | **PROVIDED, not wired** |
+| B2 | vanilla key `DDDD:OOOO:SS` (2 DV bytes) | `lua/gen2/wire.lua:73` | `DDDDDD:OOOO:SSS:TT` — 3 DV bytes, 9-bit species, trait byte | **PROVIDED** (`lua/gen2/polished.lua:131`) |
+| B3 | server key regex is 4-group | — | `server/adapters/gen2_polished.py:35` | **CLEAN** |
+| B4 | `wire.party_entry(m, active_slot, stages)` | `lua/gen2/client.lua:235` | `P.party_entry(mon, active_slot, stages)` — **identical arity** | **PROVIDED** (`lua/gen2/polished.lua:161`) |
+| B5 | party blob is whatever `wire.party_entry` emits | `lua/gen2/client.lua:240` | exactly **140 hex chars** = 48+11+11 | **PROVIDED** (`lua/gen2/polished.lua:167-168`) |
+| B6 | `wire.foe_entry(foe, stages.wire)` | `lua/gen2/client.lua:265-266` | `P.foe_entry(mon, stages)` — identical arity | **PROVIDED** (`lua/gen2/polished.lua:184`) |
+| B7 | `wire.box_entry(m, box_index)` | `lua/gen2/client.lua:322` | Polished box entries come from a **pokedb enumerate**, not a party/box struct walk | **MISSING** |
+| B8 | `hello_identity()` joins player/foundation/kind/sha1/ot_id with `\|` | `lua/gen2/client.lua:349-357` | unchanged — `read_player().ot_id` exists | **PROVIDED** (`lua/gen2/polished.lua:398`) |
+
+### 1.C `reads.*` the client calls (contract already met unless marked)
+
+| # | call site | vanilla bind | Polished binding | state |
+|---|---|---|---|---|
+| C1 | `lua/gen2/client.lua:226` | `reads.read_party()` | `P.new(...).read_party()` | **PROVIDED** (`lua/gen2/polished.lua:373`) |
+| C2 | `:246`, `:533`, `:969`, `:1343`, `:1509`, `:1592`, `:1685`, `:1804` | `reads.read_battle()` | `read_battle()`; needs `c.WILD_BATTLE=1`, `c.TRAINER_BATTLE=2`, `c.BATTLERESULT_BITMASK=192` | **PROVIDED** (profile has all three) |
+| C3 | `:249`, `:266` | `reads.read_stat_stages(side)` returning `.wire` | 7 entries, neutral 6; needs `BASE_STAT_LEVEL=7`, `MAX_STAT_LEVEL=13`, `NUM_LEVEL_STATS=8` | **PROVIDED** (`lua/gen2/polished.lua:521`; profile has all three) |
+| C4 | `:265`, `:1168` | `reads.read_battle_mon("enemy")` | needs `battle_struct` = **35 B**, `SpAtk`/`SpDef` renamed | **PROVIDED** (`lua/gen2/polished.lua:489`; RAM.md §2.3) |
+| C5 | `:274` | `reads.read_pocket("balls")` | `derived.pockets.balls` = `{capacity 25, count "wNumBalls", data "wBalls"}` | **PROVIDED** (profile + `lua/gen2/polished.lua:424`) |
+| C6 | `:282` | `reads.read_map()` | `wMapGroup`+1/wMapNumber+2 geometry | **PROVIDED** (`lua/gen2/polished.lua:404`) |
+| C7 | `:312` | `reads.read_current_box_num()` | `wCurBox`, 0-based, gate `>= c.NUM_BOXES` | **PROVIDED** (`lua/gen2/polished.lua:445`; `NUM_BOXES=20`) |
+| C8 | `:343`, `:350`, `:421`, `:1312`, `:1405` | `reads.read_player()` | `wPlayerID`/`wPlayerGender`/`wPlayerName`, NAME_LENGTH 11 | **PROVIDED** (`lua/gen2/polished.lua:388`) |
+| C9 | `:1313`, `:1406` | `reads.read_badges()` | needs **two** badge bytes, `NUM_JOHTO_BADGES=8`, `NUM_KANTO_BADGES=8` | **PROVIDED** (`lua/gen2/polished.lua:413`; profile has 8/8) |
+| C10 | `:1509`, `:1592` | `wram_byte("wLinkMode")` | `wLinkMode` **is** in the Polished `ram` table | **PROVIDED** (verified present) |
+| C11 | `:317` | `reads.read_active_box()` | **no analogue** — Polished has no `sBox`/`sBoxMons` (RAM.md §1.4 "the boxes are gone") | **MISSING** |
+| C12 | `:317` | `reads.read_storage_box(box)` | same | **MISSING** |
+| C13 | `:318-321` | loop `0 .. c.NUM_BOXES-1` | Polished `NUM_BOXES = 20`, boxes 1-based in SRAM, `wCurBox` 0-based | **MISSING** (newbox reader) |
+| C14 | `:196-202` | `io.read_range(addr, n, "System Bus")` + `io.bank_valid(bank, addr, n)` | `P.new` uses the **identical** contract (`lua/gen2/polished.lua:341-348`) | **CLEAN** |
+
+### 1.D Struct geometry (why vanilla `reads.lua` must not be reused)
+
+`docs/polished/RAM.md:392-398` already ranks these; the client-side consequence:
+
+| # | vanilla bind | file:line | Polished | state |
+|---|---|---|---|---|
+| D1 | `party_struct == 48` asserted | `lua/gen2/writes.lua:64`, `lua/gen2/reads.lua:60` (per RAM.md §5.1) | still 48 B, **different middle** — 6 one-byte EVs at +11, 3 DV bytes at +17, personality +20, ext-species/form +21, PP +22 | **PROVIDED** (`lua/gen2/polished.lua:270-283`) |
+| D2 | `battle_struct == 32`, fields built by name concatenation (`SpclAtk`/`SpclDef`) | `lua/gen2/reads.lua:491-493` (per RAM.md §5.2) | **35 B**, `SpAtk`/`SpDef` | **PROVIDED** (profile `derived.battle_struct_size=35`) |
+| D3 | `NUM_POKEMON = 251`, one-byte species | `lua/gen2/reads.lua:105-106` (per RAM.md §5.5) | **9-bit species + form**, `MAX_SPECIES = 0x1FF` | **PROVIDED** (`lua/gen2/polished.lua:21`, `:244`) |
+| D4 | `wPartySpecies` is a real list | `lua/gen2/reads.lua:221-227` (per RAM.md §1.2) | Polished has `ds 7 ; unused` — **byte offsets still hold, so a vanilla geometry gate passes on a meaningless range** | **PROVIDED** (`lua/gen2/polished.lua:311-313` derives from `wPartyMons`/`wPartyCount` instead) |
+| D5 | bag: 3 pockets, ball ids from the items list | `lua/gen2/client.lua:271-277` | **5 pockets**, capacities all changed (items 20→75, balls 12→25) | **PROVIDED** for read; nuzlocke ball-id **set** is wrong (RAM.md §5.7) |
+| D6 | trainer class ids | `lua/gen2/client.lua:223-224` | all moved; `RIVAL0/1/2` + `LYRA1/2` unmodelled | **server side only**; `class*256+id` packing unchanged |
+| D7 | `wScriptRunning` safe-state | RAM.md §1.2 | still exists, `01:D437` | **NOT YET BOUND** (no `write_checkpoint.json`) |
+
+### 1.E Writes / checkpoint (all out of scope for `caps=0`)
+
+| # | vanilla bind | file:line | Polished binding needed | state |
+|---|---|---|---|---|
+| E1 | `writes.lua` `W.SYM` four literals: `wCurPlayerMove`, `wCurOTMon`, `wOTPartyCount`, `wOTPartyDataEnd` | `lua/gen2/writes.lua:37-41`, table at `docs/polished/RAM.md:37-51` | all four **moved**; profile has no `W.SYM` analogue | **MISSING** |
+| E2 | `writes.lua:94` derives `ot_species = ot_block + 1` as an enemy species list | RAM.md:52 | in Polished those 7 bytes are `wMirrorHerbPendingBoosts` — writing there **clobbers Mirror Herb state** | **MISSING, and hazardous** |
+| E3 | `checkpoint_pc` (the hooked PC for writes + hello readiness) | `lua/gen2/entry.lua:540`, consumed `lua/gen2/client.lua:1441-1446` | needs `view.checkpoint.primary.execution_before.pc`; Polished has no receipts | **MISSING** |
+| E4 | `battle_hold` / `battle_bench` / `rival_swap` gates | `lua/gen2/entry.lua:543-549`, `lua/gen2/client.lua:1448-1450` | all three require receipts; with none, all three are `nil` and the hooks simply never arm | **SAFE BY OMISSION** |
+| E5 | `contest_mask` → `contest_masked()` | `lua/gen2/entry.lua:550`, `lua/gen2/client.lua:487-488` | needs `write_checkpoint.json:contest_mask`; without it, what does it default to? **UNVERIFIED** | **UNVERIFIED** |
+| E6 | `Boxes.executor` / `cart_gate` — every span re-proves a receipt kind | `lua/gen2/entry.lua:495-510` | no receipts ⇒ `covers()` false ⇒ every box write refuses **before a byte** | **SAFE BY OMISSION** |
+
+### 1.F Engine sites / signals (the P5a catch-detection blocker)
+
+| # | vanilla bind | file:line | Polished binding needed | state |
+|---|---|---|---|---|
+| F1 | `signals = Signals.new(options)` with `pack = data.sites` | `lua/gen2/entry.lua:472-474` | Polished has **no `engine_signals.json`** | **MISSING** |
+| F2 | client builds `points` from `site.point_symbols` | `lua/gen2/client.lua:200-202` | empty `sites` is safe (`pairs({})`); point scalars like `wBattleScriptFlags` simply have no fallback | **DEGRADES** |
+| F3 | production signals require `proof.engine` (a U1 receipt) | `lua/gen2/entry.lua:478` | no receipt ⇒ the candidate/`new_model` path, or a Polished path that registers a reduced site set | **MISSING** |
+| F4 | site shape: `{rom_offset, expected_hex, prelude, point_symbols}` | `lua/gen2/entry.lua:270-271`; generator spec `docs/gen2/gen2_engine_sites.md:15-16` | a Polished engine-site pack generated the same way, or hand-listed from the pinned source | **MISSING** |
+
+### 1.G Box census (PokeDB, not boxes)
+
+`docs/polished/RAM.md:106` states the vanilla `sram_bank` box symbols are **gone**. `docs/polished/NEWBOX.md` is the
+replacement spec and is already precise enough to implement:
+
+| # | vanilla bind | file:line | Polished binding needed | state |
+|---|---|---|---|---|
+| G1 | `read_active_box()` reads `sBox` + `sBoxMons` (32 B/slot) | `lua/gen2/client.lua:317` | NEWBOX §1.2: 20 gameplay records at flat `0x30E4 + 0x21*(b-1)`, each 33 B; `Entries[20]` + `Banks[3]` + `Name[9]` + `Theme[1]` | **SPEC READY** (`docs/polished/NEWBOX.md:15-42`) |
+| G2 | `read_storage_box(box)` reads the backing SRAM box | `lua/gen2/client.lua:317` | same, via the pokedb: 2 banks × 207 entries × 3 sections (A/B/C), 49-byte `savemon_struct` | **SPEC READY** (`docs/polished/NEWBOX.md:42-62`) |
+| G3 | slot → mon decode is a struct read | `lua/gen2/client.lua:318-324` | NEWBOX §6.1 is a **13-step pointer walk** (entry index → bank bit → flat pokedb → checksum → species/form/egg/level/ot/dvs/nickname/ot) | **SPEC READY** (`docs/polished/NEWBOX.md:221-239`) |
+| G4 | box entry wire shape | `lua/gen2/client.lua:322` `wire.box_entry(m, box)` | needs a Polished box-entry shape; `polished_codec.decode_savemon` exists server-side | **MISSING on the client** |
+
+### 1.H Panel / phone / trade / sfx capability gates
+
+| # | vanilla bind | file:line | Polished binding needed | state |
+|---|---|---|---|---|
+| H1 | `panel` built only in production, needs `deps.hud` | `lua/gen2/entry.lua:514-517` | optional; `nil` is tolerated downstream | **OPTIONAL** |
+| H2 | `phone` needs `profile.overlay.phone.stage` (`wUnusedMapBuffer`, **absent** in Polished — HOOKS.md:129) | `lua/gen2/entry.lua:518-523` | a new `$C633` staging span (HOOKS.md §5.1) | **MISSING** |
+| H3 | `trade` requires `profile.overlay.trade` | `lua/gen2/entry.lua:530-533` | Polished's profile `overlay` block has `abi/artifact/base_sha1/md5/ram/rom_sha1/sym/sym_sha256` — **no `trade`, no `phone`** | **MISSING** |
+| H4 | `panel:present()`/`abi()`/`sfx_present()`/`companion_abi()` drive the hello caps fields | `lua/gen2/client.lua:1325-1329` | all four are `panel and … or false/0/nil` guarded ⇒ **`nil` panel is safe** | **SAFE at caps=0** |
+| H5 | `request_sfx_local` | `lua/gen2/client.lua:502-512` | with `panel == nil`, `code` is `nil`, the early return is skipped, and it logs once | **SAFE at caps=0** |
+| H6 | `trade_prepare = self:trade_live()` | `lua/gen2/client.lua:1331`, `:663` | needs `trade` non-nil; **UNVERIFIED** whether `trade_live()` guards a nil `trade` | **UNVERIFIED — falsifier required** |
+| H7 | `awaiting_save_field()` | `lua/gen2/client.lua:1001`, `:1418` | checkpoint-derived; with no checkpoint it must degrade, not throw | **UNVERIFIED** |
+
+### 1.I hello / tick payload — what must survive unchanged
+
+Payload field lines: `local payload = {` at `client.lua:1314`, `send("hello", payload)` at `:1334`,
+`send(event or "tick", {` at `:1407`. The field set is fixed and the server already expects it, so **the field set must not change**. Full construction:
+`lua/gen2/client.lua:1295-1334` (hello) and `:1395-1420` (tick).
+
+Fields a Polished run must supply, with the reader that supplies them:
+
+| field | source | Polished reader |
+|---|---|---|
+| `rom_type`, `foundation`, `artifact_kind`, `rom_sha1` | `client.lua:1315` | `:97`, `entry.lua:553` |
+| `party` | `client.lua:1316` ← `snapshot_party()` `:242-260` | `read_party` + `P.party_entry` |
+| `ot_id`, `trainer_name` | `client.lua:1316` | `read_player` |
+| `has_pokeballs`, `ball_count` | `client.lua:1317` | `read_pocket("balls")` |
+| `badges`, `kanto_badges` | `client.lua:1319` | `read_badges` |
+| `area_id`, `loc_name` | `client.lua:1320` ← `area_of()` `:281-287` | `read_map` **+ an `area_map.json` that does not exist** |
+| `pc_boxes`, `pc_boxes_generation` | `client.lua:1320` | degrades to `[]`/`nil` without a box reader |
+| `writes_enabled`, `rom_sha1`, `in_battle` | `client.lua:1321`, `:1322` | fine |
+| `panel`, `panel_abi`, `sfx`, `companion_abi` | `client.lua:1325-1329` | `false`/`0`/`false`/`nil` at caps=0 |
+| `trade_prepare` | `client.lua:1331` | see H6 |
+| tick-only: `trainer_id`, `is_trainer_battle`, `enemy_party`, `trade_blocked`, `awaiting_save` | `client.lua:1407-1419` | `read_battle` ✓; `trade_blocked` `client.lua:1417` / `awaiting_save` `client.lua:1418` see H7 |
+
+---
+
+## 2. What runs at `caps=0`, and what needs new data
+
+### 2.1 Runs with the shipped code, once composition is wired
+
+| capability | needs | blocker |
+|---|---|---|
+| `hello` with a full party | `read_party` + `P.party_entry` + `read_player` + `read_battle` | composition (A1, A4) + `wire` shim (B1) |
+| `tick` | the same, plus `read_stat_stages` | same |
+| `ball_count` / nuzlocke gate | `read_pocket("balls")` | none |
+| **link-by-key** | only the key string | `P.mon_key` + server regex already agree |
+| **death / faint handling** | party HP in the snapshot | none beyond the above |
+| `panel`/`sfx`/`phone`/`trade` | nothing — all guarded | **already `caps=0`-clean** |
+| `pc_boxes` | a box reader | degrades to `[]`; **no hello failure** |
+| area naming | `area_map.json` | missing ⇒ `area_id=""`, `loc_name="map_G_N"`; links still form, **display and dead-zone naming degrade** |
+
+### 2.2 Genuinely blocked on new engine-site / checkpoint data
+
+| capability | needs | doc |
+|---|---|---|
+| **catch / acquisition detection** | an engine-site pack: the client only settles a snapshot on a signalled frame, so a new monKey appears only if a site fires | `docs/gen2/gen2_engine_sites.md:1-3` (43 candidates *per pret title*, `physical_firing OPEN`); `lua/gen2/signals.lua` |
+| any battle write (`force_faint` in battle) | a `battle_faint` receipt + a hold site | RAM.md §1.2 (`wScriptRunning 01:D437` exists but is unbound) |
+| bench faint, rival swap, explode | `battle_bench` receipt | `entry.lua:543-549` |
+| box deposit / withdraw / memorialize | box receipts **and** a newbox writer | `docs/polished/NEWBOX.md:239-278` |
+| hello **readiness** gating | `checkpoint_pc` | `entry.lua:540` |
+
+`docs/polished/HOOKS.md:349-352` still carries the Polished-specific unverified list (`$7E` linker acceptance, `$FF` lower
+bound, `ResetWRAM` span, the phone-stage span, the trade stack fingerprint). **No `ENGINE_SITES.md` exists** in
+`docs/polished/` — the engine-site spec for Polished has not been written yet, which is why F1/F4 are "MISSING" rather
+than "authored".
+
+---
+
+*(sections 3-5 follow: the card list, the open items, and the CLAIMS block)*
+---
+
+## 3. Dependency-ordered cards
+
+Exclusive files = the only files a card may touch. **First falsifier** = the cheapest thing that kills the card's
+premise *before* any code is written. **Exit evidence** = the observable that closes it.
+
+Order is a strict dependency chain for milestone A, then milestone B.
+
+### Milestone A — "the client composes and says hello to the server with a party"
+
+#### C-KEY — one key format, three places
+**Exclusive files:** `lua/gen2/polished.lua`, `lua/gen2/client.lua`
+**Premise:** there is exactly one place the mon key is built.
+**Falsifier (already fired):** there are **three**, and only one is polymorphic.
+- `lua/gen2/wire.lua:73` `M.mon_key` -> `%04X:%04X:%02X` over a **16-bit** `dv_word`
+- `lua/gen2/signals.lua:55-58` a **private** `key()` -> `%04X:%04X:%02X`, gated `integer(mon.species_id,1,251)`
+  and reading `mon.dv_word`; Polished exposes **`dv_bytes` (24-bit)** and species to **511**
+- `lua/gen2/client.lua:470` `target:sub(1,9)` / `tonumber(target:sub(11),16)` — positional slicing of the key
+  string. On `DDDDDD:OOOO:SSS:TT` that yields `DDDDDD:O` and `OO:SSS`, so **`tonumber` returns `nil`**.
+**Change:** add `P.wire()` returning `{mon_key, party_entry, foe_entry, box_entry}` and inject it wherever
+`wire` is injected (`entry.lua:536`); give `signals` an injected key builder instead of the module-local one;
+replace the positional slice with a parsed key.
+**Exit evidence:** a table-driven check over one decoded Polished record asserting all three sites emit the same
+string, that string matching `server/adapters/gen2_polished.py:35`, and that the evolved-identity fallback at
+`client.lua:470` returns a mon instead of `nil`.
+**Risk if skipped:** silent. The client composes, links by key, and only misfires on an *evolved* death — the
+rarest path in a run.
+
+#### C-PACK — a Polished pack load that asks for 2 files, not 15
+**Exclusive files:** `lua/gen2/entry.lua`
+**Premise:** `compose` can share `load_pack`.
+**Falsifier (already fired):** `Entry.PACK_FILES.polished_crystal` (`entry.lua:79-82`) supplies `profile` and
+`charmap`; `load_pack`'s `order` (`entry.lua:186-187`) indexes 15 keys and `root .. "/" .. nil` at
+`entry.lua:203`. Separately `entry.lua:235` asserts `matrix.foundation == "gen2_gsc"` on an `admission.json`
+Polished does not ship, and `entry.lua:200` refuses `def.dev`.
+**Change:** a `load_pack_polished` that delegates to `P.load(root, json)` (`lua/gen2/polished.lua:65`) and
+returns `data = {profile, charmap}`, skipping the `admission`/`sites`/`checkpoint`/`area_map` asserts.
+**Exit evidence:** composition reaches the `client.new(...)` call at `entry.lua:534` without a pcall error;
+a deliberately broken `charmap.source.lock_sha256` still refuses.
+
+#### C-SIGNALS — the binder's three vanilla literals
+**Exclusive files:** `lua/gen2/signals.lua`
+**Premise:** signals is title-generic.
+**Falsifier (already fired):**
+- `signals.lua:529` `assert(({crystal=true,gold=true,silver=true})[title])` — a hard refuse on `"polished"`
+- `signals.lua:56` `integer(mon.species_id,1,251)`
+- `signals.lua:1045` `need(integer(old,0,13) and integer(requested,0,13))` — Polished boxes are **0..19**
+**Change:** take the title allow-list, the species ceiling and the box ceiling from the profile
+(`constants.NUM_BOXES = 20`, `MAX_SPECIES = 0x1FF`), not from module literals.
+**Exit evidence:** `Signals.new` with `title="polished"` and one Polished mon returns a binder instead of raising;
+a box-change event with `requested=19` is accepted and one with `requested=20` is refused **by name**.
+
+#### C-COMPOSE — a production graph under a dev-grade authority (reaches **milestone A**)
+**Exclusive files:** `lua/gen2/entry.lua`
+**Premise:** a Polished hello can be produced from the shipped data.
+**Falsifier (already fired):** `proofs()` returns `nil, "no shipped PHYSICAL ... receipts"` at `entry.lua:290`,
+because `Entry.RECEIPT_FILES` (`entry.lua:91`) has no `polished_crystal` key — and `compose` then hard-asserts
+at `entry.lua:424`, so there is **no** path that skips it today.
+**Change:** a Polished compose that builds `reads`/`writes`/`rom`/`boxes`/`client` with
+`panel=phone=trade=nil`, a `safety` stub that refuses every kind, and `qualification="DEV_OVERLAY_SHA1"` carried
+through from `lua/gen2/polished.lua:112`. Keep `production=true` semantics for `client` construction, but make
+`checkpoint`/`write_policy` **optional** rather than required — every consumer (`client.lua:1441`, `:1448`) already
+guards on nil.
+**Exit evidence:** against a real server with a client at `player=a`, `GET /api/debug/manual_link_data` lists the
+Polished `rom_type`; the server's `player_identity` locks the Polished OT id; `/api/status` shows the party rows
+with sprite HTML. **This is milestone A.**
+**Known trap:** `Entry.admit` refuses `clean` rows outright (`entry.lua:337-340`) and Polished's own `P.admit`
+does the same (`polished.lua:99-102`) — both messages are correct; do not "fix" them.
+
+#### C-AREA — area naming (non-blocking for A)
+**Exclusive files:** `tools/gen_polished_pack.py`, `data/games/polished_crystal/area_map.json`
+**Premise:** `area_of()` at `client.lua:281-287` needs `area_map[group*256+number]`.
+**Falsifier:** the Polished pack has **no `area_map.json`**. Links still form (the server keys on `area_id`, and
+`""` is a valid key), but the status page shows `map_G_N` and dead-zone/gift naming loses its labels.
+**Exit evidence:** `area_of()` returns a real `area_id` for New Bark Town.
+
+### Milestone B — "detects a catch"
+
+#### C-SITES — a Polished engine-site pack (reaches **milestone B**)
+**Exclusive files:** `docs/polished/ENGINE_SITES.md` (new), the Polished site spec generator, `data/games/polished_crystal/engine_signals.json`
+**Premise:** the client notices a new mon without a signal.
+**Falsifier (already fired):** it cannot. The client only settles a snapshot on a signalled frame
+(`client.lua:196-202` builds `points`; the dispatch is `on_observation` `client.lua:1165-1226` and `on_event`
+`client.lua:1229-1273`), and `capture` is emitted from an `ev.acquisition` at `client.lua:1154-1158`. With no
+sites there is no `ev`. `docs/gen2/gen2_engine_sites.md:6` is explicit that even the pret packs are
+`physical_firing OPEN` / `runtime_enabled false` — Polished has not even been enumerated.
+**Exit evidence:** one live acquisition observed on a real cartridge: the client emits `capture`
+(`client.lua:1156`) with the Polished key, and the server's `pending_captures` gains a row. **This is milestone B.**
+**Scope note:** the minimum viable site set is *one* acquisition signal (capture/gift/egg) plus whatever gates
+"we are in an overworld frame"; it does **not** need the full 25-family census.
+
+#### C-BOX — the newbox census (independent of B; unlocks `pc_boxes` and every box write)
+**Exclusive files:** `lua/gen2/polished.lua` (add `read_boxes`), `lua/gen2/boxes.lua` (only if a writer is added)
+**Premise:** a box is a slot array of 32-byte records.
+**Falsifier (already fired):** `docs/polished/RAM.md:106` — the vanilla `sram_bank` box symbols are *gone*.
+Polished PC storage is a 20-record metadata table (`docs/polished/NEWBOX.md:15`) over a 2x207-entry pokedb of
+49-byte `savemon_struct` records (`docs/polished/NEWBOX.md:42`), reachable only by the pointer walk in
+`docs/polished/NEWBOX.md:221`.
+**Change:** implement NEWBOX 6.1 verbatim as `read_boxes()`; return `box_complete=true` only when every one of
+the 20 records and every referenced entry decoded (the client already treats a partial scan as "not a census",
+`client.lua:318-322`).
+**Exit evidence:** one real deposited mon enumerates with a matching key and level, and `pc_boxes` appears in the
+hello payload with a non-null `pc_boxes_generation`.
+
+### Deferred — explicitly out of scope until A and B land
+
+| item | why deferred | doc |
+|---|---|---|
+| `battle_faint` / `battle_bench` / rival swap | need receipts that do not exist | `entry.lua:543-549` |
+| any box **write** (deposit/withdraw/memorialize) | needs NEWBOX 6.2/6.3 **and** a box receipt | `docs/polished/NEWBOX.md:239`, `:257` |
+| phone | `wUnusedMapBuffer` is absent; needs a `$C633` staging span | `HOOKS.md:129`, `entry.lua:518-523` |
+| trade | `profile.overlay` has no `trade` block | `entry.lua:530-533` |
+| SFX / panel | needs a later overlay milestone (caps != 0) | `entry.lua:514-517` |
+| `writes.lua` `W.SYM` four literals | all four moved; one clobbers Mirror Herb state | `docs/polished/RAM.md:37-51`, `:52` |
+
+---
+
+## 4. Open items and UNVERIFIED
+
+| # | question | what would settle it |
+|---|---|---|
+| U1 | `trade_live()` (`client.lua:663`) called with `trade == nil` (`client.lua:1331`) — raises or returns false? | read `client.lua:663-700`; one line either way. **This is the only P0 unknown.** |
+| U2 | `contest_masked()` (`client.lua:487-488`) with no `p.contest_mask` — nil comparison or error? | read `client.lua:485-500` |
+| U3 | `awaiting_save_field()` (`client.lua:1001`) with no checkpoint | read `client.lua:1000-1010` |
+| U4 | Does `AREA_BATTLE_TYPES = {0,4,8}` (`client.lua:48`) match Polished's `wBattleType` enum? | read `engine/battle/core.asm` in the pinned source; RAM.md does not cover it |
+| U5 | Is `signals.lua`'s `ev.acquisition` vocabulary (`egg_hatch`/`gift`) reachable at all on Polished without the full site set? | the C-SITES design |
+| U6 | Polished's `wLinkMode` values | RAM.md 1.2 does not list it; confirmed present in the profile only |
+| U7 | Nuzlocke ball-id set (RAM.md 5.7 — five pockets, capacities and ids differ) | a Ball id table in the pinned source |
+| U8 | BizHawk `WRAM`-domain offset for pokedb bank 2 | `docs/polished/NEWBOX.md` 7 lists this as open; System Bus + `SVBK` is the stated fallback |
+
+**Two architectural facts worth stating plainly, because they change how the cards are sized:**
+
+1. **`lua/core/{session,deferred,identity}.lua` are not bound by Gen 2 today.** The Gen 2 client is a
+   self-contained state machine with its own `send`, its own pre-hello hold and its own deferred queue; the core
+   modules are the generation-neutral *target* the work list converges on, not the current binding. **No card in
+   section 3 should try to route Gen 2 through `lua/core` first** — that is a separate migration with its own risk.
+2. **`qualification` must stay honest.** The vanilla graph claims `"PHYSICAL_RECEIPTED"`
+   (`entry.lua:567`). Polished can only ever claim `"DEV_OVERLAY_SHA1"` (`lua/gen2/polished.lua:112`). Never let a
+   refactor let Polished reach the former — it would assert a proof that was never made.
+
+---
+
+## 5. CLAIMS
+
+All 73 verified by reading the cited line of the cited file.
+
+```json
+[
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 80,
+  "expect": "profile=\"data/games/polished_crystal/profile.json\","
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 81,
+  "expect": "charmap=\"data/games/polished_crystal/charmap.lua\","
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 91,
+  "expect": "Entry.RECEIPT_FILES = {"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 185,
+  "expect": "local titles = {\"crystal\", \"gold\", \"silver\"}"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 186,
+  "expect": "local order = {\"profile\", \"admission\", \"sites\", \"checkpoint\", \"area_map\", \"statics\", \"encounters\","
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 200,
+  "expect": "assert(not def.dev, \"a dev title has no Gen 2 production pack\")"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 203,
+  "expect": "local path = root .. \"/\" .. files[key]"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 235,
+  "expect": "matrix.foundation == \"gen2_gsc\""
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 288,
+  "expect": "local group = Entry.RECEIPT_FILES[pack]"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 290,
+  "expect": "\"no shipped PHYSICAL \""
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 337,
+  "expect": "if row.kind == \"clean\" then"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 419,
+  "expect": "local reads, why = Reads.new(profile, io_, decode_name)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 424,
+  "expect": "proof = assert(proofs(root, json, data, title, def.pack, view))"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 472,
+  "expect": "local options = {title=title, profile=data.profile, pack=data.sites, io=io_,"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 495,
+  "expect": "local Boxes, wire = load(\"lua/gen2/boxes.lua\"), load(\"lua/gen2/wire.lua\")"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 505,
+  "expect": "local boxes = Boxes.executor({profile=profile, reads=reads, key=wire.mon_key, writes=writes,"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 516,
+  "expect": "panel = Panel.new(profile, data.charmap, io_, Panel.writes(io_, Permit),"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 520,
+  "expect": "local ph = profile.overlay and profile.overlay.phone"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 530,
+  "expect": "if profile.overlay and profile.overlay.trade then"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 534,
+  "expect": "client = load(\"lua/gen2/client.lua\").new({"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 536,
+  "expect": "reads=reads, wire=wire, writes=writes, rom=rom, boxes=boxes, panel=panel, phone=phone,"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 540,
+  "expect": "checkpoint_pc=production and view.checkpoint.primary.execution_before.pc or nil,"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 543,
+  "expect": "battle_hold=(not production or checkpoint:covers(\"battle_faint\"))"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 550,
+  "expect": "contest_mask=hold_facts.contest_mask,"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 553,
+  "expect": "rom_type=def.rom_type,"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 567,
+  "expect": "qualification=production and \"PHYSICAL_RECEIPTED\" or \"SOURCE_MODEL_CANDIDATE\""
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 579,
+  "expect": "PKPCRYSTAL=\"polished\"}"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 597,
+  "expect": "if deps.title == \"polished\" then"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 601,
+  "expect": "Polished Crystal overlay admitted (dev,"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/entry.lua",
+  "line": 615,
+  "expect": "function Entry.admit_polished(deps)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 16,
+  "expect": "P.TITLE, P.ROM_TYPE = \"polished\", \"polished_crystal\""
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 21,
+  "expect": "local MAX_SPECIES = 0x1FF"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 65,
+  "expect": "function P.load(root, json)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 99,
+  "expect": "if candidate.kind == \"clean\" then"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 112,
+  "expect": "qualification=\"DEV_OVERLAY_SHA1\"}"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 131,
+  "expect": "string.format(\"%06X:%04X:%03X:%02X\", mon.dv_bytes, mon.ot_id, mon.species_id, traits)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 161,
+  "expect": "function P.party_entry(mon, active_slot, stages)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 168,
+  "expect": "if #blob ~= 140 or not blob:match(\"^%x+$\") then return nil, \"missing/invalid party blob hex\" end"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 184,
+  "expect": "function P.foe_entry(mon, stages)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 373,
+  "expect": "function r.read_party()"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 424,
+  "expect": "function r.read_pocket(pocket)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/polished.lua",
+  "line": 445,
+  "expect": "function r.read_current_box_num()"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 48,
+  "expect": "local AREA_BATTLE_TYPES = { [0] = true, [4] = true, [8] = true }"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 97,
+  "expect": "foundation = \"gen2_gsc\", artifact_kind = p.artifact_kind or \"clean\","
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 219,
+  "expect": "local mon_key = wire.mon_key"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 235,
+  "expect": "local e, why = wire.party_entry(m, active, stages)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 317,
+  "expect": "if box == cur then mons = reads.read_active_box() else mons = reads.read_storage_box(box) end"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 320,
+  "expect": "local e = (not m.is_egg) and wire.box_entry(m, box) or nil"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 470,
+  "expect": "local stable, old = target:sub(1, 9), tonumber(target:sub(11), 16)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 502,
+  "expect": "function self:request_sfx_local(gen3_id)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 663,
+  "expect": "function self:trade_live()"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 1001,
+  "expect": "local function awaiting_save_field()"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 1156,
+  "expect": "send(\"capture\", { key = key, area_id = ev.area_id, species_id = m.species_id, level = m.level,"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 1314,
+  "expect": "local payload = {"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 1320,
+  "expect": "area_id = area_id, loc_name = loc, pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation(),"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 1325,
+  "expect": "panel = panel and panel:present() or false, panel_abi = panel and panel:abi() or 0,"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 1331,
+  "expect": "trade_prepare = self:trade_live(),"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 1407,
+  "expect": "send(event or \"tick\", {"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/client.lua",
+  "line": 1417,
+  "expect": "trade_blocked = contest_masked(),"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/wire.lua",
+  "line": 73,
+  "expect": "function M.mon_key(mon)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/wire.lua",
+  "line": 203,
+  "expect": "function M.box_entry(mon, box_index)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/signals.lua",
+  "line": 56,
+  "expect": "integer(mon.species_id,1,251) and integer(mon.ot_id,0,65535)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/signals.lua",
+  "line": 58,
+  "expect": "return string.format(\"%04X:%04X:%02X\",mon.dv_word,mon.ot_id,mon.species_id)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/signals.lua",
+  "line": 529,
+  "expect": "assert(({crystal=true,gold=true,silver=true})[title], \"selected Gen 2 title required\")"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gen2/signals.lua",
+  "line": 1045,
+  "expect": "need(integer(old,0,13) and integer(requested,0,13),\"box-change context unavailable: \""
+ },
+ {
+  "path": "F:/slink-work/wt/polished/server/adapters/gen2_polished.py",
+  "line": 35,
+  "expect": "_KEY = re.compile(r\"([0-9A-F]{6}):([0-9A-F]{4}):([0-9A-F]{3}):([0-9A-F]{2})\")"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/docs/polished/RAM.md",
+  "line": 106,
+  "expect": "### 1.4 `sram_bank` (365 keys) — the boxes are gone"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/docs/polished/RAM.md",
+  "line": 392,
+  "expect": "## 5. What breaks, ranked"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/docs/polished/NEWBOX.md",
+  "line": 15,
+  "expect": "### 1.1 Box metadata: 20 records, two copies"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/docs/polished/NEWBOX.md",
+  "line": 42,
+  "expect": "### 1.2 PokeDB: 2 banks × 207 entries, 6 sections"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/docs/polished/NEWBOX.md",
+  "line": 221,
+  "expect": "### 6.1 Enumerate boxed mons (read-only)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/docs/polished/HOOKS.md",
+  "line": 349,
+  "expect": "the `$FF` scan is a **lower bound**; real data can be `$FF`"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/docs/gen2/gen2_engine_sites.md",
+  "line": 6,
+  "expect": "It does **not** complete F3, arm hooks, grant runtime"
+ }
+]
+```
