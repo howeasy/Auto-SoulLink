@@ -27,6 +27,7 @@ from tests.unit.test_polished_lua import (
     _real,
     _sym,
     _with,
+    load_variants,
 )
 
 lupa = pytest.importorskip("lupa")
@@ -223,7 +224,7 @@ def test_the_production_signals_gate_refuses_polished():
     io = lua.table(model_only=True, bank_valid=lambda *a: True,
                    on_bus_exec=lambda fn, addr, name, d=None: hooks.append(name))
     authority = lua.table(kind="MODEL_PROBE", allow_model_registration=True, capture=lambda: 1, valid=lambda s: True)
-    key_fn = lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")').mon_key
+    key_fn = load_variants(lua, lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")')).mon_key
     options = lua.table(title="polished", profile=data("profile"), pack=data("engine_signals"), io=io,
                         authority=authority, key_fn=key_fn, runtime_qualification=lua.table())
     binder, why = signals.new(options)
@@ -271,7 +272,7 @@ def _relabelled(num_boxes=None, area_types=None, key_fn=True, overrides=POLISHED
     fields = {"title": "polished", "profile": lua.table_from(profile, recursive=True),
               "pack": lua.table_from(pack, recursive=True)}
     if key_fn:
-        fields["key_fn"] = lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")').mon_key
+        fields["key_fn"] = load_variants(lua, lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")')).mon_key
     world.options = lambda: _with(options(), **fields)
     return world
 

@@ -46,7 +46,8 @@ def test_nine_bit_species_and_forms(adapter):
     # variant form: Alolan Rattata is its own name and types; a cosmetic form (Unown B) is the base species
     assert adapter.species_name(19, 2) == "Rattata (Alolan)"
     assert [adapter.type_name(t) for t in adapter.species_types(19, 2)] == ["Dark", "Normal"]
-    assert adapter.species_types(19) is None          # Rattata has variant forms: the type clause cannot judge it by species alone
+    # forms are in the pool (owner 2026-10-04): Rattata is plain Normal; the Alolan form is its own effective species
+    assert [adapter.type_name(t) for t in adapter.species_types(19)] == ["Normal", "Normal"]
     assert len(adapter.species_types(1)) == 2                      # Bulbasaur has no variant forms
     assert adapter.species_name(201, 2) == "Unown"
 

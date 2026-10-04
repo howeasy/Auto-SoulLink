@@ -40,7 +40,7 @@ from tests.unit.test_polished_boxes import (
     random_entry,
 )
 from tests.unit.test_polished_client import OT_ID, _memory, _mons
-from tests.unit.test_polished_lua import ROOT, _pair, _real, _sym
+from tests.unit.test_polished_lua import ROOT, _pair, _real, _sym, load_variants
 
 lupa = pytest.importorskip("lupa")
 
@@ -87,7 +87,7 @@ class Rig:
         self.img, self.logs = img, []
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         fn = self.lua.eval("function(f) return function(...) return f(...) end end")
-        self.P = self.lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")')
+        self.P = load_variants(self.lua, self.lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")'))
         self.B = self.lua.eval(f'dofile("{ROOT}/lua/gen2/polished_boxes.lua")')
         fields = {"read_u8": fn(img.read), "domain_size": fn(lambda d: sram if d == "CartRAM" else wram)}
         if linear:
@@ -347,7 +347,7 @@ async def test_the_real_server_takes_the_census(overlay_rom, tmp_path):
 
 def test_the_box_wire_entry_spans_twenty_boxes_and_refuses_eggs():
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
-    P = lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")')
+    P = load_variants(lua, lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")'))
     mon = lua.table_from({"species_id": 0x123, "form": 3, "gender": "male", "shiny": False, "dv_bytes": 0x123456,
                           "ot_id": OT_ID, "level": 50, "held_item": 7, "slot": 19, "nickname": "X",
                           "moves": lua.table_from([1, 2, 3, 4])})

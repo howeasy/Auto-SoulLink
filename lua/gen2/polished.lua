@@ -122,14 +122,35 @@ function P.admit(args)
     return result
 end
 
--- polished_codec.key: 3 DV bytes, OT ID, 9-bit species, traits (shiny bit 7, female bit 6, form 0-4).
+-- (species_id * 32 + form) of every REGIONAL/variant form, from profile.derived.variant_forms (set by P.new).
+-- Owner 2026-10-04: regional forms are different mons; every other (cosmetic) form is one mon and keys as form 0.
+-- ponytail: module-level because the key builder is injected without the profile; unset = fail closed.
+local VARIANT = nil
+
+-- profile.derived.variant_forms = {{species_id, form_id}, ...}; P.new calls this, tests may call it directly.
+function P.load_variants(list)
+    if type(list) ~= "table" or #list == 0 then return nil, "profile.derived.variant_forms required" end
+    local variant = {}
+    for _, pair in ipairs(list) do
+        if type(pair) ~= "table" or not integer(pair[1], 1, MAX_SPECIES) or not integer(pair[2], 1, 31) then
+            return nil, "invalid variant_forms row"
+        end
+        variant[pair[1] * 32 + pair[2]] = true
+    end
+    VARIANT = variant
+    return true
+end
+
+-- polished_codec.key: 3 DV bytes, OT ID, 9-bit species, traits (shiny bit 7, female bit 6, variant form 0-4).
 function P.mon_key(mon)
+    if VARIANT == nil then return nil, "variant form table not loaded (P.new first)" end
     if type(mon) ~= "table" then return nil, "mon record required" end
     if not integer(mon.dv_bytes, 0, 0xFFFFFF) then return nil, "invalid or missing dv_bytes" end
     if not integer(mon.ot_id, 0, 0xFFFF) then return nil, "invalid or missing ot_id" end
     if not integer(mon.species_id, 1, MAX_SPECIES) then return nil, "invalid or missing species_id" end
     if not integer(mon.form, 0, 31) then return nil, "invalid or missing form" end
-    local traits = (mon.shiny and 0x80 or 0) + (mon.gender == "female" and 0x40 or 0) + mon.form
+    local form = VARIANT[mon.species_id * 32 + mon.form] and mon.form or 0
+    local traits = (mon.shiny and 0x80 or 0) + (mon.gender == "female" and 0x40 or 0) + form
     return string.format("%06X:%04X:%03X:%02X", mon.dv_bytes, mon.ot_id, mon.species_id, traits)
 end
 
@@ -230,6 +251,8 @@ function P.new(profile, io, decode_name)
     if type(io) ~= "table" or type(io.read_range) ~= "function" then return nil, "injected read_range required" end
     if decode_name ~= nil and type(decode_name) ~= "function" then return nil, "name decoder must be a function" end
     local c, d, a, banks = profile.constants, profile.derived, profile.ram, profile.ram_bank
+    local ok, why = P.load_variants(d.variant_forms)
+    if not ok then return nil, why end
     local s, b = profile.structs.party, profile.structs.battle
     if type(s) ~= "table" or type(b) ~= "table" or s.End ~= d.party_struct_size or b.StructEnd ~= d.battle_struct_size
        or c.NUM_MOVES ~= 4 or c.NAME_LENGTH ~= d.name_length or c.MON_NAME_LENGTH ~= d.mon_name_length

@@ -20,6 +20,12 @@ lupa = pytest.importorskip("lupa")
 
 REPO = Path(__file__).resolve().parents[2]
 ROOT = str(REPO).replace("\\", "/")
+def load_variants(lua, module):
+    """A bare dofile'd polished.lua has no variant table until P.new / P.load_variants (the key fails closed)."""
+    assert module.load_variants(lua.table_from([lua.table_from(p) for p in P["derived"]["variant_forms"]]))
+    return module
+
+
 PROFILE = json.loads((REPO / "data/games/polished_crystal/profile.json").read_text(encoding="utf-8"))
 P = PROFILE["titles"]["polished"]
 CLEAN_ROM = Path(os.environ.get("SLINK_WORK_ROOT", "F:/slink-work")) / "cache/polished/release/polishedcrystal-3.2.3.gbc"
@@ -352,7 +358,7 @@ def _polished_world(overrides):
         end}
     end""")(reads, world.lua.table_from([world.lua.table_from(o) for o in overrides]))
     options = world.options
-    key_fn = world.lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")').mon_key
+    key_fn = load_variants(world.lua, world.lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")')).mon_key
     world.options = lambda: _with(options(), key_fn=key_fn)
     return world
 
@@ -386,7 +392,7 @@ def test_injected_polished_key_builder_matches_the_codec():
     binder = world.bind()
     world.party([world.mon(species=1 + i) for i in range(3)])
     assert _faint_keys(world, binder, 3) == [pc.key(o) for o in POLISHED]
-    assert [pc.key(o) for o in POLISHED] == ["FFFFFF:0001:1FF:C1", "000000:0000:019:00", "123456:ABCD:123:5F"]
+    assert [pc.key(o) for o in POLISHED] == ["FFFFFF:0001:1FF:C0", "000000:0000:019:00", "123456:ABCD:123:40"]  # forms 1 and 31 are cosmetic: keyed as form 0 (owner 2026-10-04)
     # evolution: the old key is the same record (DV bytes, OT, traits) under the pre-evolution species
     evo = dict(POLISHED[2], species_id=26, form=3)
     world = _polished_world([POLISHED[1], evo])

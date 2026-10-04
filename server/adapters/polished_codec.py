@@ -40,6 +40,49 @@ PARTY_SIZE, SAVEMON_SIZE = 48, 49
 NAME_SIZE = NICKNAME_SIZE = 11         # wPartyMonOTs stride (8-byte OT + 3 Extra) / wPartyMonNicknames stride
 PLAYER_NAME_LENGTH = 8
 BLOB_SIZE = PARTY_SIZE + NAME_SIZE + NICKNAME_SIZE
+
+FORMS_INDEX = ROOT / "data" / "games" / "polished_crystal" / "forms_index.json"
+
+
+def _load_variant_records() -> MappingProxyType:
+    """(species_id, form_id) -> BaseData record index, from the generated forms index
+    (tools/gen_polished_forms.py, FORMS-H2). Records 292..337 are the variant forms."""
+    if not FORMS_INDEX.exists():
+        return MappingProxyType({})
+    path = FORMS_INDEX
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return MappingProxyType({(int(r["species_id"]), int(r["form_id"])): int(r["record_index"])
+                             for r in data["variant_forms"] if r.get("kind") == "variant"})
+
+
+@cache
+def variant_records() -> MappingProxyType:
+    return _load_variant_records()
+
+
+def is_variant_form(species_id: int, form: int) -> bool:
+    """True when (species, form) names a regional/species variant form.
+
+    Owner ruling 2026-10-04: regional/variant forms are DIFFERENT mons from the standard counterpart;
+    cosmetic forms (Unown letters, Magikarp letters/patterns, Spinda dots) are the SAME mon.
+    """
+    return (int(species_id), int(form)) in variant_records()
+
+
+def effective_species(species_id: int, form: int) -> int:
+    """The species id the shared state should judge this mon as.
+
+    A variant form maps to its own BaseData record index (292..337), so species_types /
+    evo_family / duplicate handling treat it as a different mon with NO signature change to
+    server/state.py. Plain and cosmetic forms keep their species id.
+    """
+    return variant_records().get((int(species_id), int(form)), int(species_id))
+
+
+def key_form(species_id: int, form: int) -> int:
+    """Form bits carried in the identity key: variant forms stay, cosmetic forms normalise to 0.
+    Owner ruling: cosmetic forms are ONE mon, so two Unown letters must produce one key."""
+    return int(form) if is_variant_form(species_id, form) else 0
 TERMINATOR, SPACE, START = 0x53, 0x7F, 0x00   # charmap.asm:43 '@', :93 ' ', <START>
 
 GENDER_MASK, IS_EGG_MASK, EXTSPECIES_MASK, FORM_MASK = 0x80, 0x40, 0x20, 0x1F  # pokemon_data_constants.asm:241-245
@@ -205,17 +248,21 @@ def encode_party_blob(mon) -> bytes:
 
 
 def key(mon) -> str:
-    """DDDDDD:OOOO:SSS:TT -- 3 DV bytes, OT ID, 9-bit species, traits (shiny bit 7, gender bit 6, form 0-4).
+    """DDDDDD:OOOO:SSS:TT -- 3 DV bytes, OT ID, 9-bit species, traits (shiny bit 7, gender bit 6,
+    form bits 0-4 = the form when it is a VARIANT form, else 0 for cosmetic forms).
 
     P3: the Polished Lua client must emit exactly this key. The traits byte carries what Gen 2's DV-only
     key cannot (Polished stores shiny and gender explicitly); it drops is-egg (hatching is not a new mon),
     the ability slot and nature. Evolution changes the species part, as for vanilla.
     """
+    species = _integer(mon["species_id"], 1, 0x1FF, "species")
+    # Owner ruling 2026-10-04: cosmetic forms are ONE mon, so their form bits normalise to 0 in the
+    # key; a regional/variant form keeps its bits and is a DIFFERENT mon from the standard counterpart.
     traits = ((0x80 if mon["shiny"] else 0) | (0x40 if mon["gender"] == "female" else 0)
-              | _integer(mon["form"], 0, 31, "form"))
+              | key_form(species, _integer(mon["form"], 0, 31, "form")))
     return (f"{_integer(mon['dv_bytes'], 0, 0xFFFFFF, 'DV bytes'):06X}:"
             f"{_integer(mon['ot_id'], 0, 0xFFFF, 'OT ID'):04X}:"
-            f"{_integer(mon['species_id'], 1, 0x1FF, 'species'):03X}:{traits:02X}")
+            f"{species:03X}:{traits:02X}")
 
 
 # ── savemon_struct (NEWBOX.md §3) ────────────────────────────────────────────

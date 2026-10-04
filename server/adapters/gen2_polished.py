@@ -18,6 +18,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import pathlib
 import re
 from functools import cache
 from pathlib import Path
@@ -62,6 +63,9 @@ def _require(condition, message):
 
 def _integer(value, low, high):
     return type(value) is int and low <= value <= high
+
+
+FORMS_INDEX = pathlib.Path(__file__).resolve().parents[2] / "data" / "games" / "polished_crystal" / "forms_index.json"
 
 
 def _json(name):
@@ -206,6 +210,20 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         # (species, form) -> variant row. Variant forms carry their own stats/types (Alolan etc.);
         # cosmetic forms (Unown letters, Magikarp patterns) are the base species in every rule.
         self._variants = {(row["species"], row["form"]): row for row in species["forms"] if row["kind"] == "variant"}
+        # BaseData record index -> the same variant row. A variant form's EFFECTIVE species id IS its record
+        # index (forms_index.json, tools/gen_polished_forms.py), which is what keeps server/state.py unchanged.
+        self._variant_by_record = {}
+        if FORMS_INDEX.exists():
+            forms_index = json.loads(FORMS_INDEX.read_text(encoding="utf-8"))
+            for row in forms_index["variant_forms"]:
+                if row.get("kind") != "variant":
+                    continue
+                base = next((s for s in self._variants.values()
+                             if s["species"] == row["species_id"]), None)
+                merged = dict(base or {})
+                merged.update({"species": row["species_id"], "form": row["form_id"],
+                               "record_index": row["record_index"]})
+                self._variant_by_record[row["record_index"]] = merged
         self._types = {}
         for row in [*self._species.values(), *self._variants.values()]:
             _require(isinstance(row.get("name"), str) and _integer(row.get("gender_ratio"), 0, 15),
@@ -402,6 +420,10 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         return self._variants.get((species_id, form)) or self._species[species_id]
 
     def species_name(self, species_id, form=0):
+        record = self._variant_by_record.get(species_id) if type(species_id) is int else None
+        if record is not None:
+            label = _form_label(record)
+            return f"{label} {self._species[record['species']]['name']}".strip()
         if not _integer(species_id, 1, 0x1FF) or species_id not in self._species:
             return f"#{species_id}" if type(species_id) is int else "#?"
         variant = self._variants.get((species_id, form))
@@ -409,14 +431,23 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         return f"{name} ({_form_label(variant)})" if variant else name
 
     def species_types(self, species_id, form=0):
-        # state.py's type clause passes only the species, never the form: for a species that has variant forms
-        # (Alolan Rattata, Paldean Tauros ...) the base types would be judged for the variant, so answer None
-        # and the clause skips the pair rather than deciding it wrongly (review cx-7110b381 #1).
-        if form == 0 and any(key[0] == species_id for key in self._variants):
-            return None
+        # Owner ruling 2026-10-04: a variant form is a DIFFERENT mon. The codec hands the shared state an
+        # EFFECTIVE species id (the variant's BaseData record index, 292..337), so the type clause judges
+        # Alolan Rattata on Alolan Rattata's types without state.py ever seeing a form.
+        # The old "form 0 of a variant-bearing species -> None" skip is gone: it silently exempted every
+        # standard/variant pair (review cx-7110b381 #1), which the effective id makes unnecessary.
+        record = self._variant_by_record.get(species_id) if type(species_id) is int else None
+        if record is not None:
+            return tuple(record["type_ids"])
+        if type(form) is int and (species_id, form) in self._variants:
+            return tuple(self._variants[(species_id, form)]["type_ids"])
         return tuple(self._row(species_id, form)["type_ids"]) if species_id in self._species else None
 
     def evo_family(self, species_id):
+        # UNVERIFIED: evolutions.json carries no rows for variant forms (self._families is keyed exactly by
+        # self._species, verified in __init__), so a variant record is a family of its own rather than a guess.
+        if type(species_id) is int and species_id in self._variant_by_record:
+            return species_id
         return self._families.get(species_id, species_id) if type(species_id) is int else species_id
 
     def to_national_dex(self, species_id):
@@ -466,6 +497,9 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
             blob = bytes.fromhex(blob)
         mon = polished_codec.decode_party_blob(blob)
         mon["key"] = polished_codec.key(mon)
+        # The species the shared state judges this mon as: a variant form's BaseData record index.
+        mon["effective_species_id"] = polished_codec.effective_species(
+            mon["species_id"], mon["form"])
         return mon
 
     def validate_party_blob(self, blob, *, key=None, species_marker=None):
