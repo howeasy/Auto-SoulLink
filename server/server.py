@@ -745,6 +745,23 @@ class SLinkServer:
             self._rom_contract = self._load_rom_contract()
             self._rom_contract_mtime = mtime
 
+    def _contracted_rom(self, player_id: str, msg: dict) -> dict | None:
+        """The ROM-content payload for a randomized cartridge bound by the contract sha1 (`rom_contract_by_sha1`),
+        whose client sends no rom_content: the Manager's own file for this player (server/cartridges.py writes
+        roms/<pid>.<ext> beside rom_contract.json), as bytes, with the pinned sha1 the adapter re-checks. A missing
+        file still yields a payload, so ingest fails and the player shows NO tables rather than the shipped ones."""
+        if (msg.get("artifact_kind") not in ("rand", "rand_overlay")
+                or getattr(self.adapter, "rom_contract_by_sha1", False) is not True):
+            return None
+        want = (((self._rom_contract or {}).get("players") or {}).get(player_id) or {}).get("rom_sha1")
+        roms, rom = os.path.join(self._data_dir or DATA_DIR, "roms"), None
+        for name in (f"{player_id}.gbc", f"{player_id}.gb"):
+            with contextlib.suppress(OSError):
+                with open(os.path.join(roms, name), "rb") as f:
+                    rom = f.read()
+                break
+        return {"rom": rom, "rom_type": msg.get("rom_type", ""), "rom_sha1": want}
+
     def _mixed_games_error(self, player_id: str, rom_type: str, artifact_kind: str,
                            foundation: object = _FOUNDATION_ABSENT, rom_content: object = None) -> str:
         """Why this hello cannot join the committed run, or "" when it can.
@@ -848,9 +865,10 @@ class SLinkServer:
 
         expected = (self._rom_contract.get("players") or {}).get(player_id) or {}
         want = expected.get("fingerprint")
-        if not want and getattr(self.adapter, "rom_contract_by_sha1", False) is True:
-            # A foundation whose contract carries no table fingerprint binds the cartridge by the full-ROM
-            # sha1 its client rehashes: the contract's pin for this player, exactly.
+        if getattr(self.adapter, "rom_contract_by_sha1", False) is True:
+            # A foundation that binds its cartridge by the full-ROM sha1 its client rehashes: the contract's
+            # pin for this player, exactly. It applies even when the contract also carries a fingerprint
+            # (then the fingerprint checks below follow); it is never the weaker fallback.
             want_sha1 = expected.get("rom_sha1")
             got_sha1 = msg.get("rom_sha1")
             if not (isinstance(want_sha1, str) and len(want_sha1) == 40):
@@ -864,7 +882,8 @@ class SLinkServer:
                 return {"state": "rejected",
                         "reason": (f"this is not the ROM built for player {player_id} "
                                    f"(sha1 {got_sha1.lower()[:12]}, expected {want_sha1.lower()[:12]})")}
-            return {"state": "admitted", "reason": "cartridge sha1 matches the contract"}
+            if not want:
+                return {"state": "admitted", "reason": "cartridge sha1 matches the contract"}
         if not want:
             return {"state": "rejected",
                     "reason": f"the contract names no cartridge for player {player_id}"}
@@ -2349,8 +2368,8 @@ class SLinkServer:
             # the end of the handler catches every path, instead of saving too early
             # (before either loop) and losing whichever one runs after it.
             stats_before = copy.deepcopy(self.state.mon_stats)
-            if msg.get("rom_content"):
-                self._ingest_rom_content(player_id, msg["rom_content"])
+            if rom_payload := (msg.get("rom_content") or self._contracted_rom(player_id, msg)):
+                self._ingest_rom_content(player_id, rom_payload)
             if "pc_boxes" in msg and not self.state.party_snapshot_withheld(player_id, msg):
                 self.pc_boxes[player_id] = msg["pc_boxes"]
                 for bentry in msg["pc_boxes"]:

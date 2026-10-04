@@ -143,6 +143,27 @@ def test_a_randomized_overlay_under_another_titles_header_is_refused():
     assert decision is None and "unknown artifact SHA-1" in why, why
 
 
+def test_a_truncated_randomized_overlay_is_refused():
+    """A short flat ROM domain must refuse, not admit on the anchors it happens to cover (review F-2)."""
+    image = _randomize(_overlay("crystal"), "crystal")
+    decision, why = _admit(image[:len(image) // 2])
+    assert decision is None and "unknown artifact SHA-1" in why, why
+
+
+def test_a_clean_rom_with_only_the_two_hook_pins_is_admitted_today_a_known_limit():
+    """DOCUMENTS review F-1 (cx-63dc558a): the Lua gate checks 7 of the overlay's 9839 changed bytes. The server's
+    UPS-hunk audit at preparation and the contract sha1 are the real binding. When the overlay beacon lands
+    (docs/gen2/RANDOMIZER.md, 'Known limit'), flip this to refused."""
+    binding = _binding("crystal")
+    image = bytearray(_randomize(_clean("crystal"), "crystal"))
+    pins = {"DelayFrame": 0x045A, "MainMenuJoypadLoop": 0x49DE4}
+    for edit in binding["builder_substitutions"]:
+        offset, after = pins[edit["symbol"]], bytes.fromhex(edit["after_hex"])
+        image[offset:offset + len(after)] = after
+    decision, _why = _admit(bytes(image))
+    assert decision is not None and decision.kind == "rand_overlay"
+
+
 # --- server: the hello binds the contract's rom_sha1 -----------------------------------------------------------
 
 SHA_A, SHA_B = "a" * 40, "b" * 40

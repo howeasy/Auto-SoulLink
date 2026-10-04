@@ -354,4 +354,8 @@ include them.
   Manager makes randomized Gen 2 cartridges.
 - Not done yet: ROM-derived data (R4). Until then, static, roamer and gift captures on a randomized
   cart are dropped by `lua/gen2/signals.lua` (they are matched against vanilla species), and the
-  encounter panel shows vanilla species.
+  encounter panel shows vanilla species.
+
+### Known limit: the Lua gate checks the two hook pins, not the whole overlay
+
+Adversarial review cx-63dc558a (2026-10-04) confirmed by execution that a clean cartridge with only the 7 bytes of the two companion hook pins patched (plus randomized wild data) is admitted as `rand_overlay` by `lua/gen2/entry.lua`. The overlay differs from clean in 9839 bytes over 336 runs; the anchors and pins cover 7 of them. What actually binds a randomized cartridge is the server side: the Manager prepares it (UPS first, then UPR, then `upr_gen2_write_domain.check_output` proves no overlay byte was touched) and the hello sha1 must equal the contract's `rom_sha1` for that player. The Lua gate proves only that a companion is wired in at two hook sites. Planned hardening: an overlay beacon, a generated digest over the overlay-owned spans that the Lua gate re-hashes. The ROM size floor (review F-2) and the additive sha1 pin (review F-4) are fixed.

@@ -369,6 +369,10 @@ function Entry.admit(args)
                     if Entry.detect_title(artifact.read_u8) ~= candidate.title then
                         return false, "header does not select the " .. candidate.title .. " candidate"
                     end
+                    -- a short flat ROM domain must refuse, not admit on the anchors it happens to cover
+                    if artifact.size ~= candidate.profile.derived.rom_size then
+                        return false, "ROM size does not match the " .. candidate.title .. " cartridge"
+                    end
                 end
                 -- Patch-first (owner 2026-10-02): the companion is REQUIRED for every Gen 2 title, so
                 -- a clean cartridge is never admitted, whatever its row and gate say.
