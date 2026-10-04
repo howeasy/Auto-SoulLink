@@ -17,6 +17,7 @@ data/purergb/*.sym text eol=lf
 data/purergb/*.map text eol=lf
 data/polished/*.sym text eol=lf
 data/polished/*.map text eol=lf
+data/polished/*.ini text eol=lf
 
 # Card X3-FIX: the expansion harness slices are hash-pinned byte-for-byte (SYM_SLICE_SHA256/
 # MAP_SLICE_SHA256 in tools/gen_gen3_title_syms_exp.py) against their committed LF bytes -- same
