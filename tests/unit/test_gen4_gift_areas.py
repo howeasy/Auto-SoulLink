@@ -39,12 +39,15 @@ PIN = gen4_pins.SOURCE_COMMITS["pokeheartgold_citation"]
 # (new_bark_town 60/T20, pallet_town 49/T01, celadon_city 55/T07, cianwood_city 75/T24, violet_city
 # 73/T22) own a wild-encounter map, so the split sends them to `on_wild_area` even though the site that
 # found them is an interior with no bank of its own. The client exempts by AREA, so a wildcard in one
-# interior would silence a real no_catch on the town's grass.
+# interior would silence a real no_catch on the town's grass. The Day-Care egg site is the sixth such case and
+# the sharpest one: the handoff NPC stands ON Route 34 itself (map 38), so the egg must NOT buy that route a
+# no_catch exemption.
 EXPECTED_IDS = {"goldenrod_city", "pewter_city", "saffron_city", "sinjoh_ruins"}
 EXPECTED_ON_WILD = {
     "61": "new_bark_town", "101": "route_35", "117": "ilex_forest", "157": "violet_city",
     "158": "violet_city", "232": "cianwood_city", "236": "cianwood_city", "252": "mt_mortar",
     "288": "dragons_den", "382": "celadon_city", "505": "pallet_town",
+    "38": "route_34",
 }
 
 
@@ -94,13 +97,25 @@ def test_the_two_sides_partition_the_sites_and_the_rule_says_why():
     assert block["acquisition"]["generator"] == "tools/gen_gen4_acquisition.py"
 
 
-def test_the_daycare_egg_is_named_as_a_gift_catch_the_pack_cannot_place_on_a_map():
-    """GiveDaycareEgg really is a gift catch (O-15) but is not a script_site, so it carries no map id
-    and cannot reach `ids`. The file must say so by name rather than lose the fact silently -- and
-    every site it DOES record must be keyed by a real map id, or the daycare would have to be one."""
+def test_the_daycare_egg_is_a_site_on_the_day_care_man_map_not_an_unplaceable_command():
+    """Behaviour, not a note. GiveDaycareEgg is a gift catch (O-15), so the only thing that may keep it out of
+    `ids` is that the area it lands on owns a wild-encounter map -- which is what this asserts. It is no longer
+    a `no_map_commands` entry: it is a real script_site placed on map 38, Route 34 owns a wild map, so it must
+    land in `on_wild_area` and route_34 must NOT be exempted."""
     block = load("area_map.json")["gift_areas"]
-    daycare = block["no_map_commands"]["GiveDaycareEgg"]
-    assert daycare["sites"] == ["scr_seq_0265.s:101"] and "gift catch" in daycare["why"]
+    assert "GiveDaycareEgg" not in block["no_map_commands"], "the egg is placed on a map; it is not a no_map command"
+    assert block["sites"]["38"] == "route_34" and block["on_wild_area"]["38"] == "route_34"
+    assert "route_34" not in block["ids"], "a route with grass must never be exempted from no_catch"
+    assert all(k.isdigit() for k in block["sites"]), "every recorded gift site is placed on a map"
+
+
+@pytest.mark.parametrize("data", [DATA, HGE_DATA], ids=["hgss", "hge"])
+def test_both_packs_place_the_daycare_egg_the_same_way(data):
+    """gen4_hge carries its own inventory; the egg site must travel into it and land on the same side of the
+    split, or the hge pack would grant (or lose) a Route 34 exemption the hgss pack does not."""
+    block = load("area_map.json", data)["gift_areas"]
+    assert (block["sites"].get("38"), block["on_wild_area"].get("38")) == ("route_34", "route_34")
+    assert "route_34" not in block["ids"]
     assert all(k.isdigit() for k in block["sites"]), "every recorded gift site is placed on a map"
 
 

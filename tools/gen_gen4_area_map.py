@@ -300,6 +300,24 @@ class Maps:
         assert len(self.rows) == 540 and all("mapsec" in r for r in self.rows.values()), "map header parse drifted"
         assert len({r["token"] for r in self.rows.values()}) == 540, "map tokens are no longer unique"
         self.by_token = {r["token"]: mid for mid, r in self.rows.items()}
+        # `.eventsBank` binds a zone_event NARC member to the map header that loads it. A zone_event FILE NAME's
+        # numeric prefix IS that member number and is NOT a map id (035_R34.json is map 38; 302_R34R0101.json is
+        # map 331), so every lookup from a zone_event file to a map must come through here.
+        self.by_events_bank: dict[int, tuple[int, str]] = {}   # zone_event member -> (map id, map_headers.h cite)
+        self.events_bank_token: dict[int, str] = {}            # zone_event member -> the token the file is named for
+        self.ambiguous_events_bank: set[int] = set()           # members two headers both claim
+        cur = None
+        for n, ln in enumerate(hdr.splitlines(), 1):
+            if m := re.match(r"^\s*\[(MAP_\w+)\] = \{", ln):
+                cur = by_const[m[1]]
+            elif cur is not None and (m := re.match(r"^\s*\.eventsBank\s*=\s*NARC_zone_event_(\d+)_(\w+)_bin\b", ln)):
+                bank = int(m[1])
+                if bank in self.by_events_bank:
+                    self.ambiguous_events_bank.add(bank)   # not fatal here: a map that binds nothing is still a valid header
+                else:
+                    self.by_events_bank[bank] = (cur, f"src/data/map_headers.h:{n}")
+                    self.events_bank_token[bank] = m[2]
+                self.rows[cur]["events_bank"] = bank
 
 
 SAFARI_AREAS = ("PLAINS", "MEADOW", "SAVANNAH", "PEAK", "ROCKY_BEACH", "WETLAND", "FOREST", "SWAMP", "MARSHLAND", "WASTELAND", "MOUNTAIN", "DESERT")
@@ -458,9 +476,14 @@ def gift_areas(m: dict, acq: dict, acq_path: Path = ACQUISITION) -> dict:
     if missing:
         raise GiftAreaOnWildMap(f"gift sites resolved to areas in neither ids nor on_wild_area: {sorted(missing)}")
 
-    # The commands acquisition.json parks under out_of_scope_commands are not script_sites, so they carry
-    # no map and cannot put an area in `ids`. GiveDaycareEgg is the one that matters: the grant really IS a
-    # gift catch (O-15), but the daycare has no map of its own, so the area is whatever the player stands in.
+    # The commands acquisition.json parks under out_of_scope_commands are not script_sites, so they carry no map
+    # and cannot put an area in `ids`. What is left there genuinely has no map of its own: an externally driven
+    # grant (MysteryGift), a record the LoadNPCTrade site already owns (NPCTradeExec), a variable fill a GiveMon
+    # site consumes (GetFossilPokemon) and a withdrawal of a mon that already has a Soul Link key
+    # (RetrieveDaycareMon). A scripted catch inside a COMMON (std) script is NOT one of these: the acquisition
+    # generator resolves the object that RUNS the member holding the command, so the Day-Care Man's
+    # GiveDaycareEgg is a real script_site on the map that object stands on (Route 34) and takes the ordinary
+    # sites / on_wild_area path -- its area owns a wild-encounter map, so it is NEVER exempted.
     no_map = {
         cmd: {"sites": row.get("sites", []), "why": row.get("why", "")}
         for cmd, row in sorted((acq.get("out_of_scope_commands") or {}).items())

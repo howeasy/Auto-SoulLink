@@ -1796,11 +1796,12 @@
     "source": "tools/gen_gen4_area_map.py gift_areas(), over acquisition.json script_sites; the rule is rules.gift_areas",
     "acquisition": {
       "file": "data/games/gen4_hge/acquisition.json",
-      "sha256": "e12392c5a55e5135d84efb67d14c9415a3963937974410a216ffbf4d069aef92",
+      "sha256": "39f1ab236b2219f497a13a06d251dc99c4a132dbe46b0ceca42fb53ecd9fcc83",
       "generator": "tools/gen_gen4_acquisition.py",
       "kinds": ["egg", "gift", "loan", "special_gift", "starter"]
     },
     "sites": {
+      "38": "route_34",
       "61": "new_bark_town",
       "101": "route_35",
       "117": "ilex_forest",
@@ -1820,6 +1821,7 @@
       "536": "goldenrod_city"
     },
     "on_wild_area": {
+      "38": "route_34",
       "61": "new_bark_town",
       "101": "route_35",
       "117": "ilex_forest",

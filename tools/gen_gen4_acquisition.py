@@ -58,12 +58,13 @@ import gen_gen4_names as names  # noqa: E402  (ROM/fork locators + Absent/Mismat
 # NAME COLLISION: "GiveEgg" is both a script COMMAND (macro GiveEgg -> opcode 138 -> handler ScrCmd_GiveEgg) and a
 # vanilla C FUNCTION (script_pokemon_util.c GiveEgg, the shared implementation the Manaphy mystery gift calls).
 # COMMANDS / script_sites / `scripts` fields use the command; C_PRODUCERS and HGE_C_APIS keys use the C function.
-COMMANDS = ("GiveMon", "GiveEgg", "GiveTogepiEgg", "GiveSpikyEarPichu", "GiveLoanMon", "CreateRoamer", "WildBattle", "LoadNPCTrade", "ChooseStarter")
+COMMANDS = ("GiveMon", "GiveEgg", "GiveDaycareEgg", "GiveTogepiEgg", "GiveSpikyEarPichu", "GiveLoanMon", "CreateRoamer", "WildBattle", "LoadNPCTrade", "ChooseStarter")
 SCAN_RE = re.compile(r"^\s*(" + "|".join(COMMANDS) + r")\b(.*)$")
 KIND = {
     "ChooseStarter": "starter",
     "GiveMon": "gift",
     "GiveEgg": "egg",
+    "GiveDaycareEgg": "egg",
     "GiveTogepiEgg": "egg",
     "GiveSpikyEarPichu": "special_gift",
     "GiveLoanMon": "loan",
@@ -85,11 +86,12 @@ ZONE_POLICY = {
     "safari": {"zone": "own", "plan": "D10", "note": "one zone per Safari area, resolved at runtime"},
 }
 HV = {"heartgold": 7, "soulsilver": 8}  # include/config.h VERSION_HEARTGOLD/SOULSILVER, compared by GetGameVersion
-SITE_COUNT = 61  # script sites for COMMANDS at the pin (docs/gen4/research/acquisition.md)
+SITE_COUNT = 62  # script sites for COMMANDS at the pin (docs/gen4/research/acquisition.md)
 # Mon-making script commands deliberately outside COMMANDS. Key = command; a count change fails generation so
 # new producers cannot appear unnoticed.
 OUT_OF_SCOPE = {
-    "GiveDaycareEgg": {"count": 1, "why": "daycare egg grant: the hatch is the O-15 gift catch (see C producer GiveEggToPlayer)"},
+    # GiveDaycareEgg is NOT here: the command lives in the COMMON (std) script scr_seq_0265.s, which has no map of
+    # its own. It is a real site -- std_script_sites() binds it to the Day-Care Man object on Route 34 (map 38).
     "RetrieveDaycareMon": {"count": 1, "why": "daycare withdrawal: the mon already has a Soul Link key (see C producer open_question)"},
     "MysteryGift": {"count": 14, "why": "external distribution, not observable (src/scrcmd_mystery_gift.c)"},
     "NPCTradeExec": {"count": 11, "why": "executes the LoadNPCTrade record; counted 1:1 with LoadNPCTrade per file, the exchange itself is the LoadNPCTrade site"},
@@ -98,6 +100,8 @@ OUT_OF_SCOPE = {
 INPUTS = [
     "include/constants/maps.h",
     "src/data/map_headers.h",
+    "src/fieldmap.c",
+    "include/constants/std_script.h",
     "include/constants/map_sections.h",
     "include/constants/safari.h",
     "files/msgdata/msg/msg_0279.gmm",
@@ -141,7 +145,7 @@ C_PRODUCERS: dict[tuple[str, str, str], dict] = {
     ("src/field/scrcmd_pokemon_misc.c", "ScrCmd_GiveTogepiEgg", "Party_AddMon"): _p(n=1, cls="acquisition", kind="egg", scripts=["GiveTogepiEgg"], note="Mr. Pokemon's Togepi egg (species fixed in C)"),
     ("src/field/scrcmd_pokemon_misc.c", "ScrCmd_GiveSpikyEarPichu", "Party_AddMon"): _p(n=1, cls="acquisition", kind="special_gift", scripts=["GiveSpikyEarPichu"], note="Spiky-eared Pichu L30 form 1 (fixed in C)"),
     ("src/get_egg.c", "Save_Daycare_MoveMonToParty", "Party_AddMon"): _p(n=1, cls="not_acquisition", kind="daycare_withdraw", open_question="the mon already has a Soul Link key; while deposited it is in neither party nor box, so the storage watcher must treat the withdrawal as a known-key party gain", note="returns the deposited mon to the party"),
-    ("src/get_egg.c", "GiveEggToPlayer", "Party_AddMon"): _p(n=1, cls="acquisition", kind="egg", note="daycare egg (O-15: the hatch is the gift catch); reached from a daycare script, not one of the 9 commands"),
+    ("src/get_egg.c", "GiveEggToPlayer", "Party_AddMon"): _p(n=1, cls="acquisition", kind="egg", scripts=["GiveDaycareEgg"], note="daycare egg (O-15: the hatch is the gift catch); the GiveDaycareEgg command sits in the COMMON (std) script scr_seq_0265.s, member 000, run by the Day-Care Man object on Route 34"),
     ("src/npc_trade.c", "NPCTrade_MakeAndGiveLoanMon", "Party_AddMon"): _p(n=1, cls="acquisition", kind="loan", scripts=["GiveLoanMon"], note="loan grant: adds a party mon, replaces no outgoing slot"),
     ("src/npc_trade.c", "NPCTrade_ReceiveMonToSlot", "Party_SafeCopyMonToSlot_ResetAprijuiceModifiers"): _p(n=1, cls="acquisition", kind="npc_exchange", scripts=["LoadNPCTrade"], note="the executed exchange replaces the chosen party slot"),
     ("src/overlay_bug_contest.c", "BugContest_RestoreParty_RetrieveCaughtPokemon", "Party_SafeCopyMonToSlot_ResetAprijuiceModifiers"): _p(n=1, cls="not_acquisition", kind="contest_party_restore", note="puts the (used) lead mon back into the restored party"),
@@ -486,6 +490,19 @@ def build(clone: Path) -> dict[str, str]:
     return {"acquisition.json": base.dumps(build_doc(clone), 3)}
 
 
+def std_resolutions(cmd: str) -> dict:
+    """The argument-derived fields for a COMMANDS hit found in a COMMON (std) script. Such a site carries no
+    script arguments to resolve -- the command is written bare -- so the ENGINE supplies them, and every row
+    names the C that does. A command that lands in a std script without a row here fails generation rather
+    than shipping a site with nothing resolved."""
+    if cmd == "GiveDaycareEgg":
+        return {
+            "species": {"resolution": "c_source", "evidence": "src/get_egg.c:628 GiveEggToPlayer Daycare_GetEggSpecies(dayCare, gender_idx)", "detail": "the command takes no argument: the species is the egg the Day Care is holding (its own state, plus the incense), not anything the script names"},
+            "level": {"resolution": "c_source", "value": 1, "evidence": "src/get_egg.c GiveEggToPlayer -> SetEggStats(level 1)"},
+        }
+    raise AssertionError(f"{cmd} appears in a COMMON (std) script: model its arguments in std_resolutions() before regenerating")
+
+
 def build_doc(clone: Path) -> dict:
     ctx = Ctx(clone)
     cf = c_facts(ctx)
@@ -504,14 +521,64 @@ def build_doc(clone: Path) -> dict:
         if any("GetGameVersion" in ln for ln in lines):
             branch_files.add(path.name)
         m = re.match(r"scr_seq_(\d+)_(\w+?)(?:_hdr)?\.s$", path.name)
-        token = m[2] if m else None
-        assert token in ctx.maps.by_token, f"{path.name}: script token {token!r} names no map"
-        mid = ctx.maps.by_token[token]
-        row = ctx.maps.rows[mid]
-        area = ctx.model["map_area"].get(mid)
-        script = Script(f"{SCR_DIR}/{path.name}", lines)
-        ms = map_sources.setdefault(token, MapSources(clone, token))
+        token, std_file = m[2] if m else None, None
+        if token is None:
+            # A nameless `scr_seq_<digits>.s` is a COMMON (std) script file: it belongs to no map, so the name
+            # token that resolves every other file to its map is absent. The file's ScrDef members are the
+            # sScriptBankMapping banks; which map a hit happens on is decided per MEMBER, by the map object that
+            # RUNS that member (id - scriptIdLo = the ScrDef index), so the std path is resolved below.
+            sm = re.fullmatch(r"scr_seq_(\d+)\.s", path.name)
+            assert sm, f"{path.name}: no map token in the name and not a std script member file"
+            std_file = int(sm[1])
+        else:
+            assert token in ctx.maps.by_token, f"{path.name}: script token {token!r} names no map"
+            mid = ctx.maps.by_token[token]
+            row = ctx.maps.rows[mid]
+            area = ctx.model["map_area"].get(mid)
+            script = Script(f"{SCR_DIR}/{path.name}", lines)
+            ms = map_sources.setdefault(token, MapSources(clone, token))
         for i, mm in hits:
+            cmd, raw = mm.group(1), mm.group(2).strip()
+            kind = KIND[cmd]
+            if std_file is not None:
+                # COMMON (std) script file: emit one site per (member holding the command, calling map).
+                sc = std.script(std_file)
+                owners, skipped = std_callers(clone, ctx, std, sc, std_file, i)
+                for own in owners:
+                    for call in own["called_by"]:
+                        smid = call["map_id"]
+                        srow = ctx.maps.rows[smid]
+                        stok = srow["token"]
+                        sms = map_sources.setdefault(stok, MapSources(clone, stok))
+                        stdsite = {
+                            "id": f"{path.stem}:{i + 1}",
+                            "file": path.name,
+                            "line": i + 1,
+                            "command": cmd,
+                            "raw_args": raw,
+                            "kind": kind,
+                            "zone": ZONE_POLICY[kind]["zone"],
+                            "map_id": smid,
+                            "map_const": srow["const"],
+                            "map_token": stok,
+                            "area": ctx.model["map_area"].get(smid),
+                            "via": {
+                                "kind": "std_script",
+                                "std": own["std"],
+                                "scriptId": own["scriptId"],
+                                "member": own["member"],
+                                "entry": own["entry"],
+                                "cite": own["bank_cite"],
+                                "called_by": call,
+                                "members_without_this_command": skipped,
+                            },
+                        }
+                        stdsite |= std_resolutions(cmd)
+                        stdsite["status"] = status_of(stdsite)
+                        stdsite["reachability"] = reachability(sc, sms, i, smid, srow["const"], std, {own["entry"]: sms.std_trigger(own["std"])})
+                        assert_in_own_entry(stdsite, lines, i)
+                        sites.append(stdsite)
+                continue
             cmd, raw = mm.group(1), mm.group(2).strip()
             args = split_args(raw)
             kind = KIND[cmd]
@@ -625,7 +692,7 @@ def build_doc(clone: Path) -> dict:
             "callstd_targets": sorted({c["std"] for s in sites for c in s["reachability"]["callstd"]["calls"]}),
             "reachability_by_command": {c: dict(sorted(Counter(s["reachability"]["status"] for s in sites if s["command"] == c).items())) for c in COMMANDS},
             "commands_without_a_c_producer": sorted(set(COMMANDS) - commands_with_c - {"CreateRoamer", "WildBattle"}),
-            "scope": "bounded candidate inventory: script sites for the 9 commands plus the C call sites of the 6 producer APIs; hge has its own inventory (UNVERIFIED)",
+            "scope": "bounded candidate inventory: script sites for the 10 commands (a command inside a COMMON (std) script file is placed on the map of the object that runs its member) plus the C call sites of the 6 producer APIs; hge has its own inventory (UNVERIFIED)",
         },
         "zone_policy": ZONE_POLICY,
         "reachability_scope": REACHABILITY_SCOPE,
@@ -912,8 +979,11 @@ class StdScripts:
     def __init__(self, clone: Path):
         self.clone = clone
         self.consts = {n: int(v) for n, v in re.findall(r"^#define\s+(\w+)\s+(\d+)\b", base.read(clone, "include/constants/std_script.h"), re.M)}
-        rows = re.findall(r"^\s*\{\s*(\w+),\s*NARC_scr_seq_scr_seq_(\d+)_bin,", base.read(clone, "src/fieldmap.c"), re.M)
-        self.banks = [(int(lo) if lo.isdigit() else self.consts[lo], int(member)) for lo, member in rows]
+        rows = []
+        for n, ln in enumerate(base.read(clone, "src/fieldmap.c").splitlines(), 1):
+            if m := re.match(r"^\s*\{\s*(\w+),\s*NARC_scr_seq_scr_seq_(\d+)_bin,", ln):
+                rows.append((m[1], int(m[2]), f"src/fieldmap.c:{n}"))
+        self.banks = [(int(lo) if lo.isdigit() else self.consts[lo], member, cite) for lo, member, cite in rows]
         assert len(self.banks) == 30 and [b[0] for b in self.banks] == sorted((b[0] for b in self.banks), reverse=True), "sScriptBankMapping drifted (30 rows, descending)"
         self._scripts: dict[int, Script] = {}
         self._writes: dict[tuple[int, str], dict[str, str]] = {}
@@ -928,14 +998,36 @@ class StdScripts:
         sid = self.consts.get(arg)
         if sid is None:
             return None
-        lo, member = next((b for b in self.banks if sid >= b[0]), (None, None))
+        lo, member, _cite = next((b for b in self.banks if sid >= b[0]), (None, None, None))
         if lo is None:
             return None
         sc = self.script(member)
-        defs = [m[1] for ln in sc.lines if (m := re.match(r"^\s*ScrDef\s+(\w+)", ln))]
+        defs = self.entries(sc)
         if sid - lo >= len(defs) or defs[sid - lo] not in sc.index:
             return None
         return {"std": arg, "id": sid, "member": member, "entry": defs[sid - lo], "callee_cite": sc.cite(sc.starts[sc.index[defs[sid - lo]]])}
+
+    def entries(self, sc: Script) -> list[str]:
+        """The ScrDef labels of a std script file, in member order (index = id - scriptIdLo)."""
+        return [m[1] for ln in sc.lines if (m := re.match(r"^\s*ScrDef\s+(\w+)", ln))]
+
+
+    def bank(self, sid: int) -> tuple[int, int, str] | None:
+        """(scriptIdLo, scr_seq member, src/fieldmap.c cite of the sScriptBankMapping row) for a std script id."""
+        return next((b for b in self.banks if sid >= b[0]), None)
+
+    def members(self, member_file: int) -> dict[int, list[tuple[str, int, str]]]:
+        """ScrDef index -> every std_script.h NAME whose id lands on it, as (name, id, src/fieldmap.c cite).
+        Two names can share an id (`_std_daycare` == `std_daycare_man`); the `_std_*` base names are dropped
+        because no object calls them by that name -- the map event names the callable alias."""
+        out: dict[int, list[tuple[str, int, str]]] = {}
+        for name, sid in sorted(self.consts.items()):
+            if name.startswith("_") or name[0].isdigit():   # `_std_*` base names and bare numbers are not callable aliases
+                continue
+            row = self.bank(sid)
+            if row and row[1] == member_file:
+                out.setdefault(sid - row[0], []).append((name, sid, row[2]))
+        return out
 
     def writes(self, member: int, entry: str, _seen: frozenset = frozenset()) -> dict[str, str]:
         """token -> cite of its first mention in the callee closure."""
@@ -1024,6 +1116,98 @@ class MapSources:
                 out.append({"kind": f"map_script:{mn}", "cite": f"{self.hdr_rel}:{n}", "gates": gates})
         return out
 
+    def std_trigger(self, std_name: str) -> list[dict]:
+        """Every object in this map's zone_event JSON that RUNS the std script `std_name`. A COMMON (std) script
+        has no `scr_seq_<token>_NNN` entry of its own, so the object that calls it IS the trigger; the trigger's
+        own `token` is the scriptId name, which is what the cite must hold."""
+        if not self.event_rel:
+            return []
+        out = []
+        for row in self.events.get("objects", []):
+            if row.get("scriptId", ("",))[0] != std_name:
+                continue
+            gates = []
+            if row["eventFlag"][0] not in ("0", "FLAG_NOTHING"):
+                gates.append(_gate("flag", row["eventFlag"][0], "npc_visibility", f"{self.event_rel}:{row['eventFlag'][1]}", "story", state="unset"))
+            out.append({"kind": "npc:std_script", "token": std_name, "cite": f"{self.event_rel}:{row['scriptId'][1]}", "gates": gates})
+        return out
+
+
+def std_member_of(sc: Script, hit: int) -> int:
+    """The ScrDef index of the std script member that holds line index `hit` (id - scriptIdLo is that index).
+    A member is its ENTRY label (the Nth `ScrDef` line) plus every later local label (`_0114:` ...) up to the
+    next entry: counting all labels instead would number blocks, not members."""
+    defs = [m[1] for ln in sc.lines if (m := re.match(r"^\s*ScrDef\s+(\w+)\s*$", ln))]
+    starts = [sc.starts[sc.index[name]] for name in defs if name in sc.index]
+    member = -1
+    for i, start in enumerate(starts):
+        if start <= hit:
+            member = i
+    return member
+
+
+def std_member_range(sc: Script, member: int) -> tuple[int, int]:
+    """[first, end) line indexes of ScrDef member `member` of a std script file: from its entry label to the next
+    entry label (or the end of the file). The dispatch check scans only this range for a std site, so a handler
+    the fork hooks that a DIFFERENT member of the same file uses (the Day-Care Lady's DaycareSanitizeMon) is not
+    charged to the Man's egg site."""
+    defs = [m[1] for ln in sc.lines if (m := re.match(r"^\s*ScrDef\s+(\w+)\s*$", ln))]
+    starts = [sc.starts[sc.index[name]] for name in defs if name in sc.index]
+    return starts[member], (starts[member + 1] if member + 1 < len(starts) else len(sc.lines))
+
+
+@functools.cache
+def std_event_index(clone_str: str) -> dict[str, list[tuple[str, int]]]:
+    """std_script.h NAME -> every zone_event object that RUNS it, as (relative json path, line of the scriptId).
+    Scanned once. A scriptId that names a per-map entry (`_EV_scr_seq_<token>_<nnn> + 1`) is not a std script."""
+    clone, out = Path(clone_str), {}
+    for f in sorted((clone / EVT_DIR).glob("[0-9][0-9][0-9]_*.json")):
+        rel = f.relative_to(clone).as_posix()
+        for row in parse_events(f.read_text(encoding="utf-8")).get("objects", []):
+            sid = row.get("scriptId", ("", 0))[0]
+            if sid and not sid.startswith("_EV_scr_seq_"):
+                out.setdefault(sid, []).append((rel, row["scriptId"][1]))
+    return out
+
+
+def event_bank_map(ctx: Ctx, rel: str) -> int:
+    """The map a zone_event member belongs to, resolved through `.eventsBank` (src/data/map_headers.h). The
+    file NAME's numeric prefix is a NARC member number, NOT a map id -- 035_R34.json is map 38 and
+    302_R34R0101.json is map 331 -- so the name is only ever an index into `by_events_bank`, and the header's
+    own token is cross-checked against the name so the two can never be confused again."""
+    name = Path(rel).name
+    bank = int(name[:3])
+    assert bank not in ctx.maps.ambiguous_events_bank, f"{rel}: two map headers claim .eventsBank = NARC_zone_event_{bank}_bin"
+    row = ctx.maps.by_events_bank.get(bank)
+    assert row, f"{rel}: no map header in src/data/map_headers.h names .eventsBank = NARC_zone_event_{bank}_bin"
+    mid, cite = row
+    named = ctx.maps.by_token.get(name[4:-5])
+    assert named == mid, f"{rel}: its token names map {named} but .eventsBank {bank} ({cite}) names map {mid}"
+    return mid
+
+
+def std_callers(clone: Path, ctx: Ctx, std: StdScripts, sc: Script, member_file: int, hit: int) -> tuple[list[dict], list[dict]]:
+    """(owners, skipped) for the std script file `sc`. `owners` is one row per (std_script.h name, calling map)
+    whose member index is the member holding line `hit`: those maps are where the site happens, because the
+    object that RUNS the member is what puts the player in front of it. `skipped` records the members of the
+    same file that a map object also runs but that do NOT hold the command (the Day-Care Lady's member 001),
+    with cites, so the exclusion is visible instead of silent."""
+    member = std_member_of(sc, hit)
+    assert member >= 0, f"{sc.rel}:{hit + 1} is outside every ScrDef member"
+    defs = std.entries(sc)
+    index = std_event_index(str(clone))
+    owners: list[dict] = []
+    skipped: list[dict] = []
+    for mem, std_names in sorted(std.members(member_file).items()):
+        for name, sid, bank_cite in std_names:
+            called_by = [{"map_id": event_bank_map(ctx, rel), "cite": f"{rel}:{line}", "map_cite": ctx.maps.by_events_bank[int(Path(rel).name[:3])][1]} for rel, line in index.get(name, [])]
+            row = {"std": name, "scriptId": sid, "member": mem, "entry": defs[mem], "bank_cite": bank_cite, "called_by": called_by}
+            (owners if mem == member else skipped).append(row)
+    for row in skipped:
+        row["why"] = f"member {row['member']} ({row['entry']}) of the same std script file does not contain the command"
+    assert owners, f"{sc.rel}:{hit + 1}: member {member} is run by no map object"
+    return owners, skipped
+
 
 def callstd_check(script: Script, std, fl: dict, hit: int, entries: list[dict]) -> tuple[dict, list[dict]]:
     """Every CallStd on a path to the site (blocks that can reach it; lines before the site, or before the block's
@@ -1055,7 +1239,10 @@ def callstd_check(script: Script, std, fl: dict, hit: int, entries: list[dict]) 
     return {"calls": [c for _i, c in sorted(calls.items())], "conflicts": sorted(conflicts, key=lambda c: (c["call"], c["token"]))}, un
 
 
-def reachability(script: Script, ms: MapSources, hit: int, mid: int, const: str, std) -> dict:
+def reachability(script: Script, ms: MapSources, hit: int, mid: int, const: str, std, std_triggers: dict[str, list[dict]] | None = None) -> dict:
+    """`std_triggers` maps an entry LABEL to the triggers that start it when the entry is a COMMON (std) script
+    member: such a label is `scr_seq_<member file>_NNN`, not `scr_seq_<map token>_NNN`, so it cannot be matched
+    to the map's `_EV_scr_seq_` events; the object that calls the member by name is the trigger instead."""
     fl = script.flow(hit)
     un = list(fl["unresolved"])
     rec = {
@@ -1073,8 +1260,10 @@ def reachability(script: Script, ms: MapSources, hit: int, mid: int, const: str,
         return rec | {"entries": [], "gates": [], "callstd": {"calls": [], "conflicts": []}, "status": "unresolved", "unresolved": un}
     entries, combos = [], []
     for r, (must, may) in fl["roots"].items():
-        m = re.fullmatch(rf"scr_seq_{re.escape(ms.token)}_(\d{{3}})", r)
-        trig = ms.triggers(m[1]) if m else []
+        trig = (std_triggers or {}).get(r)
+        m = None if trig is not None else re.fullmatch(rf"scr_seq_{re.escape(ms.token)}_(\d{{3}})", r)
+        if trig is None:
+            trig = ms.triggers(m[1]) if m else []
         at = script.cite(script.starts[script.index[r]])
         if not trig:
             why = "no object/bg/coord event in the map's zone_event JSON and no header script entry starts it (reached from another script file, or unused)"
@@ -1142,7 +1331,9 @@ def verify_reachability(clone: Path, sites: list[dict]) -> list[str]:
         for g in iter_gates(rec):
             problems += cite_problem(clone, f"{s['id']} gate {g.get('token')}", g.get("cite"), g.get("token"))
         for t in (t for e in rec["entries"] for t in e["triggers"]):
-            problems += cite_problem(clone, f"{s['id']} trigger {t['kind']}", t.get("cite"), "_EV_scr_seq_")
+            # a per-map trigger names its entry through `_EV_scr_seq_`; a COMMON (std) script trigger carries the
+            # scriptId NAME it calls, and its cite must hold that name instead
+            problems += cite_problem(clone, f"{s['id']} trigger {t['kind']}", t.get("cite"), t.get("token", "_EV_scr_seq_"))
     return problems
 
 
@@ -1453,7 +1644,7 @@ def script_member_proof(vanilla: str, hge: str, sites: list[dict]) -> tuple[dict
     v, h = narc_member_hashes(vanilla, SCRIPT_NARC), narc_member_hashes(hge, SCRIPT_NARC)
     if len(v) != len(h):
         problems.append(f"{SCRIPT_NARC} has {len(v)} members in the vanilla ROM and {len(h)} in the hge ROM")
-    members = {int(re.match(r"scr_seq_(\d+)_", s["file"])[1]): s["file"] for s in sites}
+    members = {int(re.match(r"scr_seq_(\d+)[_.]", s["file"])[1]): s["file"] for s in sites}
     proof = {}
     for n in sorted(members):
         if n >= min(len(v), len(h)):
@@ -1610,7 +1801,21 @@ def check_dispatch(used: dict[str, set[str]], hooked: dict[str, list[str]], acco
     return rows, problems
 
 
-def script_dispatch(pret: Path, files: list[str], van: Vanilla, accounted: dict[str, str]) -> tuple[dict, list[str]]:
+def std_member_scope(pret: Path, sites: list[dict]) -> dict[str, tuple[int, int]]:
+    """file -> [first, end) line range the dispatch check scans for a COMMON (std) script file: only the member(s)
+    that hold a site (see std_member_range). A file with no std site is not in the map and is scanned whole."""
+    scope: dict[str, tuple[int, int]] = {}
+    for s in sites:
+        via = s.get("via")
+        if via and via.get("kind") == "std_script":
+            rel = f"files/fielddata/script/scr_seq/{s['file']}"
+            lo, hi = std_member_range(Script(rel, (pret / rel).read_text(encoding="utf-8", errors="replace").splitlines()), via["member"])
+            old_lo, old_hi = scope.get(s["file"], (lo, hi))
+            scope[s["file"]] = (min(old_lo, lo), max(old_hi, hi))
+    return scope
+
+
+def script_dispatch(pret: Path, files: list[str], van: Vanilla, accounted: dict[str, str], member_scope: dict[str, tuple[int, int]] | None = None) -> tuple[dict, list[str]]:
     """Decode every command used by the site-bearing script sources through script.inc (macro -> opcode) and the pret
     command table (opcode -> handler), and check no handler the fork hooks is reached unaccounted. SOURCE level: the
     member BYTES are proved identical by script_narc, the command names come from the same .s sources the sites do."""
@@ -1619,8 +1824,12 @@ def script_dispatch(pret: Path, files: list[str], van: Vanilla, accounted: dict[
     movement = set(re.findall(r"\.macro (\w+)", base.read(pret, "asm/macros/movement.inc")))
     used_cmds: dict[str, set[str]] = {}
     unknown: dict[str, list[str]] = {}
+    member_scope = member_scope or {}
     for f in files:
-        for ln in (pret / "files/fielddata/script/scr_seq" / f).read_text(encoding="utf-8", errors="replace").splitlines():
+        lo, hi = member_scope.get(f, (0, 1 << 30))  # a std file is scanned only over the member that holds its site
+        for idx, ln in enumerate((pret / "files/fielddata/script/scr_seq" / f).read_text(encoding="utf-8", errors="replace").splitlines()):
+            if not lo <= idx < hi:
+                continue
             t = ln.split("@", 1)[0].strip()
             if not t or t[0] in ".#;" or t.startswith("//") or t.split()[0].endswith(":"):
                 continue
@@ -1706,7 +1915,7 @@ def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: s
     replaced = {r["replaces"]["function"] for r in calls + defs + other if r["replaces"]} & van.replaced_names()
 
     accounted = {r["replaces"]["function"]: f"fork function {r.get('function') or r.get('api') or r['hook']} replaces it" for r in calls + defs + other if r["replaces"] and r["replaces"]["function"].startswith("ScrCmd_")} | HGE_DISPATCH_OK
-    dispatch, dispatch_problems = script_dispatch(pret, sorted({s["file"] for s in sites}), van, accounted)
+    dispatch, dispatch_problems = script_dispatch(pret, sorted({s["file"] for s in sites}), van, accounted, std_member_scope(pret, sites))
     problems += dispatch_problems
 
     # API names the fork calls -> the vanilla function behind them, and whether it is hooked
@@ -1823,7 +2032,7 @@ def build_hge(pret: Path, hge_rom: Path, vanilla_rom: Path, src: Path, commit: s
             "vanilla_producer_count": len(vrows),
             "vanilla_producer_status_counts": dict(sorted(counts.items())),
             "commands_without_a_c_producer": sorted(set(COMMANDS) - reach - {"CreateRoamer", "WildBattle"}),
-            "scope": "script sites = the vanilla 61 (members proven identical); C side = call sites and definitions of the 11 producer APIs in the fork's src/ plus the status of every vanilla producer",
+            "scope": "script sites = the vanilla 62 (members proven identical); C side = call sites and definitions of the 11 producer APIs in the fork's src/ plus the status of every vanilla producer",
         },
         "zone_policy": vdoc["zone_policy"],
         "reachability_scope": vdoc["reachability_scope"],
