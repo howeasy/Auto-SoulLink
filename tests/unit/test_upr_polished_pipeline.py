@@ -246,8 +246,23 @@ def test_jar_supports_polished_matches_the_exact_header_checksum(roms, tmp_path)
         zf.writestr("com/dabomstew/pkrandom/config/polished_offsets.ini",
                     "[Polished Crystal (U) 3.2.3]\nCRCInHeader=0x6CA3\n[Polished Crystal (U) 3.2.3]\nCRCInHeader=0xA36C // big-endian\n")
     assert P.jar_supports_polished(str(jar), release)
-    assert not P.jar_supports_polished(str(jar), overlay)         # 0x725C: the overlay needs its own entry
+    assert not P.jar_supports_polished(str(jar), overlay)         # an overlay needs the CRCInHeader=-1 section
     assert not P.jar_supports_polished(str(tmp_path / "missing.jar"), release)
+    wild = tmp_path / "fork19.jar"                                # patch 0019: overlay accepted by structure
+    with zipfile.ZipFile(wild, "w") as zf:
+        zf.writestr("com/dabomstew/pkrandom/config/polished_offsets.ini",
+                    "[Polished Crystal (U) 3.2.3]\nCRCInHeader=0xA36C\n"
+                    "[Polished Crystal SLink overlay (U) 3.2.3]\nCRCInHeader=-1\n")
+    assert P.jar_supports_polished(str(wild), release) and P.jar_supports_polished(str(wild), overlay)
+    changed = bytearray(overlay)
+    changed[0x14E:0x150] = b"\x12\x34"                            # a rebuilt overlay's header checksum
+    assert P.jar_supports_polished(str(wild), bytes(changed))
+    plain = bytearray(release)
+    plain[0x14E:0x150] = b"\x12\x34"                              # the release with a wrong checksum is not an overlay
+    assert not P.jar_supports_polished(str(wild), bytes(plain))
+    bare = bytearray(overlay)
+    bare[0x1F8000:0x1FC000] = b"\xff" * 0x4000                    # bridge bytes but an empty bank $7E
+    assert not P.jar_supports_polished(str(wild), bytes(bare))
 
 
 def _drive_prepare_pair(roms, tmp_path, monkeypatch, flips):
@@ -260,7 +275,8 @@ def _drive_prepare_pair(roms, tmp_path, monkeypatch, flips):
         (tmp_path / f"{pid}_companion.gbc").write_bytes(overlay)
         sources[pid] = str(tmp_path / f"{pid}_companion.gbc")
     settings = tmp_path / "settings.rnqs"
-    settings.write_bytes(U.build_spec(dict(U.default_spec(U.FAMILY_POLISHED), wild="area", wild_min_catch_rate=2),
+    settings.write_bytes(U.build_spec(dict(U.default_spec(U.FAMILY_POLISHED), wild="area", wild_min_catch_rate=2,
+                                           starters="unchanged", trainers="unchanged"),
                                       family=U.FAMILY_POLISHED))
     string = settings.read_bytes()[8:].decode("ascii")
 

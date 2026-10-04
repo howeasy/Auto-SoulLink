@@ -1,0 +1,126 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: howeasy <howardabudd@gmail.com>
+Date: Sun, 4 Oct 2026 11:36:18 -0400
+Subject: [PATCH] slink: Polished Crystal overlay by structure
+
+Every SLink companion overlay build rewrites its own header checksum, so
+pinning the overlay by CRCInHeader=0x725C stopped accepting it at the next
+rebuild. PolishedCrystalRomHandler now recognises the overlay by structure:
+code PKPC, version, non-Japanese flag and size as before, plus the moved
+DelayFrame lead-in at $0070, "call $0070" + 4 nops at $0DA8 and a bank $7E
+that is not all $FF. Such a ROM matches only a CRCInHeader=-1 section (the
+overlay section, CopyFrom the release); any other ROM still needs the exact
+header checksum, so the release match is unchanged. isLoadable reads the
+whole ROM for the bank $7E test.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ FORK_CHANGES.md                               | 10 ++++++
+ .../pkrandom/config/polished_offsets.ini      |  7 ++--
+ .../PolishedCrystalRomHandler.java            | 33 ++++++++++++++++---
+ 3 files changed, 44 insertions(+), 6 deletions(-)
+
+diff --git a/FORK_CHANGES.md b/FORK_CHANGES.md
+index ac5058c..fec346b 100644
+--- a/FORK_CHANGES.md
++++ b/FORK_CHANGES.md
+@@ -146,3 +146,13 @@ entries), so a vanilla `[Red (U)]`-style entry executes exactly the original cod
+   `TradeCount`, `TradeLength`, `StarterSites`, `StaticSite0..43` (validated at load: a site must be a PLAIN_FORM
+   givepoke/loadwildmon species), and a `[Polished Crystal SLink overlay (U) 3.2.3]` section for the SLink companion
+   overlay (header checksum 0x725C) via the new `CopyFrom=` key.
++
++## Patch 19 — Polished Crystal companion overlay matched by structure
++- `PolishedCrystalRomHandler`: every SLink overlay build rewrites its own header checksum ($014E-$014F), so the
++  overlay is no longer pinned by one. A ROM with code PKPC, the version byte, the non-Japanese flag and size $200000
++  is the overlay when $0070 holds the moved DelayFrame lead-in `f0 44 e0 d7 af e0 8f`, $0DA8 holds
++  `cd 70 00 00 00 00 00` and bank $7E is not all $FF; it then matches only a `CRCInHeader=-1` section, and a ROM
++  without that structure matches only an exact `CRCInHeader`, so the release stays exact. `isLoadable` reads the
++  whole ROM (up to $200000) instead of the first $1000 bytes, for the bank $7E test.
++- `config/polished_offsets.ini` supplement: the overlay section is `CopyFrom` the release with `CRCInHeader=-1`
++  (its `CRCInHeader=0x725C` and `CRC32=0x36A59795` pins are gone).
+diff --git a/src/com/dabomstew/pkrandom/config/polished_offsets.ini b/src/com/dabomstew/pkrandom/config/polished_offsets.ini
+index 9e0f467..710552b 100644
+--- a/src/com/dabomstew/pkrandom/config/polished_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/polished_offsets.ini
+@@ -781,7 +781,10 @@ StaticSite43=0x1ACBBB  // loadwildmon LUGIA maps/WhirlIslandLugiaChamber.asm:44
+ 
+ // SLink companion overlay (patch/dist/SLink-Polished.ups over the release): it moves no table; it changes
+ // 107 bytes at $0070-$0088, $0DA8-$0DAE, the header checksum $014E-$014F and bank $7E $1F8000-$1F8048.
++// Every overlay build rewrites its own header checksum, so this section pins none (patch 19): CRCInHeader=-1
++// matches only a ROM with the overlay's structure (bridge at $0070, "call $0070" at $0DA8, code in bank $7E),
++// and the release section matches only a ROM without it. CRC32 stays the release's, so UPR's log calls an
++// overlay "not a clean, official ROM" (log-only).
+ [Polished Crystal SLink overlay (U) 3.2.3]
+ CopyFrom=Polished Crystal (U) 3.2.3
+-CRCInHeader=0x725C             // ROM 0x14E-0x14F of the overlay, read big-endian
+-CRC32=0x36A59795
++CRCInHeader=-1                 // not pinned: matched by structure (PolishedCrystalRomHandler.isSlinkOverlay)
+diff --git a/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java b/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
+index 20040f4..c8b6bbf 100644
+--- a/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
++++ b/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
+@@ -50,7 +50,8 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+             if (fileLength > 8 * 1024 * 1024) {
+                 return false;
+             }
+-            byte[] loaded = loadFilePartial(filename, 0x1000);
++            // the whole ROM, not the header page: the companion-overlay test reads bank $7E (patch 19)
++            byte[] loaded = loadFilePartial(filename, GBConstants.maxRomSize);
+             return loaded.length != 0 && detectRomInner(loaded, (int) fileLength);
+         }
+     }
+@@ -174,8 +175,9 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+         return re != null && romSize == re.getValue("RomSize");
+     }
+ 
+-    // Exact match only: game code, version, non-Japanese flag and header checksum, the same
+-    // tuple Gen2RomHandler reads, with no CRCInHeader wildcard.
++    // Game code, version and non-Japanese flag (the tuple Gen2RomHandler reads), then the header checksum:
++    // exact for a plain ROM, while a ROM with the SLink companion overlay's structure matches only a
++    // CRCInHeader=-1 section, since every overlay build rewrites its own header checksum (patch 19).
+     private static RomEntry checkRomEntry(byte[] rom) {
+         if (rom.length < GBConstants.crcOffset + 2) {
+             return null;
+@@ -183,15 +185,38 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+         int version = rom[GBConstants.versionOffset] & 0xFF;
+         int nonjap = rom[GBConstants.jpFlagOffset] & 0xFF;
+         int crcInHeader = ((rom[GBConstants.crcOffset] & 0xFF) << 8) | (rom[GBConstants.crcOffset + 1] & 0xFF);
++        boolean overlay = isSlinkOverlay(rom);
+         for (RomEntry re : roms) {
+             if (re.romCode() != null && romCode(rom, re.romCode()) && re.getValue("Version") == version
+-                    && re.getValue("NonJapanese") == nonjap && re.getValue("CRCInHeader") == crcInHeader) {
++                    && re.getValue("NonJapanese") == nonjap
++                    && (overlay ? re.getValue("CRCInHeader") == -1 : re.getValue("CRCInHeader") == crcInHeader)) {
+                 return re;
+             }
+         }
+         return null;
+     }
+ 
++    // The companion overlay (patch/polished/src) moves DelayFrame's lead-in to a ROM0 bridge at $0070, puts
++    // "call $0070" + 4 nops at DelayFrame ($0DA8) and its service in bank $7E, which is all $FF in the release.
++    private static final byte[] OVERLAY_BRIDGE = { (byte) 0xF0, 0x44, (byte) 0xE0, (byte) 0xD7, (byte) 0xAF, (byte) 0xE0, (byte) 0x8F };
++    private static final byte[] OVERLAY_DELAYFRAME = { (byte) 0xCD, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00 };
++    private static final int OVERLAY_SERVICE_BANK = 0x7E;
++
++    private static boolean isSlinkOverlay(byte[] rom) {
++        int bank = OVERLAY_SERVICE_BANK * GBConstants.bankSize;
++        if (rom.length < bank + GBConstants.bankSize
++                || !Arrays.equals(Arrays.copyOfRange(rom, 0x0070, 0x0077), OVERLAY_BRIDGE)
++                || !Arrays.equals(Arrays.copyOfRange(rom, 0x0DA8, 0x0DAF), OVERLAY_DELAYFRAME)) {
++            return false;
++        }
++        for (int i = bank; i < bank + GBConstants.bankSize; i++) {
++            if (rom[i] != (byte) 0xFF) {
++                return true;
++            }
++        }
++        return false;
++    }
++
+     @Override
+     public void loadedRom() {
+         romEntry = checkRomEntry(this.rom);
+-- 
+2.54.0.windows.1
+

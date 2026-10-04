@@ -280,17 +280,28 @@ EXPANSION_REFUSAL = ("The Emerald Expansion has no randomizer and no companion p
                      "reference ROM); turn Randomize and Companion off")
 
 
+def _is_slink_polished_overlay(rom: bytes) -> bool:
+    """The structure patch 0019's PolishedCrystalRomHandler.isSlinkOverlay tests: the moved DelayFrame lead-in at
+    $0070, the `call $0070` rewrite at $0DA8, and a non-empty bank $7E (the release has it all $FF)."""
+    return (len(rom) == 0x200000 and rom[0x70:0x77] == bytes.fromhex("f044e0d7afe08f")
+            and rom[0xDA8:0xDAF] == bytes.fromhex("cd700000000000") and any(b != 0xFF for b in rom[0x1F8000:0x1FC000]))
+
+
 def jar_supports_polished(jar: str, rom: bytes) -> bool:
-    """The fork's PolishedCrystalRomHandler matches ONLY an exact header checksum (no wildcard), so a
-    jar without an entry for this build would fail inside Java ("unsupported ROM"); say so first."""
+    """The fork's PolishedCrystalRomHandler matches the release by an EXACT header checksum, and (patch 0019) the
+    SLink overlay by structure with an ini section whose CRCInHeader is -1 (an overlay rebuild changes its own header
+    checksum, so it cannot be pinned). A jar without a matching entry would fail inside Java ("unsupported ROM");
+    say so first."""
     import zipfile
     try:
         with zipfile.ZipFile(jar) as zf:
             text = zf.read("com/dabomstew/pkrandom/config/polished_offsets.ini").decode("utf-8", "replace")
     except (OSError, KeyError, zipfile.BadZipFile):
         return False
-    want = rom[0x14E] << 8 | rom[0x14F]                 # read big-endian, as the handler does
-    return want in {int(m, 0) for m in re.findall(r"^CRCInHeader=(0x[0-9A-Fa-f]+|\d+)", text, flags=re.MULTILINE)}
+    pinned = {int(m, 0) for m in re.findall(r"^CRCInHeader=(0x[0-9A-Fa-f]+|\d+)", text, flags=re.MULTILINE)}
+    if _is_slink_polished_overlay(rom):
+        return re.search(r"^CRCInHeader=-1\s*$", text, flags=re.MULTILINE) is not None
+    return (rom[0x14E] << 8 | rom[0x14F]) in pinned     # read big-endian, as the handler does
 
 
 @functools.cache
