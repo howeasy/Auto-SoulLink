@@ -151,7 +151,7 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
         boot["a"] = digest((ROOT / f"tests/fixtures/gen2/{seed}.SaveRAM").read_bytes())
     pub = (ROOT / "data/gen2/overlay_provenance.json").read_bytes()
     manifest = {"schema": "gen2-trade-lane-v1", "run_id": "MODEL-trade", "scenario": scenario,
-                "evidence_class": "HARNESS_ONLY_OVERLAY", "provenance_sha256": digest(pub), "players": {}}
+                "evidence_class": "PHYSICAL_RECEIPTED", "provenance_sha256": digest(pub), "players": {}}
     refs, baseline_paths, old, offers, markers, syms, before, projected = {}, {}, {}, {}, {}, {}, {}, {}
     tokens = {"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]}
     generations = {"a": 255, "b": 17}
@@ -190,7 +190,7 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
             "ups_sha256": pin["ups"]["sha256"], "sym_sha256": digest(sym_path.read_bytes())}
         receipt = {"schema": "gen2-duo-trade-v1", "player": side, "title": title, "case": scenario,
                    "rom_sha1": pin["sha1"], "run_id": manifest["run_id"], "fixture_sha256": boot[side],
-                   "admission_scope": "HARNESS_ONLY_OVERLAY", "token": tokens[side],
+                   "admission_scope": "PHYSICAL_RECEIPTED", "token": tokens[side],
                    "generation": generations[side], "role": number,
                    "harness_write_scopes": [], "harness_exception": None}
         symbols = syms[side]
@@ -349,7 +349,7 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
     events = []
     if committed:
         for number, side in enumerate(("a", "b"), 1):
-            events.append({"seq": number, "source": "server_dispatch", "evidence_class": "HARNESS_ONLY_OVERLAY",
+            events.append({"seq": number, "source": "server_dispatch", "evidence_class": "PHYSICAL_RECEIPTED",
                 "run_id": manifest["run_id"], "scenario": scenario, "player": side,
                 "message": {"event": "trade_done", "token": "t1", "new_key": projected[side]["key"],
                             "new_species": projected[side]["to_species"], "uncertain": False},
@@ -456,7 +456,7 @@ def test_null_server_token_cannot_hide_dispatched_offer(tmp_path, sources):
     case = make_case(tmp_path, sources, scenario="gen2_trade_refuse_item")
     early_d3(case)
     path = tmp_path / "events.jsonl"
-    path.write_text(json.dumps({"seq": 1, "source": "server_dispatch", "evidence_class": "HARNESS_ONLY_OVERLAY",
+    path.write_text(json.dumps({"seq": 1, "source": "server_dispatch", "evidence_class": "PHYSICAL_RECEIPTED",
         "run_id": "MODEL-trade", "scenario": "gen2_trade_refuse_item", "player": "a",
         "message": {"event": "trade_offer", "slot": 0}, "outcome": {"dispatch": "returned", "commands": []}}))
     case["kwargs"]["transaction_evidence"]["events"]["sha256"] = digest(path.read_bytes())
@@ -1021,7 +1021,7 @@ def test_negative_case_never_reaches_server_apply(tmp_path, sources, scenario, e
         message = {"event": "trade_done", "token": "t1", "new_key": "x", "new_species": 16}
     else:
         commands = [{"cmd": "apply_trade", "token": "t1"}]
-    row = {"seq": 1, "source": "server_dispatch", "evidence_class": "HARNESS_ONLY_OVERLAY", "run_id": "MODEL-trade",
+    row = {"seq": 1, "source": "server_dispatch", "evidence_class": "PHYSICAL_RECEIPTED", "run_id": "MODEL-trade",
            "scenario": scenario, "player": "a", "message": message,
            "outcome": {"dispatch": "returned", "commands": commands}}
     journal = Path(case["kwargs"]["transaction_evidence"]["events"]["path"])

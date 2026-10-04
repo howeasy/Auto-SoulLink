@@ -1,0 +1,110 @@
+# gen3_final_cut row=frlgc_species_clause_gen3_em_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_emerald --scenario species_clause_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald_companion=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:27:42 cpu=42% emuhawk=1 python=9
+start_utc=2026-10-03T08:27:40Z tracked_clean_before=True
+
+========== scenario: species_clause_gen3 ==========
+[duo] species_clause_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0 b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=65458 http=65459 data=F:\slink-work\tmp\duo_wl6wv10h
+[duo] timing server 1.1s
+[duo] cleared 7 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_1_witness.bin, e2e_species_clause_gen3_a_attempt1_result.txt, e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_1_witness.bin, e2e_species_clause_gen3_b_attempt1_result.txt, e2e_species_clause_gen3_b_result.txt, e2e_species_clause_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_wl6wv10h path=F:\slink-work\tmp\duo_wl6wv10h\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_wl6wv10h path=F:\slink-work\tmp\duo_wl6wv10h\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 10.3s
+[duo] PYDEC: FAIL species preflight families differ; both battles held
+[duo] data dir kept: F:\slink-work\tmp\duo_wl6wv10h
+[duo] species_clause_gen3: species preflight families differ; both battles held; retrying fresh lane
+[duo] species_clause_gen3: attempt 2 of 8
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0 b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=49153 http=49154 data=F:\slink-work\tmp\duo_75nqkj5f
+[duo] timing server 1.0s
+[duo] cleared 2 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_result.txt
+[duo] JOURNAL attempt=2 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_75nqkj5f path=F:\slink-work\tmp\duo_75nqkj5f\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=2 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_75nqkj5f path=F:\slink-work\tmp\duo_75nqkj5f\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 10.4s
+[duo] PYDEC: FAIL species preflight families differ; both battles held
+[duo] data dir kept: F:\slink-work\tmp\duo_75nqkj5f
+[duo] species_clause_gen3: species preflight families differ; both battles held; retrying fresh lane
+[duo] species_clause_gen3: attempt 3 of 8
+[duo] JITTER requested=74 attempt=3
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0 b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=49256 http=49257 data=F:\slink-work\tmp\duo_usxdsjq9
+[duo] timing server 1.0s
+[duo] cleared 2 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_result.txt
+[duo] JOURNAL attempt=3 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_usxdsjq9 path=F:\slink-work\tmp\duo_usxdsjq9\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=3 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_usxdsjq9 path=F:\slink-work\tmp\duo_usxdsjq9\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 10.6s
+[duo] PYDEC: FAIL species preflight families differ; both battles held
+[duo] data dir kept: F:\slink-work\tmp\duo_usxdsjq9
+[duo] species_clause_gen3: species preflight families differ; both battles held; retrying fresh lane
+[duo] species_clause_gen3: attempt 4 of 8
+[duo] JITTER requested=111 attempt=4
+[duo] IDENTITY a=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0 b=emerald:rom=d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5:fixture=cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b write_checkpoint.json=e3fc8008ed54baeabb6ab17538caabf0c26821c76add5052bac48cd37c0f1f1c profile.json=d14fc9cfbfe66e11475ba5946d3d04408c7e27754200de432917dbd211b4e354 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=49268 http=49269 data=F:\slink-work\tmp\duo_5sn_chw5
+[duo] timing server 1.0s
+[duo] cleared 2 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_result.txt
+[duo] JOURNAL attempt=4 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_5sn_chw5 path=F:\slink-work\tmp\duo_5sn_chw5\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=4 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_5sn_chw5 path=F:\slink-work\tmp\duo_5sn_chw5\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 45.2s
+[duo] timing results 2.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player a -> 127.0.0.1:49268 (rom f1fbbd79)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_emerald/emerald (companion by hash) player b -> 127.0.0.1:49268 (rom f1fbbd79)
+[duo] SAVE_WITNESS_SHA256 inst=a site=8a0bb56936d85744f41f7db7da7f533c6e6c663ee5b255b17ab9f44d2d7af000 file=8a0bb56936d85744f41f7db7da7f533c6e6c663ee5b255b17ab9f44d2d7af000 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=d686cba3054047b71fc19e61df498a2c77ba6ac967544b9bec3f3d90649469fc file=d686cba3054047b71fc19e61df498a2c77ba6ac967544b9bec3f3d90649469fc match=true saves=1 counter=2->3 rtc=normalized
+[duo] BAG_BALLS baseline=20 final=15 throws=5 inst=a native_grant=0
+[duo] BAG_BALLS baseline=20 final=18 throws=2 inst=b native_grant=0
+[duo] link: BA651503:20250925 <-> B29207F2:DFDAF6DA alive on route_102 and saved once in each party
+[duo] species: alive pair after 1 native rerolls
+[duo] timing oracle 0.7s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] species_clause_gen3: a=PASS b=PASS
+
+========== summary ==========
+  species_clause_gen3: PASS (attempt 4 of 8)
+exit=0 end_utc=2026-10-03T08:29:09Z tracked_clean_after=True classification=pass

@@ -68,6 +68,9 @@
 }
 
 :root {
+  /* Chip shape: the notched "game-menu" corner cut (see the chip rule below). */
+  --chip-notch: 6px;
+  --chip-pad-x: calc(var(--chip-notch) + 5px);   /* text clear of the cut corners */
   /* ── Semantic status palette (overlay defaults — also drives dashboard) ── */
   --c-alive:    #3de85a;
   --c-dead:     #f03838;
@@ -114,13 +117,12 @@
   --c-hp-mid:  #f0c030;
   --c-hp-low:  #f44;
 
-  /* Hyperlink colour — cyan-blue across the dashboard, memorial subtitle,
+  /* Hyperlink colour — cyan-blue across the dashboard and the
    * "Open in calc" button. Themes can override; default matches the existing
    * #6af used everywhere today. */
   --c-link:    #6af;
 
-  /* Cyan "info / area" accent. The dashboard's `.area` and the memorial's
-   * `.tomb-area` use this. Defaults to the existing #7cf hex literal. */
+  /* Cyan "info / area" accent. The dashboard's `.area` uses this. Defaults to the existing #7cf hex literal. */
   --c-info:    #7cf;
 
   /* ── Typography ── */
@@ -173,7 +175,6 @@
   --size-rail-collapsed: calc(var(--scale-step) * 2.5);
   --size-content-cap:    calc(var(--scale-step) * 75);
   --size-header-cap:     calc(var(--scale-step) * 45);
-  --size-tomb:           calc(var(--scale-step) * 13);
   --size-sprite-mon:     clamp(38px, 6.5vmin, 58px);
   --size-sprite-table:   clamp(40px, calc(var(--scale-step) * 1.6), 72px);
   --size-hp-bar:         calc(var(--scale-step) * 3.2);
@@ -183,7 +184,7 @@
 /* ── Figures ──────────────────────────────────────────────────────────
  * Anything that is a number wears this. A page font is a voice; digits are data, and
  * they line up only when every one is the same width. */
-.num, .enc-lv, .tomb-mon .level, .phase-stats,
+.num, .enc-lv, .phase-stats,
 .mk-hp-num, .mk-ev-ts, .mk-badges, .mk-bond-state, .mk-meta, .mk-tag, .mk-sub {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
@@ -571,6 +572,27 @@ body.stream {
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+/* ── Chips: one notched "game-menu" shape for the whole family ───────────────
+ * Top-left and bottom-right corners cut diagonally by --chip-notch; themes inherit it.
+ * The borders are cut on the diagonals by design. clip-path also clips anything drawn
+ * outside the box, so a chip's focus ring sits INSIDE it (negative offset). Round things
+ * (.mk-dot, badge pips, avatars) are not chips and keep their radius. */
+.badge-lock, .mk-pill, .mk-tab, .mk-gchip, .mk-tag, .patcher-game {
+  border-radius: 0;
+  clip-path: polygon(var(--chip-notch) 0, 100% 0, 100% calc(100% - var(--chip-notch)),
+                     calc(100% - var(--chip-notch)) 100%, 0 100%, 0 var(--chip-notch));
+}
+.mk-tab:focus-visible, .mk-gchip:focus-visible, .patcher-game:focus-visible {
+  outline: 2px solid var(--c-brand, currentColor); outline-offset: -4px;
+}
+
+/* conn-watch.js: the poll stopped getting answers. On stream, so quiet: the stale data
+ * dims and a small corner tag says why; both clear on the next good poll. */
+body.stream.conn-lost #root { opacity: .45; filter: grayscale(.7); transition: opacity .4s, filter .4s; }
+body.stream.conn-lost::after {
+  content: "signal lost"; position: fixed; right: 6px; bottom: 4px;
+  font-size: .7em; letter-spacing: .06em; color: var(--c-dim); pointer-events: none;
 }
 body.stream, body.stream *, body.stream *::before, body.stream *::after {
   box-sizing: border-box;
@@ -1070,6 +1092,7 @@ body.ov-focus .focus-mons.doubles .move-name { line-height: 1.15; }
 }
 .calc-preview-table .ohko   { color: var(--c-dead); font-weight: bold; }
 .calc-preview-table .twohko { color: var(--c-pend); }
+.calc-preview-note { margin: 0; font-size: 0.82em; color: var(--c-dim); }
 
 .calc-open-btn {
   display: inline-block;

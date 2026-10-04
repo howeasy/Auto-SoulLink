@@ -1,0 +1,48 @@
+# gen3_final_cut row=release_gen3_exp_as_a item=XG3_TEST-ONLY_duo cut=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+# lane=C:/slink-wt/exp-fc-0b3f15ea-s3
+# command: python tools/e2e_duo.py --game gen3_exp --scenario release_gen3   (cwd=C:/slink-wt/exp-fc-0b3f15ea-s3)
+# env: SLINK_EXPANSION_SRC=C:/slink-wt/exp-fc-0b3f15ea-s3\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-fc-0b3f15ea-s3\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-fc-0b3f15ea-s3\.cache\x1-probe\probe.o
+# verdict: PASS
+# inputs: artifact:exp:pokeemerald.elf=179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b artifact:exp:pokeemerald.map=c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08 artifact:exp:pokeemerald.sym=ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e artifact:exp:receipt.json=5863040ced15481f83539fbe26bc9936388ebcf2557c3239d627be61ed2f55fb fixture:exp::catch=e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a fixture:exp::pc=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a fixture:exp:_b:catch=345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0 fixture:exp:_b:pc=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 probe:exp=81e30323668a45fcef909f19f8c4971cbd81597a1b37ccbe4eb7a681ff418f0e rom:exp=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39
+--- attempt 1 of 1 ---
+LOAD 2026-10-02T10:45:58 cpu=93% emuhawk=2 python=12
+start_utc=2026-10-02T14:45:56Z tracked_clean_before=True
+EXPANSION_CUT requested=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3 before=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+
+========== scenario: release_gen3 ==========
+[duo] release_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=3696a0573e6099493895278636edaf95b0ee742e746e3495056d737915f0be79 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+[duo] server up: tcp=57401 http=57402 data=C:\slink-wt\exp-fc-0b3f15ea-state\s3\slink_duo_release_gen3_hlpqmgd2
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 10:45:59,630 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 10:45:59,630 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\slink-wt\exp-fc-0b3f15ea-state\s3\slink_duo_release_gen3_hlpqmgd2 path=C:\slink-wt\exp-fc-0b3f15ea-state\s3\slink_duo_release_gen3_hlpqmgd2\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\slink-wt\exp-fc-0b3f15ea-state\s3\slink_duo_release_gen3_hlpqmgd2 path=C:\slink-wt\exp-fc-0b3f15ea-state\s3\slink_duo_release_gen3_hlpqmgd2\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 18.6s
+[duo] timing results 9.2s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=83a2adc94e2f7a7d8a04929839bf0644a206e8847fc945cf022dfdc2f6decddb file=83a2adc94e2f7a7d8a04929839bf0644a206e8847fc945cf022dfdc2f6decddb match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=4875a9562c6a94b63c23afea125bcb6a5ea46136a67db852501f2e1cf3cc3e1b file=4875a9562c6a94b63c23afea125bcb6a5ea46136a67db852501f2e1cf3cc3e1b match=true saves=1 counter=3->4 rtc=normalized
+[duo] release: native PC removal 504F4F4D:20250925; boxed partner 504F4F4D:DFDAF6DA retired and memorial saved
+[duo] timing oracle 1.1s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] release_gen3: a=PASS b=PASS
+
+========== summary ==========
+  release_gen3: PASS (attempt 1 of 1)
+
+EXPANSION_CUT after=0b3f15ea3152c5b3e1f8bc53415f26c28f3631b3
+exit=0 end_utc=2026-10-02T14:46:29Z tracked_clean_after=True classification=pass

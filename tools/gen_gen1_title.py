@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""Draw the SoulLink title art for every SLink-patched family and write it where each patch reads it.
+
+The logo is drawn once in the Pokemon logo's style (grey fill, black outline, darker extrusion) and recoloured per game:
+
+    Gen 1 Red/Blue      patch/gen1/tools/title_art.py        9x2 tiles in the 16 pixel band under the Pokemon logo
+    pureRGB overlay     patch/gen1/purergb/overlay/title_*   the same art, ids $60-$79
+    Crystal             patch/gen2/src/title_logo_crystal.2bpp + title_rows_crystal.inc   gold / blue / white
+    Gold / Silver       patch/gen2/src/title_logo_gs.2bpp + title_rows_gs.inc             the same wordmark, 8 tiles wide
+    FireRed / LeafGreen / Radical Red   patch/tools/gen3_title_art.py   the logo as role pixels; patch/tools/gen3_title.py
+                                                                        recolours it per game (4bpp, no Pillow at patch time)
+
+    python tools/gen_gen1_title.py             # rewrite all of it, preview -> patch/build/gen1_title_logo.png
+
+No title carries the version: each patcher prints "SoulLink <version>" (--version) on its game's main menu in the game's
+own font, so this file draws the wordmark only.
+Needs Pillow (dev only); the patchers import plain bytes.
+"""
+import pathlib
+import sys
+
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+OUT_PY = ROOT / "patch/gen1/tools/title_art.py"
+PREVIEW = ROOT / "patch/build/gen1_title_logo.png"
+OVERLAY = ROOT / "patch/gen1/purergb/overlay"          # pureRGB: tiles as a raw .2bpp and the rows as an .inc
+PURE_FIRST_ID = 0x60                                    # pureRGB's free run on the vanilla-style title is $60-$79
+
+WHITE, LIGHT, DARK, BLACK = 0, 1, 2, 3
+SHADES = (255, 170, 85, 0)
+COLS, ROWS = 9, 2
+FIRST_ID = 0x6A                                                 # free BG tile ids on the vanilla title: $6A-$7E
+
+# "SoulLink" at 9 rows tall with 2 pixel strokes: the Pokemon logo's style needs room for an outline and an
+# extrusion, and a 16 pixel band has none to spare. Lowercase letters sit on the baseline (rows 3-8).
+_GLYPHS = {
+    "S": (".####.", "##..##", "##....", "##....", ".####.", "....##", "....##", "##..##", ".####."),
+    "o": (".####.", "##..##", "##..##", "##..##", "##..##", ".####."),
+    "u": ("##..##", "##..##", "##..##", "##..##", "##..##", ".#####"),
+    "l": ("##",) * 9,
+    "L": ("##...", "##...", "##...", "##...", "##...", "##...", "##...", "#####", "#####"),
+    "i": ("##", "##", "..", "##", "##", "##", "##", "##", "##"),
+    "n": ("#####.", "##..##", "##..##", "##..##", "##..##", "##..##"),
+    "k": ("##....", "##....", "##..##", "##.##.", "####..", "####..", "##.##.", "##..##", "##..##"),
+}
+WORD, GAP, HEIGHT = "SoulLink", 3, 9
+
+
+def word_mask(size, x, y, word=WORD, gap=GAP):
+    m = Image.new("L", size, 0)
+    d = ImageDraw.Draw(m)
+    for c in word:
+        rows = _GLYPHS[c]
+        for ry, row in enumerate(rows):
+            for rx, bit in enumerate(row):
+                if bit == "#":
+                    d.point((x + rx, y + HEIGHT - len(rows) + ry), fill=255)
+        x += len(rows[0]) + gap
+    return m
+
+
+def paint(img, mask, shade):
+    img.paste(shade, mask=mask.point(lambda v: 255 if v else 0))
+
+
+def dilate(mask):
+    return mask.filter(ImageFilter.MaxFilter(3))
+
+
+def draw(cols: int = COLS) -> Image.Image:
+    """The wordmark on a cols x 2 tile canvas (9 wide, or 8 where the free tile ids are few: Gold / Silver)."""
+    img = Image.new("L", (cols * 8, ROWS * 8), WHITE)
+    m = word_mask(img.size, 5 if cols == COLS else 1, 3)
+    paint(img, ImageChops.offset(dilate(m), 1, 1), DARK)             # extrusion, down-right
+    paint(img, dilate(m), BLACK)                                      # outline
+    paint(img, m, LIGHT)
+    return img
+
+
+def pack(img, cols, rows, remap):
+    """Dedupe the 8x8 cells row-major into 2bpp tiles; `remap` turns the drawing's shades into palette indices."""
+    tiles, ids, order = [], {}, []
+    for ty in range(rows):
+        for tx in range(cols):
+            cell = img.crop((tx * 8, ty * 8, tx * 8 + 8, ty * 8 + 8))
+            key = cell.tobytes()
+            if key not in ids:
+                ids[key] = len(tiles)
+                tiles.append(cell)
+            order.append(ids[key])
+    data = bytearray()
+    for t in tiles:
+        p = t.load()
+        for y in range(8):
+            lo = hi = 0
+            for x in range(8):
+                v = remap[p[x, y]]
+                lo |= (v & 1) << (7 - x)
+                hi |= (v >> 1) << (7 - x)
+            data += bytes((lo, hi))
+    return bytes(data), order, len(tiles)
+
+
+# shade drawn -> palette index. Crystal's logo palette 6 is black, white, gold, blue: the Pokemon logo's own gold
+# letters with a blue outline and a white edge. Gold/Silver's logo palette 1 is orange, grey, sky blue, dark blue.
+CRYSTAL_ROLES = {WHITE: 0, LIGHT: 2, DARK: 1, BLACK: 3}
+GS_ROLES = {WHITE: 2, LIGHT: 0, DARK: 1, BLACK: 3}
+GEN2_SRC = ROOT / "patch/gen2/src"
+
+
+def write_gen2() -> str:
+    """Crystal: the 9x2 logo at ids $60-; Gold/Silver: the 8x2 logo at ids $70-$7F (patch/gen2/src/title.asm)."""
+    GEN2_SRC.mkdir(parents=True, exist_ok=True)
+    out = []
+    ids = lambda b: ",".join(f"${v:02X}" for v in b)                    # noqa: E731
+    data, order, n = pack(draw(), COLS, ROWS, CRYSTAL_ROLES)
+    (GEN2_SRC / "title_logo_crystal.2bpp").write_bytes(data)
+    first = 0x60
+    inc = ["; GENERATED by tools/gen_gen1_title.py -- do not edit. Crystal title band: the logo's tile ids (9 wide).",
+           f"DEF SLINK_TITLE_LOGO_TILES EQU {n}", f"DEF SLINK_TITLE_FIRST_TILE EQU ${first:02X}"]
+    for r in range(ROWS):
+        inc += [f"SlinkTitleLogoRow{r}:", f"\tdb {ids(bytes(first + k for k in order[r * COLS:(r + 1) * COLS]))}"]
+    (GEN2_SRC / "title_rows_crystal.inc").write_text("\n".join(inc) + "\n", encoding="utf-8", newline="\n")
+    out.append(f"crystal {n} tiles")
+    data, order, n = pack(draw(8), 8, ROWS, GS_ROLES)
+    assert n <= 16, f"{n} tiles; Gold/Silver's free run $70-$7F holds 16"
+    (GEN2_SRC / "title_logo_gs.2bpp").write_bytes(data)
+    first = 0x70
+    inc = ["; GENERATED by tools/gen_gen1_title.py -- do not edit. Gold/Silver title band: the logo's tile ids (8 wide).",
+           f"DEF SLINK_TITLE_LOGO_TILES EQU {n}", f"DEF SLINK_TITLE_FIRST_TILE EQU ${first:02X}"]
+    for r in range(ROWS):
+        inc += [f"SlinkTitleLogoRow{r}:", f"\tdb {ids(bytes(first + k for k in order[r * 8:(r + 1) * 8]))}"]
+    (GEN2_SRC / "title_rows_gs.inc").write_text("\n".join(inc) + "\n", encoding="utf-8", newline="\n")
+    out.append(f"gold/silver {n} tiles")
+    return ", ".join(out)
+
+
+# The opt-in Pure title (pureRGB): the PureRed / PureBlue / PureGreen banner above it is a white box with bold dark-red
+# letters (gfx/title/pure_red.png: 5 rows, 2 pixel stems, lowercase 4 rows high). "SoulLink" is set in the same letters,
+# colour index 2, on one tile row under the banner (title_band.asm: SlinkTitleLinePure).
+PURE_GLYPHS = {
+    "S": (".RRRR", "RR...", ".RRR.", "...RR", "RRRR."),
+    "o": ("....", ".RRR", "RR.R", "RR.R", ".RRR"),
+    "u": ("....", "RR.R", "RR.R", "RR.R", ".RRR"),
+    "l": ("RR",) * 5,
+    "L": ("RR...", "RR...", "RR...", "RR...", "RRRRR"),
+    "i": ("RR", "..", "RR", "RR", "RR"),
+    "n": ("....", "RRR.", "RR.R", "RR.R", "RR.R"),
+    "k": ("RR..", "RR.R", "RRR.", "RR.R", "RR.R"),
+}
+PURE_LINE_CELLS, PURE_LINE_X, PURE_LINE_INK_X, PURE_LINE_INK_Y = 6, 7, 4, 1       # tile cells at column 7 of row 9
+
+
+def write_pure_line() -> str:
+    """title_line.2bpp: "SoulLink" in the Pure banner's lettering across 6 tiles (48 x 8 pixels, committed art)."""
+    width = PURE_LINE_CELLS * 8
+    rows = [[0] * width for _ in range(8)]
+    x = PURE_LINE_INK_X
+    for ch in "SoulLink":
+        glyph = PURE_GLYPHS[ch]
+        for y, line in enumerate(glyph):
+            for dx, c in enumerate(line):
+                if c == "R":
+                    rows[PURE_LINE_INK_Y + y][x + dx] = 2
+        x += len(glyph[0]) + 1
+    assert x - 1 <= width, "the line does not fit its cells"
+    data = bytearray()
+    for cell in range(PURE_LINE_CELLS):
+        for y in range(8):
+            lo = hi = 0
+            for dx in range(8):
+                v = rows[y][cell * 8 + dx]
+                lo |= (v & 1) << (7 - dx)
+                hi |= (v >> 1) << (7 - dx)
+            data += bytes((lo, hi))
+    (OVERLAY / "title_line.2bpp").write_bytes(bytes(data))
+    return f"pure line {x - 1 - PURE_LINE_INK_X}px in {PURE_LINE_CELLS} tiles"
+
+
+GEN3_ART = ROOT / "patch/tools/gen3_title_art.py"
+
+
+def write_gen3() -> str:
+    """The 72x16 logo as role pixels (0 background, 1 fill, 2 extrusion, 3 outline) for patch/tools/gen3_title.py."""
+    img = draw()
+    role = {WHITE: "0", LIGHT: "1", DARK: "2", BLACK: "3"}
+    rows = ["".join(role[img.getpixel((x, y))] for x in range(img.width)) for y in range(img.height)]
+    head = ('"""GENERATED by tools/gen_gen1_title.py -- do not edit. The SoulLink logo for the Gen 3 title screens as role pixels'
+            + chr(10) + '(0 background, 1 fill, 2 extrusion, 3 outline)."""' + chr(10) * 2)
+    body = "LOGO = (" + chr(10) + "".join(f'    "{r}",' + chr(10) for r in rows) + ")" + chr(10)
+    GEN3_ART.write_text(head + body, encoding="utf-8", newline=chr(10))
+    return f"gen3 logo {img.width}x{img.height}"
+
+
+def main() -> int:
+    print(write_gen2())
+    print(write_gen3())
+    print(write_pure_line())
+    img = draw()
+    tiles, ids, order = [], {}, []
+    for ty in range(ROWS):
+        for tx in range(COLS):
+            cell = img.crop((tx * 8, ty * 8, tx * 8 + 8, ty * 8 + 8))
+            key = cell.tobytes()
+            if key not in ids:
+                ids[key] = len(tiles)
+                tiles.append(cell)
+            order.append(ids[key])
+    data = bytearray()
+    for t in tiles:
+        p = t.load()
+        for y in range(8):
+            lo = hi = 0
+            for x in range(8):
+                v = p[x, y]
+                lo |= (v & 1) << (7 - x)
+                hi |= (v >> 1) << (7 - x)
+            data += bytes((lo, hi))
+    rows = [bytes(FIRST_ID + k for k in order[r * COLS:(r + 1) * COLS]) for r in range(ROWS)]
+    PREVIEW.parent.mkdir(parents=True, exist_ok=True)
+    prev = Image.new("RGB", img.size)
+    prev.putdata([(SHADES[v],) * 3 for v in img.getdata()])
+    prev.resize((img.width * 8, img.height * 8), Image.NEAREST).save(PREVIEW)
+    h = bytes(data).hex()
+    OUT_PY.write_text(
+        '"""GENERATED by tools/gen_gen1_title.py -- do not edit. The SoulLink logo for the Gen 1 title screen:\n'
+        '2bpp tiles and the two rows of tile ids that place them."""\n\n'
+        f"FIRST_ID = {FIRST_ID:#04x}\nTILE_COUNT = {len(tiles)}\n"
+        f"ROW0 = bytes.fromhex({rows[0].hex()!r})\nROW1 = bytes.fromhex({rows[1].hex()!r})\n"
+        "TILES = bytes.fromhex(\n" + "\n".join(f'    "{h[i:i + 96]}"' for i in range(0, len(h), 96)) + "\n)\n",
+        encoding="utf-8")
+    OVERLAY.mkdir(parents=True, exist_ok=True)
+    (OVERLAY / "title_logo.2bpp").write_bytes(bytes(data))
+    pure = [bytes(PURE_FIRST_ID + k for k in order[r * COLS:(r + 1) * COLS]) for r in range(ROWS)]
+    ids = lambda b: ",".join(f"${v:02X}" for v in b)                  # noqa: E731
+    inc = [
+        "; GENERATED by tools/gen_gen1_title.py -- do not edit. Tile ids of the SoulLink title band.",
+        f"DEF SLINK_TITLE_FIRST_TILE EQU ${PURE_FIRST_ID:02X}",
+        f"DEF SLINK_TITLE_LOGO_TILES EQU {len(tiles)}",
+        "SlinkTitleLogoRow0:", f"\tdb {ids(pure[0])},$50",
+        "SlinkTitleLogoRow1:", f"\tdb {ids(pure[1])},$50",
+    ]
+    (OVERLAY / "title_band_rows.inc").write_text("\n".join(inc) + "\n", encoding="utf-8", newline="\n")
+    print(f"{len(tiles)} tiles")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

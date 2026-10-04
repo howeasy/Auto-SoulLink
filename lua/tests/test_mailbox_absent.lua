@@ -1,7 +1,8 @@
 -- test_mailbox_absent.lua — negative control: on the UNPATCHED Radical Red ROM the companion beacon
--- must never appear, and lua/gen3/native.lua must refuse every op as "native absent" so the client
--- takes its Lua fallback (PLAN §5 graceful degradation). Run with the *clean* RR ROM
--- (tests/live/test_lua_gates.py stages it as patch/build/rr_clean.gba).
+-- must never appear, and lua/gen3/native.lua must refuse every op as "native absent" (PLAN §5), AND
+-- the launcher must refuse the cartridge outright: patch-first (owner 2026-10-02) makes the companion
+-- REQUIRED, so Entry.admit_routed returns the "needs the SLink companion patch" verdict for it.
+-- Run with the *clean* RR ROM (tests/live/test_lua_gates.py stages it as patch/build/rr_clean.gba).
 local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen3_gatelib.lua")
 local t = G.open("absent")
 t.boot({ kind = "clean", beacon = false, speed = 800 })
@@ -20,4 +21,8 @@ t.check("native refuses an op as absent", job == nil and why == "native absent",
 local ok, swhy = t.native:service()
 t.check("native:service reports absent", ok == nil and swhy == "native absent", tostring(swhy))
 t.check("native reports idle (absence is safe for the Lua fallback)", t.native:idle() == true)
+
+local routed, rwhy = t.routed()
+t.check("the launcher refuses the clean RR: the companion patch is required",
+        routed == nil and tostring(rwhy):find("needs the SLink companion patch", 1, true) ~= nil, tostring(rwhy))
 t.finish()

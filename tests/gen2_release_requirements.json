@@ -12,6 +12,8 @@
   "requirements": [
     {
       "id": "duo.crystal.crystal",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "live-duos",
       "description": "Crystal A against Crystal B (second OT) through the real server",
       "axes": {
@@ -36,13 +38,6 @@
           "gen2_species_clause",
           "gen2_type_clause",
           "gen2_gender_clause",
-          "gen2_trade_new",
-          "gen2_trade_evolve",
-          "gen2_trade_decline_new",
-          "gen2_trade_timeout",
-          "gen2_trade_reset_wait",
-          "gen2_trade_reset_commit",
-          "gen2_trade_refuse_item",
           "gen2_whiteout",
           "gen2_pc_ops",
           "gen2_changebox",
@@ -89,7 +84,8 @@
             "a": "crystal_synth_evolve",
             "b": "crystal_synth_evolve_ot2"
           }
-        }
+        },
+        "artifact_kind": "clean"
       },
       "proofs": [
         {
@@ -270,132 +266,6 @@
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_cc_pydec_result.txt",
               "sha256": "74230d8e61a7793cb0bd333383458cc4c5503ed97abe6da90feb7f2344899955"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_new",
-          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_new --lane cc_new --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_a_result.txt",
-              "sha256": "684b1396ec906431fe613b8ddbd386c276aeb7068e0dbe7b8ff1c23fc6c87d21"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_b_result.txt",
-              "sha256": "038b2caf6861f213b3014328881c4cc925958b99bf444fbbdca93bbedd7bfdcd"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_pydec_result.txt",
-              "sha256": "d97c187d982197272c0cf12cdac81459943aa80ed7a97f4b7ca80be5a94b997a"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_decline_new",
-          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_decline_new --lane cc_decline_new --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_a_result.txt",
-              "sha256": "5a9d242331b213d9f4d300e764e01680b2db70b33ab2636f1ef60a226d1bd491"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_b_result.txt",
-              "sha256": "d79147056bb9fdd9759b39038da6736ac6450eb6281e858e71ed577d1d9de52b"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_pydec_result.txt",
-              "sha256": "2f3ff526b97219a26d4efa6bf901aa57fa4ab383958b54909492171850a17402"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_timeout",
-          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_timeout --lane cc_timeout --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_a_result.txt",
-              "sha256": "090f0b98f6b5ac56f14ec6fb215f192e6d37a0fec98c1a438dcfede5287d6eb1"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_b_result.txt",
-              "sha256": "52371a4347dd212a9d28c9504dab58ede3d611882678e8b4839ac4c11e508525"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_pydec_result.txt",
-              "sha256": "0a2ed4c1966cd9587eba63067e41146d4228229ae948124cb733930decedc107"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_reset_wait",
-          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_reset_wait --lane cc_reset_wait --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_a_result.txt",
-              "sha256": "938a9a7d85b598874e426532bf213135d49721eb1c5b3b090d43415584a84501"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_b_result.txt",
-              "sha256": "a6e2a886a976fcd5eea0a5cf9d54c2f7c5c33794b23383fa32c5ae884607ac29"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_pydec_result.txt",
-              "sha256": "2bcfa81121286d4f60bfa172314170b81e50f57054dae8084b67a9a8cd443792"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_reset_commit",
-          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_reset_commit --lane c4_reset_commit --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_a_result.txt",
-              "sha256": "f4e283a15c2693bbe50c28c2f7fec05fd6aed5c3194c80b8319ebfee255bc0ec"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_b_result.txt",
-              "sha256": "da1a7d707749ffbb57068e63318b23fee20cd95fa2c63b7a0826ce1bb7a3dee3"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_pydec_result.txt",
-              "sha256": "4c550f3503a847a515fe3a79214cf9545b1ffc2df31860ac7bfd89d566a0f805"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_refuse_item",
-          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_refuse_item --lane c4_refuse_item --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_a_result.txt",
-              "sha256": "e7fea21f2e5967411c0743520aa7dfdee57825f658a3584728a2c7d88978da69"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_b_result.txt",
-              "sha256": "300dc9319d8f922a5c4c2b9ddd82bc48a20725ebed6ef0a1c745b4657f47da07"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_pydec_result.txt",
-              "sha256": "2a29d92ff2c60cb9e29c2e345c9e2dea1468f86c0ca0c1d86c609f96a9c27e7e"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_evolve",
-          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_evolve --lane c5_evolve --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_a_result.txt",
-              "sha256": "8c67b84dad2585a3fd3357bda0854d43e099d34889bd1f1b41da7868e4f8c68e"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_b_result.txt",
-              "sha256": "8111f2d3a4835ff4160c798f18bf4586dbd8ce75a6ac24ff3aa5050fdf4bb1c2"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_pydec_result.txt",
-              "sha256": "3f0cb1c80b18934d39120ebdb46387de5433abbab866ccee1e862ba1856e3126"
             }
           }
         },
@@ -619,6 +489,8 @@
     },
     {
       "id": "duo.gold.silver",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "live-duos",
       "description": "Gold A against Silver B through the real server",
       "axes": {
@@ -643,13 +515,6 @@
           "gen2_gender_clause",
           "gen2_species_clause",
           "gen2_reconnect",
-          "gen2_trade_new",
-          "gen2_trade_evolve",
-          "gen2_trade_decline_new",
-          "gen2_trade_timeout",
-          "gen2_trade_reset_wait",
-          "gen2_trade_reset_commit",
-          "gen2_trade_refuse_item",
           "gen2_whiteout",
           "gen2_pc_ops",
           "gen2_changebox",
@@ -700,7 +565,8 @@
             "a": "gold_synth_evolve",
             "b": "silver_synth_evolve"
           }
-        }
+        },
+        "artifact_kind": "clean"
       },
       "proofs": [
         {
@@ -881,132 +747,6 @@
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_wrong_save_seed.SaveRAM",
               "sha256": "37a469b1ed2e6f1ca72b923aa3ac4ad9628166df567aa68bfbcef7bfb07ad7fa",
               "case": "gold_battle_ot2"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_new",
-          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_new --lane gsn --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_a_result.txt",
-              "sha256": "dae752ad5bd213764022adefadf397b130e57a01f804749812f745b1803f870c"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_b_result.txt",
-              "sha256": "cda8e5526a38c358f1be9db88dfc50a89e8f7a6f8d708d95e64ef87200ff713b"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_pydec_result.txt",
-              "sha256": "1c405f79ac7dd9e0a8e6a36c63bd78ec698a59572aa6075d073532cecc161013"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_decline_new",
-          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_decline_new --lane gs_decline_new --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_a_result.txt",
-              "sha256": "dee3b9a133d7e7955f5230a9334a4760e8d7064d02072c4925f6648ec7a8bcd6"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_b_result.txt",
-              "sha256": "d5e930b43f2ae6dc0385e75df8553cceb6ed65de8ded3debc599885e7f48883a"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_pydec_result.txt",
-              "sha256": "8488001e0f20abb4d4f6be810dbbd21ecf68f9e97897870e77e2d1173f94c8f7"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_timeout",
-          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_timeout --lane gs_timeout --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_a_result.txt",
-              "sha256": "6f414c8076229939d5957dd4aa331ff1608cc75cc6e7a3dce8535a322af72b00"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_b_result.txt",
-              "sha256": "015ebf22c7588714f8c3c51ac87f3682db71e6f053d5f28024fa9645d8d83425"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_pydec_result.txt",
-              "sha256": "1343a74aa74576407fb8e247f91c173f6bcb5612d55067f9d35c75c8c88fa511"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_refuse_item",
-          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_refuse_item --lane gs_refuse_item --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_a_result.txt",
-              "sha256": "82deb3d1adccce5d7a948e2bca72f051bffe7c48dd74f7fa9aee848e6f500bb4"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_b_result.txt",
-              "sha256": "fc9529f2dcf612ea2f0fcc8d84820fff50ba02b2d4c7134a19749e1f0eb3dff0"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_pydec_result.txt",
-              "sha256": "4d149972c94df5bdb1eef51f965d16308be2b062677117b1994b52e46701741b"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_reset_wait",
-          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_reset_wait --lane gs2_reset_wait --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_a_result.txt",
-              "sha256": "c3eff724902ffc027ab693851ac147f5e671cb36e7796438e49c9c2c3ac65b77"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_b_result.txt",
-              "sha256": "cdb6a8a68a89737e9b053b74b365a07a178bf9be84feee62b32340c0d0eae089"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_pydec_result.txt",
-              "sha256": "a354be13b9617a7f1b16714fda64c41863f61f7d0bb7a1b59f5326723187dffb"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_reset_commit",
-          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_reset_commit --lane g3_reset_commit --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_a_result.txt",
-              "sha256": "03e118e1d41fcab3e4dfd0520d0c21b117eacbc388fd3ad2f16ed019a308bbc9"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_b_result.txt",
-              "sha256": "4cb695a31a5858ca9b907b7279fbaa5db297ac1b3df9264ccf564d037d4763ee"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_pydec_result.txt",
-              "sha256": "8543c85bad818fae4369c1f07f94a1d2cbaefe393054d9c6c3a7235e2b8247e8"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_evolve",
-          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_evolve --lane g5_evolve --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_a_result.txt",
-              "sha256": "bec1159163f766cf9cc150b67a5fab28e17eaab3d6dfabf581f07b88c627b584"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_b_result.txt",
-              "sha256": "aa3f2b90121d639cd844a26057bb1b85ea9265aaa2be90582cf3c9e834d40dc8"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_pydec_result.txt",
-              "sha256": "94dab309bcdd2136bf555cd7f20fca9de8b003a94205da95f6b7913c7d137ad9"
             }
           }
         },
@@ -1230,6 +970,8 @@
     },
     {
       "id": "duo.crystal.gold",
+      "superseded_by_overlay": true,
+      "history_reason": "Owner 2026-10-02: companion required; clean evidence retained as history, not a release gate.",
       "stage": "live-duos",
       "description": "Crystal A against Gold B: cross-title admission through one gen2_gsc foundation (O-16); native trades allowed and tested on this pair (owner O-34, 8a42b7f7)",
       "axes": {
@@ -1258,21 +1000,15 @@
           "gen2_pc_ops",
           "gen2_changebox",
           "gen2_poison",
-          "gen2_whiteout_rebuild",
-          "gen2_trade_new",
-          "gen2_trade_evolve",
-          "gen2_trade_decline_new",
-          "gen2_trade_timeout",
-          "gen2_trade_reset_wait",
-          "gen2_trade_reset_commit",
-          "gen2_trade_refuse_item"
+          "gen2_whiteout_rebuild"
         ],
         "scenario_fixtures": {
           "gen2_trade_evolve": {
             "a": "crystal_synth_trade_evolve",
             "b": "gold_battle_errand"
           }
-        }
+        },
+        "artifact_kind": "clean"
       },
       "proofs": [
         {
@@ -1457,132 +1193,6 @@
           }
         },
         {
-          "scenario": "gen2_trade_new",
-          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_new --lane g1_new --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_a_result.txt",
-              "sha256": "5b4c86fffb81c03bd8f5c8eb4f7af3bb69f9e87df5f1f30c0ad5a25c4a247879"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_b_result.txt",
-              "sha256": "680bcc9e6bcc34b79d448733892c8d54035ef602c2d4f6a5510439c1bc01e622"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_pydec_result.txt",
-              "sha256": "74de13af363571c4d74d5cf694828a1a5b1cbf6ff8a4881759de3da064af2045"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_reset_wait",
-          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_reset_wait --lane g2_reset_wait --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_a_result.txt",
-              "sha256": "6a26b716eb159102af13d2c6929da18df8506fd12ab2ed804ec9455b6b4bb0ff"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_b_result.txt",
-              "sha256": "92169feda1ae341f065b2e80d4f2bc9df4dfd77a80bb2dc3fbeb16caffd65645"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_pydec_result.txt",
-              "sha256": "df8d5fbd21918efd68b9a8626463c78f809325b560afbf09c6200ab0760f40d5"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_decline_new",
-          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_decline_new --lane g1_decline_new --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_a_result.txt",
-              "sha256": "5b118d3277f5e8a96afbbbf80b41086748dabcdc45874bfc0c79a96b8e511bd1"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_b_result.txt",
-              "sha256": "67e598cc1d6c17c139c3b74dd3ec73f035a11666baf96d23454f9368e4d2e939"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_pydec_result.txt",
-              "sha256": "b4406aaa2efcdbfe53627d8cd87b6a9a303c37c89b5ebdf750950caf97e4c319"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_refuse_item",
-          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_refuse_item --lane g3_refuse_item --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_a_result.txt",
-              "sha256": "0de14f0c9ba84148fc69a90fa62f722b87d854488cded83fc0ae132942f72a65"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_b_result.txt",
-              "sha256": "0f72f7dc38740da50c0beb472429d11bcbf8783df3673203d576adcb9279f05d"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_pydec_result.txt",
-              "sha256": "9fb8a854d74eefc7a29d90788a8f4f580c32ff9347bada8ac2b1d4f3ce124545"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_reset_commit",
-          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_reset_commit --lane g2_reset_commit --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_a_result.txt",
-              "sha256": "9c05c611c0aa6dc21adcb83932b77432320d885a40102093b0cf885fc7bff408"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_b_result.txt",
-              "sha256": "3ab3166be1fa8db63e9a2306ba3d4c309db5ed534eef2a3fae3d55a5e45b1748"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_pydec_result.txt",
-              "sha256": "107fcbc32309757a3946dd65ac944fd205dde01fbd07103681f5916bddee73bc"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_timeout",
-          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_timeout --lane g1_timeout --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_a_result.txt",
-              "sha256": "bf890c90418ad514ef18f257a8f2536253546283cbd579a8e3059e1c32775e0b"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_b_result.txt",
-              "sha256": "20473fbff6082deec3bdff5e613ccb5f59b659fd8e6fcec54577cc6b8944655a"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_pydec_result.txt",
-              "sha256": "9aff864f5213a9d6be1d7086bd39ef6a1cf333b6b9d0353a12adee0ba374dbca"
-            }
-          }
-        },
-        {
-          "scenario": "gen2_trade_evolve",
-          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_evolve --lane g4_evolve --keep-data",
-          "receipts": {
-            "a": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_a_result.txt",
-              "sha256": "c481006a093b9d8b5cee3044f107b581a9a4563c43ad3ea1746c6f62c92fd897"
-            },
-            "b": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_b_result.txt",
-              "sha256": "cc0ca3f9d1990080320bf2c84526131fd6259c213f3079d54423a76588287804"
-            },
-            "pydec": {
-              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_pydec_result.txt",
-              "sha256": "55d0b19d6193da9e32197f4f573a34bd5e143f5f960ae3ac9726643ab601f516"
-            }
-          }
-        },
-        {
           "scenario": "gen2_pc_ops",
           "command": "python tools/e2e_duo.py --keep-data --game gen2_crystal_gold --scenario gen2_pc_ops",
           "receipts": {
@@ -1673,6 +1283,214 @@
           }
         }
       ]
+    },
+    {
+      "id": "duo.crystal.crystal.overlay",
+      "stage": "live-duos",
+      "description": "Crystal A against Crystal B (second OT) through the real server (production overlay artifact)",
+      "axes": {
+        "pairing": "gen2_new",
+        "initiator": "crystal",
+        "partner": "crystal",
+        "fixtures": {
+          "a": "crystal_battle",
+          "b": "crystal_battle_ot2"
+        },
+        "trade_fixtures": {
+          "a": "crystal_battle_errand",
+          "b": "crystal_battle_ot2_errand"
+        },
+        "scenarios": [
+          "link",
+          "gen2_faint",
+          "gen2_faint_active",
+          "gen2_admit_wrong_rom",
+          "gen2_reconnect",
+          "gen2_soft_reset",
+          "gen2_species_clause",
+          "gen2_type_clause",
+          "gen2_gender_clause",
+          "gen2_trade_new",
+          "gen2_trade_evolve",
+          "gen2_trade_decline_new",
+          "gen2_trade_timeout",
+          "gen2_trade_reset_wait",
+          "gen2_trade_reset_commit",
+          "gen2_trade_refuse_item",
+          "gen2_whiteout",
+          "gen2_pc_ops",
+          "gen2_changebox",
+          "gen2_poison",
+          "gen2_whiteout_rebuild",
+          "gen2_ball_gate",
+          "gen2_egg_hatch",
+          "gen2_gift",
+          "gen2_boxed_capture",
+          "gen2_npc_trade",
+          "gen2_faint_active_trainer",
+          "gen2_evolution"
+        ],
+        "scenario_fixtures": {
+          "gen2_trade_evolve": {
+            "a": "crystal_synth_trade_evolve",
+            "b": "crystal_battle_ot2_errand"
+          },
+          "gen2_ball_gate": {
+            "a": "crystal_town",
+            "b": "crystal_town_ot2"
+          },
+          "gen2_egg_hatch": {
+            "a": "crystal_synth_hatch",
+            "b": "crystal_synth_hatch_ot2"
+          },
+          "gen2_gift": {
+            "a": "crystal_synth_bill",
+            "b": "crystal_synth_bill_ot2"
+          },
+          "gen2_boxed_capture": {
+            "a": "crystal_synth_full",
+            "b": "crystal_synth_full_ot2"
+          },
+          "gen2_npc_trade": {
+            "a": "crystal_synth_trade",
+            "b": "crystal_synth_trade_ot2"
+          },
+          "gen2_faint_active_trainer": {
+            "a": "crystal_battle_errand",
+            "b": "crystal_synth_trainer_ot2"
+          },
+          "gen2_evolution": {
+            "a": "crystal_synth_evolve",
+            "b": "crystal_synth_evolve_ot2"
+          }
+        },
+        "artifact_kind": "overlay"
+      },
+      "proofs": []
+    },
+    {
+      "id": "duo.gold.silver.overlay",
+      "stage": "live-duos",
+      "description": "Gold A against Silver B through the real server (production overlay artifact)",
+      "axes": {
+        "pairing": "gen2_gold_silver",
+        "initiator": "gold",
+        "partner": "silver",
+        "fixtures": {
+          "a": "gold_battle",
+          "b": "silver_battle"
+        },
+        "trade_fixtures": {
+          "a": "gold_battle_errand",
+          "b": "silver_battle_errand"
+        },
+        "scenarios": [
+          "link",
+          "gen2_faint",
+          "gen2_faint_active",
+          "gen2_admit_wrong_rom",
+          "gen2_soft_reset",
+          "gen2_type_clause",
+          "gen2_gender_clause",
+          "gen2_species_clause",
+          "gen2_reconnect",
+          "gen2_trade_new",
+          "gen2_trade_evolve",
+          "gen2_trade_decline_new",
+          "gen2_trade_timeout",
+          "gen2_trade_reset_wait",
+          "gen2_trade_reset_commit",
+          "gen2_trade_refuse_item",
+          "gen2_whiteout",
+          "gen2_pc_ops",
+          "gen2_changebox",
+          "gen2_poison",
+          "gen2_whiteout_rebuild",
+          "gen2_ball_gate",
+          "gen2_egg_hatch",
+          "gen2_gift",
+          "gen2_boxed_capture",
+          "gen2_npc_trade",
+          "gen2_faint_active_trainer",
+          "gen2_evolution"
+        ],
+        "scenario_fixtures": {
+          "gen2_trade_evolve": {
+            "a": "gold_synth_trade_evolve",
+            "b": "silver_battle_errand"
+          },
+          "gen2_ball_gate": {
+            "a": "gold_town",
+            "b": "silver_town"
+          },
+          "gen2_egg_hatch": {
+            "a": "gold_synth_hatch",
+            "b": "silver_synth_hatch"
+          },
+          "gen2_gift": {
+            "a": "gold_synth_bill",
+            "b": "silver_synth_bill"
+          },
+          "gen2_boxed_capture": {
+            "a": "gold_synth_full",
+            "b": "silver_synth_full"
+          },
+          "gen2_npc_trade": {
+            "a": "gold_synth_trade",
+            "b": "silver_synth_trade"
+          },
+          "gen2_poison": {
+            "a": "gold_battle_errand",
+            "b": "silver_battle"
+          },
+          "gen2_faint_active_trainer": {
+            "a": "gold_battle_errand",
+            "b": "silver_synth_trainer"
+          },
+          "gen2_evolution": {
+            "a": "gold_synth_evolve",
+            "b": "silver_synth_evolve"
+          }
+        },
+        "artifact_kind": "overlay"
+      },
+      "proofs": []
+    },
+    {
+      "id": "duo.crystal.gold.overlay",
+      "stage": "live-duos",
+      "description": "Crystal A against Gold B: cross-title admission through one gen2_gsc foundation (O-16); native trades allowed and tested on this pair (owner O-34, 8a42b7f7) (production overlay artifact)",
+      "axes": {
+        "pairing": "gen2_crystal_gold",
+        "initiator": "crystal",
+        "partner": "gold",
+        "fixtures": {
+          "a": "crystal_battle",
+          "b": "gold_battle"
+        },
+        "trade_fixtures": {
+          "a": "crystal_battle_errand",
+          "b": "gold_battle_errand"
+        },
+        "scenarios": [
+          "link",
+          "gen2_trade_decline_new",
+          "gen2_trade_evolve",
+          "gen2_trade_new",
+          "gen2_trade_refuse_item",
+          "gen2_trade_reset_commit",
+          "gen2_trade_reset_wait",
+          "gen2_trade_timeout"
+        ],
+        "scenario_fixtures": {
+          "gen2_trade_evolve": {
+            "a": "crystal_synth_trade_evolve",
+            "b": "gold_battle_errand"
+          }
+        },
+        "artifact_kind": "overlay"
+      },
+      "proofs": []
     }
   ]
 }

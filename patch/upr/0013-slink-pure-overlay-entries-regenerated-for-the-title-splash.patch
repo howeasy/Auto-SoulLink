@@ -1,0 +1,46 @@
+From: slink <slink@local>
+Date: Fri, 2 Oct 2026 13:40:00 -0400
+Subject: [PATCH] slink: pure overlay entries regenerated for the title-splash
+ overlay build (CRCs 702F/A779/9E1D)
+
+---
+ src/com/dabomstew/pkrandom/config/gen1_offsets.ini | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+index f28c701f..72de3893 100644
+--- a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+@@ -1429,8 +1429,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0xABE1
+-CRC32=C4E0DF3D
++CRCInHeader=0x702F
++CRC32=2F76DA8F
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1512,8 +1512,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0xE5A3
+-CRC32=49BA943D
++CRCInHeader=0xA779
++CRC32=5A1A57BD
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1595,8 +1595,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0xE3C1
+-CRC32=EFD69861
++CRCInHeader=0x9E1D
++CRC32=255B8E45
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10

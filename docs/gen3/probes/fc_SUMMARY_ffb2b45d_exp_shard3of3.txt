@@ -1,0 +1,15 @@
+# G4 final cut ffb2b45d4333f04bb188ff2775b98e8d3703b144 -- tools/gen3_final_cut.py summary (written 2026-10-02T19:50:33Z)
+# RUN 8 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | exp_static_static_run_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_static_run_gen3_exp_as_a_ffb2b45d.txt |
+| 2 | exp_static_surf_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_surf_gen3_exp_as_a_ffb2b45d.txt |
+| 3 | exp_static_rock_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_rock_gen3_exp_as_a_ffb2b45d.txt |
+| 4 | exp_static_altering0_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_altering0_gen3_exp_as_a_ffb2b45d.txt |
+| 5 | exp_static_altering1_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_exp_static_altering1_gen3_exp_as_a_ffb2b45d.txt |
+| 6 | egg_hatch_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_egg_hatch_gen3_exp_as_a_ffb2b45d.txt |
+| 7 | faint_cmd_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_faint_cmd_gen3_exp_as_a_ffb2b45d.txt |
+| 8 | link_gen3_exp_as_a | XG3 production duo | PASS | 1 | fc_link_gen3_exp_as_a_ffb2b45d.txt |
+
+OVERALL: PASS (8/8 rows)

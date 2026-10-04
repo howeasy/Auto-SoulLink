@@ -25,6 +25,28 @@ def _lane(name):
     return next(lane for lane in gate.LANES if lane.name == name)
 
 
+def _git_show(rev, rel):
+    """A pinned historical blob. A shallow clone lacks the history (absent input: skip); a full clone without it fails."""
+    root = Path(__file__).resolve().parents[2]
+    proc = subprocess.run(["git", "show", f"{rev}:{rel}"], cwd=root, capture_output=True, text=True, encoding="utf-8")
+    if proc.returncode and subprocess.run(["git", "rev-parse", "--is-shallow-repository"], cwd=root,
+                                          capture_output=True, text=True).stdout.strip() == "true":
+        pytest.skip(f"{rev} is not in this shallow clone (CI checks out with fetch-depth: 0)")
+    proc.check_returncode()
+    return proc.stdout
+
+
+def test_overlay_matrix_cells_have_an_independent_artifact_identity():
+    doc = json.loads((REPO / gate.DUO_MATRIX).read_text())
+    rows = [row for row in doc["requirements"] if row.get("stage") == "live-duos"]
+    identities = {(row["axes"].get("artifact_kind"), row["axes"]["initiator"], row["axes"]["partner"])
+                  for row in rows}
+    assert identities == {(kind, *pair) for kind in ("clean", "overlay") for pair in gate.DUO_PAIRS}
+    errors = gate.duo_pairs_errors()
+    assert any(".overlay" in error and "no receipt" in error for error in errors)
+    assert not any("release matrix pairs" in error for error in errors)
+
+
 def test_required_phase_lanes_and_every_title_are_declared():
     names = [lane.name for lane in gate.LANES]
     assert names == [
@@ -390,6 +412,12 @@ def _green_tree(tmp_path):
     (tmp_path / "data/gen2_sources.lock.json").write_text(json.dumps(lock), encoding="utf-8")
     (tmp_path / "tests/fixtures/gen2").mkdir(parents=True, exist_ok=True)
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    (tmp_path / "data/gen2").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "data/gen2/overlay_provenance.json").write_bytes((REPO / "data/gen2/overlay_provenance.json").read_bytes())
+    for title in gate.TITLES:
+        directory = tmp_path / f"data/games/gen2_{title}/overlay"
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "binding.json").write_bytes((REPO / f"data/games/gen2_{title}/overlay/binding.json").read_bytes())
     receipts = tmp_path / "receipts"
     receipts.mkdir()
     a_text = (REPO / "tests/fixtures/gen2/receipts/duo_link_cc_a_result.txt").read_text(encoding="utf-8")
@@ -408,8 +436,17 @@ def _green_tree(tmp_path):
             header = {"attempt": 1, "case": case, "player": side,
                       "rom_sha1": lock["outputs"][f"poke{titles[side]}"]["sha1"], "scenario": "link",
                       "title": titles[side], "fixture_sha256": hashlib.sha256(fixture_bytes).hexdigest()}
+            if axes.get("artifact_kind") == "overlay":
+                identity = gate._execution_identity(tmp_path, titles[side], "overlay")
+                header.update(rom_sha1=identity["rom_sha1"], artifact_kind="overlay", binding_sha256=identity["binding_sha256"])
             text = "\n".join("DUO_GEN2 " + json.dumps(header) if line.startswith("DUO_GEN2 ")
                              else line for line in source_text[side].splitlines()) + "\n"
+            if axes.get("artifact_kind") == "overlay":
+                client = {"title": titles[side], "rom_sha1": identity["rom_sha1"],
+                          "artifact_kind": "overlay", "binding_sha256": identity["binding_sha256"],
+                          "qualification": "PHYSICAL_RECEIPTED", "production_admitted": True}
+                text = "\n".join("CLIENT " + json.dumps(client) if line.startswith("CLIENT ") else line
+                                 for line in text.splitlines()) + "\n"
             path = receipts / f"{row['id']}_{side}.txt"
             path.write_text(text, encoding="utf-8", newline="\n")
             entries[side] = {"path": path.relative_to(tmp_path).as_posix(), "sha256": _lf_sha(path)}
@@ -442,6 +479,9 @@ def test_committed_matrix_is_red_exactly_where_a_pair_has_no_receipt():
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     errors = gate.duo_matrix_errors()
     for row in doc["requirements"]:
+        if row["axes"].get("artifact_kind") != "overlay":
+            assert row["superseded_by_overlay"] is True
+            continue
         mine = [error for error in errors if error.startswith(row["id"] + "/")]
         for proof in row["proofs"]:
             cell = row["id"] + "/" + proof["scenario"] + ":"
@@ -462,6 +502,23 @@ def test_committed_matrix_is_red_exactly_where_a_pair_has_no_receipt():
 def test_fully_receipted_matrix_is_the_only_green(tmp_path):
     _green_tree(tmp_path)
     assert gate.duo_matrix_errors(tmp_path, _fake_duo()) == []
+
+
+@pytest.mark.parametrize("field,value", [("rom_sha1", "0" * 40), ("artifact_kind", "clean"),
+                                       ("binding_sha256", "0" * 64), ("production_admitted", False),
+                                       ("qualification", "HARNESS_ONLY_OVERLAY")])
+def test_overlay_gameplay_requires_its_production_startup(tmp_path, field, value):
+    doc = _green_tree(tmp_path)
+    row = _row(doc, "duo.crystal.crystal.overlay")
+    entry = row["proofs"][0]["receipts"]["a"]
+    path = tmp_path / entry["path"]
+    lines = path.read_text().splitlines()
+    client = next(json.loads(line.partition(" ")[2]) for line in lines if line.startswith("CLIENT "))
+    client[field] = value
+    path.write_text("\n".join("CLIENT " + json.dumps(client) if line.startswith("CLIENT ") else line for line in lines))
+    entry["sha256"] = _lf_sha(path)
+    _write_doc(tmp_path, doc)
+    assert any("production startup" in error for error in gate.duo_matrix_errors(tmp_path, _fake_duo()))
 
 
 def _raise_no_contract(game):
@@ -617,7 +674,7 @@ def test_every_matrix_gap_is_red(tmp_path, mutation):
     elif mutation == "f5_malformed_row_no_axes":
         del gs["axes"]
     _write_doc(tmp_path, doc)
-    errors = gate.duo_matrix_errors(tmp_path, duo)
+    errors = gate.duo_matrix_errors(tmp_path, duo, artifact_kind=None)  # explicit historical semantic controls
     assert any(_GAPS[mutation] in error for error in errors), (mutation, errors)
 
 
@@ -634,9 +691,12 @@ def test_duo_matrix_cli_exit_follows_the_gaps(monkeypatch, capsys):
 # qualification); no emulator; every gap is RED --------------------------------------------------
 
 def _copy_new_gates_tree(tmp_path):
-    """A byte-identical copy of the committed new-gates receipts and their manifest -- the known
-    positive, safe to mutate without touching the real tree."""
-    doc = json.loads((REPO / gate.NEW_GATES).read_text(encoding="utf-8"))
+    """Historical clean controls plus MODEL feature receipts in the current producer shape.
+
+    Native feature identity is synthetic here, never rewritten into the historical files.
+    The pinned pre-migration manifest remains this test's input after Stream C is committed.
+    """
+    doc = json.loads(_git_show("df26db18", gate.NEW_GATES))
     for row in doc["requirements"]:
         entry = row["proofs"][0]["receipts"]["receipt"]
         src, dst = REPO / entry["path"], tmp_path / entry["path"]
@@ -644,6 +704,20 @@ def _copy_new_gates_tree(tmp_path):
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(src.read_bytes())
+        if row["axes"]["kind"] in ("panel_gate", "sfx_gate", "phone_gate", "w6_gate", "sp_lowwater_gate"):
+            title, kind = row["axes"]["title"], row["axes"]["kind"]
+            rel = f"data/games/gen2_{title}/overlay/binding.json"
+            (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / rel).write_bytes((REPO / rel).read_bytes())
+            receipt = json.loads(dst.read_text())
+            identity = gate._execution_identity(REPO, title, "overlay")
+            receipt.update(artifact_kind="overlay", rom_sha1=identity["rom_sha1"],
+                           base_sha1=identity["base_sha1"], binding_sha256=identity["binding_sha256"])
+            dst = tmp_path / f"tests/fixtures/gen2/receipts/overlay/{title}.{kind}.json"
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text(json.dumps(receipt))
+            entry.update(path=dst.relative_to(tmp_path).as_posix(), sha256=_lf_sha(dst))
+            row["axes"]["artifact_kind"] = "overlay"
         if row["axes"]["kind"] == "qualification":
             fixture = row["axes"]["fixture"] + ".SaveRAM"
             (tmp_path / "tests/fixtures/gen2" / fixture).write_bytes(
@@ -683,18 +757,17 @@ def test_new_gates_lane_is_the_implemented_receipt_lane():
     assert "tests/fixtures/gen2/receipts" in gate.PREREQUISITES["live-new-gates"]
 
 
-def test_committed_new_gates_tree_is_fully_green():
-    """The real tree today: every U1/U2/qualification row bound, pinned and PHYSICAL. One named, known gap:
-    the W6 Silver U1 leg's clock setup predates clock-setup-v1 (it assumed a 10:00 start where the save holds
-    09:58:55) and stays RED until W6 Silver re-runs on the fixed day_clock. Any other gap fails here."""
+def test_committed_new_gates_history_is_not_a_release_gate():
+    doc = json.loads((REPO / gate.NEW_GATES).read_text())
+    history = [r for r in doc["requirements"] if r["axes"].get("artifact_kind", "clean") == "clean"]
+    assert history and all(r["superseded_by_overlay"] is True for r in history)
     errors = gate.new_gates_errors()
-    known = [e for e in errors if e.startswith("new-gates.w6.silver: w6 gate leg u1: clock setup")]
-    assert errors == known and len(known) <= 1, errors
+    assert not any(e.startswith(r["id"] + ":") for r in history for e in errors)
 
 
 def test_copied_new_gates_tree_is_also_green(tmp_path):
     _copy_new_gates_tree(tmp_path)
-    errors = gate.new_gates_errors(tmp_path)   # the same single known gap as the committed tree (W6 Silver clock)
+    errors = gate.new_gates_errors(tmp_path, artifact_kind="clean")   # the same single known gap as the committed tree (W6 Silver clock)
     assert all(e.startswith("new-gates.w6.silver: w6 gate leg u1: clock setup") for e in errors) and len(errors) <= 1
 
 
@@ -882,7 +955,7 @@ def test_every_new_gate_gap_is_red(tmp_path, mutation):
         _repin(tmp_path, entry)
 
     (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
-    errors = gate.new_gates_errors(tmp_path)
+    errors = gate.new_gates_errors(tmp_path, artifact_kind=None)  # historical clean validator controls
     assert any(_NEW_GATE_GAPS[mutation] in error for error in errors), (mutation, errors)
 
 
@@ -1728,12 +1801,18 @@ def _trade_proof(tmp_path, axes, scenario, tag="trade"):
                     (tmp_path / "tests/fixtures/gen2" / f"{name}{ext}").write_bytes(src.read_bytes())
         raw = (tmp_path / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").read_bytes()
         receipt = {"schema": "gen2-duo-trade-v1", "case": scenario, "player": side, "title": titles[side],
-                   "variant": variant, "outcome": status, "admission_scope": "HARNESS_ONLY_OVERLAY",
+                   "variant": variant, "outcome": status, "admission_scope": "PHYSICAL_RECEIPTED",
                    "rom_sha1": pins[titles[side]], "fixture_sha256": hashlib.sha256(raw).hexdigest(),
                    "harness_exception": "O-31" if scenario in gate.TRADE_PLANTED and side == "a" else None}
-        text[side] = "RECEIPT " + json.dumps(receipt) + "\nRESULT: PASS\n"
+        directory = tmp_path / f"data/games/gen2_{titles[side]}/overlay"
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "binding.json").write_bytes((REPO / f"data/games/gen2_{titles[side]}/overlay/binding.json").read_bytes())
+        identity = gate._execution_identity(tmp_path, titles[side], "overlay")
+        client = {"qualification": "PHYSICAL_RECEIPTED", "production_admitted": True,
+                  "artifact_kind": "overlay", "rom_sha1": identity["rom_sha1"], "binding_sha256": identity["binding_sha256"]}
+        text[side] = "CLIENT " + json.dumps(client) + "\nRECEIPT " + json.dumps(receipt) + "\nRESULT: PASS\n"
     text["pydec"] = (f"PYDEC: PASS a=AAAA:1:01 b=BBBB:2:02 area=route_29 titles={titles['a']}/{titles['b']} "
-                     f"status={status} scenario={scenario} admission_scope=HARNESS_ONLY_OVERLAY\n")
+                     f"status={status} scenario={scenario} admission_scope=PHYSICAL_RECEIPTED\n")
     proof = {"scenario": scenario, "receipts": {}}
     for side, body in text.items():
         path = tmp_path / "receipts" / f"{tag}_{side}.txt"
@@ -1761,11 +1840,11 @@ _TRADE_GAPS = {
     "clean_rom_pin": ("a", '"rom_sha1": "', '"rom_sha1": "0'),
     "battle_fixture": ("b", '"fixture_sha256": "', '"fixture_sha256": "0'),
     "wrong_variant": ("a", '"variant": "cc"', '"variant": "gs"'),
-    "production_scope": ("b", '"admission_scope": "HARNESS_ONLY_OVERLAY"', '"admission_scope": "PHYSICAL"'),
+    "production_scope": ("b", '"admission_scope": "PHYSICAL_RECEIPTED"', '"admission_scope": "PHYSICAL"'),
     "undisclosed_plant": ("a", '"harness_exception": null', '"harness_exception": "O-31"'),
     "other_case": ("a", '"case": "gen2_trade_new"', '"case": "gen2_trade_timeout"'),
     "fail_verdict": ("b", "RESULT: PASS", "RESULT: FAIL"),
-    "pydec_scope": ("pydec", "admission_scope=HARNESS_ONLY_OVERLAY", "admission_scope=PHYSICAL"),
+    "pydec_scope": ("pydec", "admission_scope=PHYSICAL_RECEIPTED", "admission_scope=PHYSICAL"),
     "pydec_status": ("pydec", "status=committed", "status=unchanged"),
 }
 
@@ -1821,6 +1900,9 @@ def test_every_cell_declares_all_trade_cases_with_the_runner_fixtures():
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     for row in doc["requirements"]:
         axes = row["axes"]
+        if axes.get("artifact_kind", "clean") != "overlay":
+            assert not set(gate.TRADE_END_STATUS) & set(axes["scenarios"])
+            continue
         assert set(gate.TRADE_END_STATUS) <= set(axes["scenarios"])
         assert axes["trade_fixtures"] == _TRADE_FIXTURES[axes["pairing"]]
         if axes["pairing"] in duo.GEN2_TRADE_FIXTURES:   # the runner re-adds C-G after O-34 in its own card
@@ -1890,10 +1972,10 @@ def test_patch_build_verdict_is_the_builders_check(monkeypatch, returncode, ok):
                                             ("--duo-pairs", "duo_pairs_errors"),
                                             ("--release-evidence", "release_evidence_errors")])
 def test_receipt_cli_exit_follows_the_gaps(monkeypatch, capsys, flag, func):
-    monkeypatch.setattr(gate, func, lambda: ["x: stale"])
+    monkeypatch.setattr(gate, func, lambda **_kwargs: ["x: stale"])
     assert gate.main([flag]) == 1
     assert "RED  x: stale" in capsys.readouterr().out
-    monkeypatch.setattr(gate, func, lambda: [])
+    monkeypatch.setattr(gate, func, lambda **_kwargs: [])
     assert gate.main([flag]) == 0
 
 
@@ -1904,11 +1986,35 @@ def _clock(raw, title, hour=11, now=1790278047):
     return synth.day_clock(raw, hour=hour, now=now, title=title)[1]
 
 
+def _w6_gold_u1_leg(tmp_path, leg, now=1790278047):
+    """Gold's W6 U1 leg the way the gate records it: the SYNTH poisoned lead + the pinned clock on the errand fixture, the
+    current-drivers ('head') chain bound file by file, and the synth/start_phase disclosure."""
+    import gen2_synth_fixtures as synth
+    from tests.live.test_gen2_w6_gate import U1_CHAINS
+    fixture = "gold_battle_errand"
+    base = (REPO / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").read_bytes()
+    (tmp_path / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").write_bytes(base)
+    boot, poison = synth.build_named("gold_synth_psn", root=REPO)
+    clock = synth.day_clock(boot, hour=11, now=now, title="gold")[1]
+    files = {}
+    for rel in U1_CHAINS["head"]:
+        data = (REPO / rel).read_bytes()
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes(data)
+        files[rel] = {"ref": "a" * 40, "sha256": hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()}
+    return {**leg, "fixture": fixture, "fixture_sha256": hashlib.sha256(base).hexdigest(), "clock_setup": clock,
+            "poison_setup": poison, "synth_psn": True, "poison_start_phase": "tick",
+            "driver": {"ref": "head", "files": files}}
+
+
 def _live_gates_tree(tmp_path):
     (tmp_path / "data/gen2").mkdir(parents=True, exist_ok=True)
     provenance = (REPO / "data/gen2/overlay_provenance.json").read_bytes()
     (tmp_path / "data/gen2/overlay_provenance.json").write_bytes(provenance)
     for title in gate.TITLES:   # the SP-LOWWATER row reads the stack bounds from the provenance-bound .sym
+        rel = f"data/games/gen2_{title}/overlay/binding.json"
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes((REPO / rel).read_bytes())
         sym = f"data/gen2/{title}_slink.sym"
         (tmp_path / sym).write_bytes((REPO / sym).read_bytes())
     pins = {row["slink_title"]: row["sha1"] for row in json.loads(provenance)["outputs"].values()}
@@ -1920,6 +2026,9 @@ def _live_gates_tree(tmp_path):
         (tmp_path / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").write_bytes(raw)
         bind = {"result": "PASS", "evidence_level": "PHYSICAL", "title": title, "overlay_sha1": pins[title],
                 "fixture": fixture, "fixture_sha256": hashlib.sha256(raw).hexdigest()}
+        identity = gate._execution_identity(tmp_path, title, "overlay")
+        bind.update(artifact_kind="overlay", rom_sha1=identity["rom_sha1"], base_sha1=identity["base_sha1"],
+                    binding_sha256=identity["binding_sha256"])
         leg = {"fixture": fixture, "fixture_sha256": bind["fixture_sha256"], "overlay_sha1": pins[title],
                "inner_completed": True, "corpus_frames": 100, "allowed_writes": 3, "violation_count": 0,
                "violations": [], "control": {"native_caught": True, "lua_caught": True}}
@@ -1931,14 +2040,16 @@ def _live_gates_tree(tmp_path):
                          "reset": {"result": "PASS", "pending_at_entry": True, "played_id": None,
                                    "on_channel": None}},
             "w6_gate": {**bind, "schema": "gen2-w6-gate-v1", "violation_count": 0,
-                        "legs": {name: {**leg, "clock_setup": _clock(raw, title) if (title, name) in
-                                        gate.W6_CLOCK_LEGS else None} for name in gate.W6_GATE_LEGS}},
+                        "legs": {name: (_w6_gold_u1_leg(tmp_path, leg) if (title, name) in gate.W6_HEAD_DRIVER_LEGS
+                                        else {**leg, "clock_setup": _clock(raw, title) if (title, name) in
+                                              gate.W6_CLOCK_LEGS else None}) for name in gate.W6_GATE_LEGS}},
             "sp_lowwater_gate": good_lowwater_receipt(bind),
         }
         for kind, receipt in receipts.items():
-            path = tmp_path / "tests/fixtures/gen2/receipts" / f"{title}_overlay.{kind}.json"
+            path = tmp_path / "tests/fixtures/gen2/receipts/overlay" / f"{title}.{kind}.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(receipt), encoding="utf-8", newline="\n")
-            rows.append({"id": f"new-gates.{kind}.{title}", "axes": {"kind": kind, "title": title},
+            rows.append({"id": f"new-gates.{kind}.{title}", "axes": {"kind": kind, "title": title, "artifact_kind": "overlay"},
                          "proofs": [{"receipts": {"receipt": {"path": path.relative_to(tmp_path).as_posix(),
                                                               "sha256": _lf_sha(path)}}}]})
     doc = {"requirements": rows}
@@ -1946,10 +2057,92 @@ def _live_gates_tree(tmp_path):
     return doc
 
 
+def _w6_gold_errors(tmp_path, mutate):
+    _live_gates_tree(tmp_path)
+    path = tmp_path / "tests/fixtures/gen2/receipts/overlay/gold.w6_gate.json"
+    receipt = json.loads(path.read_text())
+    mutate(receipt["legs"]["u1"], tmp_path)
+    path.write_text(json.dumps(receipt), encoding="utf-8", newline="\n")
+    return gate._w6_gate_row_errors(tmp_path, "gold", receipt)
+
+
+def _drop(key):
+    return lambda leg, _root: leg.pop(key)
+
+
+def _edit_poison(leg, _root):
+    leg["poison_setup"]["edits"]["party_status"]["hp"] = 9
+
+
+def _edit_driver_file(leg, root):
+    rel = next(iter(leg["driver"]["files"]))
+    (root / rel).write_bytes((root / rel).read_bytes() + b"-- edited after the receipt\n")
+
+
+def _unpin_driver(leg, _root):
+    rel = next(iter(leg["driver"]["files"]))
+    leg["driver"]["files"][rel]["ref"] = "HEAD"
+
+
+@pytest.mark.parametrize("name,mutate,needle", [
+    ("clean", lambda leg, root: None, None),
+    ("hand-edited poison_setup", _edit_poison, "clock setup"),
+    ("no clock", _drop("clock_setup"), "no clock setup disclosure"),
+    ("no poison_setup", _drop("poison_setup"), "SYNTH poisoned-lead disclosure"),
+    ("no synth flag", _drop("synth_psn"), "SYNTH poisoned-lead disclosure"),
+    ("no start_phase", _drop("poison_start_phase"), "SYNTH poisoned-lead disclosure"),
+    ("driver file edited after the receipt", _edit_driver_file, "differs from the released tree"),
+    ("driver not pinned to a commit", _unpin_driver, "not pinned to an exact commit"),
+    ("no driver chain", _drop("driver"), "driver chain is not the pinned"),
+])
+def test_gold_w6_u1_leg_is_bound_to_its_drivers_and_its_synth_disclosure(tmp_path, name, mutate, needle):
+    errors = _w6_gold_errors(tmp_path, mutate)
+    if needle is None:
+        assert errors == [], errors
+    else:
+        assert any(needle in e for e in errors), (name, errors)
+
+
 def test_live_gates_green_only_on_a_valid_tree(tmp_path):
     _live_gates_tree(tmp_path)
     assert gate.live_gates_errors(tmp_path) == []
     assert gate.live_gates_errors(tmp_path / "empty") == [f"{gate.NEW_GATES} missing or malformed"]
+
+
+@pytest.mark.parametrize("field,value", [("artifact_kind", None), ("artifact_kind", "clean"),
+                                       ("rom_sha1", None), ("rom_sha1", "0" * 40),
+                                       ("binding_sha256", None), ("binding_sha256", "0" * 64)])
+def test_overlay_feature_gate_never_infers_its_executed_identity(tmp_path, field, value):
+    doc = _live_gates_tree(tmp_path)
+    assert gate.live_gates_errors(tmp_path) == []
+    entry = doc["requirements"][0]["proofs"][0]["receipts"]["receipt"]
+    path = tmp_path / entry["path"]
+    receipt = json.loads(path.read_text())
+    receipt[field] = value
+    path.write_text(json.dumps(receipt))
+    entry["sha256"] = _lf_sha(path)
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc))
+    assert gate.live_gates_errors(tmp_path)
+
+
+@pytest.mark.parametrize("mutation", ["historical_path", "implicit_row_kind", "changed_binding"])
+def test_overlay_feature_gate_refuses_historical_namespace_or_rebound_sidecar(tmp_path, mutation):
+    doc = _live_gates_tree(tmp_path)
+    row = doc["requirements"][0]
+    entry = row["proofs"][0]["receipts"]["receipt"]
+    if mutation == "historical_path":
+        old = f"tests/fixtures/gen2/receipts/{row['axes']['title']}_overlay.{row['axes']['kind']}.json"
+        (tmp_path / old).write_bytes((tmp_path / entry["path"]).read_bytes())
+        entry["path"] = old
+    elif mutation == "implicit_row_kind":
+        row["axes"].pop("artifact_kind")
+    else:
+        path = tmp_path / f"data/games/gen2_{row['axes']['title']}/overlay/binding.json"
+        binding = json.loads(path.read_text())
+        binding["profile_rom"]["MODEL_CHANGED"] = {"flat": 1}
+        path.write_text(json.dumps(binding))
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc))
+    assert gate.live_gates_errors(tmp_path)
 
 
 def _drop_row(tmp_path, doc):
@@ -2009,6 +2202,8 @@ def _trade_duo():
 def _trade_tree(tmp_path):
     doc = _green_tree(tmp_path)
     for row in doc["requirements"]:
+        if row["axes"].get("artifact_kind", "clean") != "overlay":
+            continue
         row["axes"]["trade_fixtures"] = _TRADE_FIXTURES[row["axes"]["pairing"]]
         row["axes"]["scenarios"] = ["link", *sorted(gate.TRADE_END_STATUS)]
         for scenario in sorted(gate.TRADE_END_STATUS):
@@ -2021,7 +2216,7 @@ def test_trade_gates_green_only_when_every_case_is_receipted(tmp_path):
     doc = _trade_tree(tmp_path)
     assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
     # The lane is narrowed to trade cells: a missing link proof is a duo-link gap, not a trade gap.
-    row = _row(doc, "duo.gold.silver")
+    row = _row(doc, "duo.gold.silver.overlay")
     row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "link"]
     _write_doc(tmp_path, doc)
     assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
@@ -2029,18 +2224,18 @@ def test_trade_gates_green_only_when_every_case_is_receipted(tmp_path):
 
 
 def _undeclare_case(tmp_path, doc):
-    row = _row(doc, "duo.gold.silver")
+    row = _row(doc, "duo.gold.silver.overlay")
     row["axes"]["scenarios"].remove("gen2_trade_timeout")
     row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "gen2_trade_timeout"]
 
 
 def _unreceipt_case(tmp_path, doc):
-    row = _row(doc, "duo.crystal.crystal")
+    row = _row(doc, "duo.crystal.crystal.overlay")
     row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "gen2_trade_refuse_item"]
 
 
 def _edit_trade_receipt(tmp_path, doc):
-    proof = next(p for p in _row(doc, "duo.gold.silver")["proofs"] if p["scenario"] == "gen2_trade_new")
+    proof = next(p for p in _row(doc, "duo.gold.silver.overlay")["proofs"] if p["scenario"] == "gen2_trade_new")
     path = tmp_path / proof["receipts"]["a"]["path"]
     path.write_text(path.read_text(encoding="utf-8").replace("PASS", "FAIL"), encoding="utf-8")
 
@@ -2063,9 +2258,9 @@ def test_committed_trade_gates_are_red_until_trade_duos_are_receipted():
 def test_c_g_owes_every_trade_case_under_o34(tmp_path):
     doc = _trade_tree(tmp_path)
     assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
-    _without(_row(doc, "duo.crystal.gold"), "gen2_trade_new")
+    _without(_row(doc, "duo.crystal.gold.overlay"), "gen2_trade_new")
     _write_doc(tmp_path, doc)
-    assert "duo.crystal.gold: required scenario(s) ['gen2_trade_new'] not declared" in gate.trade_gates_errors(
+    assert "duo.crystal.gold.overlay: required scenario(s) ['gen2_trade_new'] not declared" in gate.trade_gates_errors(
         tmp_path, _trade_duo())
 
 
@@ -2079,10 +2274,16 @@ def _pairs_tree(tmp_path, monkeypatch):
     duo.SCENARIOS.update({name: {"oracle": "assert_gen2_link_saved"} for name in need})
     doc = _green_tree(tmp_path)
     for row in doc["requirements"]:
-        row["axes"]["scenarios"] = list(need)
+        axes = row["axes"]
+        scenarios = gate.DUO_PAIRS_SCENARIOS
+        if axes.get("artifact_kind", "clean") == "overlay":
+            if (axes["initiator"], axes["partner"]) == ("crystal", "gold"):
+                scenarios = {"link"}
+            scenarios = scenarios | set(gate.TRADE_END_STATUS)
+        row["axes"]["scenarios"] = sorted(scenarios)
         row["axes"].pop("scenario_fixtures", None)   # the fake runner stages the pairing fixtures for every cell
         row["axes"]["trade_fixtures"] = _TRADE_FIXTURES[row["axes"]["pairing"]]
-        row["proofs"] = [{"scenario": name, "receipts": {}} for name in need]
+        row["proofs"] = [{"scenario": name, "receipts": {}} for name in sorted(scenarios)]
     _write_doc(tmp_path, doc)
     return doc, duo
 
@@ -2100,19 +2301,19 @@ def test_duo_pairs_green_only_with_every_p3b7_and_trade_cell(tmp_path, monkeypat
         row["axes"]["scenarios"], row["proofs"] = ["link"], [{"scenario": "link", "receipts": {}}]
     _write_doc(tmp_path, doc)
     errors = {e.split(":")[0]: e for e in gate.duo_pairs_errors(tmp_path, duo)}
-    assert sorted(errors) == ["duo.crystal.crystal", "duo.crystal.gold", "duo.gold.silver"]
-    assert all("required scenario(s)" in e and "gen2_trade_new" in e for e in errors.values())
+    assert sorted(errors) == ["duo.crystal.crystal.overlay", "duo.crystal.gold.overlay", "duo.gold.silver.overlay"]
+    assert all("gen2_trade_new" in e for row, e in errors.items() if row.endswith(".overlay"))
     # C-G owes the trade cases (O-34) but not the P3b.7 list.
-    assert "gen2_ball_gate" in errors["duo.gold.silver"] and "gen2_ball_gate" not in errors["duo.crystal.gold"]
+    assert "gen2_ball_gate" in errors["duo.gold.silver.overlay"] and "gen2_ball_gate" not in errors["duo.crystal.gold.overlay"]
 
 
 def test_duo_pairs_red_on_an_unreceipted_cell(tmp_path, monkeypatch):
     doc, duo = _pairs_tree(tmp_path, monkeypatch)
-    row = _row(doc, "duo.gold.silver")
+    row = _row(doc, "duo.gold.silver.overlay")
     row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "gen2_egg_hatch"]
     _write_doc(tmp_path, doc)
     assert gate.duo_pairs_errors(tmp_path, duo) == [
-        "duo.gold.silver/gen2_egg_hatch: no receipt registered (an empty proof is a release blocker)"]
+        "duo.gold.silver.overlay/gen2_egg_hatch: no receipt registered (an empty proof is a release blocker)"]
 
 
 def test_shiny_bonus_is_the_recorded_limit_not_a_duo_pairs_cell():
@@ -2153,6 +2354,22 @@ def _packet_tree(tmp_path):
             encoding="utf-8")
     (tmp_path / "data/gen2/overlay_provenance.json").write_text(
         json.dumps({"outputs": outputs, "symbols": symbols}), encoding="utf-8")
+    (tmp_path / "data/gen2_sources.lock.json").write_text("{}")
+    (tmp_path / "data/gen2/build_provenance.json").write_text("{}")
+    provenance = json.loads((tmp_path / "data/gen2/overlay_provenance.json").read_text())
+    grant = gate._published_grant(tmp_path, provenance)
+    for title in gate.TITLES:
+        directory = tmp_path / f"data/games/gen2_{title}/overlay"
+        directory.mkdir(parents=True, exist_ok=True)
+        binding = {"kind": "overlay", "title": title, "rom_sha1": outputs["poke" + title]["sha1"]}
+        path = directory / "binding.json"
+        path.write_text(json.dumps(binding))
+        matrix = tmp_path / f"data/games/gen2_{title}/admission.json"
+        doc = json.loads(matrix.read_text())
+        row = doc["artifacts"][1]
+        row.update(selection="SELECTED", binding_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                   grant_fingerprint=grant, runtime_gate={"id": "G4", "state": "ADMITTED", "grant_fingerprint": grant})
+        matrix.write_text(json.dumps(doc))
     (tmp_path / "docs/gen2").mkdir(parents=True, exist_ok=True)
     (tmp_path / "docs/gen2/PLAN.md").write_text(_LEDGER.format(g4=_SIGNED), encoding="utf-8")
     return tuple(f"SLink-{title.capitalize()}.ups" for title in gate.TITLES)
@@ -2199,6 +2416,60 @@ def test_g4_packet_red_on_each_missing_piece(tmp_path, mutation):
     else:
         mutation(tmp_path)
     assert gate.g4_packet_errors(tmp_path, shipped) != []
+
+
+def _mutate_row(tmp_path, title, **fields):
+    """Rewrite one field of one title's overlay row, leaving every other packet piece intact."""
+    matrix = tmp_path / f"data/games/gen2_{title}/admission.json"
+    doc = json.loads(matrix.read_text())
+    row = next(r for r in doc["artifacts"] if r.get("kind") == "overlay")
+    row.update(fields)
+    matrix.write_text(json.dumps(doc))
+
+
+def _errors_for(tmp_path, title, shipped):
+    return [e for e in gate.g4_packet_errors(tmp_path, shipped) if e.startswith(f"{title}_overlay")]
+
+
+# F1: each admission term is asserted INDEPENDENTLY. Relaxing the status term alone was masked by its
+# sibling (526 tests passed), so nothing proved any one of them bites on its own.
+@pytest.mark.parametrize("fields,fragment", [
+    ({"selection": "FUTURE"}, "admitted-artifact row is not ADMITTED"),
+    ({"status": "BUILT"}, "admitted-artifact row is not ADMITTED"),
+    ({"runtime_gate": {"id": "G4", "state": "SIGNED", "grant_fingerprint": "PUBLISHED"}}, "runtime G4 grant invalid"),
+    ({"runtime_gate": {"id": "G4", "state": "ADMITTED", "grant_fingerprint": "0" * 64}},
+     "runtime G4 grant invalid"),
+    ({"binding_sha256": "0" * 64}, "binding pin differs"),
+])
+def test_each_g4_admission_term_refuses_on_its_own(tmp_path, fields, fragment):
+    shipped = _packet_tree(tmp_path)
+    if (fields.get("runtime_gate") or {}).get("grant_fingerprint") == "PUBLISHED":   # only the state is wrong
+        fields = {"runtime_gate": {**fields["runtime_gate"], "grant_fingerprint": gate._published_grant(
+            tmp_path, json.loads((tmp_path / "data/gen2/overlay_provenance.json").read_text()))}}
+    _mutate_row(tmp_path, "crystal", **fields)
+    errors = _errors_for(tmp_path, "crystal", shipped)
+    assert any(fragment in e for e in errors), (fields, errors)
+
+
+# E1: the release set is catalog-derived now, so a BUILT title is not asked to ship its UPS and an
+# ADMITTED one is. Before this, membership was checked against a static tuple in both modes.
+def test_g4_release_requires_the_ups_exactly_when_the_row_is_admitted(tmp_path):
+    shipped = _packet_tree(tmp_path)
+    assert not any("does not ship" in e for e in gate.g4_packet_errors(tmp_path, shipped))
+    _mutate_row(tmp_path, "crystal", status="BUILT", selection="FUTURE")
+    # not ADMITTED -> make_release drops its UPS -> G4 must NOT then demand it (and the row errors instead)
+    assert not any("does not ship" in e for e in _errors_for(tmp_path, "crystal", shipped))
+
+
+def test_the_activation_precondition_is_not_blocked_by_the_row_it_is_about_to_write(tmp_path):
+    """require_admitted=False is --promote-overlays' own precondition. It checks every OTHER packet item
+    BEFORE writing the row, so demanding the row's binding pin and runtime grant there made activation
+    impossible: on the committed BUILT tree it returned `binding pin differs` for all three titles."""
+    shipped = _packet_tree(tmp_path)
+    for title in gate.TITLES:
+        _mutate_row(tmp_path, title, status="BUILT", selection="FUTURE")
+    errors = gate.g4_packet_errors(tmp_path, shipped, require_admitted=False)
+    assert not any("binding pin differs" in e or "runtime G4 grant invalid" in e for e in errors), errors
 
 
 _PARTS = ("g4_packet_errors", "stale_errors", "fixtures_errors", "inspect_run_errors", "new_gates_errors",
@@ -2270,10 +2541,10 @@ def test_contest_refusal_is_model_only_and_its_named_tests_exist():
 
 def test_a_model_only_case_declared_as_a_cell_is_red(tmp_path):
     doc = _trade_tree(tmp_path)
-    _row(doc, "duo.gold.silver")["axes"]["scenarios"].append("gen2_trade_refuse_contest")
+    _row(doc, "duo.gold.silver.overlay")["axes"]["scenarios"].append("gen2_trade_refuse_contest")
     _write_doc(tmp_path, doc)
     for errors in (gate.trade_gates_errors(tmp_path, _trade_duo()), gate.duo_matrix_errors(tmp_path, _trade_duo())):
-        assert any("duo.gold.silver: ['gen2_trade_refuse_contest'] are MODEL-only" in e for e in errors)
+        assert any("duo.gold.silver.overlay: ['gen2_trade_refuse_contest'] are MODEL-only" in e for e in errors)
 
 
 # clock-setup-v1: a W6 leg's O-33 clock setup must re-derive from the committed fixture (day_clock).
@@ -2339,6 +2610,100 @@ def test_any_other_legs_clock_setup_obeys_the_same_rule(tmp_path):
     leg["clock_setup"]["game_hour"] = 15
     save()
     assert any("new-gates.w6_gate.gold: w6 gate leg panel: clock setup" in e for e in gate.live_gates_errors(tmp_path))
+
+
+def _captured_u1_clock(title):
+    # Frozen historical clock input, not release evidence for the newly titled ROM.
+    # Keep the original attempt-2 11:23 control even when the live lane recaptures U1.
+    receipt = json.loads(_git_show("ca9b564f", f"tests/fixtures/gen2/receipts/overlay/{title}.engine_sites.json"))
+    return next(run for run in receipt.get("runs", [receipt]) if run.get("clock_setup"))
+
+
+def test_real_attempt_two_clock_and_legacy_missing_attempt_are_accepted():
+    run = _captured_u1_clock("crystal")
+    assert run["clock_setup"]["game_minute"] == 23
+    run.pop("u1_attempt", None)
+    assert gate._clock_setup_errors(REPO, "crystal", run) == []
+    run["u1_attempt"] = 2
+    assert gate._clock_setup_errors(REPO, "crystal", run) == []
+
+
+def test_clock_rederivation_preserves_nonzero_seconds():
+    import gen2_synth_fixtures as synth
+    raw = (REPO / "tests/fixtures/gen2/crystal_battle.SaveRAM").read_bytes()
+    _, clock = synth.day_clock(raw, title="crystal", hour=11, minute=23, second=17, now=1790952666)
+    assert gate._clock_setup_errors(REPO, "crystal", {"fixture": "crystal_battle", "clock_setup": clock}) == []
+
+
+@pytest.mark.parametrize("mutation", ["game_minute", "new_hex", "u1_attempt", "boolean_minute"])
+def test_u1_clock_refuses_changed_disclosure_or_attempt(mutation):
+    run = _captured_u1_clock("crystal")
+    if mutation == "u1_attempt":
+        run["u1_attempt"] = 1
+    elif mutation == "new_hex":
+        run["clock_setup"]["new_hex"] = "00" * 22
+    else:
+        run["clock_setup"]["game_minute"] = True if mutation == "boolean_minute" else 46
+    assert gate._clock_setup_errors(REPO, "crystal", run)
+
+
+@pytest.mark.parametrize("mutation", [None, "missing", "edited", "other_fixture"])
+def test_gold_clock_rebuilds_its_poison_setup_first(mutation):
+    run = _captured_u1_clock("gold")
+    assert run["clock_setup"]["base_sha256"] == run["poison_setup"]["sha256"]
+    if mutation == "missing":
+        run.pop("poison_setup")
+    elif mutation == "edited":
+        run["poison_setup"]["edits"]["party_status"]["hp"] = 9
+    elif mutation == "other_fixture":
+        run["fixture"] = "gold_battle"
+    errors = gate._clock_setup_errors(REPO, "gold", run)
+    assert bool(errors) == (mutation is not None), errors
+
+
+def _crystal_synth_run(attempt=1):
+    """A U1 leg the way the gate records it: SYNTH poisoned lead on crystal_battle, then the pinned clock."""
+    import gen2_synth_fixtures as synth
+    raw, poison = synth.build_named("crystal_synth_psn_u1", root=REPO)
+    minute = (0, 23, 46)[attempt - 1]
+    _, clock = synth.day_clock(raw, title="crystal", hour=11, minute=minute, now=1790952666)
+    clock.update(game_minute=minute, game_second=0)
+    return {"fixture": "crystal_battle", "poison_setup": poison, "clock_setup": clock, "u1_attempt": attempt}
+
+
+@pytest.mark.parametrize("mutation", [None, "missing", "edited", "other_fixture", "silver", "gold_recipe_on_crystal"])
+def test_crystal_clock_rebuilds_its_synth_poison_setup_first(mutation):
+    run = _crystal_synth_run()
+    assert run["clock_setup"]["base_sha256"] == run["poison_setup"]["sha256"]
+    title = "crystal"
+    if mutation == "missing":
+        run.pop("poison_setup")
+    elif mutation == "edited":
+        run["poison_setup"]["edits"]["party_status"]["hp"] = 9
+    elif mutation == "other_fixture":
+        run["fixture"] = "crystal_battle_errand"
+    elif mutation == "silver":
+        title, run["fixture"] = "silver", "silver_battle"
+    elif mutation == "gold_recipe_on_crystal":
+        run["poison_setup"]["recipe"] = "psn"     # a disclosure naming another recipe never re-derives
+    errors = gate._clock_setup_errors(REPO, title, run)
+    assert bool(errors) == (mutation is not None), errors
+
+
+@pytest.mark.parametrize("mutation", ["game_minute", "new_hex"])
+def test_engine_site_lane_checks_each_runs_clock_disclosure(tmp_path, mutation):
+    doc = _copy_new_gates_tree(tmp_path)
+    row = next(row for row in doc["requirements"] if row["axes"].get("kind") == "engine_sites"
+               and row["axes"]["title"] == "crystal")
+    entry = row["proofs"][0]["receipts"]["receipt"]
+    path = tmp_path / entry["path"]
+    receipt = json.loads(path.read_text())
+    run = next(run for run in receipt["runs"] if run.get("clock_setup"))
+    run["clock_setup"][mutation] = 23 if mutation == "game_minute" else "00" * 22
+    path.write_text(json.dumps(receipt))
+    entry["sha256"] = _lf_sha(path)
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc))
+    assert any("clock setup" in e and row["id"] in e for e in gate.new_gates_errors(tmp_path, artifact_kind="clean"))
 
 
 # DUO-WAVE-D: per-scenario fixture overrides, O-33 synth headers and the npc_trade key change.
@@ -2486,19 +2851,20 @@ def test_the_inspect_run_attestation_must_be_a_clean_physical_pass(changes):
     assert gate._inspect_run_row_errors(_attestation(**changes)) != []
 
 
-def test_release_evidence_needs_a_committed_inspect_run_row(tmp_path):
+def test_release_evidence_needs_a_committed_overlay_inspect_run_row(tmp_path):
     (tmp_path / "tests").mkdir()
-    (tmp_path / gate.NEW_GATES).write_text(json.dumps({"requirements": []}), encoding="utf-8")
-    assert "no committed live-new-gates run attestation" in gate.inspect_run_errors(tmp_path)[0]
-    path = tmp_path / "attest.json"
-    path.write_text(json.dumps(_attestation()), encoding="utf-8")
-    row = {"id": "new-gates.inspect-run", "axes": {"kind": "inspect_run"},
-           "proofs": [{"receipts": {"receipt": {"path": "attest.json", "sha256": _lf_sha(path)}}}]}
-    (tmp_path / gate.NEW_GATES).write_text(json.dumps({"requirements": [row]}), encoding="utf-8")
-    assert gate.inspect_run_errors(tmp_path) == []
+    path = tmp_path / gate.NEW_GATES
+    path.write_text(json.dumps({"requirements": []}))
+    assert "no committed overlay live-new-gates run attestation" in gate.inspect_run_errors(tmp_path)[0]
+    row = {"id": "new-gates.inspect-run", "axes": {"kind": "inspect_run", "artifact_kind": "clean"},
+           "proofs": [{"receipts": {"receipt": {"path": "missing-history.json"}}}]}
+    path.write_text(json.dumps({"requirements": [row]}))
+    assert len(gate.inspect_run_errors(tmp_path)) == 1
     assert gate.new_gates_errors(tmp_path, kinds={"inspect_run"}) == []
-    path.write_text(json.dumps(_attestation(result="FAIL")), encoding="utf-8")
-    assert gate.new_gates_errors(tmp_path, kinds={"inspect_run"}) != []   # the pin, then the content
+    row["axes"]["artifact_kind"] = "overlay"
+    path.write_text(json.dumps({"requirements": [row]}))
+    assert gate.inspect_run_errors(tmp_path) == []  # presence; content belongs to new_gates_errors
+    assert gate.new_gates_errors(tmp_path, kinds={"inspect_run"}) != []
 
 
 def test_the_promotion_verdict_includes_fixtures_and_the_inspect_run():
@@ -2554,8 +2920,9 @@ def test_an_unprovisioned_source_skips_through_the_verifier_instead_of_failing(t
     loader and pytest may catch it -- a defensive `except BaseException`/bare `except:` in a verifier would
     turn an absent clone into a bogus "proof invalid" string (Gen1-Collab2, 2026-09-26). Driven through
     the real active-faint verifier cell, which calls codec.for_foundation -> load_context."""
-    import tools.gen2_source_data as source_data
     from _pytest.outcomes import Skipped
+
+    import tools.gen2_source_data as source_data
 
     proof, axes, lock, text = _trainer_cell(tmp_path, "duo.crystal.crystal")
 
@@ -2598,3 +2965,69 @@ def test_trainer_active_faint_refuses_wild_or_unbound_evidence(tmp_path, mutatio
         b = b.replace("gen2-duo-faint-active-trainer-v1", "gen2-duo-faint-active-v1")
     text["b"] = b
     assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_faint_active_trainer") != []
+
+
+def test_the_captured_overlay_inspect_attestation_binds_the_overlay_identity():
+    # the real round-1 receipt records {kind, rom_sha1, binding_sha256}; comparing it to the whole execution
+    # identity (which also carries base_sha1) refused a genuine PASS (ROMPatch, pre-freeze)
+    path = REPO / "tests/fixtures/gen2/receipts/overlay/live_new_gates.inspect_run.json"
+    if not path.is_file():
+        pytest.skip("current overlay inspect recapture is absent")
+    receipt = json.loads(path.read_text())
+    assert gate._inspect_run_row_errors(receipt, "overlay", REPO) == []
+    receipt["artifacts"]["gold"]["binding_sha256"] = "0" * 64
+    assert any("gold: wrong executed overlay identity" in e for e in gate._inspect_run_row_errors(receipt, "overlay", REPO))
+
+
+def test_the_committed_g4_packet_reflects_activation_state():
+    pending = []
+    for title in gate.TITLES:
+        rows = json.loads((REPO / f"data/games/gen2_{title}/admission.json").read_text())["artifacts"]
+        if next(r for r in rows if r["kind"] == "overlay")["status"] != "ADMITTED":
+            pending.append(title)
+    errors = gate.g4_packet_errors(REPO)
+    if pending:  # titled-ROM recapture deliberately demotes the rows
+        for title in pending:
+            assert any(e.startswith(f"{title}_overlay: admitted-artifact row is not ADMITTED") for e in errors)
+    else:
+        assert errors == []  # real producer puts the grant only in runtime_gate
+
+
+# ---- version-masked identity (owner ruling 2026-10-02): a receipt bound to a version-equivalent build stays valid ----
+
+def test_accepted_overlay_shas_are_the_published_hash_plus_its_proven_equivalents():
+    row = {"sha1": "b" * 40, "equivalent_sha1s": ["a" * 40]}
+    assert gate._accepted_overlay_shas(row) == {"a" * 40, "b" * 40}
+    assert gate._accepted_overlay_shas({"sha1": "b" * 40}) == {"b" * 40}
+    assert gate._accepted_overlay_shas({}) == set() and gate._accepted_overlay_shas(None) == set()
+
+
+def _overlay_tree(tmp_path, published, equivalents):
+    prov = tmp_path / "data/gen2/overlay_provenance.json"
+    prov.parent.mkdir(parents=True)
+    row = {"slink_title": "crystal", "sha1": published}
+    if equivalents is not None:
+        row["equivalent_sha1s"] = equivalents
+    prov.write_text(json.dumps({"outputs": {"pokecrystal": row}}), encoding="utf-8")
+    fixture = tmp_path / "tests/fixtures/gen2/crystal_x.SaveRAM"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(b"save")
+    return {"schema": "s", "result": "PASS", "evidence_level": "PHYSICAL", "title": "crystal",
+            "fixture": "crystal_x", "fixture_sha256": hashlib.sha256(b"save").hexdigest()}
+
+
+@pytest.mark.parametrize("named, equivalents, ok", [
+    ("b" * 40, None, True),                 # the published build itself
+    ("a" * 40, ["a" * 40], True),           # an earlier build the builder proved version-equivalent
+    ("a" * 40, [], False),                  # not proven: the receipt is for another build
+    ("c" * 40, ["a" * 40], False),          # a build nobody vouched for
+])
+def test_overlay_gate_receipts_follow_the_equivalence_list(tmp_path, monkeypatch, named, equivalents, ok):
+    receipt = _overlay_tree(tmp_path, "b" * 40, equivalents)
+    receipt["overlay_sha1"] = named
+    monkeypatch.setattr(gate, "_fixture_sha256", lambda root, fixture: receipt["fixture_sha256"])
+    identity = {"kind": "overlay", "rom_sha1": named, "base_sha1": "e" * 40, "binding_sha256": "f" * 64}
+    monkeypatch.setattr(gate, "_execution_identity", lambda root, title, kind: identity)   # the executed build
+    receipt.update(artifact_kind="overlay", rom_sha1=named, base_sha1="e" * 40, binding_sha256="f" * 64)
+    errors = gate._overlay_gate_errors(tmp_path, "crystal", receipt, "s", "x gate")
+    assert (errors == []) is ok, errors

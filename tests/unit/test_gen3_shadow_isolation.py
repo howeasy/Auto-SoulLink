@@ -348,9 +348,9 @@ def _biz_globals(lua, mem, ev, regs=None):
 
 def test_start_resolves_pack_title_kind_via_entry_admit_not_hardcoded_defaults(lua, M):
     """No pack/title/kind override: start() must use Entry.admit (anchors, since this fake
-    ROM ships no gameinfo hash) over the fake cartridge -- gen3_rr/radical_red/clean's sites,
-    not the hard-coded gen3_frlg/firered/clean fallback."""
-    sites = sites_of("gen3_rr", "radical_red", "clean")
+    ROM ships no gameinfo hash) over the fake cartridge -- gen3_rr/radical_red/companion's sites
+    (the clean cartridge is not admitted), not the hard-coded gen3_frlg/firered/clean fallback."""
+    sites = sites_of("gen3_rr", "radical_red", "companion")
     rom = seed_rom(sites, header_code="BPRE")  # RR is a FireRed hack; carries FR's header code
     mem = BizMem(rom)
     ev = BizEvent()
@@ -359,7 +359,7 @@ def test_start_resolves_pack_title_kind_via_entry_admit_not_hardcoded_defaults(l
     state = M.start(opts)
     assert state is not None
     assert (state.deps.pack, state.deps.title, state.deps.kind) == (
-        "gen3_rr", "radical_red", "clean")
+        "gen3_rr", "radical_red", "companion")
     assert state.admitted_by == "anchors"
 
 

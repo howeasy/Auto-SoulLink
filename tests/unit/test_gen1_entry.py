@@ -18,6 +18,7 @@ comparison works but not that the cartridges in patch/build carry those titles.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 
 import pytest
@@ -195,14 +196,16 @@ def test_entry_passes_loaded_hello_and_reply_factories_to_client_without_owning_
 def _admission_model():
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     entry = lua.eval(f'dofile("{_ENTRY_PATH}")')
-    image = _header_image("POKEMON RED") + b"source-model"
+    # Yellow, not Red: the companion is REQUIRED for Red/Blue, so Entry.admit never admits a clean Red
+    # (patch-first, owner 2026-10-02) and could not exercise the shared admission mechanism with it.
+    image = _header_image("POKEMON YELLOW") + b"source-model"
     digest = hashlib.sha1(image).hexdigest()
-    entry.PACKS = lua.table(gen1_rby=lua.table(rom_type=lua.table(red="Red")))
+    entry.PACKS = lua.table(gen1_rby=lua.table(rom_type=lua.table(yellow="Yellow")))
     entry.PACK_FILES = lua.table(gen1_rby=lua.table(profile="data/games/gen1_rby/profile.json"))
-    catalog = lua.table(titles=lua.table(red=lua.table(rom_sha1=digest)))
+    catalog = lua.table(titles=lua.table(yellow=lua.table(rom_sha1=digest)))
     decoder = lua.table(decode=lambda _text: catalog)
     args = lua.table(root=_REPO.replace("\\", "/"), json=decoder, rom_sha1=digest,
-                     header="POKEMON RED", rom_size=len(image), read_rom_u8=lambda i: image[int(i)])
+                     header="POKEMON YELLOW", rom_size=len(image), read_rom_u8=lambda i: image[int(i)])
     return lua, entry, args, image, digest
 
 
@@ -218,7 +221,7 @@ def test_admission_rehashes_known_reported_hash_and_refuses_forged_identity():
 def test_actual_byte_admission_is_immutable_and_missing_acquisition_refuses():
     lua, entry, args, _image, digest = _admission_model()
     admitted = entry.admit(args)
-    assert admitted["title"] == "red" and admitted["rom_sha1"] == digest
+    assert admitted["title"] == "yellow" and admitted["rom_sha1"] == digest
     assert admitted["rehashed"] is True and admitted["admitted_by"] == "sha1"
     mutate = lua.eval("function(value) return pcall(function() value.kind='forged' end) end")
     assert mutate(admitted)[0] is False
@@ -244,8 +247,8 @@ def test_actual_artifact_change_during_admission_refuses():
 
 def test_duplicate_known_identity_refuses_in_shared_unique_match():
     lua, entry, args, _image, digest = _admission_model()
-    entry.PACKS.gen1_rby.rom_type.blue = "Blue"
-    catalog = lua.table(titles=lua.table(red=lua.table(rom_sha1=digest), blue=lua.table(rom_sha1=digest)))
+    entry.PACKS.gen1_rby.rom_type.twin = "Twin"
+    catalog = lua.table(titles=lua.table(yellow=lua.table(rom_sha1=digest), twin=lua.table(rom_sha1=digest)))
     args.json.decode = lambda _text: catalog
     refused = entry.admit(args)
     assert isinstance(refused, tuple) and refused[0] is None and "ambiguous" in refused[1]
@@ -324,3 +327,22 @@ def test_a_retry_through_a_second_build_keeps_the_failed_cleanup_authority():
     second.start(second)
     assert parts.signals.failed_service is None
     second.signals.close(second.signals)
+
+
+def test_an_earlier_stamp_of_the_pure_overlay_is_admitted_as_that_overlay(entry):
+    """A release stamp changes only the menu-version field, so cartridges patched before it are the same canonical build.
+    Each overlay admission row lists those exact sha1s (equivalent_sha1s); the client admits them as the overlay itself,
+    not via anchors as a randomized cartridge."""
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{_ENTRY_PATH}")')
+    codec = lua.eval(f'dofile("{_REPO.replace(chr(92), "/")}/lua/json_codec.lua")')
+    table = module.admission_table(_REPO.replace("\\", "/"), codec)
+    rows = json.load(open(os.path.join(_REPO, "data", "games", "gen1_purergb", "admission_overlay.json"), encoding="utf-8"))
+    checked = 0
+    for sha1, row in rows.items():
+        for old in row.get("equivalent_sha1s") or []:
+            hit = table[old]
+            assert hit is not None, old
+            assert (hit.pack, hit.title, hit.kind) == ("gen1_purergb", row["title"], "overlay"), old
+            checked += 1
+    assert checked >= 3, "PureRed, PureBlue and PureGreen each list the build v0.3.0 replaced"

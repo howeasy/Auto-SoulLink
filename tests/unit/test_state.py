@@ -7,6 +7,8 @@ Run:
     pytest tests/unit/test_state.py -v
 """
 
+import pytest
+
 from server.adapters.gen3_frlge import Gen3Adapter
 from server.state import (
     AreaStatus,
@@ -1406,6 +1408,7 @@ def test_illegal_capture_in_linked_area_memorialized(tmp_path, monkeypatch):
 def test_whiteout_force_faints_all_party_partners(tmp_path, monkeypatch):
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}     # a whiteout before the first ball retires nothing
 
     for i in range(3):
         a_key = f"A:{i}"
@@ -5309,7 +5312,7 @@ def test_save_writes_valid_json_and_leaves_no_tmp(tmp_path):
         payload = _json.load(f)
     assert any(e.get("area_id") == "route_1" for e in payload["links"])
 
-    assert not (tmp_path / "links.json.tmp").exists(), ".tmp scratch must not leak"
+    assert not list(tmp_path.glob("*.tmp")), ".tmp scratch must not leak"
 
 
 def test_save_crash_mid_write_preserves_previous_links_json(tmp_path, monkeypatch):
@@ -5711,3 +5714,200 @@ def test_key_change_on_a_buried_link_owes_the_faint_even_when_a_memorial_is_alre
     cmds2 += state2.handle_event("a", {"event": "tick"})
     assert sum(1 for c in cmds2 if c.get("cmd") == "force_faint" and c.get("key") == "CCCC:1111") == 1
     assert has_cmd(cmds2, "memorialize", "CCCC:1111"), "the memorial is owed even with a faint queued"
+
+
+
+@pytest.mark.parametrize("raw", [[{"maxHP": 50}], [1], 5])
+def test_a_malformed_party_snapshot_is_coerced_not_raised(raw):
+    state = SoulLinkState()
+    state.handle_event("a", {"event": "hello", "party": raw, "ot_id": "1234", "trainer_name": "A"})
+    assert state.party_keys["a"] == set()
+    state.handle_event("a", {"event": "hello", "ot_id": "1234", "trainer_name": "A",
+                              "party": [{"key": "1234:1", "hp": 10, "maxHP": 50}]})
+    assert state.party_keys["a"] == {"1234:1"} and state.party_size["a"] == 1
+
+def test_leaving_retry_area_allows_later_no_catch_to_dead_zone():
+    state = make_state_with_link()
+    state.retry_areas["a"].add("route_2")
+    state.handle_event("a", {"event": "area_enter", "area_id": "route_3"})
+    state.handle_event("a", {"event": "no_catch", "area_id": "route_2"})
+    assert state.area_states["route_2"] == AreaStatus.DEAD_ZONE
+
+
+def test_stale_retry_with_pending_capture_does_not_wedge_game_over():
+    state = make_state_with_link(status=LinkStatus.DEAD)
+    state.retry_areas["a"].add("route_2")
+    state.pending_captures["route_2"] = {"b": MonInfo(key="B:pending", level=5)}
+    state._check_game_over()
+    assert not state.run_over
+    state.handle_event("a", {"event": "area_enter", "area_id": "oaks_lab"})
+    commands = state.handle_event("a", {"event": "no_catch", "area_id": "route_2"})
+    assert "route_2" not in state.pending_captures and state.run_over
+    assert has_cmd(commands, "game_over")
+
+
+def test_same_area_no_catch_without_area_enter_still_suppresses_retry():
+    state = make_state_with_link()
+    state.retry_areas["a"].add("route_2")
+    commands = state.handle_event("a", {"event": "no_catch", "area_id": "route_2"})
+    assert has_cmd(commands, "unresolve_area")
+    assert state.area_states.get("route_2") != AreaStatus.DEAD_ZONE
+
+
+
+def test_state_save_uses_shared_atomic_helper_and_survives_drive_lock(tmp_path, monkeypatch):
+    import json
+    import time
+
+    from server import json_files
+    state = SoulLinkState(data_dir=str(tmp_path))
+    helper, replace = json_files.atomic_write_json, json_files.os.replace
+    delegated, attempts = [], []
+    def publish(path, value):
+        delegated.append(path)
+        return helper(path, value)
+    def locked(source, target):
+        attempts.append(target)
+        if len(attempts) < 3:
+            raise PermissionError("Drive lock")
+        return replace(source, target)
+    monkeypatch.setattr(json_files, "atomic_write_json", publish)
+    monkeypatch.setattr(json_files.os, "replace", locked)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    state._save()
+    assert state._links_path in delegated and len(attempts) >= 3
+    assert not state.save_failed and json.loads((tmp_path / "links.json").read_text())["links"] == []
+
+
+@pytest.mark.parametrize("error", [ValueError("bad stats"), OSError("decode IO"), RuntimeError("decoder broke")])
+def test_decode_failure_latches_and_refuses_events(tmp_path, monkeypatch, error):
+    path = tmp_path / "links.json"
+    path.write_text('{"links":[]}')
+    def broken(*_args):
+        raise error
+    monkeypatch.setattr(SoulLinkState, "_load_mon_stats", broken)
+    state = SoulLinkState.load(data_dir=str(tmp_path))
+    assert state.load_failed == f"{type(error).__name__}: {error}"
+    for event in ("hello", "tick", "capture"):
+        commands = state.handle_event("a", {"event": event, "key": "A:1", "area_id": "route_1", "party": []})
+        assert commands == [{"cmd": "noop", "refused": "load_failed"}]
+    assert path.read_text() == '{"links":[]}' and not state.party_keys["a"]
+
+
+@pytest.mark.parametrize("contents", ["{broken", "null", '{"area_states":{"route_1":"nonsense"}}'])
+def test_load_distinguishes_unreadable_json_from_decode_errors(tmp_path, contents):
+    (tmp_path / "links.json").write_text(contents)
+    state = SoulLinkState.load(data_dir=str(tmp_path))
+    assert bool(state.load_failed) == (contents != "{broken")
+
+
+def test_open_error_remains_tolerant_but_unsafe_migration_raises(tmp_path, monkeypatch):
+    import builtins
+
+    from server.state import UnsafeGameMigration
+    path = tmp_path / "links.json"
+    path.write_text('{}')
+    original = builtins.open
+    def locked(name, *args, **kwargs):
+        if str(name) == str(path):
+            raise PermissionError("locked")
+        return original(name, *args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "open", locked)
+        assert SoulLinkState.load(data_dir=str(tmp_path)).load_failed == ""
+    def unsafe(*_args):
+        raise UnsafeGameMigration("migration refused")
+    monkeypatch.setattr(SoulLinkState, "_load_mon_stats", unsafe)
+    with pytest.raises(UnsafeGameMigration, match="migration refused"):
+        SoulLinkState.load(data_dir=str(tmp_path))
+
+
+@pytest.mark.parametrize("uncertain", [False, True])
+def test_prompt_terminal_records_uncertainty_without_claiming_a_decline(tmp_path, uncertain):
+    import json
+    from pathlib import Path
+
+    from server.server import SLinkServer
+    server = SLinkServer(data_dir=str(tmp_path / "server"))
+    state = _with_trade_blobs(make_state_with_link())
+    server.state, server.adapter = state, state.adapter
+    state.on_trade_outcome = server._journal_trade
+    token = _offer_and_pick(state)
+    state.queued_commands = {"a": [], "b": []}
+    b = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 0, "uncertain": uncertain})
+    a = state.handle_event("a", {"event": "tick"})
+    assert state.pending_trade is None and state.links[0].status == LinkStatus.ALIVE
+    if uncertain:
+        assert [c["text"] for c in a if c["cmd"] == "msgbox"] == ["Trade canceled - no response."]
+        assert [c["text"] for c in b if c["cmd"] == "msgbox"] == ["Trade canceled - no response."]
+        assert state.trade_last["outcome"] == "uncertain" and state.trade_last["token"] == token
+        assert server._build_status_dict()["trade_last"] == state.trade_last
+        rows = json.loads(Path(server._events_path).read_text())
+        assert len([r for r in rows if r["type"] == "trade_uncertain" and r["key"] == token]) == 1
+        assert all("{}" not in r["text"] for r in rows if r["type"] == "trade_uncertain")
+    else:
+        assert any(c.get("text") == "Your partner declined the trade." for c in a)
+        assert any(c.get("text") == "Trade declined." for c in b)
+        assert state.trade_last is None
+
+
+
+def test_a_valid_old_format_links_json_still_loads(tmp_path):
+    import json
+    payload = {"links": [{"area_id": "route_1", "status": "alive", "a": {"key": "A:1", "level": 5},
+                          "b": {"key": "B:2", "level": 7}}],
+               "area_states": {"route_1": "linked"}, "pokeballs_obtained": {"a": True, "b": False}}
+    (tmp_path / "links.json").write_text(json.dumps(payload))
+    loaded = SoulLinkState.load(data_dir=str(tmp_path))
+    assert loaded.load_failed == "" and loaded.links[0].a.key == "A:1"
+    assert loaded.links[0].b.key == "B:2" and loaded.links[0].status == LinkStatus.ALIVE
+    assert loaded.area_states == {"route_1": AreaStatus.LINKED}
+    assert loaded.pokeballs_obtained == {"a": True, "b": False}
+
+
+def test_unknown_saved_area_state_is_a_strict_load_failure(tmp_path):
+    (tmp_path / "links.json").write_text('{"area_states":{"route_1":"unknown"}}')
+    loaded = SoulLinkState.load(data_dir=str(tmp_path))
+    assert loaded.load_failed.startswith("ValueError:")
+    assert loaded.handle_event("a", {"event": "tick"})[0]["refused"] == "load_failed"
+
+
+@pytest.mark.parametrize("event", ["tick", "safe"])
+def test_partial_party_snapshot_drops_bad_entries_with_warning(event, caplog):
+    import logging
+    state = make_state_with_link()
+    state.handle_event("a", {"event": event, "party": [1, {"maxHP": 10}, {"key": "A:1", "hp": 5, "maxHP": 10}]})
+    assert state.party_size["a"] == 1 and state.party_keys["a"] == {"A:1"}
+    assert any(r.levelno == logging.WARNING and "party" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize("event", ["hello", "tick", "safe"])
+@pytest.mark.parametrize("party", [[{"maxHP": 50}], [1], 5])
+def test_nonempty_unkeyed_party_is_refused_without_zeroing(event, party):
+    state = make_state_with_link()
+    before = set(state.party_keys["a"]), state.party_size["a"]
+    reply = state.handle_event("a", {"event": event, "party": party})
+    assert any(c.get("refused") == "party_snapshot" for c in reply)
+    assert (state.party_keys["a"], state.party_size["a"]) == before
+
+
+def test_unkeyed_lead_cannot_bypass_the_identity_lock(caplog):
+    state = SoulLinkState()
+    state.handle_event("a", {"event": "hello", "trainer_name": "A", "party": [{"key": "AAAA:1111", "hp": 10, "maxHP": 10}]})
+    message = {"event": "hello", "trainer_name": "Other", "party": [{"maxHP": 10}, {"key": "BBBB:2222", "hp": 10, "maxHP": 10}]}
+    state.handle_event("a", message)
+    assert message.get("_rejected") and "2222" in state.identity_error["a"]
+    assert state.party_keys["a"] == {"AAAA:1111"}
+
+
+
+def test_gift_area_retry_clear_is_logged_and_saved(tmp_path, caplog):
+    import logging
+    caplog.set_level(logging.INFO)
+    state = SoulLinkState(data_dir=str(tmp_path))
+    state.retry_areas["a"].add("route_2")
+    state._save()
+    state.handle_event("a", {"event": "area_enter", "area_id": "oaks_lab"})
+    restored = SoulLinkState.load(data_dir=str(tmp_path), adapter=state.adapter)
+    assert restored.retry_areas["a"] == set()
+    assert "cleared retry areas" in caplog.text

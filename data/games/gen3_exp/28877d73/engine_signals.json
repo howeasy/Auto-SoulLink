@@ -13,7 +13,7 @@
       "status": "PINNED_SOURCE_ONLY"
     },
     "capture_wild": {
-      "capture_contract": "Common return: R0 party/PC/failure, R6 source mon. REQUIRE saved caller LR at R13+16 equal 0x080AA0DA or 0x080AA36A (the two compiler-emitted Cmd_givecaughtmon call returns), success, and dedupe against mon_given. ScriptGiveMon also calls this routine.",
+      "capture_contract": "Common return: R0 party/PC/failure, R6 source mon. REQUIRE saved caller LR at R13+16 equal 0x080AA0DA or 0x080AA36A (the two compiler-emitted Cmd_givecaughtmon call returns), success. mon_given now lives in GiveScriptedMonToPlayer and never fires for a capture. ScriptGiveEgg also calls this routine (caller LR not in the two Cmd_givecaughtmon returns: ignore).",
       "source": "src/battle_script_commands.c:8371; src/pokemon.c:2941-2961",
       "status": "PINNED_SOURCE_ONLY"
     },
@@ -23,13 +23,18 @@
       "status": "PINNED_SOURCE_ONLY"
     },
     "faint": {
-      "capture_contract": "After SetValuesOnFaint returns; R4 is battler, player/opponent counters updated. REQUIRE player-side ownership and identity dedupe; not every opcode invocation is a faint.",
-      "source": "src/battle_script_commands.c:1906; src/battle_util.c:11125-11153",
+      "capture_contract": "The pop {r4-r7} at +0x86 (080DF52A) is the unique join of the player branch (falls through from the faint-counter store at +0x84) and the opponent branch (b #080DF52A at +0xAE), so both reach this instruction and it fires once per fainted battler of either side. R4 is still the battler id at the hook (the hook fires BEFORE the instruction executes). Exactly two BL callers in this build, both verified by ROM-wide scan: Cmd_tryfaintmon+0x86 (080A5BDA, the battle opcode 0x19) and MoveEndFaintBlock+0x1E8 (080936FC, the C fallback that contains FAINT_BLOCK_FAINT_TARGET) -- the old Cmd_tryfaintmon pin missed the latter. The fire alone proves a faint of EITHER side and nothing more: the client reads no register here (settle_faints is a party/HP census), so player-side ownership, identity dedupe and the player/opponent split are the client's to decide.",
+      "source": "src/battle_util.c:11125-11150; src/battle_script_commands.c:1906; src/battle_move_resolution.c:3730",
       "status": "PINNED_SOURCE_ONLY"
     },
     "frame_control": {
       "capture_contract": "Start of the main-loop iteration at input polling, before callbacks; back edges from both VBlank wait paths return here. Not the inlined CallCallbacks function or FR's help gate.",
       "source": "src/main.c:134-172",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "hatch": {
+      "capture_contract": "AddHatchedMonToParty +0xDA, the first instruction after the BL CalculateMonStats returns (MonRestorePP and CalculateMonStats done, function not inlined); R4 = completed hatchling (&gParties[B_TRAINER_PLAYER][id], set once at +0x0C and never rewritten; R5 is the species, later gSaveBlock2Ptr). Snapshot that aligned party record, require non-egg/non-Bad-Egg and valid checksum; O-15 publishes one gift_daycare capture at hatch, never at GiveEgg.",
+      "source": "src/egg_hatch.c:307-352",
       "status": "PINNED_SOURCE_ONLY"
     },
     "map_load": {
@@ -38,8 +43,8 @@
       "status": "PINNED_SOURCE_ONLY"
     },
     "mon_given": {
-      "capture_contract": "Common return after party copy or CopyMonToPC. R0 outcome, R6 source mon. Captures and scripted gifts share this renamed routine; classify by caller and dedupe capture_wild.",
-      "source": "src/pokemon.c:2941-2961; src/script_pokemon_util.c:76",
+      "capture_contract": "Single common return of GiveScriptedMonToPlayer (the only Give* routine that createmon/givemon, ScriptGiveMon and so the starter reach), after the party copy or CopyMonToPC, both Pokedex flag sets and the inlined CalculatePlayerPartyCount store. The fire ALONE proves nothing: the client reads no register for mon_given (it sets f.acquire only), the return is also reached with outcome 2 (MON_CANT_GIVE), and an explicit-slot createmon overwrites that party slot. The party/box census in settle_acquisitions decides what was actually acquired and where. Wild capture and ScriptGiveEgg go through GiveCapturedMonToPlayer instead and never reach this site, so there is no capture_wild double-fire; eggs are acquired at hatch.",
+      "source": "src/pokemon.c:6674-6706; src/script_pokemon_util.c:368-398",
       "status": "PINNED_SOURCE_ONLY"
     },
     "pc_box_place": {
@@ -109,9 +114,10 @@
     }
   },
   "live_verified": false,
+  "mirror_contract": "Every site is also hooked at address+capture_offset+mirror_offset (ROM_SIZE=0x2000000, constants/gba_constants.inc:33): script command handlers run through callnative/gScriptCmdTable pointers that carry +ROM_SIZE (asm/macros/event.inc:273-283, data/script_cmd_table.inc:11), so the CPU executes them at the 0x0A mirror alias, which an exec hook on the 0x08 address never matches. The dispatched signal keeps the canonical 0x08 address; callback_address records the real PC.",
   "pack": "gen3_exp",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "d21b118471931a57a39bcc2fee6a950ccdf8cfb4485fc39dad27d3354d63534e",
+  "sha256": "8771d56e099151067240adeff84beadda9f5ec1d414d410c78f6f0e66cbfbff1",
   "source": {
     "facts_sha256": "9f3691e0d7439f1947428101c2e0d0b50d08725d72711a30155766268becc4bf",
     "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
@@ -199,6 +205,9 @@
                 "symbol_source": "build:pokemon.sym:3948",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R15",
@@ -229,6 +238,9 @@
                 "symbol_source": "build:pokemon.sym:3915",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R0",
@@ -242,7 +254,7 @@
             },
             "capture_wild": {
               "address": 136044046,
-              "capture_contract": "Common return: R0 party/PC/failure, R6 source mon. REQUIRE saved caller LR at R13+16 equal 0x080AA0DA or 0x080AA36A (the two compiler-emitted Cmd_givecaughtmon call returns), success, and dedupe against mon_given. ScriptGiveMon also calls this routine.",
+              "capture_contract": "Common return: R0 party/PC/failure, R6 source mon. REQUIRE saved caller LR at R13+16 equal 0x080AA0DA or 0x080AA36A (the two compiler-emitted Cmd_givecaughtmon call returns), success. mon_given now lives in GiveScriptedMonToPlayer and never fires for a capture. ScriptGiveEgg also calls this routine (caller LR not in the two Cmd_givecaughtmon returns: ignore).",
               "capture_offset": 4,
               "context": {
                 "expected_hex": "194BF0B51C68072122000600FCF762FE",
@@ -260,6 +272,9 @@
                 "symbol_source": "build:pokemon.sym:12388",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R0",
@@ -293,6 +308,9 @@
                 "symbol_source": "build:pokemon.sym:7942",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R4",
@@ -305,35 +323,38 @@
               "symbol": "Task_EvolutionScene"
             },
             "faint": {
-              "address": 134896602,
-              "capture_contract": "After SetValuesOnFaint returns; R4 is battler, player/opponent counters updated. REQUIRE player-side ownership and identity dedupe; not every opcode invocation is a faint.",
+              "address": 135132454,
+              "capture_contract": "The pop {r4-r7} at +0x86 (080DF52A) is the unique join of the player branch (falls through from the faint-counter store at +0x84) and the opponent branch (b #080DF52A at +0xAE), so both reach this instruction and it fires once per fainted battler of either side. R4 is still the battler id at the hook (the hook fires BEFORE the instruction executes). Exactly two BL callers in this build, both verified by ROM-wide scan: Cmd_tryfaintmon+0x86 (080A5BDA, the battle opcode 0x19) and MoveEndFaintBlock+0x1E8 (080936FC, the C fallback that contains FAINT_BLOCK_FAINT_TARGET) -- the old Cmd_tryfaintmon pin missed the latter. The fire alone proves a faint of EITHER side and nothing more: the client reads no register here (settle_faints is a party/HP census), so player-side ownership, identity dedupe and the player/opponent split are the client's to decide.",
               "capture_offset": 4,
               "context": {
-                "expected_hex": "70B52E4E3568687821F062F8AB780400",
-                "rom_offset": 678740
+                "expected_hex": "F0B50406240E220001231C329340284E",
+                "rom_offset": 914596
               },
-              "expected_hex": "39F063FCE81D21F0BCFA104BC7E7EB1D",
+              "expected_hex": "124BDA74F0BC01BC00470E4D6B78FF2B",
               "function": {
-                "address": 134896468,
-                "anchor_offset": 134,
-                "capture_offset": 138,
-                "line": 4492,
-                "size": 220,
+                "address": 135132324,
+                "anchor_offset": 130,
+                "capture_offset": 134,
+                "line": 5541,
+                "size": 208,
                 "size_evidence": "verified_build_symbol",
-                "symbol": "Cmd_tryfaintmon",
-                "symbol_source": "build:pokemon.sym:4492",
+                "symbol": "SetValuesOnFaint",
+                "symbol_source": "build:pokemon.sym:5541",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R4",
                 "R15",
                 "CPSR"
               ],
-              "rom_offset": 678874,
+              "rom_offset": 914726,
               "snapshot": null,
-              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_script_commands.c:1906; src/battle_util.c:11125-11153",
-              "symbol": "Cmd_tryfaintmon"
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_util.c:11125-11150; src/battle_script_commands.c:1906; src/battle_move_resolution.c:3730",
+              "symbol": "SetValuesOnFaint"
             },
             "frame_control": {
               "address": 135768764,
@@ -355,6 +376,9 @@
                 "symbol_source": "build:pokemon.sym:10366",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R15",
@@ -364,6 +388,40 @@
               "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/main.c:134-172",
               "symbol": "AgbMainLoop"
+            },
+            "hatch": {
+              "address": 135377754,
+              "capture_contract": "AddHatchedMonToParty +0xDA, the first instruction after the BL CalculateMonStats returns (MonRestorePP and CalculateMonStats done, function not inlined); R4 = completed hatchling (&gParties[B_TRAINER_PLAYER][id], set once at +0x0C and never rewritten; R5 is the species, later gSaveBlock2Ptr). Snapshot that aligned party record, require non-egg/non-Bad-Egg and valid checksum; O-15 publishes one gift_daycare capture at hatch, never at GiveEgg.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "70B5642400264443364B8AB0E41804AA",
+                "rom_offset": 1159812
+              },
+              "expected_hex": "A4F05FFF0AB070BC01BC0047C046641B",
+              "function": {
+                "address": 135377540,
+                "anchor_offset": 214,
+                "capture_offset": 218,
+                "line": 6941,
+                "size": 244,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "build:pokemon.sym:6941",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mirror_offsets": [
+                33554432
+              ],
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1160026,
+              "snapshot": null,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/egg_hatch.c:307-352",
+              "symbol": "AddHatchedMonToParty"
             },
             "map_load": {
               "address": 135875774,
@@ -385,6 +443,9 @@
                 "symbol_source": "build:pokemon.sym:11293",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R0",
@@ -397,37 +458,41 @@
               "symbol": "CB2_LoadMap2"
             },
             "mon_given": {
-              "address": 136044046,
-              "capture_contract": "Common return after party copy or CopyMonToPC. R0 outcome, R6 source mon. Captures and scripted gifts share this renamed routine; classify by caller and dedupe capture_wild.",
+              "address": 136064728,
+              "capture_contract": "Single common return of GiveScriptedMonToPlayer (the only Give* routine that createmon/givemon, ScriptGiveMon and so the starter reach), after the party copy or CopyMonToPC, both Pokedex flag sets and the inlined CalculatePlayerPartyCount store. The fire ALONE proves nothing: the client reads no register for mon_given (it sets f.acquire only), the return is also reached with outcome 2 (MON_CANT_GIVE), and an explicit-slot createmon overwrites that party slot. The party/box census in settle_acquisitions decides what was actually acquired and where. Wild capture and ScriptGiveEgg go through GiveCapturedMonToPlayer instead and never reach this site, so there is no capture_wild double-fire; eggs are acquired at hatch.",
               "capture_offset": 4,
               "context": {
-                "expected_hex": "194BF0B51C68072122000600FCF762FE",
-                "rom_offset": 1826224
+                "expected_hex": "F0B5C6460B06804600B51B0E052B44D9",
+                "rom_offset": 1846900
               },
-              "expected_hex": "01341C76F0BC02BC0847C0510003641B",
+              "expected_hex": "3800347680BCB846F0BC02BC08476420",
               "function": {
-                "address": 136043952,
-                "anchor_offset": 94,
-                "capture_offset": 98,
-                "line": 12388,
-                "size": 116,
+                "address": 136064628,
+                "anchor_offset": 100,
+                "capture_offset": 104,
+                "line": 12487,
+                "size": 192,
                 "size_evidence": "verified_build_symbol",
-                "symbol": "GiveCapturedMonToPlayer",
-                "symbol_source": "build:pokemon.sym:12388",
+                "symbol": "GiveScriptedMonToPlayer",
+                "symbol_source": "build:pokemon.sym:12487",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R0",
-                "R6",
+                "R7",
+                "R8",
                 "R13",
                 "R15",
                 "CPSR"
               ],
-              "rom_offset": 1826318,
+              "rom_offset": 1847000,
               "snapshot": null,
-              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon.c:2941-2961; src/script_pokemon_util.c:76",
-              "symbol": "GiveCapturedMonToPlayer"
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon.c:6674-6706; src/script_pokemon_util.c:368-398",
+              "symbol": "GiveScriptedMonToPlayer"
             },
             "pc_box_place": {
               "address": 136103994,
@@ -449,6 +514,9 @@
                 "symbol_source": "build:pokemon.sym:12694",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R5",
@@ -481,6 +549,9 @@
                 "symbol_source": "build:pokemon.sym:12752",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R4",
@@ -525,6 +596,9 @@
                 "symbol_source": "build:pokemon.sym:12387",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R0",
@@ -559,7 +633,15 @@
                 "symbol_source": "build:pokemon.sym:12753",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
+              "pairing": {
+                "mode": "frame_window",
+                "reason": "Task_ReleaseMon +0xFA..+0x17C is straight-line mid-body: SP is equal at both sites (no push/pop between), so pair only when both fire on the same frame",
+                "window": 0
+              },
               "point": [
                 "R5",
                 "R15",
@@ -601,7 +683,15 @@
                 "symbol_source": "build:pokemon.sym:12753",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
+              "pairing": {
+                "mode": "frame_window",
+                "reason": "Task_ReleaseMon +0xFA..+0x17C is straight-line mid-body: SP is equal at both sites (no push/pop between), so pair only when both fire on the same frame",
+                "window": 0
+              },
               "point": [
                 "R5",
                 "R15",
@@ -647,6 +737,9 @@
                 "symbol_source": "build:pokemon.sym:12694",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R4",
@@ -680,6 +773,9 @@
                 "symbol_source": "build:pokemon.sym:8536",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R4",
@@ -712,6 +808,9 @@
                 "symbol_source": "build:pokemon.sym:8536",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R0",
@@ -744,6 +843,9 @@
                 "symbol_source": "build:pokemon.sym:13646",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R0",
@@ -776,6 +878,9 @@
                 "symbol_source": "build:pokemon.sym:14847",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R0",
@@ -808,6 +913,9 @@
                 "symbol_source": "build:pokemon.sym:14847",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R15",
@@ -838,6 +946,9 @@
                 "symbol_source": "build:pokemon.sym:7943",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R7",
@@ -869,6 +980,9 @@
                 "symbol_source": "build:pokemon.sym:11339",
                 "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
               },
+              "mirror_offsets": [
+                33554432
+              ],
               "mode": "thumb",
               "point": [
                 "R0",

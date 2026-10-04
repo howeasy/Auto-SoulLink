@@ -36,8 +36,7 @@ def test_skip_link_is_the_first_thing_in_the_body(env):
     assert after_body.startswith('<a class="skip-link" href="#main-content">Skip to main content</a>')
 
 
-# _smoke.html is a macro harness with no main.
-_NO_TARGET_YET = {"base.html", "_smoke.html"}
+_NO_TARGET_YET = {"base.html"}
 
 
 @pytest.mark.parametrize("name", sorted(

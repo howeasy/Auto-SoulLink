@@ -1,0 +1,46 @@
+
+========== scenario: faint_cmd_gen3 ==========
+[duo] faint_cmd_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=f2ef83e931a2319dfd642291852e16818750419889c4bc4ee7fc0304836cc686 profile.json=d07f68e65c6916d8bfaca6a643e71fdd0b34781b6380d73ce06f9eff656b83d4 source=ea9c8a070e2a9f44c56d6a2957d577525f674871
+[duo] server up: tcp=56487 http=56488 data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_qo3xbisp
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 13:37:25,330 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 13:37:25,330 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 1.2s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_qo3xbisp path=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_qo3xbisp\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_qo3xbisp path=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_qo3xbisp\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'memorialize', 'key': '504F4F4D:20250925'}
+[duo] queued for a: {'cmd': 'game_over'}
+[duo] injected A faint 504F4F4D:20250925 -> force_faint B 504F4F4D:DFDAF6DA; re-queued to A: ['memorialize', 'game_over']
+[duo] timing orchestrate 6.9s
+[duo] timing results 5.4s
+[duo] RESULT_LINE a: RESULT: PASS (memorialized 504F4F4D:20250925)
+[duo] RESULT_LINE b: RESULT: PASS (memorialized 504F4F4D:DFDAF6DA)
+[duo] SAVE_WITNESS_SHA256 inst=a site=d0773d5ff959a00f12f2d3139488fad72a015ae43f0f441d8b25662adb04b448 file=d0773d5ff959a00f12f2d3139488fad72a015ae43f0f441d8b25662adb04b448 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=7958ff4f96e14bfdc0c043c3429404161361f15ba824b2133be39aea602b64da file=7958ff4f96e14bfdc0c043c3429404161361f15ba824b2133be39aea602b64da match=true saves=1 counter=3->4 rtc=normalized
+[duo] faint_cmd: 504F4F4D:20250925 and 504F4F4D:DFDAF6DA saved once each in box 14; B's HP 0 came from an overworld-armed write
+[duo] MARKER a: RX memorialize key=504F4F4D:20250925
+[duo] MARKER a: TX memorialize_done 504F4F4D:20250925 {"box":13,"event":"memorialize_done","key":"504F4F4D:20250925","player":"a","seq":7}
+[duo] MARKER b: RX force_faint key=504F4F4D:DFDAF6DA
+[duo] MARKER b: FORCED_HP0 504F4F4D:DFDAF6DA frame=692 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=504F4F4D:DFDAF6DA
+[duo] MARKER b: TX memorialize_done 504F4F4D:DFDAF6DA {"box":13,"event":"memorialize_done","key":"504F4F4D:DFDAF6DA","player":"b","seq":7}
+[duo] MARKER b: [client] [SLink-gen3] write overworld 0x02031C1E +2 frame 692
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] faint_cmd_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_qo3xbisp
+
+========== summary ==========
+  faint_cmd_gen3: PASS (attempt 1 of 1)

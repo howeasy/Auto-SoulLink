@@ -198,13 +198,13 @@ def test_diff4_hello_during_a_blackout_is_sent_like_master():
 
 # ── listed diff 6: one pump error propagates, the session and panel survive ──────────────
 
-def test_diff6_pump_error_propagates_without_a_second_hello_or_panel_clear():
+def test_diff6_pump_hold_is_logged_without_a_second_hello_or_panel_clear():
     w = _world()
     trace = _trace(w)
     w.connect()
     w.net.pump = w.lua.eval("function() error('pump boom', 0) end")
-    with pytest.raises(lupa.LuaError, match="pump boom"):
-        w.step()
+    w.step()
+    assert sum("frame hold:" in line and "pump boom" in line for line in w.logs) == 1
     w.net.pump = lambda: None
     w.step(5)
     assert len(w.events("hello")) == 1 and ("clear",) not in trace
@@ -405,6 +405,13 @@ def test_master_equivalence_differential(name, master_root, monkeypatch):
     master, head = _with_added_hello_fields(traces[0]), _without_box_generation(traces[1])
     assert not any(k in e[1] for e in traces[0] if e[0] == "sent" for k in HELLO_ADDED), "master grew it"
     assert any(entry[0] == "sent" for entry in master), "the scenario must be observable"
+    if name == "pump_error":
+        # O-7 deliberately replaces propagation with one console hold diagnostic.
+        # Preserve the full wire/panel comparison; only the old escaped exception changes.
+        assert [entry for entry in master if entry[0] == "frame_error"] == [("frame_error", True)]
+        assert not any(entry[0] == "frame_error" for entry in head)
+        assert sum("frame hold:" in line and "pump boom" in line for line in w.logs) == 1
+        master = [entry for entry in master if entry[0] != "frame_error"]
     assert head == master
 
 
@@ -466,8 +473,12 @@ def test_w14_parked_phase_callback_matches_master(tmp_path_factory):
     point, and stepped the pre-park buttons afterwards."""
     scratch = tmp_path_factory.mktemp("w14_master")
     master = scratch / "gen1_scripted_play.lua"
-    master.write_bytes(subprocess.run(["git", "show", f"{MASTER}:lua/tests/gen1_scripted_play.lua"],
-                                      cwd=REPO, check=True, capture_output=True).stdout)
+    try:
+        blob = subprocess.run(["git", "show", f"{MASTER}:lua/tests/gen1_scripted_play.lua"],
+                              cwd=REPO, check=True, capture_output=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip(f"master {MASTER} not available in this clone (shallow checkout?)")
+    master.write_bytes(blob)
     want = _park_run(master)
     assert want[0] == 6 and want[1] == 56  # 6 iterations; 5 route steps + 50 parked + 1 idle
     assert _park_run(REPO / "lua" / "tests" / "gen1_scripted_play.lua") == want

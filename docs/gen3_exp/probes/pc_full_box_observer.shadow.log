@@ -1,0 +1,8 @@
+NOTE observer building unadmitted gen3_exp/emerald_expansion_28877d73
+STATUS frame=613 registered=44 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+STATUS frame=1557 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+STATUS frame=2157 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1187
+STATUS frame=2757 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1743
+SHADOW t=1 frame=3154 kind=pc_box_place key= address=136103998 callback_address=136103998 cpsr=1610612799 mode=thumb raw_r15=136104000 sp=50363792 thumb=1
+SHADOW t=2 frame=3154 kind=pc_deposit key= address=136127458 callback_address=136127458 cpsr=63 mode=thumb raw_r15=136127460 sp=50363816 thumb=1
+STATUS frame=3357 registered=44 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2300

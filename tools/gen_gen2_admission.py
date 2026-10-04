@@ -6,14 +6,18 @@ receipt explicitly promotes the four clean rows to BUILT after checking the
 adjacent .sym/.map files; --overlay-provenance (P4.1f) likewise promotes the three
 overlay rows to BUILT from the SLink companion build receipt (still FUTURE: BUILT is
 an identity, never a runtime admission). Neither mode emits ADMITTED artifacts; only
---promote-overlays does (P4.4), and it refuses unless the owner signed the G4 row of PLAN
-§6.1 and every release-evidence receipt lane is clean. G1 opens only for a
+--promote-overlays does (P4.4), and it refuses unless the ACTIVATION preconditions hold (OVERLAY_ADMISSION D6): the
+owner signed the G4 row of PLAN §6.1, the published overlay pins match, each overlay has its generated binding sidecar
+(data/games/gen2_<t>/overlay/binding.json) matching the published build, and each overlay's own receipts validate under
+the production validators (lua/gen2/entry.lua Entry.activation_proof). Activation is NOT the full release-evidence:
+that runs after the freeze (tools/verify_gen2_release.py --release-evidence). The same activation preconditions are re-run whenever
+any overlay row is already ADMITTED, so --check and plain regeneration never bless a self-consistent but unproven catalog. G1 opens only for a
 title in G1_ADMITTED (an owner ruling), only once its rows are BUILT, and the gate row
 is the grant, never the proof: lua/gen2/entry.lua re-validates that title's shipped
 PHYSICAL receipts at every load. Overlay/ghost qualification belongs to later owners.
-Promotion is bound to the canonical repository inputs. Each ADMITTED overlay row stores the
-exact lock/build/overlay/UPS grant fingerprint, so ordinary regeneration cannot carry an old
-grant onto changed evidence. Complete three-title catalogs are staged before locked replacement.
+Promotion is bound to the canonical repository inputs. Each ADMITTED overlay row (schema_version 2: selection
+SELECTED, runtime_gate G4) stores the exact lock/build/overlay/UPS grant fingerprint and the sha256 of its binding
+sidecar, so ordinary regeneration cannot carry an old grant onto changed evidence. Complete three-title catalogs are staged before locked replacement.
 
     python tools/gen_gen2_admission.py
     python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json
@@ -182,7 +186,7 @@ def validate_provenance(lock: dict, provenance: dict, *, lock_bytes: bytes | Non
 
 
 def overlay_row(title: str, lock: dict, overlay: dict, admitted: bool = False, *,
-                grant_fingerprint: str | None = None) -> dict:
+                grant_fingerprint: str | None = None, binding_sha256: str | None = None) -> dict:
     """The BUILT identity of one title's SLink companion build (data/gen2/overlay_provenance.json).
 
     The null (mailbox-only) build is byte-identical to the clean ROM and is refused: one hash
@@ -206,14 +210,18 @@ def overlay_row(title: str, lock: dict, overlay: dict, admitted: bool = False, *
     ups = object_at(out.get("ups"), f"overlay {artifact}.ups")
     require(isinstance(ups.get("file"), str) and is_hash(ups.get("sha256"), 64),
             f"overlay provenance: {artifact} UPS identity missing")
+    # D1: before activation the row is an identity only (FUTURE+BUILT, never runtime eligible); an activated row is
+    # SELECTED+ADMITTED behind its own G4 grant and pins the sha256 of its binding sidecar.
     row = {"id": f"{title}_overlay", "kind": "overlay", "revision": TITLE_OUTPUTS[title][0][1],
-           "selection": "FUTURE", "status": "ADMITTED" if admitted else "BUILT", "sha1": out["sha1"],
-           "md5": out["md5"], "base_sha1": clean,
+           "selection": "SELECTED" if admitted else "FUTURE", "status": "ADMITTED" if admitted else "BUILT",
+           "sha1": out["sha1"], "md5": out["md5"], "base_sha1": clean,
            "ups": {"file": ups["file"], "sha256": ups["sha256"]}}
     if admitted:
         require(is_hash(grant_fingerprint, 64),
                 "overlay promotion: ADMITTED rows require a valid grant fingerprint")
-        row["grant_fingerprint"] = grant_fingerprint
+        require(is_hash(binding_sha256, 64), "overlay promotion: ADMITTED rows require the binding sidecar sha256")
+        row["runtime_gate"] = {"id": "G4", "state": "ADMITTED", "grant_fingerprint": grant_fingerprint}
+        row["binding_sha256"] = binding_sha256
     return row
 
 
@@ -225,7 +233,7 @@ def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
               "selection": "FUTURE", "status": "PLANNED"} for kind in ("overlay", "ghost")]
     kinds = ("clean", "overlay", "ghost")
     return {
-        "schema_version": 1, "purpose": "P1_ARTIFACT_MATRIX_ONLY", "foundation": "gen2_gsc",
+        "schema_version": 2, "purpose": "P1_ARTIFACT_MATRIX_ONLY", "foundation": "gen2_gsc",
         "title": title, "pack": f"gen2_{title}", "selected_revision": TITLE_OUTPUTS[title][0][1],
         "source_lock_sha256": source_lock_sha256, "gate": _gate(title, False),
         "unknown_hash_policy": "REFUSE", "refused_kinds": ["archipelago", "randomized", "unknown"],
@@ -247,11 +255,14 @@ def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
 
 def build_matrices(lock: dict, provenance: dict | None = None, *,
                    lock_bytes: bytes | None = None, overlay: dict | None = None,
-                   promoted: bool = False, grant_fingerprint: str | None = None) -> dict[str, dict]:
+                   promoted: bool = False, grant_fingerprint: str | None = None,
+                   bindings: dict[str, str] | None = None) -> dict[str, dict]:
     validate_lock(lock)
     require(not promoted or overlay is not None, "overlay promotion requires the overlay provenance")
     require(not promoted or is_hash(grant_fingerprint, 64),
             "overlay promotion requires a valid grant fingerprint")
+    require(not promoted or (isinstance(bindings, dict) and set(bindings) >= set(TITLE_OUTPUTS)),
+            "overlay promotion requires every title's binding sidecar hash")
     source_lock_sha256 = lock_sha256(lock, lock_bytes)
     if provenance is not None:
         validate_provenance(lock, provenance, lock_bytes=lock_bytes)
@@ -269,13 +280,14 @@ def build_matrices(lock: dict, provenance: dict | None = None, *,
             rows = matrix["artifacts"]
             index = next(i for i, row in enumerate(rows) if row["kind"] == "overlay")
             rows[index] = overlay_row(matrix["title"], lock, overlay, admitted=promoted,
-                                      grant_fingerprint=grant_fingerprint)
+                                      grant_fingerprint=grant_fingerprint,
+                                      binding_sha256=(bindings or {}).get(matrix["title"]))
     return matrices
 
 
 def validate_matrix(matrix: dict, lock: dict, provenance: dict | None = None, *,
                     lock_bytes: bytes | None = None, overlay: dict | None = None,
-                    grant_fingerprint: str | None = None) -> None:
+                    grant_fingerprint: str | None = None, binding_sha256: str | None = None) -> None:
     validate_lock(lock)
     object_at(matrix, "matrix")
     require(isinstance(matrix.get("title"), str) and matrix["title"] in TITLE_OUTPUTS,
@@ -304,7 +316,7 @@ def validate_matrix(matrix: dict, lock: dict, provenance: dict | None = None, *,
             require(status in ("BUILT", "ADMITTED") and overlay is not None,
                     "matrix: a BUILT overlay row requires the overlay provenance")
             require(row == overlay_row(matrix["title"], lock, overlay, admitted=status == "ADMITTED",
-                                       grant_fingerprint=grant_fingerprint),
+                                       grant_fingerprint=grant_fingerprint, binding_sha256=binding_sha256),
                     "matrix: overlay identity/hash/provenance/grant mismatch")
         else:
             require(status == "BUILT" and planned["kind"] == "clean", "matrix: unsupported artifact state/kind")
@@ -313,12 +325,77 @@ def validate_matrix(matrix: dict, lock: dict, provenance: dict | None = None, *,
             require(row == built, "matrix: BUILT identity/hash/provenance mismatch")
 
 
-def promotion_blockers() -> list[str]:
-    """P4.4 / G4 (PLAN §6.1): everything the release-evidence lane demands except the ADMITTED rows
-    this promotion writes -- the owner's G4 signature, published overlay bytes, the shipped UPS and
-    every receipt lane (tools/verify_gen2_release.py). Empty is the only permission to promote."""
+def g4_packet_errors() -> list[str]:
+    """The G4 packet minus the ADMITTED rows this activation writes: the owner's G4 signature (PLAN §6.1), the
+    published overlay bytes (UPS, .sym/.map hashes) and the shipped release bundle (tools/verify_gen2_release.py)."""
     import verify_gen2_release as release
-    return release.release_evidence_errors(require_admitted=False)
+    return release.g4_packet_errors(require_admitted=False)
+
+
+def binding_path(out_dir: Path, title: str) -> Path:
+    return out_dir / f"gen2_{title}" / "overlay" / "binding.json"
+
+
+def binding_sha256(raw: bytes) -> str:
+    """The sidecar pin: LF-normalised, exactly lua/gen2/artifact.lua (autocrlf is not a different binding)."""
+    return hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
+
+
+def read_bindings(out_dir: Path) -> dict[str, str | None]:
+    """title -> sha256 of its generated binding sidecar (None when absent)."""
+    found = {}
+    for title in TITLE_OUTPUTS:
+        path = binding_path(out_dir, title)
+        found[title] = binding_sha256(path.read_bytes()) if path.is_file() else None
+    return found
+
+
+def binding_problems(title: str, raw: bytes, overlay: dict) -> list[str]:
+    """Whether the sidecar names exactly the published overlay build (D2): identity, base, UPS and symbol hashes."""
+    try:
+        binding = _parse_json(raw, f"{title} binding")
+        out = overlay["outputs"][TITLE_OUTPUTS[title][0][0]]
+    except (ValueError, KeyError, TypeError) as exc:
+        return [f"{title}: overlay binding sidecar unreadable: {exc}"]
+    symbols = overlay.get("symbols") or {}
+    expected = {"schema": "gen2-overlay-binding-v1", "title": title, "kind": "overlay", "rom_sha1": out.get("sha1"),
+                "base_sha1": out.get("base_sha1"), "ups_sha256": (out.get("ups") or {}).get("sha256")}
+    for ext in ("sym", "map"):
+        if symbols.get(f"{title}_slink.{ext}"):
+            expected[f"{ext}_sha256"] = symbols[f"{title}_slink.{ext}"]
+    return [f"{title}: overlay binding {key} differs from the published overlay build"
+            for key, value in expected.items() if binding.get(key) != value]
+
+
+def overlay_proof_errors(matrices: dict[str, dict]) -> list[str]:
+    """Each PROSPECTIVE overlay row's own binding and receipts under the production validators: the Lua entry's
+    Entry.activation_proof (lua/gen2/entry.lua), the same code Entry.admit runs at every load."""
+    from lupa.lua54 import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    entry = lua.eval("dofile")((ROOT / "lua/gen2/entry.lua").as_posix())
+    errors = []
+    for matrix in matrices.values():
+        row = next(r for r in matrix["artifacts"] if r["kind"] == "overlay")
+        # activation_proof always returns two values (true,nil | nil,why), which lupa unpacks into a tuple.
+        ok, why = entry.activation_proof(ROOT.as_posix(), matrix["title"], lua.table_from(row, recursive=True))
+        if ok is not True:
+            errors.append(f"{matrix['title']}: overlay proofs refused: {why}")
+    return errors
+
+
+def activation_blockers(out_dir: Path, overlay: dict) -> list[str]:
+    """P4.4 / G4, split per OVERLAY_ADMISSION D6: the ACTIVATION preconditions only -- G4 signed, the published pins,
+    and a binding sidecar that matches the published build. The overlay receipts are checked next, against the
+    prospective rows (overlay_proof_errors). The full release-evidence lanes are NOT required: they run after the
+    freeze. Empty is the only permission to activate."""
+    blockers = [f"packet: {error}" for error in g4_packet_errors()]
+    for title in TITLE_OUTPUTS:
+        path = binding_path(out_dir, title)
+        if not path.is_file():
+            blockers.append(f"{title}: overlay binding sidecar missing: {path}")
+            continue
+        blockers.extend(binding_problems(title, path.read_bytes(), overlay))
+    return blockers
 
 
 def _parse_json(raw: bytes, label: str) -> dict:
@@ -465,11 +542,12 @@ def main(argv: list[str] | None = None) -> int:
                 require(len(overlay_rows) == 1, "existing matrix: expected one overlay row")
                 row = overlay_rows[0]
                 if row.get("status") == "ADMITTED":
-                    stored = row.get("grant_fingerprint")
+                    gate = row.get("runtime_gate")
+                    stored = gate.get("grant_fingerprint") if isinstance(gate, dict) else None
                     require(is_hash(stored, 64),
                             f"existing {pack}: ADMITTED overlay lacks a valid grant fingerprint; "
                             "a new G4 promotion is required")
-                    admitted.append((pack, stored))
+                    admitted.append((pack, stored, row.get("binding_sha256")))
 
             needs_grant = args.promote_overlays or bool(admitted)
             require(not needs_grant or (provenance_bytes is not None and overlay_bytes is not None),
@@ -478,26 +556,40 @@ def main(argv: list[str] | None = None) -> int:
             current_grant = (grant_fingerprint(lock_bytes, provenance_bytes, overlay_bytes, overlay)
                              if needs_grant else None)
 
+            bindings = read_bindings(args.out_dir) if (args.promote_overlays or admitted) else None
             if args.promote_overlays:
                 promoted = True
-                if not args.check:
-                    blockers = promotion_blockers()
-                    require(not blockers,
-                            f"G4 promotion refused, {len(blockers)} blocker(s): "
-                            + "; ".join(blockers[:5]))
             elif admitted:
-                require(all(stored == current_grant for _pack, stored in admitted),
+                require(all(stored == current_grant for _pack, stored, _binding in admitted),
                         "stored G4 grant differs from the current lock/build/overlay/UPS identity; "
                         "a new G4 promotion is required")
                 require(len(admitted) == len(TITLE_OUTPUTS),
-                        f"partial G4 promotion ({[pack for pack, _ in admitted]}); "
+                        f"partial G4 promotion ({[pack for pack, _, _ in admitted]}); "
                         "rerun with --promote-overlays to complete it")
+                require(all(stored == bindings[pack.removeprefix("gen2_")] for pack, _grant, stored in admitted),
+                        "stored overlay binding pin differs from the binding sidecar; "
+                        "a new G4 promotion is required")
                 promoted = True
             else:
                 promoted = False
+            # D6: the ACTIVATION preconditions (G4 packet, binding sidecars, overlay proofs) gate every new promotion AND
+            # every catalog that already carries ADMITTED overlay rows: --check/regeneration never bless a self-consistent
+            # but unproven one. (--promote-overlays --check validates the committed tree, so it writes and proves nothing.)
+            verify_activation = bool(admitted) or (args.promote_overlays and not args.check)
+            if verify_activation:
+                blockers = activation_blockers(args.out_dir, overlay)
+                require(not blockers,
+                        f"G4 activation refused, {len(blockers)} blocker(s): "
+                        + "; ".join(blockers[:5]))
+            if promoted:
+                missing = [title for title, value in bindings.items() if value is None]
+                require(not missing, f"overlay binding sidecar missing for {missing}")
 
             matrices = build_matrices(lock, provenance, lock_bytes=lock_bytes, overlay=overlay,
-                                      promoted=promoted, grant_fingerprint=current_grant)
+                                      promoted=promoted, grant_fingerprint=current_grant, bindings=bindings)
+            if verify_activation:
+                proof_errors = overlay_proof_errors(matrices)
+                require(not proof_errors, "G4 activation refused, overlay proofs: " + "; ".join(proof_errors[:5]))
             if provenance is not None:
                 for name, expected_hash in provenance["symbols"].items():
                     artifact = args.provenance.parent / name
@@ -524,7 +616,8 @@ def main(argv: list[str] | None = None) -> int:
                                 "existing BUILT overlay row requires --overlay-provenance; refusing downgrade")
                     if args.check:
                         validate_matrix(current, lock, provenance, lock_bytes=lock_bytes, overlay=overlay,
-                                        grant_fingerprint=current_grant)
+                                        grant_fingerprint=current_grant,
+                                        binding_sha256=(bindings or {}).get(matrix["title"]))
                 if args.check:
                     require(path.exists() and path.read_bytes() == generated.encode("utf-8"),
                             f"{path}: stale or missing; regenerate the artifact matrix")

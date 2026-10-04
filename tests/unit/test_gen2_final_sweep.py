@@ -11,14 +11,70 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 import gen2_final_sweep as sweep  # noqa: E402
 
 
+def test_release_sweep_is_only_overlay_and_keeps_refusal_cells():
+    cells = sweep.cells()
+    assert len(cells) == 86  # 64 duos + 3*(U1,U2,5 feature gates) + inspect
+    assert all(c.get("artifact_kind") == "overlay" for c in cells)
+    assert {c["id"] for c in cells if c.get("scenario") == "gen2_admit_wrong_rom"} == {
+        "overlay/gen2_new/gen2_admit_wrong_rom", "overlay/gen2_gold_silver/gen2_admit_wrong_rom"}
+
+
+def test_overlay_sweep_exactly_covers_active_duo_manifest():
+    doc = json.loads((sweep.REPO / sweep.PIN_FILES[0]).read_text())
+    expected = {(r["axes"]["pairing"], s) for r in doc["requirements"]
+                if r["axes"].get("artifact_kind") == "overlay" for s in r["axes"]["scenarios"]}
+    actual = {(c["game"], c["scenario"]) for c in sweep.cells() if c["kind"] == "duo"}
+    assert actual == expected and len(actual) == 64
+
+
 def test_every_release_cell_is_listed_once():
     ids = [c["id"] for c in sweep.cells()]
     assert len(ids) == len(set(ids))
     assert sum("/gen2_trade_" in i for i in ids) == 21
-    assert sum(i.startswith("gate/") for i in ids) == 3 + 2 + 15 + 1
-    assert {"gen2_new/gen2_faint_active_trainer", "gen2_gold_silver/gen2_faint_active_trainer", "gate/w6/silver",
-            "gate/inspect_run"} <= set(ids)
+    assert sum(i.startswith("gate/") for i in ids) == 15
+    assert {"overlay/gen2_new/gen2_faint_active_trainer", "overlay/gen2_gold_silver/gen2_faint_active_trainer", "gate/w6/silver",
+            "overlay/gate/inspect_run"} <= set(ids)
     assert "gen2_crystal_gold/gen2_faint_active_trainer" not in ids
+
+
+def test_overlay_sweep_covers_gameplay_and_its_own_silver_write_proof():
+    rows = {cell["id"]: cell for cell in sweep.cells()}
+    assert rows["overlay/gen2_new/gen2_pc_ops"]["artifact_kind"] == "overlay"
+    assert rows["overlay/gen2_gold_silver/gen2_soft_reset"]["artifact_kind"] == "overlay"
+    assert rows["overlay/gen2_crystal_gold/link"]["artifact_kind"] == "overlay"
+    assert rows["overlay/gate/write_window/silver"]["artifact_kind"] == "overlay"
+    assert "--gen2-artifact" in sweep.duo_command(rows["overlay/gen2_new/gen2_pc_ops"], "model")
+    assert len(rows) == 86
+
+
+def test_pin_populates_new_overlay_proofs_without_borrowing_clean_paths(tmp_path):
+    root, out = tmp_path / "root", tmp_path / "out"
+    base = "tests/fixtures/gen2/receipts/overlay/"
+    pins = {base + f"duo_link_cc_{side}_result.txt": "a" * 64 for side in ("a", "b", "pydec")}
+    pins[base + "silver.write_window.json"] = "b" * 64
+    pins[base + "crystal.panel_gate.json"] = "c" * 64
+    for name in pins:
+        path = out / "receipts" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("new\n")
+    rows = {sweep.PIN_FILES[0]: {"requirements": [{"id": "duo.overlay", "stage": "live-duos",
+        "axes": {"artifact_kind": "overlay", "initiator": "crystal", "partner": "crystal", "scenarios": ["link"]},
+        "proofs": []}]}, sweep.PIN_FILES[1]: {"requirements": [{"id": "u2.overlay", "axes": {
+            "artifact_kind": "overlay", "kind": "write_window", "title": "silver"}, "proofs": []},
+            {"id": "panel.overlay", "axes": {"artifact_kind": "overlay", "kind": "panel_gate", "title": "crystal"},
+             "proofs": []}]}}
+    for name, doc in rows.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(doc))
+    (out / "summary.json").write_text(json.dumps({"cells": [{"ok": True, "receipts": pins}]}))
+    assert sweep.pin(out, root=root) == []
+    duo = json.loads((root / sweep.PIN_FILES[0]).read_text())["requirements"][0]["proofs"][0]
+    assert duo["scenario"] == "link" and all("/overlay/" in value["path"] for value in duo["receipts"].values())
+    window = json.loads((root / sweep.PIN_FILES[1]).read_text())["requirements"][0]["proofs"][0]
+    assert window["receipts"]["receipt"]["path"] == base + "silver.write_window.json"
+    panel = json.loads((root / sweep.PIN_FILES[1]).read_text())["requirements"][1]["proofs"][0]
+    assert panel["receipts"]["receipt"]["path"] == base + "crystal.panel_gate.json"
 
 
 def test_duo_outputs_take_the_committed_receipt_names(tmp_path):
@@ -31,6 +87,31 @@ def test_duo_outputs_take_the_committed_receipt_names(tmp_path):
     root = "tests/fixtures/gen2/receipts/duo_faint_gs_"
     assert sorted(got) == [root + "a_result.txt", root + "a_witness.SaveRAM", root + "pydec_result.txt"]
     assert got[root + "a_result.txt"] != got[root + "a_witness.SaveRAM"]   # LF-normalized text only
+
+
+def test_pin_new_overlay_reconnect_keeps_all_phases_and_seeds(tmp_path):
+    repo, out = tmp_path / "repo", tmp_path / "out"
+    stem = "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_"
+    suffixes = ["a_result.txt", "b_result.txt", "pydec_result.txt", "a_same_save_result.txt",
+                "a_wrong_save_result.txt", "a_same_save_seed.SaveRAM", "a_wrong_save_seed.SaveRAM"]
+    pins = {}
+    for suffix in suffixes:
+        path = out / "receipts" / (stem + suffix)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"MODEL witness")
+        pins[stem + suffix] = sweep.lf_sha256(path)
+    axes = {"artifact_kind": "overlay", "initiator": "gold", "partner": "silver", "scenarios": ["gen2_reconnect"]}
+    for name, doc in zip(sweep.PIN_FILES, [{"requirements": [{"stage": "live-duos", "axes": axes, "proofs": []}]},
+                                        {"requirements": []}], strict=True):
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(doc))
+    (out / "summary.json").write_text(json.dumps({"cells": [{"ok": True, "receipts": pins}]}))
+    assert sweep.pin(out, root=repo) == []
+    proof = json.loads((repo / sweep.PIN_FILES[0]).read_text())["requirements"][0]["proofs"][0]
+    assert set(proof["receipts"]) == {"a", "b", "pydec", "a_same_save", "a_wrong_save"}
+    assert proof["staged_saves"]["wrong_save"]["case"] == "gold_battle_ot2"
+    assert all("/overlay/" in pin["path"] for pin in proof["staged_saves"].values())
 
 
 def test_pin_installs_pass_receipts_repins_in_place_and_adds_the_inspect_row(tmp_path):
@@ -102,12 +183,53 @@ def test_a_cell_stops_at_its_first_failing_command_and_keeps_each_gate_result(tm
 
 def test_only_rng_stalls_earn_the_one_retry():
     for text in ("RESULT: FAIL (hunt ended out-of-balls)",
+                 "RESULT: FAIL (catch route failed: no Poke Ball left in the pocket)",
                  "RESULT: FAIL (poison route failed: the trainer battle ended without a poisoned party mon)",
                  "[FAIL] poison_faint did not fire after the previous expected site"):
         assert sweep.RNG_STALL.search(text), text
     for text in ("trade: stack canary is not a real push", "no memorialize ack for the released partner X",
-                 "wave-c: b: a rebuilt mon is not at full HP", "LostBattle ran (a whiteout)"):
+                 "wave-c: b: a rebuilt mon is not at full HP", "LostBattle ran (a whiteout)",
+                 "O-10 only permits the empty Ball pocket at the settled lab checkpoint",
+                 "the fixture starts with no Poke Balls", "out of balls, then the escape failed"):
         assert not sweep.RNG_STALL.search(text), text
+
+
+@pytest.mark.parametrize("artifact", ["clean", "overlay"])
+def test_engine_cell_rotates_clock_attempts_and_records_them(tmp_path, monkeypatch, artifact):
+    monkeypatch.setenv("SLINK_GEN2_U1_ATTEMPT", "3")  # ambient state must not select the first attempt
+    monkeypatch.setattr(sweep, "git", lambda *_args: "")
+    calls, codes = [], iter([1, 1, 0, 0])
+    def popen(cmd, cwd, env, stdout, stderr):
+        code = next(codes)
+        calls.append((cmd[-1], dict(env)))
+        stdout.write("poison_faint did not fire\n" if code else "PASS\n")
+        stdout.flush()
+        return type("Process", (), {"wait": lambda self, timeout: code})()
+    monkeypatch.setattr(sweep.subprocess, "Popen", popen)
+    cell = {"id": "gate/engine_sites/crystal", "kind": "gate", "artifact_kind": artifact, "timeout": 30,
+            "commands": [["python", "tests/live/test_gen2_frame_align.py"], ["python", "tests/live/test_gen2_u1g.py"]]}
+    result = sweep.run_cell(cell, tmp_path / "lane", 1, tmp_path / "out", lambda: None)
+    assert result["ok"] and result["attempts"] == 3
+    assert result["u1_attempts"] == [1, 2, 3]
+    assert [env.get("SLINK_GEN2_U1_ATTEMPT") for _, env in calls] == ["1", "2", "3", None]
+    assert all(env["SLINK_GEN2_ARTIFACT"] == artifact for _, env in calls)
+
+
+@pytest.mark.parametrize("engine,reason,attempts", [(False, "poison_faint did not fire", 2),
+                                                   (True, "binding identity refused", 1)])
+def test_non_u1_retry_limit_and_non_rng_refusal_do_not_expand(tmp_path, monkeypatch, engine, reason, attempts):
+    monkeypatch.setattr(sweep, "git", lambda *_args: "")
+    calls = []
+    def popen(cmd, cwd, env, stdout, stderr):
+        calls.append(dict(env))
+        stdout.write(reason + "\n")
+        stdout.flush()
+        return type("Process", (), {"wait": lambda self, timeout: 1})()
+    monkeypatch.setattr(sweep.subprocess, "Popen", popen)
+    test = "test_gen2_frame_align.py" if engine else "test_gen2_write_windows.py"
+    cell = {"id": "gate/test", "kind": "gate", "timeout": 30, "commands": [["python", "tests/live/" + test]]}
+    result = sweep.run_cell(cell, tmp_path / "lane", 1, tmp_path / "out", lambda: None)
+    assert not result["ok"] and result["attempts"] == len(calls) == attempts
 
 
 def test_pin_gives_the_reconnect_initial_phase_the_committed_a_name(tmp_path):

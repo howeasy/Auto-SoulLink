@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from patch.gen1.tools import manifest
+from patch.gen1.tools import manifest, title_screen
 from tools._build_tools_bootstrap import ensure_rgbds
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -80,6 +81,9 @@ def _rgbds() -> tuple[Path, str]:
     return directory, suffix
 
 
+SHIPPED_VERSION = json.loads((ROOT / "patch/dist/companion_pins.json").read_text())["pins"]["rb-red"]["version"]  # the release stamp
+
+
 @pytest.fixture(scope="module")
 def built() -> dict[str, bytes]:
     _rgbds()
@@ -87,7 +91,7 @@ def built() -> dict[str, bytes]:
         if not (ROOT / manifest.ROMS[key][0]).is_file():
             pytest.skip(f"clean Gen 1 {key} dump absent: {manifest.ROMS[key][0]}")
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
-    result = subprocess.run([sys.executable, str(ROOT / "patch/gen1/tools/build.py")],
+    result = subprocess.run([sys.executable, str(ROOT / "patch/gen1/tools/build.py"), "--version", SHIPPED_VERSION],
                             cwd=ROOT, env=env, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "assembled 6582 bytes" in result.stderr
@@ -217,7 +221,7 @@ def test_clean_rom_receives_only_declared_spans_and_full_bank(built, key):
     assert patched[0x0100:0x0150] == pristine[0x0100:0x0150]
     permitted = set(range(manifest.INJECT_OFFSET, manifest.INJECT_OFFSET + manifest.BANK_SIZE))
     permitted.update(range(manifest.HOOK_SITE, manifest.HOOK_SITE + len(manifest.HOOK_ORIGINAL)))
-    for offset, before, after, _why in manifest.MENU_PATCHES:
+    for offset, before, after, _why in manifest.MENU_PATCHES + title_screen.title_spans(pristine, SHIPPED_VERSION):
         assert len(before) == len(after)
         assert pristine[offset:offset + len(before)] == before
         assert patched[offset:offset + len(after)] == after
@@ -229,7 +233,19 @@ def test_clean_rom_receives_only_declared_spans_and_full_bank(built, key):
             ROOT / "patch/gen1/dist/slink_bank3f.bin").read_bytes()
 
 
-def test_panel_payload_is_bit_identical_to_panel_only_link(built):
+def _caps(image: bytes) -> int:
+    """The immediate of the one `ld a, n` / `ld [SLINK_CAPS ($DEEA)], a` pair in the image."""
+    hits = [i for i in range(len(image) - 4)
+            if image[i] == 0x3E and image[i + 2:i + 5] == bytes((0xEA, 0xEA, 0xDE))]
+    assert len(hits) == 1, [hex(i) for i in hits]
+    return image[hits[0] + 1]
+
+
+CAP_PANEL_SFX = 0x07  # SLINK_CAP_SFX | SLINK_CAP_PANEL | SLINK_CAP_SFX_NOTIFY
+CAP_TRADE = 1 << 4    # patch/gb/slink_abi.inc SLINK_CAP_TRADE
+
+
+def test_panel_payload_matches_panel_only_link_except_the_trade_cap(built):
     rgbds, suffix = _rgbds()
     panel_obj = BUILD / "trade_test_panel_only.o"
     panel_image = BUILD / "trade_test_panel_only.gb"
@@ -237,15 +253,41 @@ def test_panel_payload_is_bit_identical_to_panel_only_link(built):
                     str(SOURCE / "slink.asm")], cwd=ROOT, capture_output=True, check=True)
     subprocess.run([str(rgbds / ("rgblink" + suffix)), "-p", "0x00", "-o",
                     str(panel_image), str(panel_obj)], cwd=ROOT, capture_output=True, check=True)
-    panel = panel_image.read_bytes()
+    panel = bytearray(panel_image.read_bytes())
     combined = (BUILD / "slink_stub.gb").read_bytes()
+    # A link without trade.asm must not advertise trade; the shipped link must.
+    assert _caps(panel) == CAP_PANEL_SFX
+    assert _caps(combined) == CAP_PANEL_SFX | CAP_TRADE
+    for key in TARGETS:
+        assert _caps(built[key]) == CAP_PANEL_SFX | CAP_TRADE, key
+    # ...and that immediate is the only panel byte the trade link changes.
+    at = panel.index(bytes((0x3E, CAP_PANEL_SFX, 0xEA, 0xEA, 0xDE))) + 1
+    panel[at] |= CAP_TRADE
     assert panel[0xFC000:0xFC500] == combined[0xFC000:0xFC500]
     assert panel[0xFC500:0xFC600] == bytes(0x100)
     assert built["red"][0xFC000:0xFC500] == combined[0xFC000:0xFC500]
     assert built["red"][0xFC500:0xFC600] == combined[0xFC500:0xFC600]
 
 
+def test_shipped_payload_advertises_trade():
+    """The committed injector payload; needs no ROM or toolchain."""
+    assert _caps((ROOT / "patch/gen1/dist/slink_bank3f.bin").read_bytes()) == CAP_PANEL_SFX | CAP_TRADE
+
+
+@pytest.mark.parametrize("key", TARGETS)
+def test_shipped_ups_reproduces_the_build(built, key):
+    sys.path.insert(0, str(ROOT / "patch/tools"))
+    from make_ups import ups_apply
+    ups = (ROOT / f"patch/dist/SLink-RB-{key.capitalize()}.ups").read_bytes()
+    rom = ups_apply(_clean(key), ups)
+    assert _caps(rom) == CAP_PANEL_SFX | CAP_TRADE
+    assert rom == built[key]
+
+
 def test_red_blue_trade_bank_bytes_identical(built):
     red, blue = built["red"], built["blue"]
     assert red[0xFC500:0xFDA00] == blue[0xFC500:0xFDA00]
-    assert red[0xFC000:0x100000] == blue[0xFC000:0x100000]
+    # the payload is one image; past it only the title band's own 'Red Version' / 'Blue Version' ids differ
+    assert red[0xFC000:title_screen.FREE_FROM] == blue[0xFC000:title_screen.FREE_FROM]
+    differ = [i for i in range(title_screen.FREE_FROM, 0x100000) if red[i] != blue[i]]
+    assert differ and all(title_screen.RV_OFFSET <= i < title_screen.RV_OFFSET + title_screen.VERSION_TEXT_LEN for i in differ)

@@ -4,11 +4,15 @@
 (server.py hello, state.py persisted reload, server.py rom_content). The binder lives in
 the adapter (`_TITLE_FOR_ROM_TYPE`), so shared code keeps no `game_id` branch.
 
-Crystal's rom_type rows now select `gen2_gsc` (U5, docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md);
-Gold and Silver still select the legacy `gen2_crystal` adapter (G1 PENDING, no shipped
-receipts). The hello-path tests below simulate the FULL eventual cutover by re-pointing all
-six Gen 2 rows with monkeypatch, since Gold/Silver's own binder needs to be provable ahead
-of their own G1 admission; the live default is asserted to reflect only the Crystal flip.
+All six Gen 2 rom_type rows now select `gen2_gsc` (U5, O-22/O-23;
+docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md), which the live-row test below pins against the
+real registry; the `cutover` fixture re-points them anyway, so a regressed row is repaired here rather
+than turning every hello test into a row test.
+
+Patch-first (owner 2026-10-02): the SLink companion overlay is REQUIRED for every Gen 2 title, so a
+clean Gen 2 hello is REFUSED (server/adapters/gen2_gsc.companion_refusal) and a run commits "overlay".
+Nothing here is about patching -- the title binder is -- so every cartridge below connects as the
+artifact its title requires. The refusals themselves belong to test_companion_required_gen2.py.
 """
 from __future__ import annotations
 
@@ -25,6 +29,7 @@ from server.adapters import (
 )
 from server.adapters.gen2_gsc import _TITLE_FOR_ROM_TYPE, Gen2GSCAdapter
 from server.server import SLinkServer
+from tests.unit.companion_evidence import companion
 from tests.unit.test_mixed_foundations import _hello, _refused, _session
 
 TITLE = {"Crystal": "crystal", "crystal": "crystal", "Gold": "gold", "gold": "gold",
@@ -34,7 +39,12 @@ AP = ("Crystal (AP)", "crystal_ap")
 
 
 def _cart(rom_type):
-    return {"rom_type": rom_type, "artifact_kind": "clean"}
+    """A cartridge of `rom_type` that CONNECTS: the companion evidence its title requires.
+
+    Gen 2 needs `overlay`, Gen 3 `companion`, Gen 1 Red/Blue `named` + `panel`. These tests are
+    about the TITLE binder, so each half connects as the prepared cartridge a player would run.
+    """
+    return {"rom_type": rom_type, **companion(rom_type)}
 
 
 @pytest.fixture
@@ -73,11 +83,22 @@ def test_the_binder_refuses_what_is_not_an_admitted_gen2_title(kwargs):
         get_adapter("gen2_gsc", **kwargs)
 
 
-def test_the_binder_accepts_the_overlay_kind_but_admission_keeps_it_future():
-    """P4.3d (d5697cfb): the adapter binds the overlay kind (native trade UI / info panel on);
-    admitting a patched ROM is still refused by its FUTURE admission rows until P4.4."""
+def test_overlay_with_the_cartridges_own_evidence_is_the_only_admitted_gen2_kind():
+    """P4.3d (d5697cfb): the adapter binds the overlay kind (native trade UI / info panel on).
+
+    The claim's second half used to be "admission keeps it future", written while the overlay
+    was deliberately not admitted. Owner 2026-10-02 made the overlay the ONLY admitted kind,
+    so the name is historical and the rule is now asserted: overlay admitted, clean refused.
+    The refusal is exercised end to end in tests/unit/test_companion_required_gen2.py.
+    """
     adapter = get_adapter("gen2_gsc", rom_type="Gold", artifact_kind="overlay")
     assert adapter.native_trade_ui() and adapter.supports_info_panel()
+    assert Gen2GSCAdapter.companion_refusal({"rom_type": "Gold", "artifact_kind": "overlay", "companion_abi": 3}) is None
+    # the kind alone is a claim, not evidence: the cartridge's own live mailbox ABI must come with it
+    assert "needs the SLink companion patch" in Gen2GSCAdapter.companion_refusal(
+        {"rom_type": "Gold", "artifact_kind": "overlay"})
+    assert "needs the SLink companion patch" in Gen2GSCAdapter.companion_refusal(
+        {"rom_type": "Gold", "artifact_kind": "clean"})
 
 
 def test_the_live_rows_reflect_the_u5_cutover():
@@ -130,6 +151,9 @@ async def test_after_the_flip_gen2_still_never_pairs_with_another_foundation(
         assert not _refused(await send(_hello("a", _cart(committed))))
         adapter = srv.state.adapter
         assert _refused(await send(_hello("b", _cart(joining))))
+        # The refusal must be the FOUNDATION lock, not the patch gate: both halves now connect
+        # patched, so without this a clean-cartridge refusal would satisfy _refused() too.
+        assert "Mixed games" in srv.state.identity_error["b"], srv.state.identity_error
         assert srv.state.adapter is adapter and srv.state.rom_type == committed
     finally:
         await close()

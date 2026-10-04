@@ -16,7 +16,7 @@ from server.data.items.gen1 import ITEM_NAMES
 from server.pokemon_data import species_name as national_species_name
 
 from . import gen1_codec
-from .base import GameAdapter, gb_status_token, humanize_area_id
+from .base import GameAdapter, companion_required_reason, gb_status_token, humanize_area_id
 
 _DATA = Path(__file__).resolve().parents[2] / "data" / "games" / "gen1_rby"
 
@@ -273,8 +273,22 @@ def _natdex(internal: int) -> int:
         return 0
 
 
+# Red/Blue require the SLink companion patch (owner 2026-10-02); Yellow (zero free WRAM) and the
+# Archipelago builds (red_ap/blue_ap) do not.
+_COMPANION_ROM_TYPES = frozenset({"Red", "Blue", "red", "blue"})
+
+
 class Gen1Adapter(GameAdapter):
     """One per-player view of a Gen 1 cartridge; ROM encounters can override retail."""
+
+    @staticmethod
+    def companion_refusal(hello):
+        # A patched Red/Blue is only the header-named family on the wire ("named"), so the
+        # evidence is the client's own probe of the patch's mailbox: `panel` (lua/gen1/client.lua).
+        rom_type = hello.get("rom_type")
+        if rom_type in _COMPANION_ROM_TYPES and hello.get("panel") is not True:
+            return companion_required_reason(rom_type)
+        return None
 
     @classmethod
     def supports_randomized(cls, rom_type: str) -> bool:

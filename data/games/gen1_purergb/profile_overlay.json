@@ -5,17 +5,17 @@
   "pureblue_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "d85b256fe0133bbee8c21c33dff9694483e2f40fe666c12297095dda9c1d35b0"
+   "sha256": "b7a224a7fb84f0ae859063479cb19fb9a51f298f1e5f9e64848424b0a5717d08"
   },
   "puregreen_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "e03094c6c71dead76686bb7db5cac8d54c6f6ea259ca2b8b35af6441f4297fc9"
+   "sha256": "9aed6b717234f864d34ea62c21cc3d3afa247a3c5c4a79e41cca6ea3bedf2e08"
   },
   "purered_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "d049d08e9e25d166fe36651f54457204b694ca1a3a4568af3fa39e516dd204d9"
+   "sha256": "59d4a05e055d650bcaa4a1a0b5fa2070d4b7f44831d7d2932b9c1a466448312c"
   }
  },
  "titles": {
@@ -227,6 +227,7 @@
     "wTileMapBackup": 50440,
     "wTradedEnemyMonSpecies": 52542,
     "wTradedPlayerMonSpecies": 52541,
+    "wTradingWhichPlayerMon": 52541,
     "wTrainerClass": 53297,
     "wTrainerName": 53322,
     "wTrainerNo": 53341,
@@ -266,9 +267,9 @@
      "flat": 730181
     },
     "CableClubNPC": {
-     "addr": 27985,
+     "addr": 28002,
      "bank": 1,
-     "flat": 27985
+     "flat": 28002
     },
     "CalcCheckSum": {
      "addr": 30915,
@@ -436,14 +437,14 @@
      "flat": 22483
     },
     "MainMenu.choseContinue": {
-     "addr": 22720,
+     "addr": 22726,
      "bank": 1,
-     "flat": 22720
+     "flat": 22726
     },
     "MainMenu.pressedA": {
-     "addr": 22751,
+     "addr": 22768,
      "bank": 1,
-     "flat": 22751
+     "flat": 22768
     },
     "MonsterNames": {
      "addr": 21958,
@@ -546,9 +547,9 @@
      "flat": 7440
     },
     "SpecialEnterMap": {
-     "addr": 23165,
+     "addr": 23182,
      "bank": 1,
-     "flat": 23165
+     "flat": 23182
     },
     "StartMenu_Pokemon": {
      "addr": 30303,
@@ -601,7 +602,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "237cf7cf80376b6ab0e18969266a38fe4e0e5f6d",
+   "rom_sha1": "557268fd6adb87439cec500f22d8a5f70a202447",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -888,6 +889,7 @@
     "wTileMapBackup": 50440,
     "wTradedEnemyMonSpecies": 52542,
     "wTradedPlayerMonSpecies": 52541,
+    "wTradingWhichPlayerMon": 52541,
     "wTrainerClass": 53297,
     "wTrainerName": 53322,
     "wTrainerNo": 53341,
@@ -927,9 +929,9 @@
      "flat": 730181
     },
     "CableClubNPC": {
-     "addr": 27990,
+     "addr": 28007,
      "bank": 1,
-     "flat": 27990
+     "flat": 28007
     },
     "CalcCheckSum": {
      "addr": 30915,
@@ -1097,14 +1099,14 @@
      "flat": 22483
     },
     "MainMenu.choseContinue": {
-     "addr": 22720,
+     "addr": 22726,
      "bank": 1,
-     "flat": 22720
+     "flat": 22726
     },
     "MainMenu.pressedA": {
-     "addr": 22751,
+     "addr": 22768,
      "bank": 1,
-     "flat": 22751
+     "flat": 22768
     },
     "MonsterNames": {
      "addr": 21958,
@@ -1207,9 +1209,9 @@
      "flat": 7440
     },
     "SpecialEnterMap": {
-     "addr": 23165,
+     "addr": 23182,
      "bank": 1,
-     "flat": 23165
+     "flat": 23182
     },
     "StartMenu_Pokemon": {
      "addr": 30303,
@@ -1262,7 +1264,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "df71763fd52eff57bc2c4492add85d4bd0d82070",
+   "rom_sha1": "562d6e79cfa7e0e78a799bfff7e6b55c9acd9a3a",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1549,6 +1551,7 @@
     "wTileMapBackup": 50440,
     "wTradedEnemyMonSpecies": 52542,
     "wTradedPlayerMonSpecies": 52541,
+    "wTradingWhichPlayerMon": 52541,
     "wTrainerClass": 53297,
     "wTrainerName": 53322,
     "wTrainerNo": 53341,
@@ -1588,9 +1591,9 @@
      "flat": 730181
     },
     "CableClubNPC": {
-     "addr": 27984,
+     "addr": 28001,
      "bank": 1,
-     "flat": 27984
+     "flat": 28001
     },
     "CalcCheckSum": {
      "addr": 30915,
@@ -1758,14 +1761,14 @@
      "flat": 22483
     },
     "MainMenu.choseContinue": {
-     "addr": 22720,
+     "addr": 22726,
      "bank": 1,
-     "flat": 22720
+     "flat": 22726
     },
     "MainMenu.pressedA": {
-     "addr": 22751,
+     "addr": 22768,
      "bank": 1,
-     "flat": 22751
+     "flat": 22768
     },
     "MonsterNames": {
      "addr": 21958,
@@ -1868,9 +1871,9 @@
      "flat": 7440
     },
     "SpecialEnterMap": {
-     "addr": 23165,
+     "addr": 23182,
      "bank": 1,
-     "flat": 23165
+     "flat": 23182
     },
     "StartMenu_Pokemon": {
      "addr": 30303,
@@ -1923,7 +1926,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "43642f1248197ecbc8247ad6038b56c72264cbbc",
+   "rom_sha1": "d25e88d2d4beb6082e6264857356dce994b323af",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,

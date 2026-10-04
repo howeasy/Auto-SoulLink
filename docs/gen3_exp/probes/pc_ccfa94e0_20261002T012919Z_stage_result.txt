@@ -1,0 +1,10 @@
+phase start frame=1 title=emerald_expansion_28877d73
+phase leg-start frame=613 emerald_enter_pc
+phase emerald_enter_pc-start frame=613 at (6,17)
+phase in-pc frame=733 map=514 at=(7,8)
+phase leg-state-saved frame=733 emerald_enter_pc -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private_20261002T012919Z\states/slink_em_emerald_enter_pc.State
+phase leg-done frame=733 emerald_enter_pc
+phase leg-start frame=733 exp_fullbox_stage
+phase leg-state-saved frame=957 exp_fullbox_stage -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private_20261002T012919Z\states/slink_em_exp_fullbox_stage.State
+phase leg-done frame=957 exp_fullbox_stage
+RESULT: PASS reached: emerald_enter_pc,exp_fullbox_stage | open (skipped): 

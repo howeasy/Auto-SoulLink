@@ -232,7 +232,14 @@ function Client.new(p)
         trade_apply = nil, trade_settle_until = 0,
         trade_limits = { settle = 30 },
         bframe = nil, bcache = nil,
+        held_acq = nil,        -- LOST-CAPTURE: a gift / PC-move acquisition held while the journal is unreadable (acquisition only)
+        acq_hold_limit = 1800, -- frames (30 s) a held acquisition may wait before its loud, player-visible expiry
     }
+    -- the first actual native-trade POST and its settle window own the party change (settle's `trading`)
+    function st.trading_now()
+        return (st.trade_apply ~= nil and (st.trade_apply.posted == true or st.trade_apply.possibly_posted == true))
+               or io.framecount() < st.trade_settle_until
+    end
 
     -- ── reads (tolerant: a read the pack cannot make yet degrades the field, not the client)
     local function call(name, ...)
@@ -388,15 +395,31 @@ function Client.new(p)
         for _, m in ipairs(party) do st.party_prev[key(m)] = { slot = m.slot, stats = stats_of(m) } end
         observe_hp(party)
     end
-    local function seed_known(party)
+    -- ACQ diagnostics (log only; no decision reads them): one line per call that marked keys known, naming the path (`via`; no argument = the quiet-count observe path)
+    local function seed_known(party, via)
+        if st.held_acq then       -- a held acquisition is pending: seeding now would absorb its key as known
+            log("ACQ seed skipped via=" .. (via or "observe") .. " (a held acquisition is pending)")
+            return
+        end
+        local fresh = {}
         for _, m in ipairs(party) do
             local k = key(m)
             if m.is_egg == 1 then st.eggs[k] = true
-            elseif not st.eggs[k] then st.known[k] = true end
+            elseif not st.eggs[k] then
+                if not st.known[k] then fresh[#fresh + 1] = k end
+                st.known[k] = true
+            end
         end
         for _, e in ipairs(st.box_cache) do
             if e.is_egg == 1 then st.eggs[e.key] = true
-            elseif not st.eggs[e.key] then st.known[e.key] = true end
+            elseif not st.eggs[e.key] then
+                if not st.known[e.key] then fresh[#fresh + 1] = e.key end
+                st.known[e.key] = true
+            end
+        end
+        if #fresh > 0 then
+            log(string.format("ACQ known via=seed:%s new=%d keys=%s%s", via or "observe", #fresh,
+                              table.concat(fresh, ",", 1, math.min(#fresh, 6)), #fresh > 6 and ",..." or ""))
         end
     end
     local function mark_commanded(k)
@@ -477,15 +500,21 @@ function Client.new(p)
             if not st.known[k] and not st.eggs[k] and m.is_egg == 0 and m.is_bad_egg == 0 then
                 st.known[k], found = true, true
                 resolve_area()
-                send("capture", { key = k, area_id = area_id, species_id = m.species, level = m.level,
+                local sent = send("capture", { key = k, area_id = area_id, species_id = m.species, level = m.level,
                                   hp = m.hp, maxHP = m.max_hp, nickname = m.nickname,
                                   held_item_id = m.held_item, is_egg = m.is_egg == 1,
                                   stats = stats_of(m), gift = gift or nil })
+                log(string.format("ACQ capture via=settle:party key=%s species=%s gift=%s sent=%s", k, tostring(m.species),
+                                  tostring(gift), tostring(sent)))
             end
         end
         if found then return end
         -- party full: the mon went to the PC (SendMonToPC)
+        local before_n, known_boxed = #st.box_cache, 0
+        for _, e in ipairs(st.box_cache) do if st.known[e.key] then known_boxed = known_boxed + 1 end end
         rescan_boxes()
+        log(string.format("acquisition boxes: cache before=%d (known %d) now=%d ok=%s gen=%d",
+                          before_n, known_boxed, #st.box_cache, tostring(st.boxes_ok), st.box_generation))
         local fresh = {}
         for _, e in ipairs(st.box_cache) do
             if e.is_egg == 1 then st.eggs[e.key] = true end
@@ -501,10 +530,15 @@ function Client.new(p)
             local b = battle_now()
             for _, m in ipairs(b and b.enemy_party or {}) do if key(m) == e.key then src = m end end
             local stats = src and stats_of(src) or nil
-            send("capture", { key = e.key, area_id = area_id, in_box = true, species_id = e.species_id,
+            local sent = send("capture", { key = e.key, area_id = area_id, in_box = true, species_id = e.species_id,
                               nickname = e.nickname, held_item_id = e.held_item_id,
                               level = stats and stats.level or nil, maxHP = stats and stats.maxHP or nil,
                               stats = stats, is_egg = e.is_egg == 1, gift = gift or nil })
+            log(string.format("ACQ capture via=settle:box key=%s species=%s gift=%s sent=%s", e.key, tostring(e.species_id),
+                              tostring(gift), tostring(sent)))
+        elseif #fresh == 0 then
+            -- the signal named an acquisition but every party and boxed key was already known: nothing is reported
+            log(string.format("ACQ none via=settle caught=%s party=%d known_already=all (no capture sent)", tostring(not gift), #party))
         elseif #fresh > 1 then
             -- more than one unknown boxed key cannot be attributed to this acquisition
             log("acquisition: " .. #fresh .. " new boxed keys, none reported (ambiguous)")
@@ -517,10 +551,11 @@ function Client.new(p)
             st.eggs[k] = nil
             if not st.known[k] then
                 st.known[k] = true
-                send("capture", { key = k, area_id = "gift_daycare", species_id = m.species,
+                local sent = send("capture", { key = k, area_id = "gift_daycare", species_id = m.species,
                                   level = m.level, hp = m.hp, maxHP = m.max_hp,
                                   nickname = m.nickname, held_item_id = m.held_item,
                                   is_egg = false, stats = stats_of(m), gift = true })
+                log(string.format("ACQ capture via=settle:hatch key=%s species=%s sent=%s", k, tostring(m.species), tostring(sent)))
             end
         end
     end
@@ -555,7 +590,10 @@ function Client.new(p)
             if not st.party_prev[k] then
                 if st.known[k] then send("box_to_party", { key = k, area_id = area_id })
                 elseif now[k].is_egg == 1 then st.eggs[k] = true
-                elseif not st.eggs[k] then st.known[k] = true end -- eggs still await native hatch
+                elseif not st.eggs[k] then
+                    st.known[k] = true -- eggs still await native hatch
+                    log(string.format("ACQ known via=settle:pc key=%s species=%s (no capture sent)", k, tostring(now[k].species)))
+                end
             end
         end
     end
@@ -565,6 +603,7 @@ function Client.new(p)
     -- never for a link trade (docs/protocol.md §3.2), so skipped while a native trade runs.
     local function emit_identity_change(old, k, m, party, reason)
         st.known[k] = true
+        log(string.format("ACQ known via=%s key=%s old=%s species=%s (key_change, no capture)", reason, k, tostring(old), tostring(m.species)))
         if m.hp and m.hp > 0 then st.alive[k] = true end
         session.identity:begin_alias(old, k, m, party, io.framecount())
         -- Keep the exact message on the alias for the existing retryable box-census refusal.
@@ -662,22 +701,71 @@ function Client.new(p)
 
     local function settle()
         local f = st.flags
+        local h = st.held_acq
+        if h then
+            local hidden = recovery_hidden()                     -- re-reads the journal: refreshes journal.busy
+            local now = io.framecount()
+            if st.trading_now() or st.trade ~= nil then h.tainted = true end
+            if journal.failure or (hidden and not journal.busy) then
+                st.held_acq = nil
+                log(string.format("ACQ dropped reason=journal_owns held=%d frames caught=false", now - h.since))
+            elseif hidden then
+                if now - h.since > st.acq_hold_limit then       -- bounded: then drop, LOUDLY and player-visibly, never silently
+                    st.held_acq = nil
+                    log(string.format("ACQ expired after=%d frames reason=recovery_hidden retained=false DROPPED area=%s", now - h.since, tostring(h.area)))
+                    hud.show("Capture not recorded - check your party / tell the host", 255, 60, 60, 300)
+                end
+            else
+                st.held_acq = nil
+                if h.tainted then
+                    log(string.format("ACQ dropped reason=trade_during_hold held=%d frames", now - h.since))
+                else
+                    f.acquire, f.acq_area = true, h.area
+                    log(string.format("ACQ resumed after=%d frames (journal visible again) area=%s", now - h.since, tostring(h.area)))
+                end
+            end
+        end
         if not next(f) and not nature_completed then return end
         if f.save and io.saveram then pcall(io.saveram) end
         f.save = nil -- a host flush is one-shot even while a journal read is temporarily hidden
         if recovery_hidden() then
-            -- Retain observer evidence only for a temporary guard collision outside a posted
-            -- native trade. A genuinely unsettled/failed journal or a posted trade owns the
-            -- party change; replaying its signal after the settle window could report the
-            -- received mon as a catch. A transient empty-journal read instead needs this flag
-            -- until visibility returns, so observe_known cannot silently seed its new key.
+            -- LOST-CAPTURE (docs/protocol.md 6.2 item 5). recovery_hidden() is true whenever the journal cannot be READ, and a busy lock is
+            -- unreadable: any other process holding ROOT/slink_gen3_trade.guard makes read() answer LOCK_BUSY (a sync client, an indexer,
+            -- a backup, a second BizHawk; run.lua counts a CreateNew that sees an existing guard as busy too), so journal:hidden() is true
+            -- although the journal holds no record. An unreadable journal is not a trade-owned party change. Only the ACQUISITION is
+            -- treated specially; every other flag keeps the rule it always had here (cleared):
+            --   * a wild catch (capture_wild: the battle engine's Cmd_givecaughtmon, which no trade can produce) is reported NOW. Its
+            --     key needs no journal (party_read reads RAM, the key is personality:ot_id), so nothing is held;
+            --   * a gift / PC move (mon_given / pc_move, whose trade ambiguity is real) is held as a bounded, acquisition-only
+            --     record (st.held_acq) that carries the area and the trade-ownership verdict of the SIGNAL frame.
+            -- A journal that shows entries or a failure, or a posted trade, still owns the change: the signal is dropped, by name.
             local posted = st.trade_apply and (st.trade_apply.posted or st.trade_apply.possibly_posted)
-            if not (journal and journal.busy and not journal.failure
-                    and not awaiting_trade_run and not posted) then
+            local busy_only = journal and journal.busy and not journal.failure and not posted
+            local owned = f.acq_trade or f.trade or st.trade ~= nil or st.trading_now()
+            if f.acquire and busy_only and not owned and f.caught then
+                st.flags = {acquire = true, caught = true, acq_area = f.acq_area, acq_busy = true}
+                f = st.flags
+                log(string.format("ACQ journal_busy reported_now=true caught=true area=%s (unreadable journal; a wild catch is not a trade)",
+                                  tostring(f.acq_area)))
+            else
+                if f.acquire then
+                    local h = st.held_acq
+                    if busy_only and not owned and h then
+                        if h.area ~= f.acq_area then
+                            log(string.format("ACQ held area_conflict first=%s second=%s (the first is kept)", tostring(h.area), tostring(f.acq_area)))
+                        end
+                    elseif busy_only and not owned and st.baselined then
+                        st.held_acq = {since = io.framecount(), caught = false, area = f.acq_area}
+                        log(string.format("ACQ held reason=recovery_hidden retained=true caught=false area=%s", tostring(f.acq_area)))
+                    else
+                        log(string.format("ACQ held reason=recovery_hidden retained=false caught=%s why=%s", tostring(f.caught),
+                                          not busy_only and "journal_owns" or owned and "trade_owned" or "no_baseline"))
+                    end
+                end
                 st.flags = {}
+                st.trade, f.trade = nil, nil
+                return
             end
-            st.trade, f.trade = nil, nil
-            return
         end
         st.flags = {}
         local party = party_read(f.pc)                          -- a PC settle reads occupancy
@@ -689,11 +777,28 @@ function Client.new(p)
         update_frozen(party)
         local area_id = area_now()
         if st.battle and in_battle() then note_battle(battle_now()) end
-        if f.acquire and not st.baselined then
+        if f.acquire and not st.baselined and f.acq_busy then
+            -- LOST-CAPTURE F4: a wild catch while the journal has been unreadable since startup. The foe being caught is the new mon:
+            -- learn every OTHER key as the baseline (its personality is the foe's) and let settle report the foe.
+            if not st.frozen then
+                local b, foe = battle_now(), {}
+                for _, m in ipairs(b and b.enemy_party or {}) do if m.personality then foe[m.personality] = true end end
+                rescan_boxes(); seed_known(party, "baseline")
+                local excluded = 0
+                local function unknow(k)
+                    local pid = tonumber(tostring(k):match("^(%x+):"), 16)
+                    if pid and foe[pid] and st.known[k] then st.known[k] = nil; excluded = excluded + 1 end
+                end
+                for _, m in ipairs(party) do unknow(key(m)) end
+                for _, e in ipairs(st.box_cache) do unknow(e.key) end
+                st.baselined = true
+                log(string.format("ACQ baseline taken with the caught foe excluded (%d key(s)) before reporting it", excluded))
+            end
+        elseif f.acquire and not st.baselined then
             -- nothing tells a pre-existing key from a new one yet: report none, learn them all
             log("acquisition signal before a party baseline exists: not reported")
             f.acquire = nil
-            if not st.frozen then rescan_boxes(); seed_known(party); st.baselined = true end
+            if not st.frozen then rescan_boxes(); seed_known(party, "baseline"); st.baselined = true end
         end
         -- a PC trade in flight (and its settle window) swaps a party slot: nothing about it is a
         -- capture, a deposit or a key_change (docs/protocol.md §6.2 item 5, §6.5); the TradeMons
@@ -702,13 +807,16 @@ function Client.new(p)
         -- not from the queued phase: a post that is refused or held writes nothing, and until
         -- something is written the party can only change the ordinary way, so ordinary reduction
         -- keeps going
-        local trading = (st.trade_apply ~= nil and (st.trade_apply.posted == true or st.trade_apply.possibly_posted == true))
-                        or io.framecount() < st.trade_settle_until
+        local trading = st.trading_now()
         if trading then st.trade = nil end
+        if f.acquire and (st.frozen or trading) then
+            -- the flags were already cleared above: this acquisition signal is dropped, not retried
+            log(string.format("ACQ skipped reason=%s dropped=true caught=%s", st.frozen and "frozen" or "trading", tostring(f.caught)))
+        end
         if not st.frozen and not trading then
             if f.faint or f.battle_end or f.whiteout then settle_faints(party, area_id) end
             settle_hatches(f.hatches)
-            if f.acquire then settle_acquisitions(party, area_id, f.caught or (st.battle and st.battle.caught)) end
+            if f.acquire then settle_acquisitions(party, f.acq_area or area_id, f.caught or (st.battle and st.battle.caught)) end
             if f.pc then settle_pc(party, area_id, f.release) end
             if f.trade then settle_trade(party) end
             if nature_completed then settle_nature(party) end
@@ -1047,7 +1155,7 @@ function Client.new(p)
         rescan = function()
             rescan_boxes()
             local party = party_read()
-            if party then seed_known(party); rebaseline(party) end
+            if party then seed_known(party, "rescan"); rebaseline(party) end
         end,
     }
     local memorial_box = boxes and boxes.memorial_box or ((num(d.BOXES_PER_STORE) or 1) - 1)
@@ -1117,7 +1225,7 @@ function Client.new(p)
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
         st.last_area, st.trade = nil, nil
-        st.opp_seen, st.pre_announced_id = nil, nil
+        st.opp_seen, st.pre_announced_id, st.held_acq = nil, nil, nil
         st.baselined, st.seen_count, st.observe_at = false, nil, nil
         st.trade_apply, st.trade_settle_until = nil, 0
         -- C5-11d MAJOR 3: the battle the authority named is gone with the save, whatever the
@@ -1173,7 +1281,9 @@ function Client.new(p)
         -- hook firing this frame or the next) must stay unknown for settle to report it as a
         -- capture right after the hello. Only the very first baseline is taken here.
         if not st.baselined and not hidden then
-            seed_known(own)                                    -- box-key seeding at connect
+            seed_known(own, "hello")                           -- box-key seeding at connect
+            log(string.format("baseline(hello): boxes ok=%s n=%d gen=%d party=%d",
+                              tostring(st.boxes_ok), #st.box_cache, st.box_generation, #own))
             rebaseline(party)
             st.baselined = true
             -- the quiet interval starts from THIS count: a mon added after hello is a change
@@ -1201,6 +1311,7 @@ function Client.new(p)
         if native and native.hello_fields then
             for k, v in pairs(native:hello_fields() or {}) do f[k] = v end
         end
+        f.companion_abi = p.companion_abi and p.companion_abi() or nil  -- the cartridge's own mailbox, never the launcher's claim
         if hidden then
             f.party_hidden = true
             f.pc_boxes, f.pc_boxes_generation = nil, nil
@@ -1301,14 +1412,23 @@ function Client.new(p)
             return census
         end
         local function release_begin(sig)
-            st.release_snapshot = {keys = release_census(), epoch = trade_reset_epoch, sp = sig.sp}
+            st.release_snapshot = {keys = release_census(), epoch = trade_reset_epoch, sp = sig.sp, frame = sig.frame}
         end
         local function release_done(sig)
             local before = st.release_snapshot
             st.release_snapshot = nil
-            -- ReleaseMon entry SP and its pre-pop return SP differ by saved LR.
-            if not before or not before.keys or before.epoch ~= trade_reset_epoch
-               or before.sp ~= sig.sp + 4 then return end
+            if not before or not before.keys or before.epoch ~= trade_reset_epoch then return end
+            -- A pack whose two sites sit mid-body in one task invocation (no push/pop between,
+            -- SP delta 0) declares pairing = frame_window: same-invocation by framecount.
+            -- Otherwise (every vanilla pack: no `pairing` key) ReleaseMon entry SP and its
+            -- pre-pop return SP differ by the saved LR.
+            local site = p.sites and p.sites.pc_release
+            local pairing = site and site.pairing
+            if pairing and pairing.mode == "frame_window" then
+                local dt = sig.frame and before.frame and sig.frame - before.frame
+                if not dt or dt < 0 or dt > (tonumber(pairing.window) or 0) then return end
+            elseif pairing then return        -- declared but unknown mode: refuse, never the SP rule
+            elseif before.sp ~= sig.sp + 4 then return end
             local after, gone = release_census(), nil
             if not after then return end
             for k in pairs(after) do if not before.keys[k] then return end end
@@ -1324,9 +1444,10 @@ function Client.new(p)
             end
         end
         local function capture_hatch(sig)
-            -- All pinned AddHatchedMonToParty returns leave the mon pointer in R5.
+            -- Pinned AddHatchedMonToParty returns leave the mon pointer in R5 (FR/LG/RR/Emerald);
+            -- the expansion build keeps it in R4 (R5 is the species/save pointer): R5 first.
             -- Read AT the completed mutation, before later callbacks can move the party.
-            local base, ptr = call("party_base"), sig.point and sig.point.R5
+            local base, ptr = call("party_base"), sig.point and (sig.point.R5 or sig.point.R4)
             local party = party_read()
             if not base or not ptr or not party then return end
             for _, mon in ipairs(party) do
@@ -1426,8 +1547,15 @@ function Client.new(p)
         elseif k == "whiteout" and not sig.borrowed_party then f.whiteout = true
         elseif k == "capture_wild" then
             f.acquire, f.caught = true, true
+            f.acq_area = f.acq_area or (area_now())             -- the area of the SIGNAL, whatever settle reads later
+            if st.trading_now() or st.trade ~= nil then f.acq_trade = true end
             if st.battle then st.battle.caught = true end
-        elseif k == "mon_given" or k == "pc_move" then f.acquire = true
+            log(string.format("ACQ signal kind=capture_wild frame=%d in_battle=%s", io.framecount(), tostring(st.battle ~= nil)))
+        elseif k == "mon_given" or k == "pc_move" then
+            f.acquire = true
+            f.acq_area = f.acq_area or (area_now())
+            if st.trading_now() or st.trade ~= nil then f.acq_trade = true end
+            log(string.format("ACQ signal kind=%s frame=%d in_battle=%s", k, io.framecount(), tostring(st.battle ~= nil)))
         elseif k == "hatch" and sig.hatch_mon and sig.hatch_epoch == trade_reset_epoch then
             f.hatches = f.hatches or {}
             f.hatches[#f.hatches + 1] = sig.hatch_mon
@@ -1470,7 +1598,7 @@ function Client.new(p)
     -- hook next frame) is still settled as an acquisition, not absorbed. A signalled frame
     -- belongs to settle, which runs after this hook.
     local function observe_known()
-        if next(st.flags) then st.observe_at = nil; return end
+        if next(st.flags) or st.held_acq then st.observe_at = nil; return end   -- a held acquisition's key is never absorbed as known
         local f = io.framecount()
         local count = num(a.PARTY_COUNT_ADDR) and io.read_u8(a.PARTY_COUNT_ADDR) or -1
         -- the quiet interval belongs to one candidate count: a change inside it restarts it
@@ -1489,7 +1617,18 @@ function Client.new(p)
         if not party then return end
         update_frozen(party)
         if st.frozen or recovery_hidden() then return end      -- withheld RAM is never a baseline
-        if not st.baselined then rescan_boxes(); st.baselined = true end
+        -- A settled quiet count-change re-baselines the boxes with the party. A cold boot
+        -- baselines at party=0 / boxes n=0 before CONTINUE loads the save; without this rescan
+        -- the pre-existing boxed keys stay unknown and the next boxed gift reads as ambiguous.
+        -- Quiet frames only (st.flags empty above): a new boxed mon signals on its own frame.
+        -- ONE scan per settle: the first baseline logs after it (it used to scan twice).
+        local first = not st.baselined
+        rescan_boxes()
+        if first then
+            st.baselined = true
+            log(string.format("baseline(quiet): boxes ok=%s n=%d gen=%d party=%d",
+                              tostring(st.boxes_ok), #st.box_cache, st.box_generation, #party))
+        end
         seed_known(party)
         st.seen_count = count
     end
@@ -1758,6 +1897,7 @@ function Client.new(p)
                     local new_key = key(mon)
                     st.known[t.old_key], st.alive[t.old_key], st.commanded[t.old_key] = nil, nil, nil
                     st.known[new_key] = true
+                    log(string.format("ACQ known via=trade:completed key=%s old=%s (link trade, no capture)", new_key, tostring(t.old_key)))
                     local items = session.deferred.items
                     for i=#items,1,-1 do
                         local q=items[i]
@@ -1766,7 +1906,7 @@ function Client.new(p)
                             table.remove(items,i)
                         end
                     end
-                    seed_known(party); rebaseline(party)
+                    seed_known(party, "trade"); rebaseline(party)
                     st.trade_settle_until = io.framecount() + st.trade_limits.settle
                 end
                 -- The write-ahead interval withheld our party from the server.

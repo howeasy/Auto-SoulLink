@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import pathlib
 import re
 import struct
@@ -242,7 +243,7 @@ def test_provenance_lock_and_admission_agree(title):
     assert out["sha1"] not in _json("admission")  # a distinct artifact, never a clean row
     assert PROVENANCE["overlay"]["sources"] == {
         p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in overlay.OVERLAY_SRC.iterdir() if p.suffix in (".asm", ".inc")}
+        for p in overlay.OVERLAY_SRC.iterdir() if p.suffix in (".asm", ".inc", ".2bpp")}
     assert PROVENANCE["overlay"]["edits"] == len(overlay.EDITS)
 
 
@@ -267,6 +268,21 @@ def test_the_ups_applies_to_the_pure_rom_and_reproduces_the_overlay(title):
     for kind, site in _json("engine_signals_overlay")["titles"][title]["sites"].items():
         n = len(site["expected_hex"]) // 2
         assert rom[site["rom_offset"]:site["rom_offset"] + n].hex().upper() == site["expected_hex"], kind
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_the_overlay_advertises_the_trade_it_links(title):
+    """The VBlank caps write (`ld a, n` / `ld [wSlinkCaps], a`) carries SLINK_CAP_TRADE (1 << 4,
+    patch/gb/slink_abi.inc): the overlay links native_trade/trade_receptionist unconditionally."""
+    rom = _overlay_rom(title)
+    over = _syms(title, "overlay")
+    caps = over["wSlinkCaps"][1]
+    hook = F.flat(*over["SlinkHook"])
+    body = rom[hook:hook + 0x43]
+    store = bytes((0xEA, caps & 0xFF, caps >> 8))
+    hits = [i for i in range(2, len(body) - 2) if body[i - 2] == 0x3E and body[i:i + 3] == store]
+    assert len(hits) == 1, hits
+    assert body[hits[0] - 1] == 0x07 | 1 << 4  # SFX | PANEL | SFX_NOTIFY | TRADE
 
 
 def test_the_clean_rom_is_untouched_by_the_overlay_build():
@@ -393,6 +409,9 @@ class OverlayWorld(pc.PureWorld):
                 return self._rt.table(*a, **kw)
         monkeypatch.setattr(pc, "lupa", types.SimpleNamespace(LuaRuntime=KindedRuntime))
         super().__init__(title)
+        from tests.unit.gen1_trade_witness import plant_restore
+
+        self.rom = plant_restore(bytearray(self.rom), profile[title])
 
 
 def test_an_overlay_cartridge_is_admitted_as_kind_overlay():
@@ -439,3 +458,105 @@ def test_the_overlay_client_loads_the_trade_block_and_hellos_with_the_panel(monk
     assert hello["rom_sha1"] == PROVENANCE["outputs"]["pokered"]["sha1"]
     # and the overlay sites are the ones armed
     assert w.hooks["SLink-gen1-apex_preflight"][1] == _json("engine_signals_overlay")["titles"]["purered"]["sites"]["apex_preflight"]["address"]
+
+
+# ── version-masked identity (owner ruling 2026-10-02): the menu version is a FIXED-WIDTH field ───────────────
+
+def _bpo():
+    """tools/build_purergb_overlay.py, imported lazily: it pulls in the whole build toolchain bootstrap."""
+    import build_purergb_overlay as bpo
+    return bpo
+
+
+@pytest.mark.parametrize("version, pad", [("dev", 7), ("v0.3.0", 4), ("v10.20.30", 1), ("v0.3.0-dev", 0)])
+def test_the_generated_menu_include_is_fixed_width_for_every_version(version, pad):
+    """db text + `ds` padding always adds up to rom_identity.FIELD bytes, and the assembler asserts it too."""
+    from patch.tools import rom_identity
+    inc = _bpo().menu_version_inc(version)
+    text = re.search(r'db "([^"]+)@"', inc).group(1)
+    assert text == "SoulLink " + version
+    assert len(text) + 1 + int(re.search(r"\tds (\d+), 0\n", inc).group(1)) == rom_identity.FIELD
+    assert f"\tds {pad}, 0\n" in inc
+    assert "ASSERT @ - SlinkMenuVersionText == SLINK_MENU_VERSION_FIELD" in inc
+    assert f"DEF SLINK_MENU_VERSION_FIELD EQU {rom_identity.FIELD}" in inc
+
+
+@pytest.mark.parametrize("bad", ["0.3.0", "v0.3.0-rc1", "DEV", "v100.200.300-dev", ""])
+def test_the_menu_include_refuses_a_version_the_title_screen_would_refuse(bad):
+    with pytest.raises(ValueError):
+        _bpo().menu_version_inc(bad)
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_the_built_rom_holds_the_version_in_a_zero_padded_field_at_the_recorded_slot(title):
+    """The slot comes from the committed .sym, the field from the ROM the shipped UPS makes, the canonical sha1 from both."""
+    from patch.gen1.tools import title_screen
+    from patch.tools import rom_identity
+    out = PROVENANCE["outputs"][ROM_KEY[title]]
+    slot = rom_identity.slot_from_sym((SYMS / f"{title}_slink.sym").read_text(encoding="utf-8"), "SlinkMenuVersionText")
+    assert out["version_slot"] == slot and slot["length"] == rom_identity.FIELD
+    rom = _overlay_rom(title)
+    field = rom[slot["offset"]:slot["offset"] + slot["length"]]
+    assert field == title_screen.menu_text(PROVENANCE["overlay"]["version"])      # the pure charmap is Gen 1's, padding zeroed
+    assert rom_identity.canonical_sha1(rom, [slot], gb=True) == out["canonical_sha1"]
+    row = _json("admission_overlay")[out["sha1"]]
+    assert (row["canonical_sha1"], row["version_slot"]) == (out["canonical_sha1"], slot)
+    assert row.get("equivalent_sha1s") == (out.get("equivalent_sha1s") or None)   # the row carries what the provenance publishes
+    # the control: a different version in the same field is the same canonical build, a byte elsewhere is not
+    stamped = bytearray(rom)
+    stamped[slot["offset"]:slot["offset"] + slot["length"]] = title_screen.menu_text("v1.10.3")
+    assert hashlib.sha1(stamped).hexdigest() != out["sha1"]
+    assert rom_identity.canonical_sha1(bytes(stamped), [slot], gb=True) == out["canonical_sha1"]
+    stamped[slot["offset"] - 1] ^= 1
+    assert rom_identity.canonical_sha1(bytes(stamped), [slot], gb=True) != out["canonical_sha1"]
+
+
+def test_equivalent_sha1s_follow_the_canonical_identity():
+    """A stamp keeps the earlier exact hashes (chained); a real code change resets them; no history means none."""
+    equivalent = _bpo().equivalent_sha1s
+    old, older, new = "a" * 40, "b" * 40, "c" * 40
+    assert equivalent({"sha1": old, "canonical_sha1": "k"}, new, "k") == [old]                    # known positive
+    assert equivalent({"sha1": old, "equivalent_sha1s": [older], "canonical_sha1": "k"}, new, "k") == [old, older]
+    assert equivalent({"sha1": old, "equivalent_sha1s": [new], "canonical_sha1": "k"}, new, "k") == [old]  # never itself
+    assert equivalent({"sha1": old, "canonical_sha1": "k"}, new, "other") == []                  # a code change resets
+    assert equivalent({"sha1": old}, new, "k") == [] and equivalent(None, new, "k") == []        # no recorded identity
+
+
+def test_a_receipt_may_name_the_published_build_or_an_equivalent_one_and_nothing_else():
+    """tools/gen1_foundation.accepted_sha1s: the evidence rule (launch and admission checks stay exact)."""
+    published, earlier, stranger = "a" * 40, "b" * 40, "c" * 40
+    row = {"equivalent_sha1s": [earlier]}
+    assert F.accepted_sha1s(published, row) == {published, earlier}              # known positive: the stamped-over build is still accepted
+    assert stranger not in F.accepted_sha1s(published, row)                      # a hash nobody proved equivalent is not
+    assert F.accepted_sha1s(published, {}) == F.accepted_sha1s(published, None) == {published}   # absent = empty
+
+
+def test_the_published_rows_accept_their_own_hash_and_no_earlier_build_yet():
+    for key, out in PROVENANCE["outputs"].items():
+        accepted = F.accepted_sha1s(out["sha1"], _json("admission_overlay")[out["sha1"]])
+        assert out["sha1"] in accepted and accepted >= set(out["equivalent_sha1s"]), key
+        assert all(re.fullmatch(r"[0-9a-f]{40}", h) for h in accepted) and out["sha1"] not in out["equivalent_sha1s"]
+
+
+@pytest.mark.skipif(os.environ.get("SLINK_PURE_STAMP_BUILD") != "1",
+                    reason="two real overlay builds (~3 min); set SLINK_PURE_STAMP_BUILD=1")
+def test_a_real_version_stamp_build_moves_only_the_field_and_the_checksum(tmp_path, monkeypatch):
+    """The stamp guarantee on the real toolchain: build the overlay as `dev` and as `v0.3.0-dev` (private trees, nothing
+    published) and compare the ROMs."""
+    from patch.tools import rom_identity
+    bpo = _bpo()
+    built: dict[str, dict[str, bytes]] = {}
+    for version in ("dev", "v0.3.0-dev"):
+        monkeypatch.setattr(bpo, "OVERLAY_CACHE", tmp_path / version.replace(".", "_"))
+        bpo.build(check=True, version=version)           # --check publishes nothing; the build itself asserts the field text
+        built[version] = {key: (bpo.OVERLAY_CACHE / spec["filename"]).read_bytes() for key, spec in LOCK["outputs"].items()}
+    for key, out in PROVENANCE["outputs"].items():
+        dev, rel = built["dev"][key], built["v0.3.0-dev"][key]
+        slot = out["version_slot"]
+        assert hashlib.sha1(dev).hexdigest() == out["sha1"]                        # the committed dev build reproduces
+        assert hashlib.sha1(rel).hexdigest() != out["sha1"] and hashlib.md5(rel).hexdigest() != out["md5"]
+        rom_identity.assert_version_only_difference(dev, rel, [slot], gb=True)
+        assert rom_identity.canonical_sha1(rel, [slot], gb=True) == out["canonical_sha1"]
+        changed = {i for i in range(len(dev)) if dev[i] != rel[i]}
+        assert changed & {0x14E, 0x14F}                                            # rgbfix did recompute the global checksum
+        assert changed - {0x14E, 0x14F} <= set(range(slot["offset"], slot["offset"] + slot["length"]))

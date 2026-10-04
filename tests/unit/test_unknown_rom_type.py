@@ -57,8 +57,9 @@ async def test_a_routable_hello_clears_the_rejection(tmp_path):
     try:
         await send({"event": "hello", "player": "a", "rom_type": "gen1_rby", "trainer_name": "Alice"})
         assert srv.state.identity_error.get("a")
+        # A routable hello: Red must now show the SLink companion (panel mailbox), patch-first 2026-10-02.
         await send({"event": "hello", "player": "a", "rom_type": "red", "trainer_name": "Alice",
-                    "ot_id": "30B8", "has_pokeballs": True})
+                    "ot_id": "30B8", "has_pokeballs": True, "artifact_kind": "named", "panel": True})
         assert not srv.state.identity_error.get("a")
         assert srv.adapter.game_id == "gen1_rby"
     finally:

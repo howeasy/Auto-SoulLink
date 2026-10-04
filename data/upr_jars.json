@@ -2,5 +2,9 @@
   "SLink fork 4.6.1-slink3, built 2026-09-22 (patches 0001-0009; .cache/slink-upr/PokeRandoZX.jar)": "7064a77d9188fbb7403db66312e85293c4490ad80beafd1d59207d19851b1ba4",
   "SLink fork 4.6.1-slink3, built 2026-09-21 before patch 0009 (.cache/slink-upr/PokeRandoZX-pre0009-2026-09-21.jar)": "cc2c18237442fe230a1bf47a43286d27f7a14bbc5f4cd58438793ea5aa64f94d",
   "SLink fork 4.6.1-slink3, built 2026-09-25 (patches 0001-0010; .cache/slink-upr/PokeRandoZX.jar)": "28292b595a411e78beef851e0cd5017a5d4ff592eca9a1db3f8939b0f7ab6e56",
-  "SLink fork 4.6.1-slink3, resource update 2026-09-29 (patches 0001-0011; PokeRandoZX.jar)": "db24703b4da3cea08386c6368ec1acbf37c8fc5e34935348881348581056d0f6"
+  "SLink fork 4.6.1-slink3, resource update 2026-09-29 (patches 0001-0011; PokeRandoZX.jar)": "db24703b4da3cea08386c6368ec1acbf37c8fc5e34935348881348581056d0f6",
+  "SLink fork 4.6.1-slink3, resource update 2026-10-02 (patches 0001-0012; PokeRandoZX.jar)": "3b0eaa40a3c03fc641b13dbad7068d17541bc18b24e97f01364f8487d0c5e3d8",
+  "SLink fork 4.6.1-slink3, resource update 2026-10-02 (patches 0001-0013; PokeRandoZX.jar)": "b79eb86ca2a439dc42ac4d6fe1c9ab1fb72697847dbb7da27b81a7daaedfe1f0",
+  "SLink fork 4.6.1-slink3, resource update (fixed-width pureRGB version field) 2026-10-02 (patches 0001-0014; PokeRandoZX.jar)": "ad7eb5fce4c55de6430289b97a3598b2f853beb7af2c6f421afcc4cb54a92b87",
+  "SLink fork 4.6.1-slink3, stamp v0.3.0 2026-10-03 (patches 0001-0015; PokeRandoZX.jar)": "db4bc65c3a0c1761ffc70db6a5c0f495635ab3e0e3c8a99640f34fbb1fb833ac"
 }

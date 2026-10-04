@@ -1,13 +1,12 @@
 """Owner ruling 35: accept the NPC exchange, then retire only its violating pair."""
 
 from copy import deepcopy
-from pathlib import Path
 
-import jinja2
 import pytest
 
 from server.server import SLinkServer
 from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo
+from tests.unit.companion_evidence import patched
 
 
 TITLES = ("Red", "Blue", "Yellow", "PureRed", "Crystal", "Gold", "Silver",
@@ -32,7 +31,7 @@ def _row(adapter, mon, **extra):
 def _setup(tmp_path, title, *, other=False, species_lock=True, gender_lock=False, type_lock=False):
     srv = SLinkServer(data_dir=str(tmp_path), run_id="npc-clause-model", species_lock=species_lock,
                       gender_lock=gender_lock, type_lock=type_lock)
-    srv._dispatch("a", {"event": "hello", "rom_type": title, "party": [], "ot_id": "1111"})
+    srv._dispatch("a", patched({"event": "hello", "rom_type": title, "party": [], "ot_id": "1111"}))
     adapter = srv.adapter
     ids = {name: _species(adapter, name) for name in ("Bulbasaur", "Charmander", "Charmeleon",
                                                     "Squirtle", "Pidgey", "Ponyta", "Pikachu", "Magnemite")}
@@ -54,10 +53,10 @@ def _setup(tmp_path, title, *, other=False, species_lock=True, gender_lock=False
         for pid in ("a", "b"):
             boxes[pid] = [_row(adapter, getattr(other_entry, pid), box=0)]
     for pid in ("a", "b"):
-        srv._dispatch(pid, {"event": "hello", "rom_type": title,
-                            "ot_id": "1111" if pid == "a" else "2222", "has_pokeballs": True,
-                            "party": [_row(adapter, getattr(entry, pid))],
-                            "pc_boxes": boxes[pid], "pc_boxes_generation": 1})
+        srv._dispatch(pid, patched({"event": "hello", "rom_type": title,
+                                    "ot_id": "1111" if pid == "a" else "2222", "has_pokeballs": True,
+                                    "party": [_row(adapter, getattr(entry, pid))],
+                                    "pc_boxes": boxes[pid], "pc_boxes_generation": 1}))
     return srv, entry, other_entry, ids
 
 
@@ -190,18 +189,17 @@ def test_npc_clause_has_a_named_memorial_cause(tmp_path):
     _exchange(srv, entry, ids["Charmander"])
     memorial = srv._build_status_dict()["killfeed"][0]
     assert memorial["cause"] == "npc_trade_clause"
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader(Path(__file__).resolve().parents[2] / "server/templates"),
-                             autoescape=True, undefined=jinja2.ChainableUndefined)
-    html = str(env.get_template("_macros.html").module.tombstone(memorial, 1))
-    assert "NPC trade clause violation" in html
+    from server.board import timeline
+    deaths = [e for e in timeline(srv._build_status_dict())["entries"] if e["kind"] == "death"]
+    assert [e["cause"] for e in deaths] == ["NPC trade clause violation"]
 
 
 @pytest.mark.parametrize("title,refusal", (("firered", "party_hidden"), ("emerald", "party_hidden"),
                                           ("firered_rr", "party_hidden")))
 def test_hidden_npc_report_is_refused_before_identity_or_clause_retirement(tmp_path, title, refusal):
     srv, entry, _, ids = _setup(tmp_path, title)
-    srv._dispatch("a", {"event": "hello", "rom_type": title, "ot_id": "1111",
-                        "party": [], "party_hidden": True})
+    srv._dispatch("a", patched({"event": "hello", "rom_type": title, "ot_id": "1111",
+                                "party": [], "party_hidden": True}))
     before = deepcopy(entry)
     msg, replies = _exchange(srv, entry, ids["Charmander"])
     # docs/protocol.md section 2.1: a well-formed key_change is answered key_change_rejected{party hidden}

@@ -1,0 +1,42 @@
+DEV ONLY source=965dbc086f6172ec21ecb7dcbbb67e24c036b30f tracked_clean_before=true state=C:\slink-wt\exp-xg3-state\whiteout-dev-965dbc08
+Disclosed SYNTH HP1/max20 seed; first native action-menu witness required. No final-cut qualification.
+
+========== scenario: whiteout_gen3 ==========
+[duo] whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=647902dd0f460961156e77f091f18300d90543a9686fb37a8249ed4d3cb6aeaa b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=ea9c481f5d2ca7ee1048c6c5ec1bc204819e79d71a2a656a623798f50a6a510a write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=965dbc086f6172ec21ecb7dcbbb67e24c036b30f+dirty dirty=[docs/gen3/probes/fc_SUMMARY_f2551363_exp.txt,docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard1of3.txt,docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard2of3.txt,docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard3of3.txt,docs/gen3/probes/fc_area_map_generated_check_exp_f2551363.txt,docs/gen3/probes/fc_boxsync_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_choice_gift_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_egg_hatch_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_egg_receive_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_engine_signals_generated_check_exp_f2551363.txt,docs/gen3/probes/fc_exp_static_altering0_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_exp_static_altering1_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_exp_static_fish_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_exp_static_grass_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_exp_static_rock_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_exp_static_static_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_exp_static_static_run_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_exp_static_surf_gen3_exp_as_a_f2551363.txt,docs/gen3/probes/fc_exp_zip_build_f2551363.txt,docs/gen3/probes/fc_exp_zip_check_f2551363.txt,...]
+[duo] server up: tcp=53645 http=53646 data=C:\slink-wt\exp-xg3-state\whiteout-dev-965dbc08\slink_duo_whiteout_gen3_8mlv426y
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 10:05:54,459 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-02 10:05:54,459 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 2.2s
+[duo] cleared 7 stale artifact(s) for whiteout_gen3: e2e_whiteout_gen3_a_1_witness.bin, e2e_whiteout_gen3_a_attempt1_result.txt, e2e_whiteout_gen3_a_result.txt, e2e_whiteout_gen3_b_1_witness.bin, e2e_whiteout_gen3_b_attempt1_result.txt, e2e_whiteout_gen3_b_result.txt, e2e_whiteout_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\slink-wt\exp-xg3-state\whiteout-dev-965dbc08\slink_duo_whiteout_gen3_8mlv426y path=C:\slink-wt\exp-xg3-state\whiteout-dev-965dbc08\slink_duo_whiteout_gen3_8mlv426y\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\slink-wt\exp-xg3-state\whiteout-dev-965dbc08\slink_duo_whiteout_gen3_8mlv426y path=C:\slink-wt\exp-xg3-state\whiteout-dev-965dbc08\slink_duo_whiteout_gen3_8mlv426y\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] BOTH_BOXED appended for both halves; the server's party_keys dropped 504F4F4D:20250925 and 504F4F4D:DFDAF6DA
+[duo] queued for a: {'cmd': 'box_mon', 'key': '504F4F4D:20250925'}
+[duo] timing orchestrate 62.7s
+[duo] timing results 5.6s
+[duo] RESULT_LINE a: RESULT: PASS (pair 504F4F4D:20250925 rebuilt after the whiteout; the write landed at the healed landing 2.2 (7,4))
+[duo] RESULT_LINE b: RESULT: PASS (pair 504F4F4D:DFDAF6DA rebuilt after the whiteout)
+[duo] timing oracle 0.0s
+[duo] PYDEC: FAIL the receipt's source is +dirty (docs/gen3/probes/fc_SUMMARY_f2551363_exp.txt, docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard1of3.txt, docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard2of3.txt, docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard3of3.txt, docs/gen3/probes/fc_area_map_generated_check_exp_f2551363.txt, ...): a G4 receipt must come from a clean cut
+[duo] data dir kept: C:\slink-wt\exp-xg3-state\whiteout-dev-965dbc08\slink_duo_whiteout_gen3_8mlv426y
+[duo] whiteout_gen3: attempt 1 aborted — RuntimeError: the receipt's source is +dirty (docs/gen3/probes/fc_SUMMARY_f2551363_exp.txt, docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard1of3.txt, docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard2of3.txt, docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard3of3.txt, docs/gen3/probes/fc_area_map_generated_check_exp_f2551363.txt, ...): a G4 receipt must come from a clean cut
+
+========== summary ==========
+  whiteout_gen3: FAIL (attempt 1 of 1) — RuntimeError: the receipt's source is +dirty (docs/gen3/probes/fc_SUMMARY_f2551363_exp.txt, docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard1of3.txt, docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard2of3.txt, docs/gen3/probes/fc_SUMMARY_f2551363_exp_shard3of3.txt, docs/gen3/probes/fc_area_map_generated_check_exp_f2551363.txt, ...): a G4 receipt must come from a clean cut
+
+DEV_EXIT=1 tracked_clean_after=True source_after=965dbc086f6172ec21ecb7dcbbb67e24c036b30f

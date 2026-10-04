@@ -156,6 +156,15 @@ def test_whiteout_rule(change, match):
     assert (why is None) if match is None else (match in why)
 
 
+@pytest.mark.parametrize("faints,whiteout,want", [
+    ([157, 207, 241], 158, 157),      # the live overlay sweep: later evolution-leg faints come after the whiteout
+    ([29], 30, 29), ([12, 29], 30, 29), ([], 30, None), ([31, 40], 30, None)])
+def test_closing_faint_is_the_last_one_before_the_whiteout(faints, whiteout, want):
+    rt, F = frame_align()
+    log = lua_list([{"seq": s, "frame": s} for s in faints])
+    assert F.closing_faint_seq(rt.table_from(log, recursive=True), whiteout) == want
+
+
 EVENTS = [{"kind": "whiteout"}, {"kind": "party_to_box"}, {"kind": "box_to_party"}, {"kind": "box_change"},
           {"kind": "party_to_box"}, {"kind": "pc_release", "collection": "box"},
           {"kind": "pc_release", "collection": "party"}]

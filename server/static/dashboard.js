@@ -65,7 +65,7 @@ if (window._slinkDashInit) {
 // ── Theme switcher (vanilla, page-agnostic) ───────────────────────────────
 // One source of truth for the theme picker UI. Two cases:
 //
-//   1. Jinja pages (status via dashboard.html, manager, memorial) render the
+//   1. Jinja pages (status via dashboard.html, manager, timeline) render the
 //      Alpine-driven _theme_switcher.html partial — this script just moves
 //      that existing `.theme-switcher` element into the sidebar slot.
 //
@@ -246,6 +246,11 @@ if (window._slinkDashInit) {
       if (attrName === 'style' && node && node.classList && node.classList.contains('calc-preview')) {
         return false;
       }
+    };
+    // A form the user is filling in (the trade-resolve form): its choices are the user's.
+    // It still goes when the server stops sending it, and a new id is a new form.
+    Idiomorph.defaults.callbacks.beforeNodeMorphed = function(oldNode) {
+      if (oldNode && oldNode.hasAttribute && oldNode.hasAttribute('data-morph-keep')) return false;
     };
     // ...and so is its rendered table: the server's copy is empty, so the morph would remove
     // it every 2 s and the page painted the gap until afterSettle re-rendered it.
@@ -444,7 +449,6 @@ if (window._slinkDashInit) {
 (function() {
   var announcer = document.getElementById('mk-announcer');
   var toastHost = document.getElementById('mk-toast-host');
-  var toggle = document.getElementById('mk-announce-toggle');
   if (!announcer) return;
 
   var PAUSE_KEY = 'slink-announce-paused';
@@ -452,16 +456,18 @@ if (window._slinkDashInit) {
     try { return localStorage.getItem(PAUSE_KEY) === '1'; } catch (_) { return false; }
   }
   function setPaused(p) {
+    var toggle = document.getElementById('mk-announce-toggle');   // inside #content now (data-morph-keep)
     try { localStorage.setItem(PAUSE_KEY, p ? '1' : '0'); } catch (_) {}
     if (toggle) {
       toggle.setAttribute('aria-pressed', p ? 'true' : 'false');
       toggle.textContent = p ? 'Resume announcements' : 'Pause announcements';
     }
   }
-  if (toggle) {
-    setPaused(isPaused());
-    toggle.addEventListener('click', function() { setPaused(!isPaused()); });
-  }
+  setPaused(isPaused());
+  // Delegated: the button lives in the polled board, so a morph that ever rebuilds it keeps working.
+  document.addEventListener('click', function(e) {
+    if (e.target && e.target.closest && e.target.closest('#mk-announce-toggle')) setPaused(!isPaused());
+  });
 
   var SECTIONS = ['party', 'pending', 'split', 'boxed', 'linked', 'fallen'];
   function sectionOf(article) {

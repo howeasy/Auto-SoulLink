@@ -71,6 +71,7 @@
         "derived.SB2_ENC_KEY_OFFSET": "facts.json:structs.SaveBlock2.fields.encryptionKey.offset",
         "derived.SB2_NAME_OFFSET": "facts.json:structs.SaveBlock2.fields.playerName.offset",
         "derived.SB2_OT_ID_OFFSET": "facts.json:structs.SaveBlock2.fields.playerTrainerId.offset",
+        "derived.SB2_PLAYER_GENDER_OFFSET": "harness_facts.json:structs.SaveBlock2.fields.playerGender.offset; pin e8bd1cd7:include/global.h:591 playerGender, MALE=0/FEMALE=1 include/constants/global.h:178-179; ROM: ScrCmd_checkplayergender 0x081f9dc0 ldrb r2,[r2,#8] off gSaveBlock2Ptr",
         "derived.SHEDINJA_SPECIES_ID": "facts.json:constants.SPECIES_SHEDINJA",
         "derived.SHINY_MODIFIER_FIELD": "facts.json:structs.BoxPokemon.bitfields.shinyModifier relative to hpLost's u16 lane",
         "derived.TASK_STRUCT_SIZE": "facts.json:structs.Task.size",
@@ -119,7 +120,7 @@
         "rom.SE_SONG_HEADERS.31": "build:pokemon.sym:98319 se_success; facts.constants.SE_SUCCESS",
         "rom.SE_SONG_HEADERS.32": "build:pokemon.sym:97772 se_failure; facts.constants.SE_FAILURE"
       },
-      "admitted": false,
+      "admitted": true,
       "derived": {
         "ABILITY_NUM_FIELD": {
           "shift": 5,
@@ -207,6 +208,7 @@
         "SB2_ENC_KEY_OFFSET": 172,
         "SB2_NAME_OFFSET": 0,
         "SB2_OT_ID_OFFSET": 10,
+        "SB2_PLAYER_GENDER_OFFSET": 8,
         "SHEDINJA_SPECIES_ID": 292,
         "SHINY_MODIFIER_FIELD": {
           "shift": 14,
@@ -214,9 +216,7 @@
         },
         "TASK_STRUCT_SIZE": 40
       },
-      "open": [
-        "Runtime admission/CPU census and write safety qualification pending"
-      ],
+      "open": [],
       "ram": {
         "BATTLERS_COUNT_ADDR": 33554640,
         "BATTLER_CONTROLLER_FUNCS_ADDR": 50340844,

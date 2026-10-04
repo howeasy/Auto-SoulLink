@@ -10,6 +10,7 @@ import pytest
 
 from server.adapters import adapter_class_for_rom_type, get_adapter
 from server.server import SLinkServer
+from tests.unit.companion_evidence import companion
 
 FR_RAND = {"rom_type": "firered", "artifact_kind": "rand"}
 FR_CLEAN = {"rom_type": "firered", "artifact_kind": "clean"}
@@ -33,8 +34,9 @@ async def _session(srv):
     return send, close
 
 
-def _hello(player, cart):
-    return {"event": "hello", "player": player, "trainer_name": player.upper(),
+def _hello(player, cart, *, with_companion=True):
+    evidence = companion(cart.get("rom_type", "")) if with_companion else {}
+    return {**evidence, "event": "hello", "player": player, "trainer_name": player.upper(),
             "ot_id": "30B8" if player == "a" else "7B0B", "has_pokeballs": True,
             "party": [], **cart}
 

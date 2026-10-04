@@ -67,7 +67,12 @@ F.FAINT_INPUTS = "lua/tests/duo/gen2_faint_inputs.lua"
 -- faint leg (lua/tests/gen2_poison_inputs.lua), poison_faint joins the expected sites before battle_faint, and
 -- the faint leg runs on the poison leg's hunt map (the catch, last mon standing, faints there).
 F.POISON_INPUTS = "lua/tests/gen2_poison_inputs.lua"
-F.POISON_BUDGET = {max_frames=150000, max_phase_frames=60000}
+-- Crystal day Route 30: Weedle is 5%; 1 - 0.95^59 = 95.15% candidate coverage
+-- under independent rolls (poisoning still needs its own successful hit).
+-- Observed ~20 encounters/60000 hunt frames -> 59*3000=177000, plus 33000
+-- for travel/healing/poison ticks. Equal phase/total caps remove the old
+-- 60000-frame hunt cutoff; this estimates coverage, not an RNG guarantee.
+F.POISON_BUDGET = {max_frames=210000, max_phase_frames=210000}
 F.POISON_FAINT_BATTLES = 12   -- ponytail: the catch fights to its faint; damage carries between battles
 -- card gen2-u1f-pc: with SLINK_GEN2_U1_FACTS.pc, after the chain's closing whiteout a second catch and Bill's PC
 -- (lua/tests/gen2_pc_inputs.lua) prove the PC sites, in this order; whiteout_before_heal is proven by its own
@@ -115,6 +120,12 @@ F.DIRECTIONS = W.DIRECTIONS
 -- Per title: the rgblink .sym (diagnostics) and the title whose production binder must refuse this
 -- title's receipt (Crystal keeps its original Gold refusal; Gold and Silver refuse each other).
 F.SYM = {crystal="pokecrystal", gold="pokegold", silver="pokesilver"}
+-- The symbol table of the EXECUTED cartridge (diagnostics): the clean rgblink .sym, or for an overlay its own
+-- data/gen2/<title>_slink.sym (bank 4 labels may have moved; the clean table is never read for it).
+function F.sym_file(ctx)
+    local name = (ctx.artifact and ctx.artifact.kind == "overlay") and (ctx.env.title .. "_slink") or F.SYM[ctx.env.title]
+    return ctx.root .. "/data/gen2/" .. name .. ".sym"
+end
 F.REFUSE = {crystal="gold", gold="silver", silver="gold"}
 F.NAMES = {crystal="Crystal", gold="Gold", silver="Silver"}
 F.U1_FIXTURES = {crystal_battle="crystal", gold_battle="gold", gold_battle_errand="gold", silver_battle="silver"}
@@ -208,8 +219,29 @@ end
 -- at _SaveGameData, then SavedTheGame idles 32 frames + text + SFX + 30 frames with no UI origin and no
 -- overworld tick (C engine/menus/save.asm:241-264; U1d live run 1, the C<->G faint duo's RED run 2).
 F.TRACE_EVERY = 30
+-- All walkers share this interruption path, including the wrapped trade/synth
+-- drivers. phone_call comes ONLY from the scripted observer's bank/byte-checked
+-- RingTwice_StartCall hook; a pending special-call ID is not an active call.
+-- Keep the route's state and budgets, pulse A at ready text, release between
+-- pulses, and let the original driver reject every other unexpected UI.
+function F.phone_handler()
+    local down = false
+    return function(point)
+        if point.phone_call ~= true or point.battle_mode ~= 0 then down = false return nil end
+        local ui = point.ui
+        if ui and ui.kind ~= "text" and ui.kind ~= "prompt_button" and ui.kind ~= "wait_button" then
+            down = false
+            return nil
+        end
+        if down then down = false return {} end
+        if ui and point.input_ready == true then down = true return {A=true} end
+        return {}
+    end
+end
+
 function F.play(host, spec, driver, observe, diag)
     local last, settled = nil, false
+    local phone, route_phase = F.phone_handler(), driver.phase or "settle"
     local function locate()
         local placed, where = pcall(diag.where)
         return placed and where or "?"
@@ -217,10 +249,14 @@ function F.play(host, spec, driver, observe, diag)
     local ok, outcome = pcall(host.run, spec, function(frame)
         local point = observe()
         last = point
+        -- A new leg can start while a call is already up, before its first OW tick.
+        local answer = phone(point)
+        if answer then return answer, route_phase, point end
         settled = settled or point.overworld_ready == true or integer(point.battle_mode, 1, 255)
         if not settled then return {}, "settle", point end
         local buttons, phase = driver.step(point)
         if buttons == nil then error(phase, 0) end
+        route_phase = phase
         if diag.trace and frame % F.TRACE_EVERY == 0 then
             diag.log(F.state_line("trace", frame, phase, point, locate()))
         end
@@ -385,8 +421,7 @@ function F.verdict(record, expect, pc)
              "capture_party must fire once before the closing whiteout and once after it"
              .. (evolution and " (and once for the evolution leg)" or ""))
         local faint_log = sites.battle_faint and sites.battle_faint.log or {}
-        local last_faint = faint_log[#faint_log]
-        local why = F.whiteout_problem(w, last_faint and last_faint.seq)
+        local why = F.whiteout_problem(w, F.closing_faint_seq(faint_log, w and w.seq))
         need(why == nil, tostring(why))
         local deposit = sites.pc_deposit_begin and sites.pc_deposit_begin.log[1]
         need(deposit and w and deposit.seq > (w.seq or math.huge), "the PC operations did not follow the whiteout")
@@ -434,6 +469,17 @@ local function copy(value)
     local out = {}
     for k, v in pairs(value) do out[k] = copy(v) end
     return out
+end
+
+-- The pack this gate arms and binds. A clean run uses engine_signals.json as read. An overlay run swaps in the
+-- sites of its execution binding (D2): same schema, overlay-resolved offsets and bytes; every other pack field
+-- (source lineage, specs hash, point symbols' RAM) is the shared clean lineage. No fallback to the clean sites.
+function F.exec_pack(ctx, pack)
+    local view = ctx.artifact   -- nil = a caller with no artifact context: the clean pack, as before
+    if not view or view.kind ~= "overlay" then return pack end
+    local executed = copy(pack)
+    executed.titles[ctx.env.title].sites = copy(assert(view.sites, "overlay execution view carries no sites"))
+    return executed
 end
 
 local function binding(ctx)
@@ -538,6 +584,17 @@ function F.whiteout_snapshot(ctx, armed, callback, seq)
     for slot = 0, math.min(ctx.sym("wPartyCount")[1], 6) - 1 do hp[#hp + 1] = F.party_hp(ctx, slot) end
     return {armed=armed, callback=callback, seq=seq, de=ctx.api.register("D") * 256 + ctx.api.register("E"),
             party_count=ctx.sym("wPartyCount")[1], party_hp=hp}
+end
+
+-- Pure: the closing battle faint is the LAST battle_faint hit BEFORE the whiteout, not the run's last one: a
+-- later leg (the evolution grind) may faint again after the whiteout (overlay sweep ca9b564f: faints 157/207/241
+-- around whiteout 158 read as "the whiteout did not follow the closing battle faint"). nil when none precedes it.
+function F.closing_faint_seq(faint_log, whiteout_seq)
+    local found
+    for _, hit in ipairs(faint_log or {}) do
+        if integer(hit.seq, 1, 2^53) and integer(whiteout_seq, 1, 2^53) and hit.seq < whiteout_seq then found = hit.seq end
+    end
+    return found
 end
 
 -- Pure: the whiteout record's rule (nil = holds, else why). faint_seq: the battle_faint hit it must follow.
@@ -801,9 +858,18 @@ local function binder_options(ctx, wrapper, pack, owner, physical)
         bank_valid=function() return false end, stack_valid=function() return false end}
     local authority = {kind=physical and "PHYSICAL_RUNTIME" or "MODEL_PROBE", allow_model_registration=not physical or nil,
         capture=function() return {generation=1, operation="u1-probe"} end, valid=function() return false end}
-    return {title=ctx.env.title, profile=wrapper, pack=pack, io=io_, authority=authority, reads=ctx.reads,
+    local options = {title=ctx.env.title, profile=wrapper, pack=pack, io=io_, authority=authority, reads=ctx.reads,
             Registry=dofile(ctx.root .. "/lua/hook_registry.lua"), GB=dofile(ctx.root .. "/lua/gb_hook_binding.lua"),
             owner=owner, max_pending=8}
+    if ctx.artifact and ctx.artifact.kind == "overlay" then
+        -- The binder validates against the view's sites; carry the sites of THIS pack (a negative's mutated copy
+        -- included), so a one-byte-wrong overlay row is what refuses, not the clean pack.
+        local view = {}
+        for key, value in pairs(ctx.artifact) do view[key] = value end
+        view.sites = pack.titles[ctx.env.title].sites
+        options.view = view
+    end
+    return options
 end
 
 -- The production decoder (lua/gen2/signals.lua faint_event) on the live hook, as a MODEL instance holding only the
@@ -934,7 +1000,7 @@ function F.main(api, getenv, SG)
     local json = ctx.json
     local title = ctx.env.title
     local wrapper = read_json(ctx, "data/games/gen2_" .. title .. "/profile.json")
-    local pack = read_json(ctx, "data/games/gen2_" .. title .. "/engine_signals.json")
+    local pack = F.exec_pack(ctx, read_json(ctx, "data/games/gen2_" .. title .. "/engine_signals.json"))
     local Signals = dofile(ctx.root .. "/lua/gen2/signals.lua")
 
     -- The pack-UI origins and the item submenu join the scripted gate's UI context (this gate's own
@@ -998,7 +1064,7 @@ function F.main(api, getenv, SG)
     local symbol_at
     local function where()   -- PC and the ROM words on the stack, as bank-guessed labels (diagnostics only)
         if symbol_at == nil then
-            local f = assert(io.open(ctx.root .. "/data/gen2/" .. F.SYM[title] .. ".sym", "rb"))
+            local f = assert(io.open(F.sym_file(ctx), "rb"))
             symbol_at = F.symbols(f:read("a"))
             f:close()
         end
@@ -1042,6 +1108,9 @@ function F.main(api, getenv, SG)
             fainted=function() return probe.record.sites.poison_faint.hits >= 1 end,
             max_frames=F.POISON_BUDGET.max_frames, max_phase_frames=F.POISON_BUDGET.max_phase_frames})
         played, outcome = F.play(host, pspec, pdriver, pobserve, diag)
+        probe.record.poison_hunt = pdriver.hunt_summary()
+        -- Emit even when the hunt timed out; later sites/receipt may never exist.
+        log("POISON_HUNT " .. json.encode(probe.record.poison_hunt))
         model.close()
         probe.record.poison_model, probe.record.psn_mask = model, ctx.u1.poison.psn_mask
         fopts.map, fopts.max_battles = ctx.u1.poison.maps[ctx.u1.poison.hunt_map], F.POISON_FAINT_BATTLES
@@ -1162,7 +1231,8 @@ function F.main(api, getenv, SG)
     end
     local a = record.align
     local receipt = {schema=Signals.RECEIPT_SCHEMA, title=title, evidence_level=evidence, result="PASS",
-        rom_sha1=pack.source.rom_sha1, pack_commit=pack.source.commit, pack_specs_sha256=pack.specs_sha256,
+        rom_sha1=ctx.env.exec_sha1, artifact_kind=ctx.ident.artifact_kind, binding_sha256=ctx.ident.binding_sha256,
+        base_sha1=ctx.ident.base_sha1, pack_commit=pack.source.commit, pack_specs_sha256=pack.specs_sha256,
         fixture=case.name, attempt_id=case.attempt_id, core_mode="CGB", input_mode="normal_buttons",
         fixture_sha256=q.stage_fingerprint, qualification_attempt_id=ctx.u1.qualification_attempt_id,
         harness_write_scopes=json.array({}), bank_check="live",

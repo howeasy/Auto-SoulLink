@@ -1345,7 +1345,8 @@ def test_version_prints_before_the_native_menu(tmp_path, title):
     [(coord, text)] = machine.placed
     assert coord == tilemap + 10 * 20 + 1
     charmap = {c: i for i, c in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x80)}
-    assert text == bytes([*(charmap[c] for c in "SLINK"), 0x7F, 0xB5, 0xF7, 0xE8, 0xF8, 0xE8, 0xF9, 0x50])
+    charmap |= {c: i for i, c in enumerate("abcdefghijklmnopqrstuvwxyz", 0xA0)}
+    assert text == bytes([*(charmap[c] for c in "SoulLink"), 0x7F, 0xB5, 0xF7, 0xE8, 0xF8, 0xE8, 0xF9, 0x50])
     assert machine.bank == 7 and machine.sp == 0xDFFE
 
 

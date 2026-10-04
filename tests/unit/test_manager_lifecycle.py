@@ -288,6 +288,9 @@ def test_liveness_without_psutil_probes_without_killing(monkeypatch):
 
 def test_stop_without_psutil_kills_and_waits_for_the_child(monkeypatch):
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    # POSIX: os.kill(pid, 0) succeeds on an unreaped zombie. The manager's real children are reaped
+    # by asyncio, so reap this one the same way (a waiter) instead of weakening _is_alive.
+    threading.Thread(target=child.wait, daemon=True).start()
     try:
         monkeypatch.delattr(manager, "psutil", raising=False)
         monkeypatch.setattr(manager, "PSUTIL_AVAILABLE", False)

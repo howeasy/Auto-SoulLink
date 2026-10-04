@@ -1,170 +1,54 @@
-# SLink Companion Patch (Radical Red) — testing guide
+# SLink companion patches
 
-FireRed, LeafGreen and Emerald companions are published as
-`patch/dist/SLink-{FireRed,LeafGreen,Emerald}.ups`. Apply each to its matching
-English revision-0 ROM through `/patcher`; `gen3_companions.json` pins the base,
-result and UPS hashes. These builds use ABI2 at `0201B000` and reserve the last
-4 KiB of the native heap. FR/LG publish capabilities23; Emerald publishes87,
-including Match Call. RR keeps the separate ABI1 build described below.
+The companion patch puts SLink inside the game itself: the SLINK panel and messages, in-game trades
+between linked Pokémon, sounds, and the SoulLink title screen. Every game below that has a patch
+**requires** it. A clean cartridge of those games is refused, with a message telling you to patch it.
 
-Build or verify a vanilla companion with
-`python patch/tools/build.py --target firered --rom <clean.gba>` (substitute
-`leafgreen` or `emerald`), adding `--check` to compare the UPS and manifest without
-publishing changes. `--trade-candidate` remains a private test build. The release
-builder's `--with-patch` option includes all three UPS files and their manifest.
+## Which games need it
 
-The Manager can compose a companion after an allowed randomizer run: it refuses
-any randomizer change inside the companion's protected code/data spans. The
-final ROM hash belongs to the run contract. Native capability and randomized
-pairing remain separate; the hello uses the existing `rand` wire kind.
-
-> The Game Boy companion builds live beside this one: `patch/gen1/` (the Red/Blue binary patch,
-> `patch/dist/SLink-RB-{Red,Blue}.ups`) and `patch/gen1/purergb/` (the pureRGB **source overlay**,
-> `patch/dist/SLink-Pure{Red,Blue,Green}.ups`). `tools/make_release.py --with-patch` bundles all
-> six patches; `/patcher` applies any of them in the browser.
-
-An **optional** native code-injection layer for Radical Red. When applied, the SLink Lua
-client detects it and uses native in-game features; without it, everything falls back to
-the existing behaviour. **Unpatched players are unaffected.**
-
-## Prerequisites — the patch is per-RR-build
-
-The patch is built against **one specific Radical Red build**:
-
-| | |
+| | Games |
 |---|---|
-| Base ROM | `Pokemon - Radical Red.gba` |
-| md5 | `8529f3a45d32bce4da637976fcf269d4` |
+| **Patch required** | Red, Blue · PureRed, PureBlue, PureGreen · Gold, Silver, Crystal · FireRed, LeafGreen, Emerald · Radical Red |
+| Played clean | Yellow · Emerald Expansion |
 
-If your RR's md5 differs, the patch will not match (the engine/controller addresses are
-build-specific). Re-pin and rebuild for a different build: `python patch/tools/build.py`.
+## Get a patched cartridge
 
-## Apply the patch
+- **Run Manager (recommended).** When you create a run, the Manager patches each player's cartridge for
+  you, after randomizing it if you chose that.
+- **In the browser.** Open `/patcher` on the run server (port 8080) or the Manager (port 8090), pick
+  your clean ROM and download the patched one. Nothing is installed.
+- **By hand.** Apply `patch/dist/SLink-<Game>.ups` to the matching clean ROM with any UPS patcher
+  (Flips, RomPatcher.js, …).
 
-Apply `patch/dist/SLink-RR.ups` to your clean RR ROM with any UPS patcher
-(Flips, NUPS, RomPatcher.js, …). Result md5 should be `70e7e746e573a2d00df5d3ef41d19d61`.
-Then load the patched ROM in BizHawk as usual.
+A patched game opens on a **SoulLink** title screen and shows the patch version on the New Game /
+Continue menu. If your menu shows `dev` on Red/Blue, pureRGB or a Gen 3 game, the cartridge is from an
+earlier build: prepare a fresh one.
 
-UPS only — no IPS is provided. The patch now bundles the **Battle Calc** (the in-battle
-damage calculator, below), whose code lives above 16 MB; IPS's 24-bit offsets can't reach it.
+## Check your ROM
 
-## Verify the patch loaded
+Start from an unmodified dump. Radical Red is built for one exact release:
 
-Start the patched ROM; within a second or two the patch writes a `'SLNK'` beacon to EWRAM
-`0x0203F800`. The SLink client logs `companion patch: present` when it detects it (and
-falls back silently when it doesn't). A dev smoke check: load `lua/tests/test_mailbox_ping.lua`
-in EmuHawk → it reports `RESULT: PASS`.
-
-## Bundled Battle Calc (in-battle damage calculator)
-
-The emitted patch folds in the **Battle Calc** — an in-battle **damage / type-effectiveness
-calculator** extracted from a custom RR4.1 build. In the move-selection menu it shows a
-computed value for the highlighted move. It detours `BattlePutTextOnWindow`, reads
-`gMoveSelectionCursor`, and renders from new functions at ROM `0x09360000` (full delta map
-in `src/ADDRESSES.md`).
-
-It is captured as a base-RR → RR4.1_Custom UPS delta in `src/rr41_battle_calc.ups`
-(regenerate with `tools/make_battle_calc_patch.py`) and applied before SLink injection;
-SLink's own code was moved to `CODE_BASE 0x08378F70` to sit just above the Battle Calc's
-`0x08378CA8` block. Build without it via `python patch/tools/build.py --no-battle-calc`.
-
-It can also be hidden **per run at runtime** (no rebuild): the run's `battle_calc` toggle
-(run-manager checkbox / `--no-battle-calc` server flag) drives an EWRAM kill-switch byte
-(`SLINK_CALC_OFF 0x0203F8D8`, inverted: boot-default 0 = shown) that makes the battletext
-shim skip the calc trampoline entirely.
-
-## Per-run feature toggles
-
-Every patch feature the run can configure rides the server's `config` command (sent on hello;
-set per run in the run manager's **New run** form or via server CLI flags):
-
-| Toggle | Default | CLI | Off behaviour |
-|---|---|---|---|
-| `native_messages` | OFF | `--native-messages` | Lua HUD overlay (field + in-battle) |
-| `native_sounds` | OFF | `--native-sounds` | Lua m4a `playSE` poke |
-| `battle_calc` | ON | `--no-battle-calc` | damage display hidden (kill-switch byte) |
-| `pc_trade_npc` | ON | `--no-pc-trade-npc` | no Pokémon-Center trade NPC (only effective while overworld presence is OFF) |
-
-Run RULES that happen to need the patch (`--explode-mode`, `--rival-team-swap`,
-`--overworld-presence`) stay opt-in per run as before. **Not toggleable by design**: native PC
-box⇄party storage (24/25), the native trade scene (21), memorialize (26), party freeze and the
-peer-interact plumbing — they're correctness paths, not preferences (the Lua fallbacks remain
-for unpatched ROMs only).
-
-## What's wired into a real run TODAY
-
-- **Native message box** for momentous *overworld* events — a link forms, a shiny is found,
-  a bonus pair links, an area becomes a dead zone. The client routes these to the native box
-  when patched + in the overworld, else to the HUD/center-prompt (so unpatched/in-battle is
-  unchanged).
-- **Peer ghost (Overworld Presence) — deferred post-RC, not currently driven.** The native opcodes
-  below (`OP_SPAWN_PEER_NPC` / `OP_DESPAWN_PEER_NPC` / `OP_ARM_PEER_INTERACT`) are built into the
-  patch and were live-validated against the old, now-archived Gen 3 client (`archive/gen3-old-client`,
-  its `peer_ghost_npc.lua`). The rewritten Gen 3 client (`lua/gen3/`) never sends the opcodes that
-  arm it — `lua/gen3/client.lua`'s `ghost_pos` handler is a no-op — so no NPC spawns yet (owner
-  ruling 2026-09-22, deferred post-RC). What the ROM side does when driven: spawns a real engine
-  object-event rendered as the partner's own trainer avatar + colours, LERPs it toward broadcast
-  sub-pixel positions (continuous, speed-agnostic), matches bike/surf/fishing graphics via the
-  partner's own `graphicsId`, and applies native day/night tint measured from the player's own
-  palette slot.
-- **Talk to your partner → action menu (Trade / Say hey).** Face the Pokémon Center's trade NPC
-  (`pc_trade_npc`, on by default while Overworld Presence is off — the peer-ghost interact path
-  above is deferred) and press A to open a native **multichoice list** (`Trade` / `Say hey`, extensible). **Say hey** pings the partner
-  (the in-game nuzlocke status helper). **Trade** opens the native **"Choose a
-  POKéMON" party menu**; only a *linked* mon is accepted (anything else re-prompts). Your **partner**
-  then gets a single confirm (showing your badge count); on accept, the **real in-game trade animation
-  plays on both sides** (`DoInGameTradeScene` against the partner's matching half staged in
-  `gEnemyParty[0]`) — including **trade-evolution** (Kadabra→Alakazam, etc.) — and the link reconciles
-  to the post-trade species. The two mons are always the **matching halves of one link** (the server
-  auto-selects the partner's counterpart; you can never trade for an unlinked or different-link mon).
-  (Falls back to a faithful silent swap if the native scene is unavailable.)
-- **Native sound.** Server `play_sound` cues (link formed, KO, shiny, …) play through the patch
-  (`PlaySE`) when present **and the `native_sounds` toggle is ON**, instead of the Lua m4a
-  RAM-poke — fallback keeps unpatched ROMs (and toggled-off runs) working.
-- **Native PC box ⇄ party storage** (`DEPOSIT_MON` 24 / `WITHDRAW_MON` 25) — server-driven
-  box/party sync runs through CFRU's own compressed-box conversion (async, settled in the
-  client's storage poll; Lua RAM-poke path remains the unpatched fallback).
-- **Native memorialize** (`MEMORIALIZE` 26) — dead linked mons move to the memorial box in one
-  frame-hook pass (compress + zero + swap-with-last, survivors keep their slot indices). Async
-  like storage; on any failure the client reverts to the Lua path for the rest of the session.
-- **Event-push ring** (`EvRing 0x0203FD10`) — the patch pushes faint-settled (gBattleResults
-  counter deltas) and battle-outcome edges; the client drains them each frame
-  (`MB.events_drain`). Foundation: today they're logged alongside the proven Lua detection;
-  consumers migrate per `patch/ROADMAP.md`.
-
-## Validated but NOT yet wired into the server-driven client
-
-These opcodes are built and live-validated (see `lua/tests/test_live_*.lua`) but the
-production client doesn't invoke them yet — each needs its own server/client integration
-(the message box above is the template):
-
-- Battle: `FORCE_FAINT`, `FORCE_MOVE_SLOT` — validated headlessly
-  (`lua/tests/test_live_forcemove.lua`) but **deliberately never sent by the client**: the
-  controller swap softlocked in real play, so the Lua Variant-3 RAM path is the single
-  production mechanism.  Reserved in the ABI; see `patch/ROADMAP.md` §2.
-- Mon: `CREATE_MON`, `GIVE_MON` (`SET_ENEMY_PARTY` rival-team-swap and `SET_PARTY_MON` trade ARE wired)
-- Overworld: `ARM_PEER_INTERACT` (talk-to-ghost; `SPAWN/DESPAWN_PEER_NPC` is now wired — see above)
-- Rules/UI: `PLAY_FANFARE` (`SHOW_MENU`, `PLAY_SE` ARE wired)
-
-Removed (opcode numbers 10–12 reserved): `APPLY_DAMAGE`, `CURE_STATUS` (linked chip/status — dropped),
-`SET_RULES` (nuzlocke battle-style — redundant on RR). See `ADDRESSES.md` › "Removed opcodes".
-
-Opcode/address reference: `patch/src/ADDRESSES.md`. Build pipeline: `patch/tools/build.py`
-(gcc → ld → objcopy → inject → UPS/IPS, all round-trip self-checked).
-
-## Gen 1 Red/Blue companion patches
-
-The trade-carrying Red/Blue patches are separate UPS files for their exact clean dumps:
+| | md5 |
+|---|---|
+| Radical Red, clean | `8529f3a45d32bce4da637976fcf269d4` |
+| Radical Red, patched | `b9b8304c0c189bfbe54e9fc8df33c486` |
 
 | Patch | Clean ROM md5 | Patched ROM md5 |
 |---|---|---|
-| `SLink-RB-Red.ups` | `3d45c1ee9abd5738df46d2bdda8b57dc` | `cd0af68e5097b8cfa9733225ef055e8a` |
-| `SLink-RB-Blue.ups` | `50927e843568814f7ed45ec4f944bd8b` | `40cc749ee03edfd4a9b31bf088c1a4d2` |
+| `SLink-RB-Red.ups` | `3d45c1ee9abd5738df46d2bdda8b57dc` | `c5c715cda8b0fa178ab30f4fd9e4d821` |
+| `SLink-RB-Blue.ups` | `50927e843568814f7ed45ec4f944bd8b` | `cc5d142b0d1c4df8b5e155ded2894e84` |
 
-Rebuild them from the clean dumps and the current Gen 1 build:
+If your clean ROM's md5 doesn't match, the patch won't apply. Use the matching dump.
 
-```bash
-python patch/gen1/tools/build.py
-python patch/tools/make_ups.py create patch/build/gen1_red.gb patch/gen1/build/slink_red.gb patch/dist/SLink-RB-Red
-python patch/tools/make_ups.py create patch/build/gen1_blue.gb patch/gen1/build/slink_blue.gb patch/dist/SLink-RB-Blue
-```
+## Options per run
+
+Set these in the Manager's **New run** form.
+
+| Option | Default | What it does |
+|---|---|---|
+| Native Sounds | Off | Plays run event sounds through the game |
+| Battle Calc | On | Radical Red: shows the damage of the highlighted move in battle |
+| PC Trade NPC | On | Gen 3: a trader in each Pokémon Center for swapping linked Pokémon with your partner |
+| Phone Calls | On | Gold/Silver/Crystal: your Pokégear rings for a new link, a dead zone or a fallen Pokémon |
+
+Building or changing the patches: see [DEVELOPER.md](DEVELOPER.md).

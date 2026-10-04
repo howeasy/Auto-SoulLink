@@ -1,7 +1,7 @@
 {
  "schema": "slink-upr-gen3-write-domains-v1",
  "generated_by": "python -m server.upr_gen3_write_domain --write",
- "jar_sha256": "db24703b4da3cea08386c6368ec1acbf37c8fc5e34935348881348581056d0f6",
+ "jar_sha256": "db4bc65c3a0c1761ffc70db6a5c0f495635ab3e0e3c8a99640f34fbb1fb833ac",
  "forbidden_domains": [
   "base_stats",
   "types",

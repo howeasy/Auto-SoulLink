@@ -16,6 +16,8 @@
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/idiomorph-ext.min.js" defer></script>
   <script src="/static/calc-preview.js" defer></script>
+  <script src="/static/conn-watch.js" defer></script>
+  <script src="/static/trade-resolve.js" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -30,6 +32,7 @@
         <a class="mk-tab active" href="/" aria-current="page">Board</a>
         {% if show_calc %}<a class="mk-tab" href="/calc/normal.html">Calc</a>{% endif %}
         <a class="mk-tab" href="/debug">Debug</a>
+        <a class="mk-tab" href="/timeline">Timeline</a>
       </nav>
     </header>
     {% include "_board.html" %}

@@ -27,18 +27,33 @@ def _hello(pid: str, rom_type: str, kind: str | None) -> dict:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind, native", [("overlay", True), ("rand_overlay", True),
-                                          ("clean", False), ("rand", False)])
-async def test_a_pure_runs_adapter_follows_the_committed_kind(tmp_path, kind, native):
+@pytest.mark.parametrize("kind", ["overlay", "rand_overlay"])
+async def test_a_pure_runs_adapter_follows_the_committed_kind(tmp_path, kind):
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
         await send(_hello("a", "PureRed", kind))
         assert srv.state.artifact_kind == kind
         assert srv.adapter.game_id == "gen1_purergb"
-        assert srv.adapter.native_trade_ui() is native
-        assert srv.adapter.supports_info_panel() is native
+        assert srv.adapter.native_trade_ui() is True
+        assert srv.adapter.supports_info_panel() is True
         assert srv.state.adapter is srv.adapter
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["clean", "rand"])
+async def test_a_clean_pure_cartridge_is_refused_and_commits_nothing(tmp_path, kind):
+    """Patch-first (owner 2026-10-02): the companion overlay is required for pureRGB, so a clean or
+    randomized-clean hello never reaches the adapter's committed kind (it used to commit clean/rand with
+    no native trade, no panel)."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(_hello("a", "PureRed", kind))
+        assert srv.state.artifact_kind == "" and not srv.state.rom_type
+        assert "needs the SLink companion patch" in srv.state.identity_error["a"]
     finally:
         await close()
 
@@ -48,8 +63,8 @@ async def test_a_gen3_run_is_untouched(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
-        await send(_hello("a", "firered", None))
-        assert srv.state.artifact_kind == "clean"
+        await send(_hello("a", "firered", None))     # the session patches it: a companion FireRed
+        assert srv.state.artifact_kind == "companion"
         assert srv.adapter.game_id == "gen3_frlge" and srv.adapter.native_trade_ui() is False
     finally:
         await close()

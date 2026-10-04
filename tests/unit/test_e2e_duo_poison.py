@@ -264,7 +264,11 @@ def test_seed_instance_save_uses_the_per_instance_target(tmp_path, monkeypatch):
 
     def fake_seed(title, target, dest_dir):
         seeded.append((title, target, dest_dir))
-        return f"{dest_dir}/{title}_{target}.SaveRAM"
+        # a real file: the runner MOVES it to the companion cartridge's save name
+        path = tmp_path / dest_dir / f"{title}_{target}.SaveRAM"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"")
+        return str(path)
 
     monkeypatch.setattr(run_gb_gate, "seed_saveram", fake_seed)
     run = duo.DuoRun.__new__(duo.DuoRun)

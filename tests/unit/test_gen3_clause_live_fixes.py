@@ -4,15 +4,14 @@ import json
 import pytest
 
 from tests.unit import gen3_world as gw
-from tests.unit.gen3_world import ARTIFACTS, mon_record
+from tests.unit.gen3_world import ARTIFACTS, EMERALD_ARTIFACTS, mon_record
 from tests.unit.test_gen3_client import KB, OT, A, B, live, party
 from tools import e2e_duo as duo
 
 
-@pytest.mark.parametrize("pack,title,kind", ARTIFACTS + [("gen3_emerald", "emerald", "clean")])
+@pytest.mark.parametrize("pack,title,kind", ARTIFACTS + EMERALD_ARTIFACTS)
 @pytest.mark.parametrize("boxed", [False, True])
 def test_pc_release_is_durable_and_reports_party_or_box_key_once(monkeypatch, pack, title, kind, boxed):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", gw.REPO / "data/games/gen3_emerald")
     w = live(pack, title, kind)
     if boxed:
         w.set_party(party(A))

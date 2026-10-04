@@ -1,0 +1,13 @@
+# G4 final cut f255136395a6b4613937e4f061e1bda901cc4615 -- tools/gen3_final_cut.py summary (written 2026-10-02T13:11:32Z)
+# RUN 6 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | exp_static_static_run_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_static_run_gen3_exp_as_a_f2551363.txt |
+| 2 | exp_static_surf_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_surf_gen3_exp_as_a_f2551363.txt |
+| 3 | exp_static_altering0_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_exp_static_altering0_gen3_exp_as_a_f2551363.txt |
+| 4 | egg_receive_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_egg_receive_gen3_exp_as_a_f2551363.txt |
+| 5 | faint_cmd_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_faint_cmd_gen3_exp_as_a_f2551363.txt |
+| 6 | link_gen3_exp_as_a | XG3 TEST-ONLY duo | PASS | 1 | fc_link_gen3_exp_as_a_f2551363.txt |
+
+OVERALL: PASS (6/6 rows)

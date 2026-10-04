@@ -32,14 +32,32 @@ from server.pokemon_data import (
 )
 
 from . import gen3_codec, gen3_rom_tables
-from .base import GameAdapter, humanize_area_id
+from .base import GameAdapter, companion_required_reason, humanize_area_id
 
 log = logging.getLogger(__name__)
 
-_DATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "games", "gen3_frlge"
+_GAMES_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "games"
 )
+_DATA_DIR = os.path.join(_GAMES_DIR, "gen3_frlge")
+
+# rom_type -> the data pack whose profile.json pins the companion mailbox ABI (profile.native.ABI). The ABI
+# is read from the pack, never hard-coded per title, so a later companion (the Emerald Expansion's) only needs
+# its pack listed here and its exemption removed.
+_COMPANION_PACKS = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_emerald",
+                    "firered_rr": "gen3_rr"}
+
+
+@cache
+def _companion_abi(pack: str) -> int | None:
+    path = os.path.join(_GAMES_DIR, pack, "profile.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            abi = json.load(fh)["native"]["ABI"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return abi if type(abi) is int and abi > 0 else None
+
 
 # Gift/static encounter area_ids — Pokémon obtained here before Pokéballs.
 _GIFT_AREAS = frozenset({
@@ -74,7 +92,7 @@ _DAYCARE_AREAS = frozenset({
 # id: the egg is handed over on wild Route 117 (pret data/maps/Route117/map.json:65), and a
 # daycare id there would let an egg consume that route. A missing pack file leaves the sets empty rather than breaking the
 # import for every game.
-_EMERALD_DIR = os.path.join(os.path.dirname(_DATA_DIR), "gen3_emerald")
+_EMERALD_DIR = os.path.join(_GAMES_DIR, "gen3_emerald")
 
 
 def _emerald_json(name: str) -> dict:
@@ -430,6 +448,26 @@ class Gen3Adapter(GameAdapter):
         # "named": a companion RR and a clean RR are the same layout and pair. The
         # committed kind stays "companion" -- only this comparison maps it.
         return {"named": "clean", "companion": "clean"}.get(kind, kind)
+
+    # Owner 2026-10-02: FireRed, LeafGreen, Emerald and Radical Red require the companion. The AP
+    # builds (firered_ap/leafgreen_ap) and the Emerald Expansion (rom_type emerald_expansion_*,
+    # which inherits this method) are not listed, so they stay clean-admitted.
+    _COMPANION_ROM_TYPES = frozenset(_COMPANION_PACKS)
+
+    @classmethod
+    def companion_refusal(cls, hello):
+        # EVIDENCE from the cartridge, not the launcher's claim (review F1/F2): the hello carries
+        # `companion_abi` only when this cartridge's own companion mailbox (signature + ABI) is live in
+        # RAM (lua/gen3/native.lua companion_live), and it must equal the ABI the title's pack pins. That
+        # also closes randomized-clean: a randomized cartridge declares "rand" on the wire whether or not
+        # it carries the companion, so artifact_kind alone cannot tell them apart.
+        rom_type = hello.get("rom_type")
+        if rom_type not in cls._COMPANION_ROM_TYPES:
+            return None
+        pinned = _companion_abi(_COMPANION_PACKS[rom_type])
+        if pinned is not None and hello.get("companion_abi") == pinned and type(hello.get("companion_abi")) is int:
+            return None
+        return companion_required_reason(rom_type)
 
     @classmethod
     def supports_randomized(cls, rom_type: str) -> bool:

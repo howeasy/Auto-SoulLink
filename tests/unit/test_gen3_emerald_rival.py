@@ -33,7 +33,6 @@ def test_emerald_panel_shows_each_players_opposite_gender_rival(area):
 
 @pytest.mark.parametrize("gender", [0, 1])
 def test_emerald_hello_and_tick_report_native_player_gender(gender, monkeypatch):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", gw.REPO / "data/games/gen3_emerald")
     world = World("gen3_emerald", "emerald")
     world.set_party([mon_record(0x11111111, 0x0000ABCD)])
     # pokeemerald c65e93f2 include/global.h:510-513: playerGender at +0x08.
@@ -78,7 +77,6 @@ def test_other_packs_do_not_publish_an_unproven_gender(pack, title):
 
 
 def _emerald_world(monkeypatch):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", gw.REPO / "data/games/gen3_emerald")
     world = World("gen3_emerald", "emerald")
     world.set_party([mon_record(0x11111111, 0x0000ABCD)])
     return world
@@ -103,6 +101,9 @@ def test_hello_tick_reconnect_and_identity_refusal_keep_gender_per_player(tmp_pa
     world.poke_int(SB2_ADDR + 0x08, 0, 1)
     world.step_to(60)
     hello, = world.events("hello")
+    # the harness builds the clean artifact; the server refuses a clean Emerald (patch-first, 2026-10-02)
+    from tests.unit.companion_evidence import companion
+    hello = {**hello, **companion("emerald")}
     server = SLinkServer(data_dir=str(tmp_path))
     server._dispatch("a", dict(hello))
     server._dispatch("b", dict(hello, player="b", player_gender=1))

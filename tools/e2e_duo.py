@@ -43,10 +43,12 @@ if __package__:
     from . import gen3_expansion_faint_oracle as exp_faint_oracle
     from .duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
     from .gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
+    from .slink_space import work_root
 else:
     import gen3_expansion_faint_oracle as exp_faint_oracle
     from duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
     from gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
+    from slink_space import work_root
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
@@ -72,14 +74,30 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
+    **{f"exp_static_{case}_gen3": {
+        "flags": [], "timeout": 1200, "games": ("gen3_exp",),
+        "target": f"static_{case}_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "static_wild", "static_wild_case": case,
+        "oracle": "assert_static_wild_gen3_saved",
+    } for case in ("static", "static_run", "grass", "surf", "rock", "fish", "altering0", "altering1")},
     "gift_gen3": {"flags": ["--species-clause", "--gender-clause", "--type-clause"],
-        "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"),
+        "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr", "gen3_exp"),
         "target": "gift_synth", "frames": 2000000, "explicit_only": True,
         "scenario_module": "gift_egg", "acquisition_kind": "gift", "oracle": "assert_gift_egg_gen3_saved"},
     "egg_hatch_gen3": {"flags": [], "timeout": 1800,
-        "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"), "target": "hatch_synth",
+        "games": ("gen3_frlg", "gen3_emerald", "gen3_rr", "gen3_exp"), "target": "hatch_synth",
         "frames": 2500000, "explicit_only": True, "scenario_module": "gift_egg",
         "acquisition_kind": "hatch", "oracle": "assert_gift_egg_gen3_saved"},
+    "egg_receive_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_exp",),
+        "target": "egg_receive_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "gift_egg", "acquisition_kind": "egg_receive", "oracle": "assert_gift_egg_gen3_saved"},
+    "choice_gift_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_exp",),
+        "target": "choice_gift_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "gift_egg", "acquisition_kind": "gift", "acquisition_case": "choice_gift",
+        "oracle": "assert_gift_egg_gen3_saved"},
+    "gift_box_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_exp",),
+        "target": "gift_box_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "gift_egg", "acquisition_kind": "gift_box", "oracle": "assert_gift_egg_gen3_saved"},
     # FRLG-R4: clean-derived saves are disclosed SYNTH. Dependency preflight
     # refuses these rows before any server/emulator launch until CR-R1/CR-R2 and
     # server ingest are committed. Exactly one attempt; no borrowed vanilla PASS.
@@ -95,10 +113,21 @@ SCENARIOS = {
     "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch"},
         "frames": 2000000, "gen3_rand": True, "explicit_only": True, "ball_hunt": True,
+        # rng_attempts 6 (this scenario id only, so the Emerald twin has the same budget): the randomized FR/LG Route 1 tables make the catch a
+        # coin flip -- measured ~40-44% failure per attempt (per-throw catch odds 6-33%; fc_frlgcr_link_gen3_rand_frlg_d5a26da9 failed 3/3 attempts,
+        # the Emerald twin whited out once and passed on attempt 2); the predicted failure over 6 attempts is ~0.5%. The failure is "hunt ended
+        # whiteout" before the catch, so more balls would not help; retryable_gen1_rng admits the attempts past 2 for that reason only.
+        "rng_attempts": 6,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
     "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_trainer_panel", "oracle": "assert_trainer_panel_gen3_rand_saved"},
+    # LIVE PROBE (not a gate, in no plan): a companion pair where B's cartridge has ONE byte flipped inside a protected span, off every
+    # anchor (gen3_probe_flip_choice). It records what the client and the server actually do with it -- admitted or refused, and why --
+    # and passes on any recorded observation; it fails only when the harness itself breaks. Opt-in: --scenario probe_protected_span_flip_gen3.
+    "probe_protected_span_flip_gen3": {"flags": [], "timeout": 300, "games": ("gen3_frlg", "gen3_lgfr", "gen3_emerald"),
+        "target": "town", "frames": 600000, "no_save": ("a", "b"), "gen3_probe_flip": True, "explicit_only": True,
+        "scenario_module": "probe_flip", "oracle": "assert_probe_protected_span_flip_gen3_saved"},
     # A boots {firered,leafgreen}_party_trainer.sav (6e85ddfc): CACHED-NATIVE at (41,45) on map
     # 1.0, one step west of Rick 102's sight line, Lv13 lead -- gen3_routes skips the T2 walk.
     "trainer_bench_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
@@ -174,7 +203,8 @@ SCENARIOS = {
     # named `("gen1",)` went with them.
     # NEW Gen 1 client (lua/gen1/*, game "gen1_new"): docs/gen1_requirements.md D-1 and D-3
     # from real play through lua/tests/duo/duo_gen1_main.lua. Both battle fixtures carry
-    # exactly ONE Poke Ball, so each side gets one throw; the hunt fights one Tackle first
+    # exactly ONE Poke Ball unless a row declares the disclosed 20-ball SYNTH recipe.
+    # The hunt fights one Tackle first
     # when the foe is at full HP (lua/tests/gen1_rb_hunt_inputs.lua).
     # `frames` is only a runaway guard: the main runs at 16x, so 150000 frames (~156 s) expired
     # inside a wall-clock wait; the real bound is `timeout`, enforced by this runner's cleanup.
@@ -188,8 +218,9 @@ SCENARIOS = {
                                "target": "battle", "no_setup": True, "frames": 2500000,
                                "oracle": "assert_linked_faint_saved",
                                "oracle_kwargs": {"active": False}},
+    # Control rows retain the ordinary original attempt plus two RNG retries.
     "linked_faint_active_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
-                                "target": "battle", "no_setup": True, "frames": 2500000,
+                                "target": "battle", "gen1_synth": "explode", "rng_attempts": 3, "no_setup": True, "frames": 2500000,
                                 "oracle": "assert_linked_faint_saved",
                                 "oracle_kwargs": {"active": True}},
     # The same linked faint landing while B's linked mon sits on the BENCH of a wild battle
@@ -201,7 +232,8 @@ SCENARIOS = {
                                       "oracle": "assert_linked_faint_saved",
                                       "oracle_kwargs": {"active": False, "bench_battle": True}},
     "explode_bench_battle_new": {"flags": ["--explode-mode"], "timeout": 1500,
-                                 "games": ("gen1_new",), "target": "battle", "no_setup": True,
+                                 "games": ("gen1_new",), "target": "battle", "gen1_synth": "explode",
+                                 "rng_attempts": 3, "no_setup": True,
                                  "frames": 2500000, "oracle": "assert_linked_faint_saved",
                                  "oracle_kwargs": {"active": False, "bench_battle": True,
                                                    "explode": True}},
@@ -213,12 +245,9 @@ SCENARIOS = {
     "ball_gate_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                       "cold_boot": True, "no_setup": True, "frames": 400000,
                       "oracle": "assert_ball_gate_saved"},
-    # T-3/T-4 needs the companion trade bank, unlike the encounter-only new-client lanes.
+    # T-3/T-4: the companion trade bank (every Gen 1 row's cartridge carries it).
     "trade_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
                   "target": "battle", "no_setup": True, "frames": 2500000,
-                  "rom": {"a": "patch/gen1/build/slink_red.gb",
-                          "b": "patch/gen1/build/slink_blue.gb"},
-                  "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                   "oracle": "assert_trade_new"},
     # W-6/R-4: A holds A+B+Select+Start for 16 polls, the WRAM clear lands, the client withholds
     # its hello and pauses writes, CONTINUE reloads the SAME save, and the re-hello carries the
@@ -231,20 +260,18 @@ SCENARIOS = {
     # confirm, so no blob is ever staged and no party moves.
     "trade_decline_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
                           "target": "battle", "no_setup": True, "frames": 2500000,
-                          "rom": {"a": "patch/gen1/build/slink_red.gb",
-                                  "b": "patch/gen1/build/slink_blue.gb"},
-                          "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                           "oracle": "assert_trade_decline_saved"},
     # W-3 / D-11: linked_faint_active_new's A half against a server started with --explode-mode
     # (server/server.py:4755 spells it exactly that; the help text still says "RR only" although
-    # the Gen 1 client consumes force_explode too). Runs the trade-carrying ROMs because B's
-    # in-battle VBlank probe reads the companion patch's mailbox counter, and it saves under the
-    # filename-derived patched save name.
+    # the Gen 1 client consumes force_explode too). B's in-battle VBlank probe reads the companion
+    # patch's mailbox counter -- every Gen 1 row runs its companion cartridge (GAMES
+    # `patched_saves`), so no scenario names a ROM of its own any more.
     "explode_new": {"flags": ["--explode-mode"], "timeout": 1800, "games": ("gen1_new",),
-                    "target": "battle", "no_setup": True, "frames": 2500000,
-                    "rom": {"a": "patch/gen1/build/slink_red.gb",
-                            "b": "patch/gen1/build/slink_blue.gb"},
-                    "patched_saves": {"a": "red_patched", "b": "blue_patched"},
+                    # The wild foe can KO the linked mon before EXPLOSION (25-49%);
+                    # four attempts cover crit/tie variation in that additional battle.
+                    # O-33: private qualified battle-save copies with 20 Poke Balls.
+                    # Catch/link/explode still run natively; each PYDEC receipt discloses SYNTH.
+                    "target": "battle", "gen1_synth": "explode", "rng_attempts": 4, "no_setup": True, "frames": 2500000,
                     "oracle": "assert_explode_saved"},
     # S-6 / W-5 (Bill's PC listing): the link_new body, then A drives DEPOSIT -> WITHDRAW ->
     # DEPOSIT -> RELEASE through the native PC menus. The release sends release{key} and the
@@ -297,8 +324,9 @@ SCENARIOS = {
     "rival_swap_new": {"flags": ["--rival-team-swap"], "timeout": 1800, "games": ("gen1_new",),
                        "target": {"a": "battle", "b": "battle"}, "no_setup": True,
                        "frames": 2500000, "oracle": "assert_rival_swap_new_saved"},
-    # F-4: one randomized Red hello admitted, clean Blue rejected against its randomized
-    # Blue contract. The second UPR output is required by prepare_pair but is not launched.
+    # F-4: one randomized Red hello admitted, the un-randomized companion Blue rejected against
+    # its randomized Blue contract. The second UPR output is required by prepare_pair but is not
+    # launched.
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                              "target": "town", "no_setup": True, "frames": 100000,
                              "oracle": "assert_admit_randomized_saved"},
@@ -370,7 +398,7 @@ SCENARIOS = {
     # Both sides boot the two-mon pc fixture (slot 1 is the linked mon; A deposits it at the Oldale
     # PC and walks out to Route 103 with its lone starter).
     "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
-                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "whiteout_synth"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
     # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
     # from the Route 1 grass to the 2F; its one in-game save is the Cable Club's own
@@ -503,10 +531,12 @@ SCENARIOS = {
     #                refused with stale_battle_id -- the C5-10 battle-identity gate (2dc1b750;
     #                docs/gen3/research/rival_swap_refresh_window.md §3.3: missing session /
     #                battle_id -> refuse, nothing written) answers before any refresh window.
-    #   native_absent B boots the CLEAN RR dump (rom_kind clean/companion split; runs on
-    #                rr_town.sav). Both sides get the same VALID apply_trade (the partner
-    #                fixture's slot-1 record): the companion must stage it natively, the clean
-    #                cartridge must refuse it and write nothing (trade port 78908fe8).
+    #   clean_rr_refused REFUSAL PROOF (patch-first, owner 2026-10-02: the companion patch is
+    #                REQUIRED, a clean RR is refused at launch): B boots the CLEAN RR dump
+    #                (rom_kind clean/companion split) and `expect_refused` makes the driver PASS
+    #                B only on lua/gen3/run.lua's own "needs the SLink companion patch" refusal --
+    #                no client, no hello, no write, no save. A (companion) boots and connects
+    #                alone and must see no partner, no link and no write.
     # Owner ruling 19: RR force_explode's commit ends in the P+H hand-off, so it runs on the P+H
     # carrier (active_faint_case "explode"): no press after the commit, the same engine oracles,
     # and the attacker's own faint site after the 153 stamp. A QUALIFICATION row (G5-RR-ORACLES):
@@ -532,10 +562,10 @@ SCENARIOS = {
     "rival_swap_real_gen3": {"flags": ["--rival-team-swap"], "timeout": 900, "games": ("gen3_rr",),
                              "target": {"a": "rival", "b": "battle2"}, "frames": 900000,
                              "no_save": ("a", "b"), "oracle": "assert_rival_swap_real_gen3_saved"},
-    "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
+    "clean_rr_refused_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
                            "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
-                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("b",),
-                           "oracle": "assert_native_absent_gen3_saved"},
+                           "rom_kind": {"a": "companion", "b": "clean"}, "expect_refused": ("b",),
+                           "no_save": ("a", "b"), "oracle": "assert_clean_rr_refused_gen3_saved"},
     # G5 two-player evidence for the retired old-client rows, rebuilt on the new client.
     # trade / trade_decline: the companion's Pokemon-Center trade NPC; both boot rr_battle2{,_b}
     # (slot 1 is the linked/traded mon); the oracle reads both flashes (PYDEC) + links.json.
@@ -580,25 +610,11 @@ SCENARIOS = {
     # R4 = linked_faint_active_whiteout_gen3 on gen3_rr). R1/R2/R3 boot rr_battle2{,_b}.sav
     # (a second mon for the send-out, balls for R3's L-throw) and SKIP by name until it is built
     # (skip_reason); R4 runs on the one-mon rr_battle{,_b}.sav.
-    #   R2 clean   B boots the CLEAN RR dump: the P+H path is Lua-only, no companion needed.
+    #   R2 clean   RETIRED 2026-10-03 (patch-first): a clean RR is refused at launch, so there is
+    #              no clean-side link row; clean_rr_refused_gen3 is the single refusal proof
+    #              (docs/gen3/RR_CLEAN_ROWS_CONVERSION_2026-10-03.md).
     #   R3 lhammer B pulses L every frame from the commit to the KO; no ball may be lost.
     #   R5 mega    SIGNED G5 LIMIT (owner ruling 20): an allowed SKIP, never launched.
-    "linked_faint_active_clean_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
-                                       "target": "battle2", "frames": 2500000,
-                                       "rom_kind": {"a": "companion", "b": "clean"},
-                                       "scenario_module": "linked_faint_active",
-                                       "oracle": "assert_linked_faint_active_clean_gen3_saved"},
-    # G5-RR-CLEAN, owner ruling 25(a) (docs/gen3/G4_request_draft.md §6): the second and last
-    # clean-side row ("a decent amount", not full S-1..S-11 coverage) -- a basic link+faint on
-    # the clean ROM. Reuses faint_cmd_gen3's own module/oracle: link the slot-1 mons, then the
-    # server injects A's faint through the debug API. Nothing here pokes either cartridge but
-    # the clients (faint_cmd_gen3's own orchestrate docstring), so it needs no companion-only
-    # mechanism and runs on the clean dump exactly as native_absent_gen3's B half already does.
-    "faint_cmd_clean_gen3": {"flags": [], "timeout": 900, "games": ("gen3_rr",),
-                             "target": "battle2", "frames": 2000000,
-                             "rom_kind": {"a": "companion", "b": "clean"},
-                             "scenario_module": "faint_cmd",
-                             "oracle": "assert_faint_cmd_clean_gen3_saved"},
     "linked_faint_active_lhammer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
                                          "target": "battle2", "frames": 2500000,
                                          "scenario_module": "linked_faint_active",
@@ -646,9 +662,9 @@ for _borrow_case in ("menu", "opponent", "battle"):
 
 SCENARIOS["release_gen3"] = {
     "flags": [], "timeout": 2400, "frames": 3000000,
-    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
     "target": {"a": "battle", "b": "town"},
-    "target_by_game": {"gen3_emerald": "pc", "gen3_rr": "battle2"},
+    "target_by_game": {"gen3_emerald": "pc", "gen3_rr": "battle2", "gen3_exp": "pc"},
     "oracle": "assert_release_gen3_saved",
 }
 SCENARIOS["ball_gate_gen3"] = {
@@ -881,18 +897,24 @@ SPECIES_BUDGET_MISS = "RNG: the species hunt met only duplicates within its batt
 # (the Lua card lands the string; the phrase is pinned here and cross-checked against the body
 # once it exists).
 EXPLODE_KO_MISS = "RNG: the wild foe knocked the linked mon out before EXPLOSION"
-# The phrases a LATER attempt may still be retried for: the species reroll observation and the
-# hunt's RNG budget are the same attempts, and explode_new's budget is its own two.
-LATE_ATTEMPT_RNG = (SPECIES_BUDGET_MISS, EXPLODE_KO_MISS)
+# Only explode_new may retry a third miss; the two SYNTH controls retain three attempts.
+EXPLODE_BALL_MISS = "hunt ended out-of-balls"
+LATE_ATTEMPT_RNG = (
+    (SPECIES_BUDGET_MISS, frozenset()),  # preserve the existing species-hunt policy
+    (EXPLODE_KO_MISS, frozenset({"explode_new"})),
+    (EXPLODE_BALL_MISS, frozenset({"explode_new"})),
+)
 
 
 def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     """May these receipts restart one whole gen1_new run?
 
     Attempt 1 is the original rule: a CAUSE_RNG on one side and nothing worse than CONSEQUENCE
-    on the other. Later attempts are only for the species hunt's own budget phrase — its
-    reroll observation and its RNG budget are the same attempts, so a duplicate-flooded hunt
-    gets another whole run within `limit` (addendum (j)); a ball miss gets two retries (owner 2026-09-18).
+    on the other. Attempts 1 and 2 may retry an RNG cause. Later attempts require a
+    phrase whose tuple scope admits the named scenario (an empty set is unscoped).
+    Species-budget misses retain their existing policy; explode_new admits foe-KO
+    and out-of-balls misses into its fourth attempt. The SYNTH controls stop at three.
+    Omitting the scenario never admits a scoped late phrase.
 
     A half with NO RESULT is NOT "worse than CONSEQUENCE" — it made no claim at all. The RNG
     half's FAIL is what ended the wait (`DuoRun.wait_for` -> `ClientFinishedEarly`) and the
@@ -916,6 +938,11 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     # no runtime bag write, changed activation, or retry for a harness failure.
     if scenario == "ball_gate_gen3" and SCENARIOS[scenario].get("rng_attempts") == limit:
         return True
+    # link_gen3_rand (randomized Route 1 catch odds, see its registry row): attempts past 2 retry a "hunt ended whiteout" CAUSE_RNG, only that.
+    if scenario == "link_gen3_rand" and attempt > 2 and SCENARIOS[scenario].get("rng_attempts") == limit:
+        causes = [text for text in results.values() if classify_gen1_result(text) == "CAUSE_RNG"]
+        if causes and all("hunt ended whiteout" in (text or "") for text in causes):
+            return True
     if (scenario == "type_clause_gen3" and scenario_family(game) == "gen3_rr" and limit == 8
             and "RESULT: FAIL (RNG: type first encounter has no overlap)" in
             (results.get("b") or "").splitlines()):
@@ -928,7 +955,8 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     causes = [text for text in results.values()
               if classify_gen1_result(text) == "CAUSE_RNG"]
     return bool(causes) and all(
-        any(phrase in (text or "") for phrase in LATE_ATTEMPT_RNG) for text in causes)
+        any(phrase in (text or "") and (not scenarios or scenario in scenarios)
+            for phrase, scenarios in LATE_ATTEMPT_RNG) for text in causes)
 
 
 def scenario_attempt_limit(name, game):
@@ -942,6 +970,8 @@ def scenario_attempt_limit(name, game):
         return 3
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
+    if scenario_family(game) == "gen2_new" and name in GEN2_TRADE_SCENARIOS:
+        return 2   # one retry, only when the route's own wild battle was lost (GEN2_ROUTE_BATTLE_LOST)
     entry = SCENARIOS.get(name, {})
     if entry.get("rule_kind") == "family" and scenario_family(game) == "gen3_rr":
         return 16
@@ -964,13 +994,6 @@ def scenario_attempt_limit(name, game):
         return 3 if entry.get("ball_hunt") else 1
     if name == "species_clause_new":
         return 8
-    if name == "explode_new":
-        # EX-3/EX-4: the linked mon IS the lead at the second battle, but the speed order is a
-        # coin flip across Route 1's encounters and the hunt weakens the catch to ~3/15 HP, so
-        # one foe hit kills it about half the time (~25-49% failure per attempt as the
-        # explode-KO phrase). The Lua card heals it before the encounter; 4 covers the crit/tie
-        # cases that remain.
-        return 4
     if name == "poison_new":
         # The forest hunt races the wild table against the starter's HP; run 4 of the full
         # runner lost both attempts to 'a wild foe knocked the starter out' (owner: raise it).
@@ -1075,6 +1098,108 @@ def _new_events(problems, events_before, events_after):
     return events_after[:len(events_after) - kept]
 
 
+# Identity-bearing fields of the (200-char truncated) `TX hello - {...}` receipt lines: a refresh hello may change the AREA (the
+# client re-announces it when the map settles after CONTINUE) but nothing here. ot_id and the party keys are past the truncation, so
+# the server's own view (events.json "Connected (" rows of one text, the locked OT, identity_error) carries that half of the check.
+SAME_SAVE_HELLO_IDENTITY_FIELDS = ("artifact_kind", "foundation", "companion_abi", "badges", "ball_count", "has_pokeballs")
+_RECONNECT_HELLO_LINE_RE = re.compile(r"(?m)^RECONNECT_HELLO\b.*$")
+_TX_HELLO_LINE_RE = re.compile(r"(?m)^TX hello - (\{.*)$")
+
+
+def same_save_hello_problems(result_text):
+    """Violations in a same-save phase receipt (empty = none). The Gen 3 reconnect driver logs ONE `RECONNECT_HELLO <phase> count=N`
+    line (N = hellos sent when the phase starts; a companion cartridge sends capability-refresh hellos too, so N = 1..3 is normal),
+    and every `TX hello` of the phase must carry the same identity-bearing fields as the first. Any hello line for another phase
+    (a different save), any line this check cannot parse, or identity drift between the hellos is a violation."""
+    problems, parsed = [], []
+    for line in _RECONNECT_HELLO_LINE_RE.findall(result_text or ""):
+        m = re.fullmatch(r"RECONNECT_HELLO (\S+) count=(\d+)\s*", line)
+        if m:
+            parsed.append((m[1], int(m[2])))
+        else:
+            problems.append(f"unknown reconnect hello line {line.strip()!r}")
+    other = sorted({phase for phase, _count in parsed if phase != "same_save"})
+    if other:
+        problems.append(f"hello for another save in the same-save window: {', '.join(other)}")
+    hellos = [{k: v for k, v in re.findall(r'"(' + "|".join(SAME_SAVE_HELLO_IDENTITY_FIELDS) + r')":("[^"]*"|-?\d+|true|false)', body)}
+              for body in _TX_HELLO_LINE_RE.findall(result_text or "")]
+    for k, hello in enumerate(hellos[1:], 2):
+        drift = sorted(f for f in SAME_SAVE_HELLO_IDENTITY_FIELDS if f in hello and f in hellos[0] and hello[f] != hellos[0][f])
+        if drift:
+            problems.append(f"hello #{k} differs from hello #1 in {', '.join(drift)} (not a capability refresh of one save)")
+    return problems
+
+
+def same_save_hello_seen(result_text):
+    """The wait predicate: True once a `RECONNECT_HELLO same_save count=N` line with N >= 1 is there. It RAISES on a violation
+    (same_save_hello_problems) instead of waiting out the timeout, so a mixed same/different-save window fails at once."""
+    problems = same_save_hello_problems(result_text)
+    if problems:
+        raise RuntimeError("same-save reconnect window is not one save: " + "; ".join(problems))
+    return re.search(r"(?m)^RECONNECT_HELLO same_save count=[1-9]\d*\s*$", result_text or "") is not None
+
+
+_CONNECTED_ROW_RE = re.compile(r"Connected \((.+), (\d+) mons\)")
+_HELLO_FACTS_RE = re.compile(r"(?m)^HELLO_FACTS party=(absent|\d+) party_hidden=(true|false)\s*$")
+
+
+def hello_facts_from(result_text):
+    """The client-side facts of each hello a phase sent, in order (lua/tests/duo/duo_gen3_main.lua `HELLO_FACTS`): the party it carried
+    (`None` when the field is absent, else its length) and whether it declared the party WITHHELD."""
+    return [{"party": None if p == "absent" else int(p), "hidden": h == "true"} for p, h in _HELLO_FACTS_RE.findall(result_text or "")]
+
+
+def reconnect_hello_party_problems(new_hellos, events_before, hello_facts=None):
+    """Identity and party-size problems among A's NEW accepted hello rows (newest first, as events.json stores them).
+
+    `hello_facts=None` is the strict rule: every row is the same text (one rom, one party size). With `hello_facts` (hello_facts_from) one
+    relaxation exists: a row that reports 0 mons while the baseline reported more is accepted ONLY when the client-side fact for that very
+    hello says its party was WITHHELD (party_hidden=true). The server keeps the stored party intact for a withheld hello (server/state.py:
+    1958-1959, 2065 `if not hidden`), but REPLACES it for an empty party that is not withheld (:2067, :2087-2089 party_keys emptied), so a
+    present-and-empty party stays a failure, as does any other count; the rom must be one throughout and at least one hello must carry the
+    baseline party."""
+    rows = [_CONNECTED_ROW_RE.fullmatch(row.get("text", "")) for row in new_hellos]
+    if hello_facts is None:
+        return [] if len({row.get("text") for row in new_hellos}) == 1 else [
+            "A's accepted reconnect hellos name more than one cartridge/party (another identity)"]
+    if any(m is None for m in rows):
+        return ["A's accepted reconnect hello text is not `Connected (<rom>, <n> mons)`"]
+    problems = []
+    if len({m[1] for m in rows}) != 1:
+        problems.append("A's accepted reconnect hellos name more than one cartridge (another identity)")
+    baseline = next((int(m[2]) for m in (_CONNECTED_ROW_RE.fullmatch(r.get("text", "")) for r in events_before
+                                         if r.get("type") == "hello" and r.get("player") == "a") if m), None)
+    counts = [int(m[2]) for m in reversed(rows)]                     # chronological, to line up with the client's own hello log
+    if baseline is None:
+        return problems + (["A's accepted reconnect hellos differ in party size and the baseline has no A hello to judge them by"]
+                           if len(set(counts)) != 1 else [])
+    odd = [i for i, n in enumerate(counts) if n != baseline]
+    if odd and len(hello_facts) != len(counts):
+        problems.append(f"{len(counts)} new A hello rows but {len(hello_facts)} client HELLO_FACTS lines: a hello whose party differs "
+                        f"from the baseline ({baseline}) cannot be matched to its client-side facts")
+    else:
+        for i in odd:
+            if counts[i] != 0:
+                problems.append(f"hello #{i + 1} reports {counts[i]} mons, the baseline party is {baseline}")
+            elif hello_facts[i] != {"party": 0, "hidden": True}:
+                problems.append(f"hello #{i + 1} reports 0 mons but its party was not withheld "
+                                f"(client: party={hello_facts[i]['party']}, party_hidden={hello_facts[i]['hidden']}): the server "
+                                f"treats that as an EMPTY party")
+    if len(odd) == len(counts):
+        problems.append(f"no A hello carried the baseline party ({baseline} mons)")
+    return problems
+
+
+def accepted_reconnect_hellos(events_before, events_after, hello_facts=None):
+    """True when A added at least one hello row since the baseline, every one ACCEPTED ("Connected (") and one identity
+    (reconnect_hello_party_problems), with no event-log rewrite."""
+    problems = []
+    new_hellos = _new_a_hellos(problems, events_before, events_after)
+    return (not problems and bool(new_hellos)
+            and all(row.get("text", "").startswith("Connected (") for row in new_hellos)
+            and not reconnect_hello_party_problems(new_hellos, events_before, hello_facts))
+
+
 def _new_a_hellos(problems, events_before, events_after):
     """A's hellos among the rows this reconnect actually added, not among all of history."""
     return [row for row in _new_events(problems, events_before, events_after)
@@ -1082,7 +1207,7 @@ def _new_a_hellos(problems, events_before, events_after):
 
 
 def reconnect_same_problems(before, after, events_before, events_after, linked_key, ot_id,
-                            allow_accepted_refreshes=False):
+                            allow_accepted_refreshes=False, hello_facts=None):
     """Public/persisted C-2 facts; empty means a safe same-save reconnect."""
     problems = []
     a = (after.get("status", {}).get("players") or {}).get("a") or {}
@@ -1104,6 +1229,8 @@ def reconnect_same_problems(before, after, events_before, events_after, linked_k
         if not new_hellos or any(not row.get("text", "").startswith("Connected (")
                                  for row in new_hellos):
             problems.append("A did not add only accepted reconnect hellos")
+        else:
+            problems += reconnect_hello_party_problems(new_hellos, events_before, hello_facts)
     elif len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected ("):
         problems.append("A did not add exactly one accepted reconnect hello")
     return problems
@@ -1505,7 +1632,7 @@ GEN3_TITLES = {
     GEN3_EXP_TITLE: {"artifact": "pokeemerald.gba", "saveram": "gen3 pokeemerald.SaveRAM"},
 }
 # The raw, UNPATCHED Radical Red dump (patch/tools/build.py:91 DEFAULT_RR, patch/README.md:18),
-# for native_absent_gen3's clean-boot side only (`rom_kind`: "clean"). It resolves through the
+# for clean_rr_refused_gen3's refusal-proof side only (`rom_kind`: "clean"). It resolves through the
 # ORDINARY repo-root/parents dump search (no `staged` entry), same as firered/leafgreen, because
 # unlike the companion build it genuinely is a raw dump to stage; its battery name is computed
 # from the staged path at resolve time (_gen3_battery_path), not pinned here, since stage_rom's
@@ -1521,6 +1648,57 @@ GEN3_RR_PROFILE = os.path.join(REPO, "data", "games", "gen3_rr", "profile.json")
 # event it SENDS and one per command it RECEIVES.
 GEN3_TX_RE = r"(?m)^TX {event} {key}(?=\s|$)"   # key "-" for an event that carries none
 GEN3_RX_RE = r"(?m)^RX {cmd} key={key}(?=\s|$)"
+# lua/gen3/entry.lua Entry.admit_routed's refusal of a clean companion-required cartridge, as run.lua
+# logs it (console.log "[SLink-gen3] refused: <why>", teed with the "[client] " prefix by the driver).
+def gen3_clean_refusal_re(title="radical_red"):
+    """The refusal line for a CLEAN `title` cartridge, as the driver tees it (`[client] ` prefix)."""
+    return (rf"(?m)^\[client\] \[SLink-gen3\] refused: this {re.escape(title)} cartridge needs the SLink "
+            r"companion patch; prepare it through the Manager or /patcher$")
+
+
+GEN3_CLEAN_REFUSAL_RE = gen3_clean_refusal_re()
+
+
+def gen3_refused_side_problems(label, text, title="radical_red"):
+    """A side that was REFUSED at launch (`expect_refused`): the companion-patch refusal line, the driver's
+    REFUSED_AT_LAUNCH and WRITES 0, and nothing a working client leaves behind."""
+    return gen3_receipt_problems(
+        label, text,
+        required=[gen3_clean_refusal_re(title), r"(?m)^REFUSED_AT_LAUNCH \[SLink-gen3\] refused: ", r"(?m)^WRITES 0$"],
+        forbidden=[r"(?m)^MYKEY ", r"(?m)^TX ", r"(?m)^RX ", r"(?m)^\[client\] \[SLink-gen3\] write ",
+                   r"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \(\w+ by \w+\) player ", r"(?m)^SAVE_WITNESS_DUMP"])
+
+
+def gen3_refused_server_problems(status, side, links=()):
+    """The server never saw the refused side: it is not connected and nothing is linked."""
+    problems = []
+    if status is None:
+        problems.append(f"server: /api/status unavailable, cannot show {side} never connected")
+    elif (status.get("players") or {}).get(side, {}).get("connected"):
+        problems.append(f"server: {side} connected -- the refused cartridge reached the server")
+    if links:
+        problems.append(f"server: a persisted link exists: {list(links)}")
+    return problems
+
+
+def gen3_expect_refused_problems(cfg):
+    """`expect_refused` must be a collection of sides (a bare string would match by substring), and each
+    refused side must boot a cartridge the launcher refuses: rom_kind clean or rand."""
+    refused = cfg.get("expect_refused", ())
+    if not refused:
+        return []
+    if not isinstance(refused, (tuple, list, set, frozenset)):
+        return [f"expect_refused must be a tuple/set of sides, not {type(refused).__name__} {refused!r}"]
+    kinds, problems = cfg.get("rom_kind", "companion"), []
+    for side in sorted(refused, key=str):
+        if side not in ("a", "b"):
+            problems.append(f"expect_refused names {side!r}, not a side")
+            continue
+        kind = kinds.get(side, "companion") if isinstance(kinds, dict) else kinds
+        if kind not in ("clean", "rand"):
+            problems.append(f"expect_refused side {side} has rom_kind {kind!r}: only a clean/rand cartridge is "
+                            f"refused at launch")
+    return problems
 # duo_gen3_main.lua dump_witness: one per extension RAM copy, right after its save's DUMP line.
 GEN3_EXT_RE = re.compile(r"SAVE_WITNESS_EXT path=(\S+) bytes=(\d+) saves=(\d+)\s*$")
 
@@ -2859,6 +3037,11 @@ GEN2_BALL_GATE_FIXTURES = {"gen2_new": {"a": "crystal_town", "b": "crystal_town_
 # F.driver's refusal when the Ball pocket is empty (lua/tests/gen2_frame_align.lua): five natural Balls at ~33% a
 # throw miss about 13% of full-HP catches, so the lane may retry once on exactly this reason.
 GEN2_OUT_OF_BALLS = "no Poke Ball left in the pocket"
+# A Gen 2 trade scenario's link route throws balls at its first wild battle. On the pinned DUO-CLOCK the whole route
+# is bit-for-bit deterministic, so a starter that loses that battle loses it on every re-run of the same attempt
+# (gen2_new/gen2_trade_refuse_item, sweep gen2-fsw-1003-0029 and -rerun1: ENGINE_WHITEOUT at the same frame twice).
+# The one retry runs on the next pinned clock minute (_duo_clock_minute), a disclosed second roll like gen2_ball_gate's.
+GEN2_ROUTE_BATTLE_LOST = "link route failed: the battle ended without a catch"
 # DUO-WAVE-D O-33 setups (tools/gen2_synth_fixtures.py): scenario -> recipe kind. Each side boots
 # <title>_synth_<kind> (C<->C B: crystal_synth_<kind>_ot2) through its BASE fixture's qualified CONTINUE (case.synth).
 GEN2_SYNTH_SCENARIOS = {"gen2_boxed_capture": "full", "gen2_gift": "bill", "gen2_egg_hatch": "hatch",
@@ -2884,14 +3067,25 @@ def gen2_frame_scale(speed):
     return 20 if speed == 0 else max(1, -(-speed // 300))
 
 
-def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
+def gen2_selected_artifact(args, scenario):
+    """One explicit artifact decision for every Gen 2 scenario, including relaunches."""
+    kind = getattr(args, "gen2_artifact", None) or os.getenv("SLINK_GEN2_ARTIFACT")
+    kind = kind or "overlay"   # patch-first (owner 2026-10-02): the launcher refuses a clean Gen 2 cartridge
+    if kind not in ("clean", "overlay"):
+        raise ValueError("Gen 2 artifact must be clean or overlay")
+    if scenario in GEN2_TRADE_SCENARIOS and kind != "overlay":
+        raise ValueError("Gen 2 native trade requires overlay")
+    return kind
+
+
+def gen2_preflight(*, repo=None, game="gen2_new", scenario="link", artifact_kind="clean"):
     """Bind each side's fixture to its full qualification report and its title's pinned ROM."""
     root = Path(repo or REPO).resolve()
     if REPO not in sys.path:
         sys.path.insert(0, REPO)
     from tests.live.test_gen2_new_gates import qualified_identity
     from tools.gen2_fixtures import BY_NAME
-    from tools.gen2_source_data import load_context
+    from tools.gen2_source_data import load_context, load_overlay_context
 
     pairing = GAMES[game]
     if pairing.get("launch_profile") != "gen2":
@@ -2927,26 +3121,36 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
         if name not in BY_NAME:
             raise FileNotFoundError(f"Gen 2 lane missing played/qualified fixture declaration: {name}")
         title = BY_NAME[name].title
-        ctx = load_context(title, root=root)
-        rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
+        if artifact_kind not in ("clean", "overlay"):
+            raise ValueError("Gen 2 artifact must be clean or overlay")
+        ctx = load_context(title, root=root) if artifact_kind == "clean" else load_overlay_context(title, root=root)
         source = ctx.source_record()
-        if hashlib.sha1(rom.read_bytes()).hexdigest() != source["rom_sha1"]:
+        base_rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
+        if hashlib.sha1(base_rom.read_bytes()).hexdigest() != source["rom_sha1"]:
             raise RuntimeError(f"{inst}: Gen 2 {title} ROM differs from the pinned source")
+        rom = base_rom if artifact_kind == "clean" else root / f"patch/build/gen2_{title}_overlay.gbc"
+        executed_sha1 = hashlib.sha1(ctx.rom).hexdigest()
         fixture = root / "tests/fixtures/gen2" / f"{name}.SaveRAM"
         raw = fixture.read_bytes()
-        ot_id = qualified_identity(name, raw, repo=root)
+        ot_id = qualified_identity(name, raw, repo=root, kind=artifact_kind)
         if synth is not None:
             fixture = root / "tests/fixtures/gen2" / f"{synth}.SaveRAM"
             built, _disclosure = gen2_synth_fixtures.build_named(synth, root=root)
             raw = fixture.read_bytes()
             if built != raw:
                 raise RuntimeError(f"{inst}: {synth} is not the builder's output of {name}")
-        receipt = root / "tests/fixtures/gen2/receipts" / f"{name}.qualification.json"
+        receipt = root / ("tests/fixtures/gen2/receipts/overlay" if artifact_kind == "overlay"
+                          else "tests/fixtures/gen2/receipts") / f"{name}.qualification.json"
         report = json.loads(receipt.read_text(encoding="utf-8"))
         result[inst] = {"name": name, "fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(),
                         "ot_id": ot_id, "qualification": receipt,
                         "qualification_attempt_id": report["attempt_id"],
-                        "rom": rom, "rom_sha1": source["rom_sha1"], "title": title}
+                         "rom": rom, "rom_sha1": executed_sha1, "title": title, "artifact_kind": artifact_kind,
+                         "source_rom_sha1": source["rom_sha1"],
+                         "binding_sha256": ctx.execution_record().get("binding_sha256") if artifact_kind == "overlay" else None}
+        if artifact_kind == "overlay":
+            binding = root / f"data/games/gen2_{title}/overlay/binding.json"
+            result[inst]["binding_sha256"] = hashlib.sha256(binding.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
         if synth is not None:
             result[inst]["synth"] = synth
         if refused:
@@ -2963,7 +3167,7 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
         if name not in BY_NAME or not wrong.is_file():
             raise FileNotFoundError(f"Gen 2 reconnect missing qualified wrong-save fixture: {name}")
         raw = wrong.read_bytes()
-        if BY_NAME[name].title != result["a"]["title"] or qualified_identity(name, raw, repo=root) == result["a"]["ot_id"]:
+        if BY_NAME[name].title != result["a"]["title"] or qualified_identity(name, raw, repo=root, kind=artifact_kind) == result["a"]["ot_id"]:
             raise RuntimeError("Gen 2 reconnect wrong-save must match title and differ in OT")
         result["a"].update(wrong_fixture=wrong, wrong_sha256=hashlib.sha256(raw).hexdigest())
     return result
@@ -2989,7 +3193,14 @@ GAMES = {
         "scenario_prefix": "gen2_",
     },
     # The NEW Gen 1 client (lua/gen1/entry.lua composition root), Red as A and Blue as B, on
-    # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py). The scenarios it
+    # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py).
+    #
+    # `patched_saves` is the cartridge each instance LAUNCHES (a run_gb_gate.PATCHED key): the
+    # SLink companion is REQUIRED for Red/Blue/pureRGB (owner 2026-10-02), so every scenario runs
+    # on red_patched/blue_patched or the pureRGB overlays, seeded from the clean title's fixture
+    # (`fixture`; the companion adds ROM code and moves no SRAM, A4) under the companion build's
+    # filename-derived SaveRAM name. `rom` stays the CLEAN base: it is what the randomized-admission
+    # leg hands the randomizer, never what an emulator boots. The scenarios it
     # runs are the ones that NAME it: `gen1_new` is opt-in (OPT_IN_GAMES), so the
     # savestate-less shared ones do not leak in, and every scenario here
     # carries an `oracle` -- a Gen 1 verdict always reads the saved state (A0-H2). duo_gen1_main
@@ -3000,6 +3211,7 @@ GAMES = {
         "game": "gen1_new",
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
+        "patched_saves": {"a": "red_patched", "b": "blue_patched"},
         "uses_savestate": False,
         "fixture": {"a": "red", "b": "blue"},
         "scenario_prefix": "gen1_",
@@ -3008,46 +3220,27 @@ GAMES = {
     # gen1_new -- only the cartridges and their fixtures differ. A=purered, B=pureblue (the vanilla
     # pair's shape). `game` stays "gen1_new" because the scenario registry names that game (a
     # scenario's `games` tuple is what selects it), while `self.game` (the row key) carries the
-    # foundation: `is_gen1` and the battery-boot branch both read it.
+    # foundation: `is_gen1` and the battery-boot branch both read it. Every scenario runs on the
+    # companion OVERLAY (clean build + patch/dist/SLink-Pure*.ups, PLAN M3/P4), booting the clean
+    # pure fixture (A4); admit_randomized runs on the M5 fork jar.
     "gen1_pure": {
         "main": "lua/tests/duo/duo_gen1_main.lua",
         "game": "gen1_new",
-        # docs/purergb/PLAN.md §13: trade/explode need the M3 source overlay (admit_randomized
-        # runs on the M5 fork jar); `--scenario all` on this row runs the other fifteen.
-        "not_yet": ("trade_new", "trade_decline_new", "explode_new"),
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_pureblue.gbc"},
+        "patched_saves": {"a": "purered_overlay", "b": "pureblue_overlay"},
         "uses_savestate": False,
         "fixture": {"a": "purered", "b": "pureblue"},
         "scenario_prefix": "gen1_",
-    },
-    # The pureRGB companion OVERLAY pairing (PLAN M3/P4): clean build + the SLink UPS. Rules-only
-    # scenarios stage the CLEAN pure cartridge through the ordinary fixture path below (A4: a
-    # clean pure SaveRAM loads on the overlay build unchanged, so the two are behaviourally
-    # equivalent for anything that is not native trade) -- only a scenario carrying
-    # `patched_saves` needs the trade-carrying cartridge, and `patched_saves_override` is what
-    # redirects those three (SCENARIOS hardcodes them to the vanilla companion-patch keys, since
-    # a scenario dict has no idea which GAME row is running it; `_patch_key`/`_rom_for` in
-    # DuoRun read this override). `not_yet` is empty: the overlay artifacts exist.
-    "gen1_pure_overlay": {
-        "main": "lua/tests/duo/duo_gen1_main.lua",
-        "game": "gen1_new",
-        "not_yet": (),
-        "play": "gen1_playthrough",
-        "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_pureblue.gbc"},
-        "uses_savestate": False,
-        "fixture": {"a": "purered", "b": "pureblue"},
-        "scenario_prefix": "gen1_",
-        "patched_saves_override": {"a": "purered_overlay", "b": "pureblue_overlay"},
     },
     # The third pure title on the B side (PureGreen's fixtures lead with Charmander like Blue's),
-    # so every pure cartridge has a duo pairing; same deferred scenarios as gen1_pure.
+    # so every pure cartridge has a duo pairing; on the overlays, like gen1_pure.
     "gen1_pure_green": {
         "main": "lua/tests/duo/duo_gen1_main.lua",
         "game": "gen1_new",
-        "not_yet": ("trade_new", "trade_decline_new", "explode_new"),
         "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_purered.gbc", "b": "patch/build/gen1_puregreen.gbc"},
+        "patched_saves": {"a": "purered_overlay", "b": "puregreen_overlay"},
         "uses_savestate": False,
         "fixture": {"a": "purered", "b": "puregreen"},
         "scenario_prefix": "gen1_",
@@ -3136,26 +3329,19 @@ GAMES = {
         "save_witness": "check_save_witness_gen3",
     },
     # X3: the pokeemerald-expansion reference build (ROM 28877d73), E<->E on its own make-exp
-    # fixtures (tests/fixtures/gen3/exp_*.sav); same maps and hunts as gen3_emerald. Pre-XG the
-    # driver admits it through a TEST-ONLY seam (duo_gen3_main.lua test_admission_codec), logged
-    # in every receipt; production refuses it (unrouted, unadmitted).
+    # fixtures (tests/fixtures/gen3/exp_*.sav); the ordinary production route is verified
+    # from accepted server HELLOs and each client's unwrapped admission result.
     "gen3_exp": {
         "main": "lua/tests/duo/duo_gen3_main.lua",
         "game": "gen3_exp",
         "play": "gen3_fixtures",
         "sides": {"a": (GEN3_EXP_TITLE, "exp_{target}"), "b": (GEN3_EXP_TITLE, "exp_{target}_b")},
-        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102"},
+        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102",
+                      "whiteout_synth": "route_103"},
         "uses_savestate": False,
         "scenario_prefix": "gen3_",
         "oracle_required": True,
         "save_witness": "check_save_witness_gen3",
-        # The SERVER's half of the same TEST-ONLY seam, for the same reason and the same
-        # receipt rule (ruling 39): production refuses this rom_type by name, so the server
-        # has to be told to route it, and the only process told is this one. It is a CLI
-        # flag, not an env var, so no other lane sharing this machine's environment can
-        # inherit it; no game row but this one carries one, and the run fails unless the
-        # server's own log carries the `production:false` line it logs on startup.
-        "server_rom_routes": ["--test-only-route", GEN3_EXP_TITLE],
     },
 }
 
@@ -3167,9 +3353,13 @@ GEN3_RAND_SCENARIOS = GEN3_RAND_ADMISSION | {"link_gen3_rand", "trainer_panel_ge
 GEN3_RAND_PHASES = {
     "pair": {"a": ("a", "rand"), "b": ("b", "rand")},
     "wrong_rom": {"a": ("b", "rand")},
-    "mixed_kind": {"b": ("clean_b", "clean")},
+    # patch-first (owner 2026-10-02): a clean or randomized-clean cartridge never reaches a server verdict, it
+    # is refused at launch. Every randomized cartridge here carries the companion (kind `rand` on the wire,
+    # plus companion_abi), and the partner of the mixed-kind / clean-equivalent legs is the plain COMPANION
+    # (hello kind `companion`, which pairs as clean). The clean cartridge itself is the `clean_refused` leg.
+    "mixed_kind": {"b": ("companion_b", "companion")},
     "rules_changed": {"a": ("forbidden_a", "rand")},
-    "equivalent_pair": {"a": ("equivalent_a", "rand"), "b": ("clean_b", "clean")},
+    "equivalent_pair": {"a": ("equivalent_a", "rand"), "b": ("companion_b", "companion")},
 }
 # The randomized ROMs are never committed: point SLINK_GEN3_RAND_ROMS at a directory holding
 # {FireRed,LeafGreen}_allowed.gba, or Emerald_allowed.gba and Emerald_allowed_b.gba.
@@ -3318,6 +3508,50 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
                               for i in range(0, size, 11)}}
 
 
+def gen3_probe_flip_choice(patched, row, anchors):
+    """The ONE byte the protected-span probe flips, chosen by a fixed rule so the same build always gives the same byte.
+
+    Rule: the LAST byte of the payload's version slot (`row["payload_version_slot"]`, inside the first protected span). The slot is a
+    GBA text string, 0xFF-terminated and zero padded; its last byte is padding after the terminator, so the game cannot read it, the
+    flip does not break boot, and it still changes the ROM hash. If that byte is not a 0x00 behind a 0xFF terminator, the fallback is the
+    first byte of the first protected span outside the version slot. The byte must lie in a protected span and outside every anchor
+    (`anchors`: [(rom_offset, length)]), else ValueError. Returns {offset, before, after, span, rule}."""
+    spans = row["protected_spans"]
+    slot = row["payload_version_slot"]
+    base = spans[0]["offset"] + slot["offset"]
+    slot_bytes = patched[base:base + slot["length"]]
+    if slot_bytes[-1:] == b"\x00" and b"\xff" in slot_bytes[:-1]:
+        offset, rule = base + slot["length"] - 1, "version-slot padding byte"
+    else:
+        offset, rule = next((spans[0]["offset"] + i for i in range(spans[0]["size"])
+                             if not base <= spans[0]["offset"] + i < base + slot["length"]), None), "first non-slot payload byte"
+    span = next((k for k, s in enumerate(spans) if offset is not None and s["offset"] <= offset < s["offset"] + s["size"]), None)
+    if span is None:
+        raise ValueError("probe byte is not inside a protected span")
+    if any(start <= offset < start + length for start, length in anchors):
+        raise ValueError(f"probe byte {offset:#x} is on an anchor")
+    return {"offset": offset, "before": patched[offset], "after": patched[offset] ^ 0x01, "span": span, "rule": rule,
+            "span_offset": spans[span]["offset"], "span_size": spans[span]["size"]}
+
+
+def probe_flip_facts(flip):
+    """The flipped cartridge, named: which title (B's cart: gen3_frlg flips LeafGreen, gen3_lgfr FireRed, gen3_emerald Emerald), its byte,
+    the protected span that byte is inside, and that it is off every anchor."""
+    return (f"flipped_title={flip['title']} cart=b offset={flip['offset']:#x} inside_protected_span={flip['span_offset']:#x}+{flip['span_size']:#x} "
+            f"(span {flip['span']}) on_anchor=false (checked {flip['anchors_checked']} anchors)")
+
+
+def gen3_rand_equivalent_rom(patched, protected_spans):
+    """SYNTH 32(b) on the COMPANION cartridge: an unknown hash whose tables and engine/companion sites are
+    byte-identical to the published companion -- the last 0xFF padding byte outside every protected span is
+    changed to 0xFE."""
+    spans = [(s["offset"], s["offset"] + s["size"]) for s in protected_spans]
+    for at in range(len(patched) - 1, -1, -1):
+        if patched[at] == 0xFF and not any(lo <= at < hi for lo, hi in spans):
+            return patched[:at] + b"\xFE" + patched[at + 1:]
+    raise ValueError("no unused 0xFF padding byte outside the companion's protected spans")
+
+
 def gen3_rand_hello(text):
     rows = re.findall(r"(?m)^RAND_HELLO (.+)$", text or "")
     if len(rows) != 1:
@@ -3344,6 +3578,12 @@ def gen3_rand_hello_problems(hello, facts, kind="rand"):
     return problems
 
 
+# The clean-pairing class: the server commits the artifact_kind of the FIRST hello of a run (server/server.py:2271-2284). In the
+# equivalent_pair leg the companion partner may land first (committing "companion") or the clean-equivalent randomized cart may
+# (committing "clean"); both are the same pairing class (gen3_frlge.pairing_kind maps companion -> clean), so either is correct.
+GEN3_EQUIVALENT_PAIRING_KINDS = ("clean", "companion")
+
+
 def gen3_rand_admission_problems(phase, status, hellos, facts):
     """No connected/default-admitted shortcut: require actual contract verdicts."""
     problems = []
@@ -3366,16 +3606,17 @@ def gen3_rand_admission_problems(phase, status, hellos, facts):
             if phase == "wrong_rom" and any(facts[p]["content_fingerprint"][:12] not in reason
                                              for p in ("a", "b")):
                 problems.append("wrong-ROM rejection lacks expected/reported fingerprints")
-            if phase == "mixed_kind" and not all(k in reason for k in ("'rand'", "'clean'")):
+            if phase == "mixed_kind" and not all(k in reason for k in ("'rand'", "'companion'")):
                 problems.append("mixed-kind rejection does not name both kinds")
             if player.get("party_keys") or player.get("trainer_name") or player.get("current_area_id"):
                 problems.append(f"{side}: rejected cartridge adopted party/identity/area")
             if status.get("links"):
                 problems.append(f"{side}: admission-only negative leg created links")
     if phase in ("pair", "equivalent_pair"):
-        effective = "clean" if phase == "equivalent_pair" else "rand"
-        if status.get("gen3_rand_effective_kind") != effective:
-            problems.append(f"{phase}: effective kind is not {effective}")
+        effective = GEN3_EQUIVALENT_PAIRING_KINDS if phase == "equivalent_pair" else ("rand",)
+        if status.get("gen3_rand_effective_kind") not in effective:
+            problems.append(f"{phase}: effective kind {status.get('gen3_rand_effective_kind')!r} is not "
+                            f"{' or '.join(effective)}")
         if status.get("gen3_rand_identity_errors") != {}:
             problems.append(f"{phase}: identity/pairing error proof missing or nonempty")
     if phase == "equivalent_pair" and (
@@ -3559,6 +3800,62 @@ def gen3_rand_server_main():
                             reset=True, data_dir=sys.argv[3]))
 
 
+def gen3_production_route_lines(server_text, client_text, side, pack, title, rom_hash):
+    """One accepted server route and the client's actual admit_routed identity, or None.
+
+    Shared by duo and extracted-ZIP evidence. A requested route, old override receipt,
+    wrong player/title/hash, or TCP connection alone cannot qualify production routing.
+    """
+    if side not in ("a", "b") or any("TEST-ONLY" in text for text in (server_text, client_text)):
+        return None
+    server_pattern = re.compile(rf"^.*\[{side}\] route {re.escape(title)} -> {re.escape(pack)} \(production\)$")
+    client_pattern = re.compile(
+        rf"^.*\[SLink-gen3\] {re.escape(pack)}/{re.escape(title)} \(clean by hash\) "
+        rf"player {side} -> \S+:\d+ \(rom ([0-9a-fA-F]{{8}})\)$")
+    server_line = next((line for line in server_text.splitlines() if server_pattern.fullmatch(line)), None)
+    client_line = next((line for line in client_text.splitlines()
+                        if (match := client_pattern.fullmatch(line))
+                        and match[1].lower() == rom_hash[:8].lower()), None)
+    return (server_line, client_line) if server_line and client_line else None
+
+
+GEN3_COMPANION_GAMES = ("gen3_frlg", "gen3_lgfr", "gen3_emerald")
+
+
+def gen3_companion_game_problem(game):
+    """Why --gen3-companion cannot apply to `game`, or None. The flag swaps the CLEAN FR/LG/Emerald dumps for their patched
+    companions (patch/build/slink_*.gba); RR already boots its companion and the expansion has no companion."""
+    if game in GEN3_COMPANION_GAMES:
+        return None
+    return (f"--gen3-companion applies only to {', '.join(GEN3_COMPANION_GAMES)} (FR/LG/Emerald pairings), not {game}")
+
+
+def gen3_companion_admission_problems(results, sides, pins):
+    """(problems, proof lines): each side's OWN admission line -- lua/gen3/run.lua "[SLink-gen3] pack/title (kind by how)
+    player X -> host:port (rom HASH8)" -- must say `companion by hash` for that side's title and carry the first 8 hex of
+    the title's pinned companion sha1. `sides` {inst: title}, `pins` rom_pins() with the `<title>_companion` keys.
+    Every admission line of the side must qualify (a relaunch in the same receipt cannot hide a clean one); a clean-labelled
+    line, an anchors/header admission, another title, another player's line or another hash is a problem."""
+    problems, proofs = [], []
+    for inst, title in sides.items():
+        pin = pins.get(f"{title}_companion")
+        pack = GEN3_PACKS[title]
+        if not pin:
+            problems.append(f"{inst}: no {title}_companion pin to compare the admission hash with")
+            continue
+        text = results.get(inst) or ""
+        want = (rf"\[client\] \[SLink-gen3\] {re.escape(pack)}/{re.escape(title)} \(companion by hash\) "
+                rf"player {inst} -> \S+:\d+ \(rom {pin[:8]}\)")
+        lines = re.findall(r"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \(\w+ by \w+\) player " + inst + r" .*$", text)
+        good = [ln for ln in lines if re.fullmatch(want, ln)]
+        bad = [ln for ln in lines if ln not in good]
+        if not good:
+            problems.append(f"{inst}: no `{title} (companion by hash)` admission line with rom {pin[:8]} (the pin)")
+        problems += [f"{inst}: admission line is not the {title} companion by hash: {ln}" for ln in bad]
+        proofs += good[:1]
+    return problems, proofs
+
+
 class DuoRun:
     def __init__(self, scenario, args, attempt=1):
         self.scenario = scenario
@@ -3567,6 +3864,8 @@ class DuoRun:
         self.args = args
         self.game = getattr(args, "game", "gen3_rr")
         self.gcfg = GAMES[self.game]
+        # --gen3-companion: boot the PATCHED FR/LG/Emerald cartridges (explicit per run; the clean rows never change)
+        self.gen3_companion = bool(getattr(args, "gen3_companion", False))
         # What the launch path actually branches on is "does this game boot from a battery
         # save", not which generation it is — Gen 2 needs the identical treatment. Kept as
         # `is_gen1` only where a SCENARIO is genuinely Gen 1-specific.
@@ -3576,14 +3875,15 @@ class DuoRun:
         self.http_port = free_port()
         if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade"):
             os.makedirs(BUILD, exist_ok=True)
-        data_parent = BUILD if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade") else None
+        data_parent = (BUILD if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade")
+                       else work_root("tmp"))
         if self.cfg.get("gen3_rand") and os.environ.get("SLINK_STATE_DIR"):
             data_parent = Path(os.environ["SLINK_STATE_DIR"]).resolve()
             if not data_parent.is_relative_to(Path(REPO).resolve()):
                 raise RuntimeError("randomized lane SLINK_STATE_DIR must be private to this worktree")
             data_parent.mkdir(parents=True, exist_ok=True)
-        self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_",
-                                         dir=data_parent)
+        # Keep the leaf short: native SaveRAM/evidence paths have a 240-character ceiling.
+        self.data_dir = tempfile.mkdtemp(prefix="duo_", dir=data_parent)
         # This run's lane: the stub, the config copy, the SaveRAM directory and the window
         # position are keyed by it (the `lane` property below). --lane names a lane for a wrapper
         # that wants stable names ("pure-a", "lane3"); the port is the default.
@@ -3618,15 +3918,34 @@ class DuoRun:
                               + scenario_attempt_limit(scenario, self.game) * self.cfg["timeout"]
                               + 300)
 
-    def _gen3_duo_journal_path(self):
-        """One durable journal per attempt, shared by A/B and all their relaunch phases.
+    def _gen3_duo_journal_path(self, inst):
+        """One PRIVATE durable journal per instance, kept across that instance's relaunch phases within this data identity.
+
+        Production has one journal per player, so A and B never share a file or its OS guard (sharing made one client's read answer
+        "busy", hiding the other's captures: docs/gen3/RR_JOURNAL_ISOLATION_2026-09-29.md, per-instance addendum). A new private data
+        directory (a new attempt, or the randomized-admission control's new identity) means new files for both.
 
         T5's native candidate owns its manifest-pinned path. The lock probe intentionally reads
         and locks the install-root path, so neither row uses this ordinary duo override.
         """
         if self.cfg.get("gen3_native_trade") or self.cfg.get("journal_lock_probe"):
             return None
-        return Path(self.data_dir, "slink_gen3_trade")
+        return Path(self.data_dir, f"slink_gen3_trade_{inst}")
+
+    def _archive_gen3_duo_journals(self, archive):
+        """Copy both instances' durable journal (.log and .guard) into `archive` under their own names; every source must exist."""
+        sources = []
+        for inst in "ab":
+            base = self._gen3_duo_journal_path(inst)
+            if base is None:
+                raise RuntimeError("RR reset has no private durable journal path")
+            for suffix in ("log", "guard"):
+                source = Path(str(base) + f".{suffix}")
+                if not source.is_file():
+                    raise RuntimeError(f"RR reset missing durable trade journal {source}")
+                sources.append(source)
+        for source in sources:
+            shutil.copy2(source, Path(archive) / source.name)
 
     # ── lane identity ────────────────────────────────────────────────────────
     def stub_path(self, inst: str) -> str:
@@ -3676,11 +3995,38 @@ class DuoRun:
         return os.path.join(GEN3_FIXTURES, stem + ".sav")
 
     def _gen3_rom_kind(self, inst) -> str:
-        """native_absent_gen3's per-instance ROM selection (a scenario field, like `target`):
+        """clean_rr_refused_gen3's per-instance ROM selection (a scenario field, like `target`):
         "companion" (default, the ROM every other RR scenario boots) or "clean" (the raw,
         unpatched dump, GEN3_CLEAN_RR_ROM). Titles other than radical_red ignore this."""
         kind = self.cfg.get("rom_kind", "companion")
         return kind[inst] if isinstance(kind, dict) else kind
+
+    def _gen3_expect_refused(self, inst) -> bool:
+        """True when this side is a REFUSAL PROOF (scenario field `expect_refused`, like `rom_kind`):
+        the driver passes it only on lua/gen3/run.lua's companion-patch refusal, never as a client."""
+        problems = gen3_expect_refused_problems(self.cfg)
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        leg = (getattr(self, "_rand_current", None) or {}).get(inst) or {}     # a randomized row's clean leg
+        return inst in set(self.cfg.get("expect_refused", ())) or bool(leg.get("expect_refused"))
+
+    def _gen3_launch_refusal_problems(self):
+        """Patch-first preflight: a side that would boot a CLEAN companion-required cartridge as a working
+        client dies at launch (Entry.admit_routed), so refuse the run up front and name why. The clean
+        FR/LG/Emerald plans land here; --gen3-companion, a companion rom_kind and `expect_refused` clear it."""
+        if (not getattr(self, "is_gen3_battery", False) or self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade")
+                or self.cfg.get("gen3_probe_flip")):      # (the probe stages its own companion carts; --gen3-companion is optional there)
+            return []
+        problems = []
+        for inst in ("a", "b"):
+            title = self._gen3_title(inst)
+            clean = ((title in ("firered", "leafgreen", "emerald") and not getattr(self, "gen3_companion", False))
+                     or (title == "radical_red" and self._gen3_rom_kind(inst) == "clean"))
+            if clean and not self._gen3_expect_refused(inst):
+                problems.append(f"{inst}: this row would boot a clean {title} as a working client, but a clean {title} is "
+                                f"refused at launch (patch-first, owner 2026-10-02); run it with --gen3-companion, or "
+                                f"mark the side expect_refused")
+        return problems
 
     def _gen3_rom(self, inst) -> str:
         """The instance's ROM, staged to a space-free repo-relative path (gen3_fixtures.stage_rom,
@@ -3688,7 +4034,7 @@ class DuoRun:
         itself is not reachable from this checkout.
 
         radical_red's entry carries `staged` (ROM_REL, the already-built companion patch) for
-        the ordinary "companion" kind, bypassing the dump search below entirely; native_absent_
+        the ordinary "companion" kind, bypassing the dump search below entirely; clean_rr_refused_
         gen3's "clean" kind instead searches for the raw dump (GEN3_CLEAN_RR_ROM), same as
         firered/leafgreen.
         """
@@ -3698,7 +4044,7 @@ class DuoRun:
             from tools.gen3_trade_duo import player_manifest
             return player_manifest(self._native_candidate, inst)["rom"]
         import gen3_fixtures
-        if self.cfg.get("gen3_rand"):
+        if self.cfg.get("gen3_rand") or self.cfg.get("gen3_probe_flip"):
             if not getattr(self, "_rand_current", None):
                 raise RuntimeError("randomized ROM preflight has not run")
             return self._rand_current[inst]["rom"]
@@ -3711,6 +4057,8 @@ class DuoRun:
             if not rom.is_file():
                 raise FileNotFoundError(f"{rom} not found (tools/build_expansion.py --host hgbox)")
             return gen3_fixtures.stage_rom(str(rom))
+        if getattr(self, "gen3_companion", False) and title in ("firered", "leafgreen", "emerald"):
+            return self._gen3_companion_rom(title)
         staged = row.get("staged")
         if staged and self._gen3_rom_kind(inst) == "companion":
             if not os.path.isfile(os.path.join(REPO, staged)):
@@ -3726,13 +4074,42 @@ class DuoRun:
         raise FileNotFoundError(f"{name} not found at the repo root or any parent, and no "
                                 f"staged {staged}")
 
+    def _gen3_companion_rom(self, title) -> str:
+        """The staged companion cartridge of a --gen3-companion run, byte-pinned to patch/dist/gen3_companions.json; a missing
+        or different file is a loud failure, never a fall back to the clean dump."""
+        from tools.gen3_final_cut import COMPANION_ROMS, rom_pins
+
+        rel = COMPANION_ROMS[title]
+        path = os.path.join(REPO, rel)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"{rel} not found (stage the {title} companion cartridge: patch/dist/SLink-*.ups on the clean dump)")
+        pin = rom_pins(REPO, require_companions=True)[f"{title}_companion"]
+        got = hashlib.sha1(Path(path).read_bytes()).hexdigest()
+        if got != pin:
+            raise RuntimeError(f"{rel} sha1 {got} does not match the {title} companion pin {pin} (patch/dist/gen3_companions.json)")
+        return rel
+
+    def _gen3_require_companion_admission(self, results):
+        """A --gen3-companion run proves, from each client's own admission line, that it ran the companion by hash."""
+        if not getattr(self, "gen3_companion", False):
+            return
+        from tools.gen3_final_cut import rom_pins
+
+        # the protected-span probe's B is an UNKNOWN-hash cart on purpose (one byte flipped): only A is proven by hash
+        sides = {inst: self._gen3_title(inst) for inst in (("a",) if self.cfg.get("gen3_probe_flip") else ("a", "b"))}
+        problems, proofs = gen3_companion_admission_problems(results, sides, rom_pins(REPO, require_companions=True))
+        if problems:
+            raise RuntimeError("companion provenance: " + "; ".join(problems))
+        for inst, line in zip(sides, proofs, strict=True):
+            self._pydec_note(f"COMPANION_ADMISSION {inst}: {line}")
+
     def _gen3_battery_path(self, inst) -> str:
         title = self._gen3_title(inst)
         row = GEN3_TITLES[title]
         if self.cfg.get("gen3_native_trade"):
             from tools import gen3_fixtures
             return os.path.join(self._saveram_dir(inst), gen3_fixtures.saveram_name(self._gen3_rom(inst)))
-        if self.cfg.get("gen3_rand"):
+        if self.cfg.get("gen3_rand") or self.cfg.get("gen3_probe_flip"):
             import gen3_fixtures
 
             current = self._rand_current[inst]
@@ -3746,9 +4123,24 @@ class DuoRun:
             import gen3_fixtures
 
             saveram = gen3_fixtures.saveram_name(self._gen3_rom(inst))
+        elif self._gen3_companion_cart(inst, title):
+            # A patched FR/LG/Emerald cartridge is an unknown hash to BizHawk's gamedb: its battery follows the FILENAME
+            # (same rule as the RR branch above), so seeding the clean gamedb name would leave an untouched file for the
+            # oracles to read back (_flushed_saveram returns the seeded name whenever it exists).
+            import gen3_fixtures
+
+            saveram = gen3_fixtures.saveram_name(self._gen3_rom(inst))
         else:
             saveram = row["saveram"]
         return os.path.join(self._saveram_dir(inst), saveram)
+
+    def _gen3_companion_cart(self, inst, title) -> bool:
+        """True when `title` is a gamedb-known one (FR/LG/Emerald) and the resolved ROM is NOT its pinned clean dump."""
+        if title not in ("firered", "leafgreen", "emerald"):
+            return False
+        from tools.gen3_final_cut import rom_pins
+
+        return hashlib.sha1(Path(REPO, self._gen3_rom(inst)).read_bytes()).hexdigest() != rom_pins(REPO)[title]
 
     def _gen3_flushed(self, inst) -> bytes:
         """The battery the instance's EmuHawk left, by the gamedb name it was seeded under (or the
@@ -3758,6 +4150,21 @@ class DuoRun:
         import gen3_fixtures
 
         seeded = Path(self._gen3_battery_path(inst))
+        if self._gen3_companion_cart(inst, self._gen3_title(inst)):
+            # The seed is written before the launch: only a file the emulator wrote after it is an oracle input, under the
+            # derived name alone (no 'any other *.SaveRAM' fallback: a stale file of another name must not be adopted).
+            launched = self._launch_times.get(inst)
+            # A NO-WRITE half (`no_save`: the cartridge is expected to leave its battery as the harness seeded it) may be
+            # an untouched seed: BizHawk need not flush an SRAM nothing wrote. What proves "nothing wrote" differs by row:
+            # active_end_gen3's B and reconnect_gen3's A are READ by their oracles and compared byte-for-byte; the
+            # center_controls_gen3 / save_then_write_gen3 B halves are never read at all, and their proof is the
+            # declared-no_save gate in check_save_witness_gen3 (a no_save half whose receipt dumped a save FAILS).
+            # Every other half still needs a battery the emulator wrote after the launch.
+            no_write = inst in self.cfg.get("no_save", ())
+            if not seeded.is_file() or (not no_write and (not launched or seeded.stat().st_mtime < launched)):
+                raise RuntimeError(f"{inst}: companion cartridge has no fresh flushed battery at {rel_to_repo(seeded)} "
+                                   f"(only the seed, or nothing, is there)")
+            return seeded.read_bytes()
         found = gen3_fixtures._flushed_saveram(seeded.parent, seeded.name)
         if found is None:
             raise RuntimeError(f"{inst}: EmuHawk left no *.SaveRAM in {rel_to_repo(seeded.parent)}")
@@ -3903,7 +4310,7 @@ class DuoRun:
         """Manager-equivalent run identity, stable across this run's reconnects."""
         if any(flag == "--test-only-route" or flag.startswith("--test-only-route=")
                for flag in self.args.server_flags):
-            raise ValueError("TEST-ONLY route is reserved for the configured game row")
+            raise ValueError("test-only route flags are not supported")
         if not getattr(self, "_server_run_id", None):
             self._server_run_id = "duo-" + uuid.uuid4().hex
         cmd = [sys.executable, "-m", "server.server",
@@ -3913,11 +4320,6 @@ class DuoRun:
                "--data-dir", self.data_dir, "--run-id",
                ("t5-" + self._native_candidate["nonce"]) if self.cfg.get("gen3_native_trade")
                else self._server_run_id] + self.cfg["flags"] + self.args.server_flags
-        # A game row may ask the server for a TEST-ONLY route (the expansion, ruling 39) --
-        # after --server-flags and before --wire-log, so the wire-log pair stays the tail the
-        # argv tests pin. getattr: a unit test builds a DuoRun with only the fields its own
-        # case reads, and a run with no row carries no routes at all.
-        cmd += list((getattr(self, "gcfg", None) or {}).get("server_rom_routes") or ())
         wire = self._wire_dir()
         if wire:
             cmd += ["--wire-log", wire]
@@ -3992,48 +4394,41 @@ class DuoRun:
             stderr=subprocess.STDOUT)
         self.wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
-        self._require_test_only_route_receipt()
 
-    def _require_test_only_route_receipt(self, timeout: float = 15):
-        """The TEST-ONLY route this row asked for must be VISIBLE in the run's own evidence.
+    def _require_production_route_receipt(self, timeout: float = 15):
+        """Expansion-only receipt: accepted HELLOs and native admission after both connect.
 
-        The server logs every route it is told to open with `production:false` (see
-        server/adapters/__init__.py set_test_only_routes), and this run copies that exact line
-        into the pydec receipt that ships with the attempt, so a receipt can always be read
-        for whether the cartridge was routed or merely admitted. It is CHECKED, not assumed: a
-        run whose server never logged the seam it was launched with did not test what it
-        claims to, and fails here instead of passing quietly. A row with no routes is silent.
+        Other game rows deliberately keep their existing evidence contracts.
         """
-        routes = list((getattr(self, "gcfg", None) or {}).get("server_rom_routes") or ())
-        if not routes:
+        if getattr(self, "game", None) != "gen3_exp":
             return []
-        if len(routes) != 2 or routes[0] != "--test-only-route":
-            raise RuntimeError(f"malformed configured TEST-ONLY route: {routes!r}")
-        expected = (f"TEST-ONLY route of {routes[1]} -> {self.game} enabled "
-                    "(production refuses it by name; production:false)")
-        log_path = os.path.join(self.data_dir, "server.log")
+        title = GEN3_EXP_TITLE
+        profile = json.loads(Path(gen3_profile_path(title)).read_text(encoding="utf-8"))
+        rom_hash = profile["titles"][title]["rom_sha1"]
         deadline = time.time() + timeout
-        while True:
+
+        def complete_lines(path):
             try:
-                with open(log_path, encoding="utf-8", errors="replace") as handle:
-                    text = handle.read()
+                text = Path(path).read_text(encoding="utf-8", errors="replace")
             except OSError:
-                text = ""
-            line = next((row for row in text.splitlines()
-                         if row.partition("TEST-ONLY route of ")[2] ==
-                         expected[len("TEST-ONLY route of "):]), "")
-            if line or time.time() >= deadline:
+                return ""
+            return text[:text.rfind("\n") + 1]
+
+        while True:
+            server = complete_lines(Path(self.data_dir) / "server.log")
+            proofs = [gen3_production_route_lines(server, complete_lines(self._result_path(side)),
+                                                  side, "gen3_exp", title, rom_hash)
+                      for side in ("a", "b")]
+            if all(proofs):
                 break
+            if time.time() >= deadline:
+                missing = ", ".join(side for side, proof in zip("ab", proofs, strict=True) if not proof)
+                raise RuntimeError(f"gen3_exp: missing production route/client admission for {missing}")
             time.sleep(0.2)
-        if not line:
-            raise RuntimeError(
-                f"{getattr(self, 'game', '?')}: the server logged no TEST-ONLY route, but this "
-                f"row launched it with {' '.join(routes)} — this run cannot be a receipt")
-        note = (f"TEST_ONLY_ROUTE game={getattr(self, 'game', '?')} "
-                f"argv={' '.join(routes)} production:false server={line}")
-        print(f"[duo] {note}")
-        self._pydec_note(note)
-        return [line]
+        for side, (server_line, client_line) in zip("ab", proofs, strict=True):
+            self._pydec_note(f"PRODUCTION_ROUTE side={side} server={server_line}")
+            self._pydec_note(f"PRODUCTION_ADMISSION side={side} client={client_line}")
+        return proofs
 
     def _saveram_dir(self, inst: str) -> str:
         """A SaveRAM directory unique to this SCENARIO and this instance.
@@ -4091,8 +4486,9 @@ class DuoRun:
 
         if REPO not in sys.path:
             sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+        from server import cartridges
         from server.adapters.gen1_rom_scan import fingerprint_rom
-        from server.upr_pipeline import find_upr_jar, prepare_pair
+        from server.upr_pipeline import find_upr_jar
         from server.upr_settings import build_categories
 
         jar = find_upr_jar()  # upr_pipeline.py:101-123 searches the main checkout's .cache/upr
@@ -4108,51 +4504,46 @@ class DuoRun:
         fastest = not is_pure_pairing(getattr(self, "game", ""))
         with open(settings, "wb") as handle:
             handle.write(build_categories({"wild"}, fastest_text=fastest))  # upr_settings.py:483-491
-        # prepare_pair requires BOTH players, writes .gbc outputs and verifies distinct seeds
-        # and rule-bearing data (upr_pipeline.py:254-335). One invocation, no retry.
-        result = prepare_pair(jar, settings, sources, os.path.join(self.data_dir, "roms"))
-        players = result["players"]
-        contract = {
-            "upr_version": result["upr_version"],
-            "settings_sha256": result["settings_sha256"],
-            "categories": result["categories"],
-            "players": {p: {"fingerprint": players[p]["fingerprint"], "seed": str(players[p]["seed"]),
-                            "rom_sha1": players[p]["sha1"]} for p in ("a", "b")},
-        }  # Manager-shaped: manager.py:954-964; spec belongs to the registry, not this file.
+        # Companion required: the cartridges are what the Manager hands out for a randomized
+        # companion run -- server.cartridges.provision, the production composition (vanilla
+        # randomizes the clean bytes, THEN injects the companion; pureRGB randomizes the overlay
+        # after its UPS). A randomized CLEAN cartridge is refused by the harness like any clean
+        # one. provision runs prepare_pair once (both players, distinct seeds, rule-bearing data)
+        # and writes the Manager-shaped contract to <run_dir>/rom_contract.json, which is the path
+        # server.py reads from --data-dir.
+        result = cartridges.provision(self.data_dir, sources, companion=True,
+                                      randomize={"settings_path": settings}, jar=jar)
+        with open(os.path.join(self.data_dir, "rom_contract.json"), encoding="utf-8") as handle:
+            contract = json.load(handle)
         # BizHawk opens a .gbc as a Color title and misses the DMG battery save
-        # (tools/make_randomized_patched.py:30-34). Stage unchanged bytes under a known
-        # space-free .gb basename; never apply UPS or the structural injector in this gate.
+        # (tools/make_randomized_patched.py:30-34). Stage the final bytes unchanged under a known
+        # space-free .gb basename.
         stage_dir = os.path.join(BUILD, "e2e_admit_randomized_new")
         os.makedirs(stage_dir, exist_ok=True)
         stage = os.path.join(stage_dir, "slink_red_randomized.gb")
-        shutil.copyfile(players["a"]["output"], stage)
+        shutil.copyfile(result["players"]["a"]["output"], stage)
         with open(stage, "rb") as handle:
             staged = handle.read()
         if hashlib.sha1(staged).hexdigest() != contract["players"]["a"]["rom_sha1"]:
             raise RuntimeError("staged randomized Red SHA-1 differs from the contract")
         if fingerprint_rom(staged) != contract["players"]["a"]["fingerprint"]:
             raise RuntimeError("staged randomized Red fingerprint differs from the contract")
-        with open(sources["b"], "rb") as handle:
-            clean_blue_fingerprint = fingerprint_rom(handle.read())
-        if clean_blue_fingerprint == contract["players"]["b"]["fingerprint"]:
-            raise RuntimeError("clean Blue equals randomized Blue fingerprint; negative control is invalid")
-        self._admit_roms = {"a": os.path.relpath(stage, REPO).replace("\\", "/"),
-                            "b": self.gcfg["rom"]["b"]}
-        # run_gb_gate.py:47-80: patched/unknown-hash ROMs use the filename-derived SaveRAM
-        # name. Seed both that fallback and the clean gamedb name into the same isolated dir.
-        from run_gb_gate import GENS
-
-        self._admit_extra_saves = {
-            "a": GENS["gen1"]["patched"]["red_rand_patched"][2],
-        }
+        # Only A stages its own cartridge. B boots the row's companion build (`_rom_for`): a clean
+        # cartridge is refused outright now (owner 2026-10-02), before any contract check, so the
+        # negative control is the un-randomized COMPANION B, and its fingerprint is read off the
+        # bytes that actually boot.
+        self._admit_roms = {"a": os.path.relpath(stage, REPO).replace("\\", "/")}
+        with open(os.path.join(REPO, self._rom_for("b")), "rb") as handle:
+            b_fingerprint = fingerprint_rom(handle.read())
+        if b_fingerprint == contract["players"]["b"]["fingerprint"]:
+            raise RuntimeError("un-randomized B equals randomized Blue fingerprint; negative control is invalid")
+        # A's save is seeded under the filename-derived name of the staged cartridge alone
+        # (`_gen1_save_name`, which `_seed_instance_save` and the oracles share).
         self._admit_fingerprints = {"expected_b": contract["players"]["b"]["fingerprint"],
-                                    "reported_b": clean_blue_fingerprint}
-        # server.py:468-505 reads this exact path from --data-dir, including on hello refresh.
-        with open(os.path.join(self.data_dir, "rom_contract.json"), "w", encoding="utf-8") as handle:
-            json.dump(contract, handle, indent=2)
+                                    "reported_b": b_fingerprint}
         print(f"[duo] admission contract staged: A={contract['players']['a']['fingerprint'][:12]} "
               f"B expected={contract['players']['b']['fingerprint'][:12]} "
-              f"B clean={clean_blue_fingerprint[:12]}")
+              f"B companion={b_fingerprint[:12]}")
         return contract
 
     def _target_for(self, inst):
@@ -4201,42 +4592,46 @@ class DuoRun:
             json.dump(cfg, handle, indent=2)
 
     def _patch_key(self, inst: str) -> str | None:
-        """Which `run_gb_gate.PATCHED` row a trade-carrying scenario needs on this instance, or
-        None when the running scenario does not carry one at all.
+        """The `run_gb_gate.PATCHED` row (companion cartridge) this instance launches, or None
+        for a row without one.
 
-        `trade_new`/`trade_decline_new`/`explode_new` hardcode `patched_saves` to the vanilla
-        companion-patch keys (`red_patched`/`blue_patched`) at the SCENARIO level, because they
-        predate any second foundation and a scenario has no idea which GAME row is running it.
-        A GAME row that needs a DIFFERENT trade-carrying cartridge for those same three scenarios
-        (the pureRGB overlay row, PLAN M3/P4) says so with its own `patched_saves_override`,
-        keyed the same way; this is the one place that override is read.
+        The GAME row decides, never the scenario: the companion is REQUIRED for Red/Blue/pureRGB
+        (owner 2026-10-02), so every Gen 1 row except Yellow names its companion keys
+        (red_patched/blue_patched, or the *_overlay keys on the pure rows) and every scenario on
+        it runs that cartridge. This is the one place the key is read; `_rom_for` (what boots),
+        `_seed_instance_save` (which file is seeded) and `_saved_gen1_party` (which file and ROM
+        the oracle reads) all go through it, so the three can never disagree.
         """
-        if not self.cfg.get("patched_saves"):
-            return None
-        override = self.gcfg.get("patched_saves_override")
-        return override[inst] if override else self.cfg["patched_saves"][inst]
+        return (self.gcfg.get("patched_saves") or {}).get(inst)
 
     def _rom_for(self, inst: str) -> str:
         """The ROM path this instance launches.
 
-        A trade-carrying scenario whose GAME row overrides `patched_saves` (the pureRGB overlay
-        row) stages ITS OWN cartridge first: g1.staged_rom applies the UPS and sha1-verifies the
-        result, so returning a bare literal path here would race the artifact into existing.
-        Otherwise a scenario that stages its own (the randomized-admission legs, or the vanilla
-        trade scenarios' literal patched-ROM path) wins; failing that, a battery-boot game
-        resolves the ROM through its own play module's staged_rom(), which copies and verifies
-        it: that returns the same path the GAMES table spells out for the vanilla rows and lets a
-        pureRGB fixture key stage from the pinned source lock.
+        A scenario that stages its own cartridge for an instance (the randomized-admission leg's
+        A) wins. Otherwise the instance's companion key does: a vanilla companion build is the
+        literal `patch/gen1/build/slink_*.gb` path, and an overlay key stages ITS OWN cartridge
+        (g1.staged_rom applies the UPS and sha1-verifies the result). Every Gen 1 row must
+        declare a companion key, even when the scenario stages a randomized companion.
+        Other battery-boot games resolve through their own play module's staged_rom().
         """
         if self.is_gen3_battery:
             return self._gen3_rom(inst)
         if self.gcfg.get("launch_profile") == "gen2":
             return Path(self._gen2_plans[inst]["rom"]).relative_to(Path(REPO).resolve()).as_posix()
         patch_key = self._patch_key(inst)
-        if patch_key and self.gcfg.get("patched_saves_override"):
-            import gen1_playthrough as g1
-            return g1.staged_rom(patch_key)
-        staged = getattr(self, "_admit_roms", None) or self.cfg.get("rom")
+        if self.gcfg.get("game") == "gen1_new" and not patch_key:
+            raise RuntimeError(f"{inst}: Gen 1 row has no companion key")
+        admitted = getattr(self, "_admit_roms", None) or {}
+        if inst in admitted:
+            return admitted[inst]
+        if patch_key:
+            from run_gb_gate import PATCHED
+            rom_rel = PATCHED[patch_key][1]
+            if rom_rel is None:
+                import gen1_playthrough as g1
+                return g1.staged_rom(patch_key)
+            return rom_rel
+        staged = self.cfg.get("rom")
         if staged:
             return staged[inst]
         if self.battery_boot and self.gcfg.get("play") and self.gcfg.get("fixture"):
@@ -4284,17 +4679,23 @@ class DuoRun:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(raw)
             return str(destination)
-        from run_gb_gate import GENS, seed_saveram
+        if self.cfg.get("gen1_synth") == "explode":
+            fixture = Path(self._prepare_gen1_explode_fixture(inst))
+            booted = Path(self._saveram_dir(inst)) / self._gen1_save_name(inst)
+            booted.parent.mkdir(parents=True, exist_ok=True)
+            booted.write_bytes(fixture.read_bytes())
+            return str(booted)
+        from run_gb_gate import seed_saveram
 
         seeded = seed_saveram(self.gcfg["fixture"][inst], self._target_for(inst),
                               dest_dir=self._saveram_dir(inst))
-        patch_key = self._patch_key(inst)
-        if patch_key:
-            save_name = GENS["gen1"]["patched"][patch_key][2]
-            shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), save_name))
-        extra_name = getattr(self, "_admit_extra_saves", {}).get(inst)
-        if extra_name:
-            shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), extra_name))
+        if self._patch_key(inst) or inst in (getattr(self, "_admit_roms", None) or {}):
+            # MOVED, not copied, to the one name the booted cartridge (companion, or a staged
+            # randomized one) reads and writes: any other name left beside it is a stale file an
+            # oracle could read and pass on (the fixture's bytes, never touched by the run).
+            booted = os.path.join(self._saveram_dir(inst), self._gen1_save_name(inst))
+            os.replace(seeded, booted)
+            seeded = booted
         return seeded
 
     @property
@@ -4388,7 +4789,7 @@ class DuoRun:
             # title's pack files and pret symbols by `title`.
             duo.update({"title": self._gen3_title(inst),
                         "scenario_prefix": self.gcfg["scenario_prefix"]})
-            journal_path = self._gen3_duo_journal_path()
+            journal_path = self._gen3_duo_journal_path(inst)
             if journal_path is not None:
                 duo["journal_path"] = journal_path.as_posix()
                 print(f"[duo] JOURNAL attempt={self.attempt} inst={inst} phase={phase} "
@@ -4398,6 +4799,8 @@ class DuoRun:
                 print(f"[duo] JOURNAL attempt={self.attempt} inst={inst} phase={phase} "
                       f"scope={scope} install_root={REPO}")
             duo["ball_stock_phase"] = bool(self.cfg.get("post_flip_stock") and not self._gen3_rr)
+            duo["expect_refused"] = self._gen3_expect_refused(inst)
+            duo["probe_admission"] = bool(self.cfg.get("gen3_probe_flip")) and inst == "b"      # B holds the flipped cartridge; A is ordinary
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]
@@ -4412,6 +4815,9 @@ class DuoRun:
             if self.cfg.get("acquisition_kind"):
                 from gen3_gift_egg_rows import own_facts
                 duo.update(acquisition_kind=self.cfg["acquisition_kind"], acquisition_facts=own_facts(self, inst))
+            if self.cfg.get("static_wild_case"):
+                from gen3_static_wild_rows import own_facts
+                duo.update(static_wild_case=self.cfg["static_wild_case"], static_wild_facts=own_facts(self, inst))
             if self._gen3_rr:
                 # the live EWRAM range RR's extension writer copies to sectors 30-31
                 codec = gen3_codec()
@@ -4506,18 +4912,34 @@ class DuoRun:
                 self._gen3_rom(inst)  # staged (and found) before either emulator starts
         elif self.battery_boot and self.gcfg.get("launch_profile") != "gen2":
             play = importlib.import_module(self.gcfg["play"])
-            for key in self.gcfg["fixture"].values():
-                play.staged_rom(key)  # space-free relative ROM paths for BizHawk
+            # Clean Gen 1 dumps are inputs only to randomization or a pureRGB UPS base;
+            # ordinary vanilla scenarios boot already-built companions without those dumps.
+            if (self.gcfg.get("game") != "gen1_new"
+                    or self.scenario == "admit_randomized_new"
+                    or is_pure_pairing(getattr(self, "game", ""))):
+                for key in self.gcfg["fixture"].values():
+                    play.staged_rom(key)  # space-free relative input paths for BizHawk
+            for inst in ("a", "b"):
+                # the cartridge each instance boots (its companion build, or the overlay staged
+                # and sha1-verified here) must exist BEFORE either emulator starts: BizHawk handed
+                # a missing path opens nothing and the lane would wait out its whole timeout
+                rom = self._rom_for(inst)
+                if not os.path.isfile(os.path.join(REPO, rom)):
+                    raise FileNotFoundError(f"{inst}: {rom} missing -- build the companion with "
+                                            "`python patch/gen1/tools/build.py`")
+        if self.cfg.get("gen1_synth") == "explode":
+            for inst in ("a", "b"):
+                self._prepare_gen1_explode_fixture(inst)  # qualify/disclose both BEFORE either launch
         self._clear_attempt_artifacts()
         # F-4 tests B's CONTRACT verdict. A's randomized hello commits the run's artifact kind,
-        # after which a pure clean B is refused earlier by the mixed-kinds gate, which records
+        # after which an un-randomized B is refused earlier by the mixed-kinds gate, which records
         # no admission verdict (server.py _mixed_games_error), so B must hello alone first.
         b_first = self.scenario == "admit_randomized_new"
         for inst in (("b", "a") if b_first else ("a", "b")):
             with self._timed(f"launch_{inst}"):
                 self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
             if b_first and inst == "b":
-                self.wait_for("clean B's contract verdict before A launches", lambda: (
+                self.wait_for("un-randomized companion B's contract verdict before A launches", lambda: (
                     ((self._status() or {}).get("players") or {}).get("b", {})
                     .get("admission") == "rejected"), 120)
         print("[duo] two EmuHawk instances launched")
@@ -4540,49 +4962,66 @@ class DuoRun:
         if not Path(EMUHAWK).is_file():
             raise FileNotFoundError(f"EmuHawk missing for Gen 2 duo: {EMUHAWK}")
         with self._timed("gen2_preflight"):
-            self._gen2_inputs = gen2_preflight(game=self.game, scenario=self.scenario)
+            self._gen2_artifact = gen2_selected_artifact(self.args, self.scenario)
+            self._gen2_inputs = gen2_preflight(game=self.game, scenario=self.scenario, artifact_kind=self._gen2_artifact)
         from run_gb_gate import GENS
 
         from tests.live.test_gen2_frame_align import u1_facts
         from tests.live.test_gen2_new_gates import inspect_env
-        from tools import gen2_fixtures, gen2_source_data
+        from tools import gen2_fixtures
 
-        suffix = "_overlay" if self.scenario in GEN2_TRADE_SCENARIOS else ""
+        suffix = "_overlay" if self._gen2_artifact == "overlay" else ""
         with self._timed("plans"):
             self._gen2_plans = {
-                inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"],
+                inst: GENS["gen2"]["plan"](row["title"] + ("" if row.get("expect_admission") == "refused" else suffix),
+                                           self._saveram_dir(inst), row["fixture"],
                                            self.gen2_speed())
                 for inst, row in self._gen2_inputs.items()}
+        # The negative side deliberately boots clean Crystal 1.1. Resolve its
+        # complete launch identity BEFORE path checks/staging can replace it.
+        for inst, row in self._gen2_inputs.items():
+            if row.get("expect_admission") != "refused":
+                continue
+            plan = self._gen2_plans[inst]
+            database = Path(EMUHAWK).resolve().parent / "gamedb/gamedb_gbc.txt"
+            names = [line.split("\t") for line in database.read_text(encoding="utf-8-sig").splitlines()
+                     if line.split("\t", 1)[0].lower() == row["rom_sha1"]]
+            if len(names) != 1 or len(names[0]) < 4 or names[0][1] != "G" or names[0][3] != "GBC":
+                raise RuntimeError("refused Crystal 1.1 gamedb binding missing or contradictory")
+            if hashlib.sha1(Path(row["rom"]).read_bytes()).hexdigest() != row["rom_sha1"]:
+                raise RuntimeError("refused Crystal 1.1 ROM changed after preflight")
+            plan.update(rom=row["rom"], rom_sha1=row["rom_sha1"], base_sha1=row["rom_sha1"],
+                        launch_sha1=row["rom_sha1"], artifact="pokecrystal11", kind="clean", overlay=False,
+                        stage=None, saveram_name=names[0][2] + ".SaveRAM")
+            plan["env"].update(SLINK_GEN2_ROM_SHA1=row["rom_sha1"], SLINK_GEN2_BASE_SHA1=row["rom_sha1"],
+                               SLINK_GEN2_EXEC_SHA1=row["rom_sha1"], SLINK_GEN2_ARTIFACT_KIND="clean",
+                               SLINK_GEN2_SAVERAM_NAME=plan["saveram_name"])
+            for key in ("SLINK_GEN2_OVERLAY_SHA1", "SLINK_GEN2_BINDING_SHA256"):  # defence: the clean plan has none
+                plan["env"].pop(key, None)
+            row.update(artifact_kind="clean", binding_sha256=None)  # the row, too, names what B boots
         self._check_bizhawk_paths()
+        self._stage_gen2_roms()
         if self.scenario in GEN2_TRADE_SCENARIOS:
             with self._timed("trade_manifest"):
                 self._prepare_gen2_trade_manifest()
         self._gen2_env = {}
         for inst, row in self._gen2_inputs.items():
             if row.get("expect_admission") == "refused":
-                plan = self._gen2_plans[inst]
-                database = Path(EMUHAWK).resolve().parent / "gamedb/gamedb_gbc.txt"
-                names = [line.split("\t") for line in database.read_text(encoding="utf-8-sig").splitlines()
-                         if line.split("\t", 1)[0].lower() == row["rom_sha1"]]
-                if len(names) != 1 or len(names[0]) < 4 or names[0][1] != "G" or names[0][3] != "GBC":
-                    raise RuntimeError("refused Crystal 1.1 gamedb binding missing or contradictory")
-                plan.update(rom=row["rom"], rom_sha1=row["rom_sha1"], saveram_name=names[0][2] + ".SaveRAM")
-                plan["env"].update(SLINK_GEN2_ROM_SHA1=row["rom_sha1"], SLINK_GEN2_SAVERAM_NAME=plan["saveram_name"])
                 self._gen2_env[inst] = {}
                 continue
             timer = self._timed(f"env_{inst}")
             timer.__enter__()
-            ctx = gen2_source_data.load_context(row["title"], root=Path(REPO))
+            ctx = gen2_fixtures.exec_context(row["title"], self._gen2_artifact, Path(REPO))
             # errand fixtures play on their own spec's facts (the Gold errand maps), not the title's
-            facts = gen2_fixtures.spec_route_facts(gen2_fixtures.BY_NAME[row["name"]], Path(REPO))
+            facts = gen2_fixtures.spec_route_facts(gen2_fixtures.BY_NAME[row["name"]], Path(REPO), kind=self._gen2_artifact)
             env = inspect_env(gen2_fixtures.BY_NAME[row["name"]], row["fixture"].read_bytes(),
-                              repo=Path(REPO))
+                              repo=Path(REPO), kind=self._gen2_artifact)
             if self.scenario == "gen2_ball_gate":
                 # the town fixture plays the errand: errand route facts + ledges, qualify facts over the same
                 # fingerprint, and the case flag the shared gate admits a town case with errand facts on
-                facts = gen2_fixtures.route_facts(row["title"], Path(REPO), errand=True)
+                facts = gen2_fixtures.route_facts(row["title"], Path(REPO), errand=True, kind=self._gen2_artifact)
                 qualify = json.loads(env["SLINK_GEN2_QUALIFY"])
-                qualify["facts"] = gen2_fixtures.qualify_facts(row["title"], Path(REPO), errand=True)
+                qualify["facts"] = gen2_fixtures.qualify_facts(row["title"], Path(REPO), errand=True, kind=self._gen2_artifact)
                 env.update(SLINK_GEN2_ROUTE_FACTS=json.dumps(facts), SLINK_GEN2_QUALIFY=json.dumps(qualify),
                            SLINK_GEN2_ROUTE_LEDGES=json.dumps(gen2_fixtures.route_ledges(row["title"], facts,
                                                                                         Path(REPO))))
@@ -4659,6 +5098,31 @@ class DuoRun:
         if not all(callable(getattr(oracle, name, None)) for name in (witness, oracle_name)):
             raise RuntimeError("Gen 2 duo witness/oracle implementation missing")
 
+    def _stage_gen2_roms(self):
+        """Materialize every overlay before launch, not only native trade's cartridges."""
+        for side, plan in self._gen2_plans.items():
+            if self._gen2_inputs[side].get("expect_admission") == "refused":
+                continue
+            stage = plan.get("stage")
+            if stage is None:
+                continue
+            if hashlib.sha1(stage).hexdigest() != plan["launch_sha1"]:
+                raise RuntimeError("staged Gen 2 overlay hash differs before launch")
+            target = Path(plan["rom"]).resolve()
+            if not target.is_relative_to(Path(BUILD).resolve()):
+                raise RuntimeError("Gen 2 staged ROM escapes build directory")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.is_file() or hashlib.sha1(target.read_bytes()).hexdigest() != plan["launch_sha1"]:
+                with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".tmp", delete=False) as handle:
+                    temporary = Path(handle.name)
+                    handle.write(stage)
+                try:
+                    os.replace(temporary, target)
+                finally:
+                    if temporary.exists():
+                        temporary.unlink()
+            self._gen2_inputs[side].update(rom=target, rom_sha1=plan["launch_sha1"])
+
     def _prepare_gen2_trade_manifest(self):
         from tools.gen2_trade_lane import validate_manifest
 
@@ -4666,19 +5130,22 @@ class DuoRun:
         raw = (root / "data/gen2/overlay_provenance.json").read_bytes()
         provenance = json.loads(raw)
         manifest = {"schema": "gen2-trade-lane-v1", "run_id": "g2trade_" + uuid.uuid4().hex,
-                    "scenario": self.scenario, "evidence_class": "HARNESS_ONLY_OVERLAY",
+                    "scenario": self.scenario, "evidence_class": "PHYSICAL_RECEIPTED",
                     "provenance_sha256": hashlib.sha256(raw).hexdigest(), "players": {}}
         for inst, row in self._gen2_inputs.items():
             title, plan = row["title"], self._gen2_plans[inst]
             artifact = provenance["outputs"]["poke" + title]
             stage = plan.get("stage")
             if (not isinstance(stage, bytes) or hashlib.sha1(stage).hexdigest() != artifact["sha1"]
-                    or plan["launch_sha1"] != artifact["sha1"] or row["rom_sha1"] != artifact["base_sha1"]):
+                    or plan["launch_sha1"] != artifact["sha1"] or row["source_rom_sha1"] != artifact["base_sha1"]):
                 raise RuntimeError(f"{inst}: trade overlay stage/base binding differs")
             manifest["players"][inst] = {"title": title, "rom_type": title, "foundation": "gen2_gsc",
                 "artifact_kind": "overlay", "rom_sha1": artifact["sha1"], "base_sha1": artifact["base_sha1"],
                 "ups_sha256": artifact["ups"]["sha256"], "sym_sha256": provenance["symbols"][title + "_slink.sym"]}
         validate_manifest(manifest, root=root)
+        # gen2_trade_lane refuses a server --run-id other than the manifest's: the trade server IS this
+        # run, so server_cmd must name the same id (it used to mint its own duo-<uuid>; every trade cell failed)
+        self._server_run_id = manifest["run_id"]
         for inst, plan in self._gen2_plans.items():
             target = Path(plan["rom"]).resolve()
             if not target.is_relative_to(Path(BUILD).resolve()):
@@ -4694,7 +5161,7 @@ class DuoRun:
                 finally:
                     if temporary is not None and temporary.exists():
                         temporary.unlink()
-            self._gen2_inputs[inst].update(source_rom_sha1=self._gen2_inputs[inst]["rom_sha1"],
+            self._gen2_inputs[inst].update(source_rom_sha1=self._gen2_inputs[inst]["source_rom_sha1"],
                                           rom_sha1=plan["launch_sha1"], rom=target)
         path = Path(self.data_dir) / "gen2_trade_manifest.json"
         encoded = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
@@ -4791,8 +5258,8 @@ class DuoRun:
                 transaction["reconciliation"][label] = {"path": str(snapshot), "sha256": hashlib.sha256(content).hexdigest()}
 
         def verified(facts):
-            if facts.get("scenario") != self.scenario or facts.get("admission_scope") != "HARNESS_ONLY_OVERLAY":
-                raise RuntimeError("trade oracle omitted its harness scope")
+            if facts.get("scenario") != self.scenario or facts.get("admission_scope") != "PHYSICAL_RECEIPTED":
+                raise RuntimeError("trade oracle omitted its production scope")
             self._record_gen2_facts({"a": facts["players"]["a"]["key"], "b": facts["players"]["b"]["key"],
                 "area": facts["area_id"], "titles": "/".join(facts["players"][side]["title"] for side in ("a", "b")),
                 "status": facts["status"], "scenario": self.scenario, "admission_scope": facts["admission_scope"]})
@@ -4803,6 +5270,19 @@ class DuoRun:
             on_verified=verified, **kwargs)
 
     def check_gen2_save_witness(self, results):
+        if hasattr(self, "_gen2_artifact"):
+            for side, text in results.items():
+                if side not in ("a", "b") or self._gen2_inputs[side].get("expect_admission") == "refused":
+                    continue
+                if self.scenario == "gen2_reconnect" and side == "a":
+                    text = self._gen2_initial_a
+                lines = [line.split(" ", 1)[1] for line in text.splitlines() if line.startswith("CLIENT ")]
+                if len(lines) != 1:
+                    raise RuntimeError("Gen 2 production artifact CLIENT marker missing or ambiguous")
+                client = json.loads(lines[0])
+                if (client.get("artifact_kind", "clean") != self._gen2_artifact
+                        or client.get("rom_sha1") != self._gen2_inputs[side]["rom_sha1"]):
+                    raise RuntimeError("Gen 2 receipt belongs to another executed artifact")
         if self.scenario in GEN2_TRADE_SCENARIOS:
             return importlib.import_module("gen2_trade_oracles").check_trade_witness(results,
                 expected_case=self._gen2_trade_expected_case(), overlay_provenance=self._gen2_trade_overlay_reference())
@@ -4900,7 +5380,7 @@ class DuoRun:
         seed = Path(BUILD, f"e2e_{self.artifact_name}_a_{phase}_seed.SaveRAM")
         seed.write_bytes(raw)
         directory = Path(self._saveram_dir("a") + "_" + phase)
-        plan = GENS["gen2"]["plan"](self._gen2_inputs["a"]["title"], directory, seed, self.gen2_speed())
+        plan = GENS["gen2"]["plan"](self._gen2_inputs["a"]["title"] + ("_overlay" if self._gen2_artifact == "overlay" else ""), directory, seed, self.gen2_speed())
         directory.mkdir(parents=True, exist_ok=True)
         target = directory / plan["saveram_name"]
         target.write_bytes(raw)
@@ -5103,15 +5583,28 @@ class DuoRun:
         return ka, kb
 
     def wait_connected(self):
+        last_status = None
         def both():
+            nonlocal last_status
             st = self._status()
+            last_status = st
             if not st:
                 return None
             players = st.get("players", {})
             return (players.get("a", {}).get("connected")
                     and players.get("b", {}).get("connected")) or None
-        self.wait_for("both players hello'd", both, 120)
+        try:
+            self.wait_for("both players hello'd", both, 120)
+        except TimeoutError:
+            players = (last_status or {}).get("players", {})
+            diagnostic = {"players": {inst: {
+                "connected": players.get(inst, {}).get("connected", "unavailable"),
+                "last_event": players.get(inst, {}).get("last_event", "unavailable"),
+            } for inst in ("a", "b")}}
+            print("[duo] CONNECT_TIMEOUT " + json.dumps(diagnostic, sort_keys=True))
+            raise
         print("[duo] both players connected")
+        self._require_production_route_receipt()
 
     def inject_link(self, a_key, b_key, area_id="duo"):
         def linked():
@@ -5474,7 +5967,8 @@ class DuoRun:
                 or not (name.startswith(title_a) or f"{title_a} version" in name)):
             raise RuntimeError(f"--wrong-save must name an existing second-OT {title_a} SaveRAM")
         sram = source.read_bytes()
-        rom = (Path(REPO) / self.gcfg["rom"]["a"]).read_bytes()
+        # the cartridge A boots (its companion build), never the clean dump the run refuses
+        rom = (Path(REPO) / self._rom_for("a")).read_bytes()
         problems = qualify(sram, rom)  # gen1_fixtures.py:81-148, game's checksum/stat oracle
         if problems:
             raise RuntimeError(f"--wrong-save is not a game-loadable Red save: {problems}")
@@ -5497,8 +5991,6 @@ class DuoRun:
         """C-2 crash/reload while B stays online, then optional fail-closed C-1 wrong save."""
         from pathlib import Path
 
-        from run_gb_gate import GENS
-
         self.go()
         self.assert_link_new()
         for inst in ("a", "b"):
@@ -5507,7 +5999,7 @@ class DuoRun:
         _sram, party, _current, codec = self._saved_gen1_party("a")
         if [codec.key(mon) for mon in party] != [self._boot_keys["a"], self._link_keys["a"]]:
             raise RuntimeError("A's flushed Red save does not hold the linked pair before the crash")
-        correct_save = Path(self._saveram_dir("a")) / GENS["gen1"]["saveram_names"][self.gcfg["fixture"]["a"]]
+        correct_save = Path(self._saveram_dir("a")) / self._gen1_save_name("a")
         shutil.copyfile(correct_save, os.path.join(self.data_dir, "a_original_before_reconnect.SaveRAM"))
         baseline = {"links": self._reconnect_document(), "events": self._reconnect_events()}
         shutil.copyfile(self._result_path("a"), os.path.join(self.data_dir, "a_initial_result.txt"))
@@ -5830,8 +6322,94 @@ class DuoRun:
                                f"by {age:.0f}s")
         return file
 
+    def _prepare_gen1_explode_fixture(self, inst):
+        """An immutable private SYNTH baseline, distinct from the cartridge's writable save."""
+        import gen1_playthrough as play
+
+        cached = self.__dict__.setdefault("_gen1_synth_fixtures", {})
+        if inst in cached:
+            path, digest, _disclosure = cached[inst]
+            if hashlib.sha256(Path(path).read_bytes()).hexdigest() != digest:
+                raise RuntimeError(f"{inst}: SYNTH setup fixture changed after qualification")
+            return path
+        module = importlib.import_module(
+            "tools.gen1_synth_fixtures" if __package__ else "gen1_synth_fixtures")
+        title = self.gcfg["fixture"][inst]
+        source = Path(play.fixture_path(title, self._target_for(inst)))
+        rom = Path(REPO) / self._rom_for(inst)
+        raw, disclosure = module.build_explode_synth(title, source.read_bytes(), rom.read_bytes())
+        path = Path(self.data_dir) / f"explode_{inst}.SaveRAM"
+        path.write_bytes(raw)
+        disclosure.update(inst=inst, scenario=self.scenario, attempt=self.attempt,
+                          source=str(source), fixture=str(path))
+        self._pydec_note("GEN1_SYNTH_SETUP " + json.dumps(disclosure, sort_keys=True))
+        cached[inst] = (str(path), disclosure["fixture_sha256"], dict(disclosure))
+        return str(path)
+
+    def assert_gen1_synth_setup(self, results, *, complete=True):
+        """Bind each first catch encounter to this attempt's qualified SYNTH disclosure.
+
+        Later hunts legitimately spend balls. On early failure an unfinished partner may
+        not have reached grass yet; a PASS or RNG-cause half must always carry its first read.
+        """
+        if getattr(self, "cfg", {}).get("gen1_synth") != "explode":
+            return
+        from server.adapters import gen1_codec
+
+        def fail(why):
+            raise RuntimeError("GEN1 SYNTH setup: " + why)
+
+        try:
+            text = Path(self._pydec_path).read_text(encoding="utf-8")
+            records = [json.loads(line.removeprefix("GEN1_SYNTH_SETUP "))
+                       for line in text.splitlines() if line.startswith("GEN1_SYNTH_SETUP ")]
+        except (OSError, TypeError, ValueError, AttributeError) as exc:
+            fail("disclosure unavailable or malformed: " + str(exc))
+        if (len(records) != 2 or any(not isinstance(row, dict) for row in records)
+                or sorted(str(row.get("inst")) for row in records) != ["a", "b"]):
+            fail("one unambiguous disclosure per instance is required")
+        by_inst = {row["inst"]: row for row in records}
+        cached = getattr(self, "_gen1_synth_fixtures", {})
+        for inst in ("a", "b"):
+            if inst not in cached:
+                fail(f"{inst}: no qualified setup for this attempt")
+            path, digest, expected = cached[inst]
+            row = by_inst[inst]
+            if json.dumps(row, sort_keys=True) != json.dumps(expected, sort_keys=True):
+                fail(f"{inst}: disclosure differs from this attempt's qualified setup")
+            try:
+                raw = Path(path).read_bytes()
+                rom_hash = hashlib.sha1((Path(REPO) / self._rom_for(inst)).read_bytes()).hexdigest()
+            except OSError as exc:
+                fail(f"{inst}: setup/cartridge bytes unavailable: {exc}")
+            if hashlib.sha256(raw).hexdigest() != digest:
+                fail(f"{inst}: setup bytes changed after qualification")
+            if rom_hash != row["rom_sha1"]:
+                fail(f"{inst}: cartridge differs from the setup qualification")
+            foundation = "gen1_purergb" if row["title"].startswith("pure") else "gen1_rby"
+            layout = gen1_codec.for_foundation(foundation)
+            quantity = sum(qty for item, qty in layout.decode_bag(raw) if item in layout.ball_items)
+            if type(row["balls_after"]) is not int or row["balls_after"] != quantity:
+                fail(f"{inst}: disclosed balls_after disagrees with the setup bytes")
+            receipt = (results or {}).get(inst) or ""
+            encounters = [line for line in receipt.splitlines() if line.startswith("[hunt] encounter ")]
+            if not encounters:
+                if complete or classify_gen1_result(receipt) in ("PASS", "CAUSE_RNG"):
+                    fail(f"{inst}: first catch encounter ball count missing")
+                continue
+            observed = re.fullmatch(
+                r"\[hunt\] encounter 1 at \(-?\d+,-?\d+\) mode=catch balls=(\d+)", encounters[0])
+            if not observed or int(observed[1]) != quantity:
+                fail(f"{inst}: first catch encounter differs from disclosed balls_after={quantity}: {encounters[0]}")
+            seen = self.__dict__.setdefault("_gen1_synth_observed", set())
+            proof = (inst, digest, quantity)
+            if proof not in seen:
+                self._pydec_note(f"GEN1_SYNTH_OBSERVED inst={inst} balls={observed[1]} "
+                                 f"disclosed={quantity} fixture_sha256={digest}")
+                seen.add(proof)
+
     def _fixture_save_path(self, inst):
-        """The committed fixture this instance was seeded from — the bag baseline's source.
+        """The committed or disclosed private fixture this instance was seeded from.
 
         `run_gb_gate.seed_saveram` copies `<rom>_<target>.SaveRAM` from this directory into the
         instance's SaveRAM dir, so reading it here compares the flushed bag with the bytes the
@@ -5839,40 +6417,63 @@ class DuoRun:
         """
         import gen1_playthrough as play
 
+        if self.cfg.get("gen1_synth") == "explode":
+            if inst not in getattr(self, "_gen1_synth_fixtures", {}):
+                raise RuntimeError(f"{inst}: SYNTH setup was not prepared before the oracle")
+            return self._prepare_gen1_explode_fixture(inst)
         return os.path.join(play.FIXTURES,
                             f"{self.gcfg['fixture'][inst]}_{self._target_for(inst)}.SaveRAM")
+
+    def _gen1_save_name(self, inst):
+        """The companion's SaveRAM filename; a missing game-row companion key is an error."""
+        from run_gb_gate import GENS
+
+        patch_key = self._patch_key(inst)
+        if not patch_key:
+            raise RuntimeError(f"{inst}: Gen 1 row has no companion key")
+        staged = (getattr(self, "_admit_roms", None) or {}).get(inst)
+        if staged:
+            # a scenario-staged cartridge (admit_randomized_new's A) is unknown to the gamedb
+            import gen1_playthrough as g1
+            return g1.save_name_for(staged)
+        return GENS["gen1"]["patched"][patch_key][2]
 
     def _saved_gen1_party(self, inst, rom=None, save_name=None):
         """PYDEC + the fixture qualifier on the cartridge's flushed 32 KiB SaveRAM.
 
-        `rom` (repo-relative, the path the instance launched) and `save_name` override the
-        clean-title defaults, which name the wrong file for two scenarios: admit_randomized_new
-        launches the staged randomized Red, whose SaveRAM carries the filename-derived name a
-        hash BizHawk does not know resolves to, and reconnect_new's same-save leg is overwritten
-        in place by the wrong-OT copy before the run ends. An absolute `save_name` is read as
-        given; a relative one resolves inside the instance's own SaveRAM directory.
+        The defaults are the cartridge the instance LAUNCHED: `_rom_for` for the ROM and the save
+        name of its companion key (`_patch_key`), which is the filename-derived name BizHawk gives
+        a hash it does not know. Defaulting to the clean title's gamedb name read the fixture
+        bytes seeded under it -- a file the companion cartridge never touches -- and passed on
+        them. `rom` (repo-relative) and `save_name` override the defaults: reconnect_new's
+        same-save leg is overwritten in place by the wrong-OT copy before the run ends, and
+        admit_randomized_new's A saves under the randomized build's own name. An absolute
+        `save_name` is read as given; a relative one resolves inside the instance's own SaveRAM
+        directory.
         """
         from pathlib import Path
 
         if REPO not in sys.path:
             sys.path.insert(0, REPO)
         from gen1_fixtures import qualify
-        from run_gb_gate import GENS
 
         from server.adapters import gen1_codec as codec
+        from server.adapters.gen1_rom_scan import RomScanError
 
-        title = self.gcfg["fixture"][inst]
-        name = save_name or GENS["gen1"]["saveram_names"][title]
+        name = save_name or self._gen1_save_name(inst)
         path = Path(name) if os.path.isabs(str(name)) else Path(self._saveram_dir(inst)) / name
         sram = path.read_bytes()
-        rom_bytes = (Path(REPO) / (rom or self.gcfg["rom"][inst])).read_bytes()
+        rom_bytes = (Path(REPO) / (rom or self._rom_for(inst))).read_bytes()
         # tools/gen1_fixtures.py:81-148 uses codec.verify_bank1 (the game's CalcCheckSum),
         # decode_party, level_from_exp and recompute_stats against this exact ROM.
         # `notes` carries the stored stats that lag their stat exp: legal (the engine only
         # rebuilds stats where it calls CalcStats -- see the band in gen1_fixtures.qualify),
         # but named in the PYDEC line so a tolerated value is never silent.
         notes: list[str] = []
-        problems = qualify(sram, rom_bytes, notes)
+        try:
+            problems = qualify(sram, rom_bytes, notes)
+        except RomScanError as exc:
+            problems = [f"qualification: {exc}"]
         if problems:
             raise RuntimeError(f"{inst} saved game would not qualify: {problems}")
         start = codec.SRAM_LAYOUT["sPartyData"]  # gen1_codec.py:66-72,587-595
@@ -5946,36 +6547,14 @@ class DuoRun:
         self._pydec_note("B initialized box banks and all 12 counts/terminators/checksums valid")
         self._pydec_note(f"B Box 12 holds {self._deadzone_b_key} at HP 0")
 
-    def _patched_saved_state(self, inst):
-        """The flushed SaveRAM of a trade-carrying cartridge (companion patch in the ROM, or the
-        pureRGB companion OVERLAY on a row that sets `patched_saves_override`).
-
-        Those scenarios launch `patch/gen1/build/slink_{red,blue}.gb` (or, overridden, the
-        overlay cartridge `_rom_for` staged), whose SaveRAM name is the filename-derived patched
-        one, so the clean-title default would read the wrong file. One resolver, shared by every
-        oracle that runs those ROMs.
-        """
-        if REPO not in sys.path:
-            sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
-        from run_gb_gate import GENS
-
-        patch_key = self._patch_key(inst)
-        save_name = GENS["gen1"]["patched"][patch_key][2]
-        rom_path = self._rom_for(inst) if self.gcfg.get("patched_saves_override") else self.cfg["rom"][inst]
-        return self._saved_gen1_party(inst, rom=rom_path, save_name=save_name)
-
-    def assert_linked_faint_saved(self, results, *, active, saved_state=None, explode=False,
-                                  bench_battle=False):
+    def assert_linked_faint_saved(self, results, *, active, explode=False, bench_battle=False):
         """D-6/W-1/W-2: server cause + both game-loadable memorials and engine receipts.
 
         `bench_battle` is the bench-in-battle lane (commit 6a8958fb): B's linked mon sits on the
         bench of a wild battle when the command arrives, and every B marker has to show the write
         landing INSIDE that battle -- the pre-fix client deferred it to the overworld checkpoint.
-
-        `saved_state(inst)` defaults to the clean-title read; explode_new passes the patched
-        resolver because it runs the trade-carrying ROMs, whose SaveRAM name and ROM differ.
         """
-        read = saved_state or self._saved_gen1_party
+        self.assert_gen1_synth_setup(results)
         for process in self.emus:
             process.wait(timeout=30)
         matches = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
@@ -6002,7 +6581,62 @@ class DuoRun:
             key = self._link_keys[inst]
             if link[inst]["key"] != key:
                 raise RuntimeError(f"{inst} persisted link key differs from captured {key}")
-            sram, party, current_box, codec = read(inst)
+            sram, party, current_box, codec = self._saved_gen1_party(inst)
+            if getattr(self, "cfg", {}).get("gen1_synth") == "explode":
+                from server.adapters import gen1_codec
+                layout = gen1_codec.for_foundation("gen1_purergb" if is_pure_pairing(self.game) else "gen1_rby")
+                stock = self._gen1_synth_fixtures[inst][2]["balls_after"]
+                throw_lines = [line for line in results[inst].splitlines()
+                               if line.startswith("[hunt] threw ball")]
+                throws = []
+                for line in throw_lines:
+                    throw = re.fullmatch(r"\[hunt\] threw ball index \d+ -> (missed|caught|timeout) "
+                                         r"balls_before=(\d+) balls_after=(\d+)", line)
+                    if not throw:
+                        raise RuntimeError(f"{inst}: SYNTH catch has malformed throw receipt: {line}")
+                    throws.append((throw[1], int(throw[2]), int(throw[3])))
+                saved_balls = sum(qty for item, qty in layout.decode_bag(sram) if item in layout.ball_items)
+                remaining = stock
+                for outcome, before, after in throws:
+                    # A timeout is an unfinished observation, not a failed throw. The
+                    # input-free wait can expire before the capture animation consumes
+                    # the ball. Only settled observations carry reliable live counts;
+                    # the final save must independently account for EVERY attempt.
+                    if outcome != "timeout" and (before != remaining or after != remaining - 1):
+                        raise RuntimeError(f"{inst}: SYNTH catch throw counts are not continuous: {throws}")
+                    remaining -= 1
+                caught = sum(outcome == "caught" for outcome, _, _ in throws)
+                final_caught = bool(throws) and throws[-1][0] == "caught" and caught == 1
+                if throws and throws[-1][0] == "timeout" and caught == 0:
+                    tail = results[inst].rsplit(throw_lines[-1], 1)[1]
+                    captures = []
+                    capture_prefix = ""
+                    for line in tail.splitlines():
+                        if line.startswith("TX "):
+                            try:
+                                event = json.loads(line[3:])
+                            except ValueError:
+                                continue
+                            if isinstance(event, dict) and event.get("event") == "capture":
+                                captures.append(event)
+                                capture_prefix = tail.split(line, 1)[0]
+                    # Later party routing can remove/reinsert a captured mon; count
+                    # growth only up to the capture TX, not across the whole scenario.
+                    growth = re.findall(r"(?m)^PARTY_COUNT (\d+) -> (\d+) @\d+$", capture_prefix)
+                    final_caught = (len(captures) == 1
+                                    and captures[0].get("key") == key
+                                    and captures[0].get("player") == inst
+                                    and captures[0].get("area_id") == "route_1"
+                                    and captures[0].get("gift") is False
+                                    and sum(int(b) - int(a) for a, b in growth if int(b) > int(a)) == 1)
+                decrement = stock - saved_balls
+                if (not throws or decrement != len(throws) or decrement < 1
+                        or not final_caught or saved_balls != remaining):
+                    raise RuntimeError(f"{inst}: SYNTH catch spent balls must match recorded throws: "
+                                       f"stock={stock} throws={throws} saved={saved_balls}")
+                self._pydec_note(f"GEN1_SYNTH_CATCH inst={inst} balls_before={stock} "
+                                 f"balls_after={saved_balls} throws={len(throws)} "
+                                 f"decrement={decrement} saved=true")
             if len(party) != 1 or codec.key(party[0]) != self._boot_keys[inst] or party[0]["hp"] == 0:
                 raise RuntimeError(f"{inst} saved party is not its living starter: "
                                    f"{[(codec.key(m), m['hp']) for m in party]}")
@@ -6130,16 +6764,16 @@ class DuoRun:
         """W-3/D-11: the shared faint half plus the markers only a companion-patched cartridge
         with `--explode-mode` can produce.
 
-        The saved-state half is `assert_linked_faint_saved(active=True)` run through the
-        patched-save resolver, because explode_new launches the trade-carrying ROMs: the pair
+        The saved-state half is `assert_linked_faint_saved(active=True)` on the companion
+        cartridges' own saves (`_saved_gen1_party` reads what each instance launched): the pair
         must be dead with cause battle and both Box 12s must hold the linked key at HP 0. B's
         markers then prove the path was Explode Mode's: the in-battle VBlank counter advanced
         (the patch's hook still runs), the server sent only `force_explode`, the move menu
         showed the catch's own moves BEFORE the write and four EXPLOSIONs after it, and the
         commit was the coerced turn rather than a queued one.
         """
-        self.assert_linked_faint_saved(results, active=True, explode=True,
-                                       saved_state=self._patched_saved_state)
+        self.assert_gen1_synth_setup(results)
+        self.assert_linked_faint_saved(results, active=True, explode=True)
         a_text, b_text = results["a"], results["b"]
 
         marker(a_text, r"A_ENGINE_FAINT", "A engine faint")
@@ -6635,8 +7269,7 @@ class DuoRun:
 
         The saved state is read through the same PYDEC path as `assert_pc_ops_new_saved`
         (`_saved_gen1_party`, whose `qualify()` checks the game's own checksum and recomputed
-        stats). This scenario runs the clean fixtures, so the patched-ROM resolver
-        (`_patched_saved_state`) does not apply.
+        stats), on the save of the companion cartridge the instance launched.
         """
         for process in self.emus:
             process.wait(timeout=30)  # BizHawk flushes CartRAM when client.exit completes
@@ -7177,7 +7810,6 @@ class DuoRun:
 
         if REPO not in sys.path:
             sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
-        from run_gb_gate import GENS
 
         from server.adapters import gen1_codec as codec
         from tests.unit import protocol_schema
@@ -7196,8 +7828,7 @@ class DuoRun:
             raise RuntimeError(f"links.json halves were not swapped: {link['a']['key']} / {link['b']['key']}")
 
         for inst, incoming, partner in (("a", before_b, "b"), ("b", before_a, "a")):
-            save_name = GENS["gen1"]["patched"][self._patch_key(inst)][2]
-            save = Path(self._saveram_dir(inst)) / save_name
+            save = Path(self._saveram_dir(inst)) / self._gen1_save_name(inst)
             sram = save.read_bytes()
             if len(sram) != codec.SRAM_SIZE:
                 raise RuntimeError(f"{inst} SaveRAM is {len(sram)} bytes, expected {codec.SRAM_SIZE}")
@@ -7262,7 +7893,7 @@ class DuoRun:
         self._pydec_note(f"durable route_1 pair unchanged: a={before_a} b={before_b}")
 
         for inst in ("a", "b"):
-            _sram, party, _box, codec = self._patched_saved_state(inst)
+            _sram, party, _box, codec = self._saved_gen1_party(inst)
             keys = [codec.key(mon) for mon in party]
             want = [self._boot_keys[inst], self._link_keys[inst]]
             if keys != want:
@@ -7283,7 +7914,8 @@ class DuoRun:
             return (status if a.get("admission") == "admitted" and a.get("admission_reason")
                     and b.get("admission") == "rejected" else None)
 
-        status = self.wait_for("randomized A admitted and clean B rejected", both_verdicts, 180)
+        status = self.wait_for("randomized A admitted and un-randomized companion B rejected",
+                               both_verdicts, 180)
         a, b = status["players"]["a"], status["players"]["b"]
         if a.get("admission_reason") != "cartridge matches the contract":
             raise RuntimeError(f"A admission reason differs: {a.get('admission_reason')!r}")
@@ -7331,17 +7963,17 @@ class DuoRun:
         if ("[a] admission: admitted — cartridge matches the contract" not in log_text
                 or "[b] admission: rejected — " + reason not in log_text):
             raise RuntimeError("slink.log omitted an admission transition")
-        self._pydec_note(f"F-4 public verdicts: A admitted, clean B rejected; "
+        self._pydec_note(f"F-4 public verdicts: A admitted, un-randomized companion B rejected; "
                          f"expected={want[:12]} reported={got[:12]} (admission-only, no save mutation)")
         self._live_complete["admit_randomized_new"] = True
 
     def assert_admit_randomized_saved(self, results):
         """F-4's saved half, with explicit provenance for both cartridges.
 
-        A runs the STAGED randomized Red, whose SaveRAM carries the filename-derived name
-        BizHawk resolves for a hash it does not know — so the default read would qualify the
-        untouched clean-name seed against the clean ROM and prove nothing. B's readback shows
-        the rejected cartridge's save was not touched by the server: party and current box
+        A runs the STAGED randomized companion Red, whose SaveRAM carries the filename-derived
+        name BizHawk resolves for a hash it does not know (`_gen1_save_name`, the one name it was
+        seeded under), qualified against that staged ROM. B -- the un-randomized companion build --
+        shows the rejected cartridge's save was not touched by the server: party and current box
         unchanged from the seed it booted with, its rejection the only durable record, and none
         of its keys anywhere in links.json.
         """
@@ -7353,7 +7985,7 @@ class DuoRun:
             process.wait(timeout=30)  # client.exit flushes CartRAM
 
         a_rom = self._admit_roms["a"]
-        a_save = self._admit_extra_saves["a"]
+        a_save = self._gen1_save_name("a")
         a_path = Path(self._saveram_dir("a")) / a_save
         launched = self._launch_times.get("a")
         if not launched or a_path.stat().st_mtime < launched:
@@ -7364,7 +7996,7 @@ class DuoRun:
         self._pydec_note(f"phase initial: {os.path.relpath(a_path, REPO)} written after launch, "
                          f"qualifies against {a_rom}, party {[codec.key(m) for m in a_party]}")
 
-        b_sram, b_party, b_box, _codec = self._saved_gen1_party("b", rom=self._admit_roms["b"])
+        b_sram, b_party, b_box, _codec = self._saved_gen1_party("b")
         seed = Path(self._fixture_save_path("b")).read_bytes()
         party_start = codec.SRAM_LAYOUT["sPartyData"]
         box_start = codec.SRAM_LAYOUT["sCurBoxData"]
@@ -7743,20 +8375,19 @@ class DuoRun:
     def _witness_flush(self, inst):
         """The flushed SaveRAM the scenario's OWN oracle reads.
 
-        The scenario's resolver, not a hardcoded name: a randomized cartridge (admit_randomized_new)
-        saves under BizHawk's filename-derived name while the gamedb name still holds the fixture
-        it was seeded from, and a trade-carrying ROM saves under its patched name. Comparing a
+        The scenario's resolver, not a hardcoded name: a staged randomized cartridge
+        (admit_randomized_new) and a companion cartridge each save under their own
+        filename-derived name (`_gen1_save_name`, `_saved_gen1_party`'s default). Comparing a
         witness against a fixture would fail for a reason that is not the cartridge's.
         """
-        if self.cfg.get("patched_saves"):
-            return self._patched_saved_state(inst)[0]
-        return self._saved_gen1_party(inst, save_name=getattr(self, "_admit_extra_saves",
-                                                              {}).get(inst))[0]
+        return self._saved_gen1_party(inst)[0]
 
-    def check_save_witness(self, results):
+    def check_save_witness(self, results, *, archived_paths=None):
         """S-7: the cartridge's save bytes hashed where the hook fired and where the file landed.
 
-        One PYDEC line per instance, exactly:
+        Each instance first requires a client-built ROM hash prefix matching its resolved
+        cartridge and records that cartridge's full SHA-1 in GEN1_ROM_SHA1. This applies
+        even when the instance never saved. The save witness then records:
 
             SAVE_WITNESS_SHA256 inst=<a|b> site=<hex> file=<hex> match=<true|false> saves=<n>
 
@@ -7784,6 +8415,27 @@ class DuoRun:
             process.wait(timeout=30)  # the flush boundary; see _saved_gen1_party
         for inst in ("a", "b"):
             receipt = (results or {}).get(inst) or ""
+            # Bind every receipt, including a no-save half, to the cartridge the launcher
+            # resolved. Repeated builds must all agree; one good line cannot mask a bad one.
+            built = [line for line in receipt.splitlines() if line.startswith("client built:")]
+            pattern = (rf"client built: title=\S+ pack=(?P<pack>\S+) kind=(?P<kind>\S+) player={inst} "
+                       r"rom=(?P<rom>[0-9a-fA-F]{8}) -> \S+")
+            matches = [re.fullmatch(pattern, line) for line in built]
+            if not matches or any(match is None for match in matches):
+                raise RuntimeError(f"{inst}: client built ROM receipt missing or malformed")
+            expected_pack = "gen1_purergb" if is_pure_pairing(self.game) else "gen1_rby"
+            allowed = {"gen1_rby": {"named"}, "gen1_purergb": {"overlay", "rand_overlay"}}
+            if any(match["pack"] != expected_pack or match["kind"] not in allowed[expected_pack]
+                   for match in matches):
+                raise RuntimeError(f"{inst}: client built ROM kind is not an admitted companion/overlay")
+            rom = self._rom_for(inst)
+            digest = hashlib.sha1((Path(REPO) / rom).read_bytes()).hexdigest()
+            prefixes = {match["rom"].lower() for match in matches}
+            if prefixes != {digest[:8]}:
+                raise RuntimeError(f"{inst}: client built ROM prefixes {sorted(prefixes)} "
+                                   f"differ from booted cartridge {rom} sha1={digest}")
+            self._pydec_note(f"GEN1_ROM_SHA1 inst={inst} rom={rom} sha1={digest} "
+                             f"receipt={matches[0]['rom']} computed={digest[:8]} match=true")
             dumps = SAVE_WITNESS_DUMP_RE.findall(receipt)
             if not re.search(r"(?m)^SAVE_WITNESS[_ ]", receipt):
                 self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site=- file=- match=- "
@@ -7821,6 +8473,11 @@ class DuoRun:
                         f"{inst}: the save witness landed at {dumps[-1][0]!r} (the receipt's "
                         f"last dump), not {rel_to_repo(path)!r} — the body and this "
                         f"check disagree about the name")
+            # Offline rejudgment preserves the receipt's original logical path above,
+            # then reads an explicitly retained copy. Size/hash/flush checks still apply.
+            if archived_paths is not None:
+                path = str(archived_paths[inst])
+                self._pydec_note(f"SAVE_WITNESS_ARCHIVE inst={inst} path={path}")
             if not os.path.exists(path):
                 failed = re.findall(r"SAVE_WITNESS_DUMP_FAIL (.*)", receipt)
                 detail = (f" (the body logged SAVE_WITNESS_DUMP_FAIL: {failed[-1]})"
@@ -8068,8 +8725,6 @@ class DuoRun:
               f"{self._link_keys['b']}; re-queued to A: "
               f"{[c.get('cmd') for c in reply.get('commands_returned') or []]}")
 
-    orchestrate_faint_cmd_clean_gen3 = orchestrate_faint_cmd_gen3
-
     # ── NAT-LEGS (S-8, S-9, S-11): link the leg's subject (server staging), GO; nothing else is
     # injected -- the stimulus is A's own native play (scenario_gen3_{evolve,npc_trade,poison_faint}).
     def orchestrate_evolve_gen3(self):
@@ -8101,7 +8756,6 @@ class DuoRun:
 
     orchestrate_linked_faint_active_whiteout_gen3 = orchestrate_linked_faint_active_gen3
     orchestrate_linked_faint_active_trainer_gen3 = orchestrate_linked_faint_active_gen3
-    orchestrate_linked_faint_active_clean_gen3 = orchestrate_linked_faint_active_gen3
     orchestrate_linked_faint_active_lhammer_gen3 = orchestrate_linked_faint_active_gen3
     orchestrate_linked_faint_active_mega_gen3 = orchestrate_linked_faint_active_gen3
 
@@ -8290,14 +8944,7 @@ class DuoRun:
                     raise RuntimeError(f"{inst}: native save artifact missing at clean exit: {source}")
                 shutil.copy2(source, archive / f"{inst}_{source.name}")
         (archive / "links.json").write_bytes(self._links_bytes() or b"")
-        journal_base = self._gen3_duo_journal_path()
-        if journal_base is None:
-            raise RuntimeError("RR reset has no private durable journal path")
-        for suffix in ("log", "guard"):
-            source = Path(str(journal_base) + f".{suffix}")
-            if not source.is_file():
-                raise RuntimeError(f"RR reset missing durable trade journal {source}")
-            shutil.copy2(source, archive / source.name)
+        self._archive_gen3_duo_journals(archive)
         self._pydec_note(f"RR_RESET_INITIAL_ARCHIVE {rel_to_repo(archive)} "
                          + " ".join(f"{i}_sha256={hashlib.sha256(self._rr_reset_before[i]).hexdigest()}"
                                     for i in "ab"))
@@ -8439,9 +9086,29 @@ class DuoRun:
         return orchestrate(self)
 
     orchestrate_egg_hatch_gen3 = orchestrate_gift_gen3
+    orchestrate_egg_receive_gen3 = orchestrate_gift_gen3
+    orchestrate_choice_gift_gen3 = orchestrate_gift_gen3
+    orchestrate_gift_box_gen3 = orchestrate_gift_gen3
 
     def assert_gift_egg_gen3_saved(self, results):
         from gen3_gift_egg_rows import saved_oracle
+        return saved_oracle(self, results)
+
+    def orchestrate_static_wild_gen3(self):
+        from gen3_static_wild_rows import orchestrate
+        return orchestrate(self)
+
+    orchestrate_exp_static_static_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_static_run_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_grass_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_surf_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_rock_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_fish_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_altering0_gen3 = orchestrate_static_wild_gen3
+    orchestrate_exp_static_altering1_gen3 = orchestrate_static_wild_gen3
+
+    def assert_static_wild_gen3_saved(self, results):
+        from gen3_static_wild_rows import saved_oracle
         return saved_oracle(self, results)
 
     orchestrate_gender_clause_gen3 = orchestrate_species_clause_gen3
@@ -8702,6 +9369,88 @@ class DuoRun:
         self.go()
         self.assert_link_new()
 
+    def _prepare_gen3_probe_flip(self):
+        """A boots the byte-pinned companion; B boots the published companion with ONE byte flipped (gen3_probe_flip_choice). The edit
+        is staged under patch/build/probe_flip_<lane>/ and recorded in the receipt before anything launches."""
+        gen3_codec()
+        from tools.gen3_companions import published
+        from tools.gen3_final_cut import STAGED, rom_pins
+
+        pins = rom_pins(REPO, require_companions=True)
+        title_a, title_b = (self.gcfg["sides"][side][0] for side in ("a", "b"))
+        clean = next((base / STAGED[title_b] for base in (Path(REPO), *Path(REPO).parents) if (base / STAGED[title_b]).is_file()), None)
+        if clean is None:
+            raise RuntimeError(f"BLOCKED: pinned clean {title_b} ROM absent for the probe build")
+        clean_raw = clean.read_bytes()
+        if hashlib.sha1(clean_raw).hexdigest() != pins[title_b]:
+            raise RuntimeError(f"present-but-wrong clean {title_b} SHA-1")
+        published_row = published(title_b, clean_raw)
+        if published_row is None:
+            raise RuntimeError(f"BLOCKED: no published companion for {title_b} (patch/dist/gen3_companions.json)")
+        patched, row = published_row
+        pack = Path(REPO) / "data" / "games" / GEN3_PACKS[title_b].split("/")[0]
+        checkpoint = json.loads((pack / "write_checkpoint.json").read_text(encoding="utf-8"))[title_b]
+        anchors = [(a["rom_offset"], len(a["expected_hex"]["companion"]) // 2) for a in checkpoint["anchors"].values()]
+        choice = gen3_probe_flip_choice(patched, row, anchors)
+        flipped = patched[:choice["offset"]] + bytes([choice["after"]]) + patched[choice["offset"] + 1:]
+        stage = Path(BUILD) / f"probe_flip_{self.lane}"
+        stage.mkdir(parents=True, exist_ok=True)
+        dest = stage / f"b_{title_b}.gba"
+        dest.write_bytes(flipped)
+        self._probe_flip = {**choice, "title": title_b, "anchors_checked": len(anchors), "sha1": hashlib.sha1(flipped).hexdigest(),
+                            "published_sha1": hashlib.sha1(patched).hexdigest()}
+        self._rand_current = {"a": {"title": title_a, "rom": self._gen3_companion_rom(title_a)},
+                              "b": {"title": title_b, "rom": dest.relative_to(REPO).as_posix()}}
+        self._rand_inputs = dict(self._rand_current)
+        self._pydec_note(
+            f"PROBE_FLIP_INPUT {probe_flip_facts(self._probe_flip)} before={choice['before']:#04x} after={choice['after']:#04x} "
+            f"span={choice['span']} rule='{choice['rule']}' sha1={self._probe_flip['sha1']} published_sha1={self._probe_flip['published_sha1']}")
+
+    def orchestrate_probe_protected_span_flip_gen3(self):
+        """Record what the flipped cartridge (B) gets: refused at launch by the client's own admission, or a hello the server then
+        admits or rejects. Never asserts either outcome; an observation of either kind is the result."""
+        def b_outcome():
+            text = self._read_receipt("b")
+            refused = re.search(r"(?m)^PROBE_ADMISSION client=refused_at_launch reason=(.*)$", text)
+            if refused:
+                return {"client": "refused_at_launch", "reason": refused[1].strip()}
+            if hello_facts_from(text):
+                return {"client": "admitted", "reason": ""}
+            return None
+        seen = self.wait_for("b: the flipped cartridge's launch outcome", b_outcome, 180)
+        server = {"server": "n/a (the client never sent a hello)", "server_reason": ""}
+        if seen["client"] == "admitted":
+            def verdict():
+                player = ((self._status() or {}).get("players") or {}).get("b") or {}
+                if player.get("admission") in ("admitted", "rejected") or player.get("identity_error"):
+                    return player
+                return None
+            player = self.wait_for("b: the server's verdict on the flipped cartridge", verdict, 90)
+            server = {"server": player.get("admission") or "identity_error", "server_reason": player.get("admission_reason") or
+                      player.get("identity_error") or ""}
+        self._probe_observed = {**seen, **server}
+        flip = self._probe_flip
+        self._pydec_note(
+            f"PROBE_FLIP_OBSERVED {probe_flip_facts(flip)} client={seen['client']} server={server['server']} "
+            f"reason='{(seen['reason'] or server['server_reason']).replace(chr(10), ' ')[:200]}'")
+        self.go()
+
+    def assert_probe_protected_span_flip_gen3_saved(self, results):
+        """A probe, not a gate: it passes when an observation was recorded (either outcome); it fails only when the harness broke."""
+        observed = getattr(self, "_probe_observed", None)
+        problems = []
+        if not observed:
+            problems.append("no admission observation was recorded for the flipped cartridge")
+        elif observed["client"] == "refused_at_launch" and not re.search(r"(?m)^PROBE_ADMISSION client=refused_at_launch ", results["b"]):
+            problems.append("b: the refusal observation is not in its own receipt")
+        elif observed["client"] == "admitted" and not re.search(r"(?m)^PROBE_CLIENT admitted ", results["b"]):
+            problems.append("b: the admitted observation is not in its own receipt")
+        if observed and observed["client"] == "admitted" and not hello_facts_from(results["b"]):
+            problems.append("b: no hello was logged although the probe records it as admitted")
+        outcome = (observed or {}).get("client", "nothing")
+        self._gen3_raise(problems, f"OBSERVED {outcome} (an observation, not a verdict): probe_protected_span_flip "
+                          f"{probe_flip_facts(self._probe_flip) if getattr(self, '_probe_flip', None) else 'no flip recorded'} {observed}")
+
     def _prepare_gen3_rand(self):
         problems = gen3_rand_dependencies()
         if problems:
@@ -8715,8 +9464,31 @@ class DuoRun:
         stage = Path(BUILD) / f"rand_{self.lane}"
         stage.mkdir(parents=True, exist_ok=True)
         self._rand_facts, self._rand_inputs, self._rand_evidence = {}, {}, {}
-        self._rand_negative_saves = {}
+        self._rand_negative_saves, self._rand_refusals = {}, {}
         pins = rom_pins(REPO)
+        from tools.gen3_companions import overlay_randomized, published
+
+        pristine = {}
+
+        def pinned_clean(title):
+            # the pinned clean dump: the base every companion overlay is built on and the pret-table reference
+            if title not in pristine:
+                clean = next((base / STAGED[title] for base in (Path(REPO), *Path(REPO).parents)
+                              if (base / STAGED[title]).is_file()), None)
+                if clean is None:
+                    raise RuntimeError(f"BLOCKED: pinned clean {title} ROM absent for the companion overlays")
+                pristine[title] = clean.read_bytes()
+                if hashlib.sha1(pristine[title]).hexdigest() != pins[title]:
+                    raise RuntimeError(f"present-but-wrong clean {title} SHA-1")
+            return pristine[title]
+
+        def companion_of(title, randomized):
+            # patch-first: the launched cartridge is the randomized ROM WITH the companion overlay
+            try:
+                return overlay_randomized(title, pinned_clean(title), randomized)
+            except ValueError as exc:
+                raise RuntimeError(f"BLOCKED: companion overlay for {title}: {exc}") from exc
+
         for side in ("a", "b"):
             title = self.gcfg["sides"][side][0]
             if self.scenario == "link_gen3_rand":
@@ -8733,36 +9505,41 @@ class DuoRun:
                 raise RuntimeError(f"randomized input is wrong-title or clean: {path}")
             if gen3_rand_site_problems(raw, title):
                 raise RuntimeError(f"randomized input changes engine sites: {path}")
+            raw = companion_of(title, raw)
             facts = gen3_rand_rom_facts(raw, title)
             dest = stage / f"{side}_{title}.gba"
             dest.write_bytes(raw)
             self._rand_inputs[side] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
             self._rand_facts[side] = facts
-            self._pydec_note(f"RAND_INPUT {side} SYNTH=clean-derived-save title={title} "
+            self._pydec_note(f"RAND_INPUT {side} SYNTH=clean-derived-save title={title} companion=overlay "
+                             f"companion_pin={pins.get(title + '_companion', '')[:12]} "
                              f"sha1={facts['sha1']} transport_sha1={facts['payload']['fingerprint']} "
                              f"content_fingerprint={facts['content_fingerprint']}")
         if self._rand_facts["a"]["payload"]["fingerprint"] == self._rand_facts["b"]["payload"]["fingerprint"]:
             raise RuntimeError("randomized pair has identical fingerprints; swap control invalid")
         for side in ("a", "b"):
             title = self._rand_inputs[side]["title"]
-            clean = next((base / STAGED[title] for base in (Path(REPO), *Path(REPO).parents)
-                          if (base / STAGED[title]).is_file()), None)
-            if clean is None:
-                raise RuntimeError(f"BLOCKED: pinned clean {title} ROM absent for clean-kind controls")
-            raw = clean.read_bytes()
-            if hashlib.sha1(raw).hexdigest() != pins[title]:
-                raise RuntimeError(f"present-but-wrong clean {title} SHA-1")
+            raw = pinned_clean(title)
+            # the CLEAN cartridge: never launched as a client (it is refused at launch -- the clean_refused leg
+            # on B); its facts are the pret-table reference the clean-equivalent control is compared with
             clean_dest = stage / f"clean_{title}.gba"
             clean_dest.write_bytes(raw)
-            self._rand_inputs[f"clean_{side}"] = {"title": title, "clean": True,
+            self._rand_inputs[f"clean_{side}"] = {"title": title, "clean": True, "expect_refused": True,
                                                  "rom": clean_dest.relative_to(REPO).as_posix()}
             self._rand_facts[f"clean_{side}"] = gen3_rand_rom_facts(raw, title)
+            if side == "b":
+                # the plain COMPANION partner of the mixed-kind and clean-equivalent legs: the byte-pinned build
+                companion = self._gen3_companion_rom(title)
+                self._rand_inputs["companion_b"] = {"title": title, "rom": companion}
+                self._rand_facts["companion_b"] = gen3_rand_rom_facts(Path(REPO, companion).read_bytes(), title)
             if side == "a" and self.scenario in GEN3_RAND_ADMISSION:
-                # SYNTH 32(b): one unused trailing padding byte changes the ROM hash, while
-                # every shipped table and every engine/site anchor stays byte-identical.
-                if raw[-1] != 255:
-                    raise RuntimeError("clean-equivalent control needs trailing 0xFF padding")
-                equivalent = raw[:-1] + b"\xFE"
+                # SYNTH 32(b): one unused trailing padding byte of the COMPANION build changes the ROM hash,
+                # while every shipped table and every engine/companion site stays byte-identical.
+                companion_row = published(title, raw)
+                if companion_row is None:
+                    raise RuntimeError(f"BLOCKED: no published companion for {title} (patch/dist/gen3_companions.json)")
+                patched, row = companion_row
+                equivalent = gen3_rand_equivalent_rom(patched, row["protected_spans"])
                 dest = stage / f"equivalent_{title}.gba"
                 dest.write_bytes(equivalent)
                 self._rand_inputs["equivalent_a"] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
@@ -8774,15 +9551,15 @@ class DuoRun:
                 if not widest.is_file():
                     raise RuntimeError(f"BLOCKED: rule-changed control absent: {widest}")
                 forbidden = widest.read_bytes()
+                if gen3_rand_site_problems(forbidden, title):
+                    raise RuntimeError("control changes engine sites, so cannot isolate table admission")
+                forbidden = companion_of(title, forbidden)
                 dest = stage / f"forbidden_{title}.gba"
                 dest.write_bytes(forbidden)
                 self._rand_inputs["forbidden_a"] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
                 self._rand_facts["forbidden_a"] = gen3_rand_rom_facts(forbidden, title)
                 if self._rand_facts["forbidden_a"]["tables"]["evolutions"] == self._rand_facts["clean_a"]["tables"]["evolutions"]:
                     raise RuntimeError("rule-changed control has no changed evolution table")
-                for control in (equivalent, forbidden):
-                    if gen3_rand_site_problems(control, title):
-                        raise RuntimeError("control changes engine sites, so cannot isolate table admission")
                 self._pydec_note(f"RAND_32B_INPUT equivalent_sha1={hashlib.sha1(equivalent).hexdigest()} "
                                  f"clean_sha1={pins[title]} SYNTH=one_unused_tail_byte tables_identical=true "
                                  f"forbidden_sha1={hashlib.sha1(forbidden).hexdigest()}")
@@ -8835,6 +9612,23 @@ class DuoRun:
         if os.path.exists(self.go_files[side]):
             os.remove(self.go_files[side])
 
+    def _observe_gen3_rand_refused(self, side, phase):
+        """A CLEAN cartridge in a randomized run: the launcher refuses it before any hello, so the proof is the
+        companion-patch refusal on its own receipt (nothing sent, nothing written, no save) and a server that
+        never saw it -- not a server-side verdict."""
+        title = self._rand_inputs[f"clean_{side}"]["title"]
+        self.wait_for(f"{side}: clean {title} refused at launch",
+                      lambda: re.search(gen3_clean_refusal_re(title), self._read_receipt(side)), 120)
+        self.emu_by_inst[side].wait(timeout=45)
+        status = self._status()
+        problems = gen3_refused_side_problems(side, self._read_receipt(side), title)
+        problems += gen3_refused_server_problems(status, side, (status or {}).get("links"))
+        if problems:
+            raise RuntimeError(f"{phase}: " + "; ".join(problems))
+        self._rand_refusals[phase] = side
+        self._expected_exit.add(side)
+        self._pydec_note(f"RAND_REFUSED phase={phase} side={side} title={title} at=launch")
+
     def _gen3_rand_fresh_flushed(self, side):
         battery = Path(self._gen3_battery_path(side))
         launched = self._launch_times.get(side)
@@ -8859,10 +9653,16 @@ class DuoRun:
         self.wait_for("randomized A commits rand before clean B", lambda:
                       ((self._status() or {}).get("players") or {}).get("a", {}).get(
                           "admission_reason") == "cartridge matches the contract", 180)
-        self._rand_current["b"] = self._rand_inputs["clean_b"]
+        # a plain COMPANION partner in a randomized run: the server's mixed-kind refusal (a clean one cannot
+        # get that far, it is refused at launch -- the next leg)
+        self._rand_current["b"] = self._rand_inputs["companion_b"]
         self.launch_instance("b", phase="mixed_kind")
         self._observe_gen3_rand_admission("mixed_kind")
         self._finish_gen3_rand_negative("b", "mixed_kind")
+        self._rand_current["b"] = self._rand_inputs["clean_b"]
+        self._expected_exit.discard("b")
+        self.launch_instance("b", phase="clean_refused")
+        self._observe_gen3_rand_refused("b", "clean_refused")
         self._rand_current["b"] = self._rand_inputs["b"]
         self._expected_exit.discard("b")
         self.launch_instance("b")
@@ -8874,7 +9674,7 @@ class DuoRun:
         self._observe_gen3_rand_admission("rules_changed")
         self._finish_gen3_rand_negative("a", "rules_changed")
         Path(self.data_dir, "rom_contract.json").unlink()
-        for side, source, phase in (("a", "equivalent_a", "equivalent"), ("b", "clean_b", "clean_partner")):
+        for side, source, phase in (("a", "equivalent_a", "equivalent"), ("b", "companion_b", "companion_partner")):
             self._rand_current[side] = self._rand_inputs[source]
             self._expected_exit.discard(side)
             self.launch_instance(side, phase=phase)
@@ -8894,6 +9694,7 @@ class DuoRun:
     def orchestrate_admit_randomized_frlg(self):
         self._gen3_prelude()
         self._observe_gen3_rand_admission("pair")
+        self._assert_gen3_rand_roms_unchanged()
         self._live_complete[self.scenario] = True
         self.go()
 
@@ -8905,6 +9706,7 @@ class DuoRun:
         self._observe_gen3_rand_admission("pair")
         self.go()
         self.assert_link_new()
+        self._assert_gen3_rand_roms_unchanged()
         self._live_complete[self.scenario] = True
 
     def orchestrate_trainer_panel_gen3_rand(self):
@@ -8916,15 +9718,21 @@ class DuoRun:
         problems = gen3_rand_panel_problems(probes, self._rand_facts, retail, expected_area=area)
         if problems:
             raise RuntimeError("; ".join(problems))
+        self._assert_gen3_rand_roms_unchanged()
         self._live_complete[self.scenario] = True
         self.go()
+
+    def _assert_gen3_rand_roms_unchanged(self):
+        """Every ROM file the attempt prepared (all six randomized rows share one stage dir) still has the sha1 its facts were
+        taken from. Called by all three randomized orchestrations and by the shared verdict check."""
+        for side, row in self._rand_inputs.items():
+            if hashlib.sha1(Path(REPO, row["rom"]).read_bytes()).hexdigest() != self._rand_facts[side]["sha1"]:
+                raise RuntimeError(f"{side}: ROM file changed during the attempt")
 
     def _check_gen3_rand_pair(self):
         if not self._live_complete.get(self.scenario):
             raise RuntimeError("randomized live legs incomplete")
-        for side, row in self._rand_inputs.items():
-            if hashlib.sha1(Path(REPO, row["rom"]).read_bytes()).hexdigest() != self._rand_facts[side]["sha1"]:
-                raise RuntimeError(f"{side}: ROM file changed during the attempt")
+        self._assert_gen3_rand_roms_unchanged()
         evidence = self._rand_evidence["pair"]
         problems = gen3_rand_admission_problems("pair", **evidence, facts=self._rand_facts)
         if problems:
@@ -8932,6 +9740,8 @@ class DuoRun:
 
     def assert_admit_randomized_frlg_saved(self, results):
         self._check_gen3_rand_pair()
+        if self._rand_refusals.get("clean_refused") != "b":
+            raise RuntimeError("randomized clean_refused live leg missing (the clean cartridge must be refused at launch)")
         problems = []
         for phase in ("wrong_rom", "mixed_kind"):
             if phase not in self._rand_evidence or phase not in self._rand_negative_saves:
@@ -8954,8 +9764,10 @@ class DuoRun:
                 problems.append(f"{side}: final admission client did not remain passive")
             problems += gen3_rand_saved_problems(self._gen3_rand_fresh_flushed(side), self._gen3_fixture_bytes(side),
                                                  unchanged_bytes=True)
-        self._gen3_raise(problems, "rand pair admitted; other-player/mixed-kind/rule-changed ROMs refused; "
-                                  "32(b) declared-rand clean-equivalent pair effective=clean; flash unchanged")
+        self._gen3_raise(problems, "rand pair admitted; other-player/mixed-kind(companion)/rule-changed ROMs refused; "
+                                  "a clean cartridge refused at launch; 32(b) declared-rand unknown-hash companion admitted by anchors + "
+                                  "mailbox, effective pairing class clean (committed kind clean or companion, by hello "
+                                  "order); flash unchanged")
 
     def assert_link_gen3_rand_saved(self, results):
         self._check_gen3_rand_pair()
@@ -9034,18 +9846,17 @@ class DuoRun:
         at = codec._TITLE_PARTY_OFFSETS[codec._title(layout)][1] + slot * codec.PARTY_MON_SIZE
         return sb1[at:at + codec.PARTY_MON_SIZE].hex().upper()
 
-    def orchestrate_native_absent_gen3(self):
-        """PLAN P5's clean-vs-companion RR control (Codex C4-6b finding 6), redesigned for the
-        durable trade (RR-DURABLE): B boots rom_kind=clean, A the companion build. Each side is
-        sent the same well-formed apply_prepare -- its slot-1 key as old_key. The companion must
-        answer ok only after its NATIVE pre-save (PREPARE posted, the native save dialog, READY);
-        the clean cartridge must answer ok:false and write nothing."""
-        ka, kb = self._gen3_prelude()
+    def orchestrate_clean_rr_refused_gen3(self):
+        """Clean-RR REFUSAL PROOF (patch-first, owner 2026-10-02). B boots the raw dump and the
+        driver (`expect_refused`) must see lua/gen3/run.lua refuse it: no MYKEY, no hello. So only A
+        is waited on for keys and a hello; B is waited on for its refusal line; then A is released
+        to sit quietly (it must see no partner and no write)."""
+        self.wait_for("a: MYKEY line", lambda: extract_keys(self._read_receipt("a")) or None, 120)
+        self.wait_for("a: hello accepted", lambda: ((self._status() or {}).get("players", {})
+                                                    .get("a", {}).get("connected")) or None, 120)
+        self.wait_for("b: refused at launch", lambda: re.search(GEN3_CLEAN_REFUSAL_RE,
+                                                                self._read_receipt("b")), 120)
         self.go()
-        for inst, own in (("a", ka), ("b", kb)):
-            self.queue_command(inst, {"cmd": "apply_prepare", "slot": 1, "old_key": own[1],
-                                      "token": f"native_absent_{inst}"})
-        self._native_absent_keys = {"a": ka[1], "b": kb[1]}
 
     def _gen3_wrong_save(self, path):
         """A real save, qualifying under the row's own layout (vanilla or CFRU), whose trainer id
@@ -9097,25 +9908,21 @@ class DuoRun:
             raise RuntimeError("the live link changed when A's EmuHawk was killed")
         self.launch_instance("a", phase="same_save", seed=False)
         same_path = self._phase_result_path("a", "same_save")
-        self.wait_for("same-save A hello",
-                      lambda: "RECONNECT_HELLO same_save count=1" in text(same_path), 300)
+        self.wait_for("same-save A hello", lambda: same_save_hello_seen(text(same_path)), 300)
         self.wait_for("server accepts A's same-save party", lambda: (
             (s := self._status()) and (a := s["players"]["a"]).get("connected")
             and not a.get("identity_error") and self._link_keys["a"] in (a.get("party_keys") or [])),
             60)
-        def accepted_reconnect_hello():
-            problems = []
-            new_hellos = _new_a_hellos(problems, baseline["events"], self._reconnect_events())
-            return (not problems and bool(new_hellos)
-                    and all(row.get("text", "").startswith("Connected (") for row in new_hellos))
-
-        self.wait_for("durable accepted reconnect hello", accepted_reconnect_hello, 30)
+        self.wait_for("durable accepted reconnect hello",
+                      lambda: accepted_reconnect_hellos(baseline["events"], self._reconnect_events(),
+                                                        hello_facts_from(text(same_path))), 30)
         same_after = {**self._reconnect_document(), "events": self._reconnect_events(),
                       "status": self._status() or {}}
         problems = reconnect_same_problems(baseline["links"], same_after, baseline["events"],
                                            same_after["events"], self._link_keys["a"],
                                            baseline["links"]["player_identity"]["a"]["ot_id"],
-                                           allow_accepted_refreshes=True)
+                                           allow_accepted_refreshes=True, hello_facts=hello_facts_from(text(same_path)))
+        problems += same_save_hello_problems(text(same_path))
         problems += gen3_receipt_problems("a same_save", text(same_path), forbidden=(
             r"(?m)^RX force_faint ", r"(?m)^RX box_mon ", r"(?m)^RX memorialize "))
         if problems:
@@ -9197,30 +10004,6 @@ class DuoRun:
         for process in getattr(self, "emus", []):
             process.wait(timeout=30)
 
-    def _gen3_rom_provenance_problems(self, want_kind, results) -> list:
-        """Each side's own admission line -- lua/gen3/run.lua "[SLink-gen3] pack/title (kind by
-        admitted_by) player X -> host:port (rom HASH)" -- is what the CLIENT independently found
-        on its own cartridge, checked against the rom_sha1/rom_md5 pins in engine_signals.json
-        (Entry.admit, lua/gen3/entry.lua): admitted_by=="hash" is a pin hit, "anchors"/"header"
-        are the weaker fallbacks. A scenario's rom_kind config (self._gen3_rom_kind) is only what
-        the harness INTENDED to stage; this is the independent proof it actually happened
-        (G5-RR-CLEAN-2, OMP review cx-39175521) -- also catches a same-dump mislabel, where both
-        sides admit the identical hash under two different kind claims."""
-        problems, hashes = [], {}
-        for inst, kind in want_kind.items():
-            text = results.get(inst) or ""
-            problems += gen3_receipt_problems(
-                inst, text,
-                required=[rf"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \({re.escape(kind)} by hash\) "
-                          rf"player {inst} "])
-            m = re.search(rf"(?m)^\[client\] \[SLink-gen3\] .*player {inst} .* \(rom ([0-9A-Fa-f]+)\)$", text)
-            if m:
-                hashes[inst] = m.group(1)
-        if len(hashes) > 1 and len(set(hashes.values())) < len(hashes):
-            problems.append(f"the sides admitted the same ROM hash {hashes}: the companion/clean "
-                            f"split did not actually run two different dumps")
-        return problems
-
     def assert_faint_cmd_gen3_saved(self, results):
         """Both memorials saved: the linked key left each party for the memorial box and nothing
         else moved; B's key went to HP 0 through an armed OVERWORLD write (the checkpoint), after
@@ -9247,14 +10030,6 @@ class DuoRun:
                      (forced, gen3_tx("memorialize_done", kb))])
         self._gen3_raise(problems, f"faint_cmd: {ka} and {kb} saved once each in box {box + 1}; "
                                    f"B's HP 0 came from an overworld-armed write")
-
-    def assert_faint_cmd_clean_gen3_saved(self, results):
-        """faint_cmd_gen3's own oracle wholesale (the link+faint mechanics are identical) -- plus
-        proof the clean-side split actually ran: A admitted as the companion build and B as the
-        raw CLEAN dump, both by HASH against the pins, on two different cartridges."""
-        self._gen3_raise(self._gen3_rom_provenance_problems({"a": "companion", "b": "clean"}, results),
-                         "faint_cmd_clean_gen3: ROM provenance confirmed (a=companion, b=clean, both by hash)")
-        self.assert_faint_cmd_gen3_saved(results)
 
     # ── NAT-LEGS oracles: the engine signal (the driver's SIGNAL tee), what the client sent, what
     # the SERVER persisted, and A's saved battery against its SYNTH fixture.
@@ -9485,9 +10260,9 @@ class DuoRun:
                 marks[inst] = ([done], [(done, r"(?m)^SAVE_WITNESS_DUMP ")], [])
         req_a, ord_a, forb_a = marks["a"]
         if self.game == "gen3_exp":
-            # The expansion's natural A faint has a raw frame-end party HP0 witness but does
-            # not hit the pinned Cmd_tryfaintmon completion site. B's P+H path below still
-            # requires that engine site, counter increment and independent save readback.
+            # Expansion natural A faint uses pinned SetValuesOnFaint plus the raw frame-end
+            # party HP0 watcher. B's P+H path also requires that engine site, counter
+            # increment and independent save readback.
             problems += exp_faint_oracle.natural_faint_receipt_problems(results["a"], ka)
             problems += gen3_receipt_problems("a", results["a"],
                                              required=[gen3_tx("faint", ka), *req_a],
@@ -9508,7 +10283,6 @@ class DuoRun:
 
     assert_linked_faint_active_whiteout_gen3_saved = assert_linked_faint_active_gen3_saved
     assert_linked_faint_active_trainer_gen3_saved = assert_linked_faint_active_gen3_saved
-    assert_linked_faint_active_clean_gen3_saved = assert_linked_faint_active_gen3_saved
     assert_linked_faint_active_lhammer_gen3_saved = assert_linked_faint_active_gen3_saved
     assert_linked_faint_active_mega_gen3_saved = assert_linked_faint_active_gen3_saved
 
@@ -9836,28 +10610,24 @@ class DuoRun:
         self._gen3_raise(problems, "rival_swap NEGATIVE CONTROL (not qualification): the dummy, "
                                    "identity-less team was refused with stale_battle_id")
 
-    def assert_native_absent_gen3_saved(self, results):
-        """native_absent_gen3 (RR-DURABLE): the same valid apply_prepare, two outcomes. A
-        (companion): a native write AFTER the command (the PREPARE post; the link panel may write
-        native before it), the native pre-save (gSaveCounter advanced), the producer READY, and
-        apply_ready ok:true. B (clean): apply_ready ok:false, no write at all. Neither side saves."""
-        native_write = r"(?m)^\[client\] \[SLink-gen3\] write native "
-        prepared = r"(?m)^NATIVE_PREPARED phase=2 writes=[1-9]"
-        after_cmd = r"(?ms)^RX apply_prepare\b.*?^\[client\] \[SLink-gen3\] write native "
-        ready_ok = r'(?m)^TX apply_ready - .*"ok":true'
+    def assert_clean_rr_refused_gen3_saved(self, results):
+        """clean_rr_refused_gen3: the clean-RR REFUSAL PROOF. B (raw dump): lua/gen3/run.lua's own
+        "needs the SLink companion patch" refusal line, the driver's REFUSED_AT_LAUNCH, WRITES 0,
+        and nothing a working client leaves (no MYKEY, no TX, no RX, no admission line, no write, no
+        save dump). A (companion): admitted, hello sent, a settled window with no write and no
+        command, none of the partner-driven commands. The server: B never connected and no link
+        exists. Neither side saves."""
+        partner_cmds = "|".join(("apply_prepare", "apply_trade", "force_faint", "force_explode", "memorialize",
+                                 "party_mon", "box_mon", "replace_rival_team"))
         problems = gen3_receipt_problems(
-            "a", results["a"], required=[r"(?m)^RX apply_prepare\b", after_cmd, ready_ok, prepared],
-            forbidden=[r'(?m)^TX apply_ready - .*"ok":false'])
-        m = re.search(r"(?m)^PRESAVE_COUNTER before=(\d+) after=(\d+)$", results["a"])
-        if not m or int(m[2]) <= int(m[1]):
-            problems.append("a: the native pre-save never advanced gSaveCounter "
-                            f"({m[0] if m else 'no PRESAVE_COUNTER line'})")
-        problems += gen3_receipt_problems(
-            "b", results["b"], required=[r"(?m)^RX apply_prepare\b", r'(?m)^TX apply_ready - .*"ok":false',
-                                         r"(?m)^WRITES 0$", r"(?m)^PROBE_SETTLED writes=0$"],
-            forbidden=[native_write, r"(?m)^\[client\] \[SLink-gen3\] write ", r'"ok":true'])
-        self._gen3_raise(problems, "native_absent: the companion answered the valid prepare only after "
-                                   "its native pre-save; the clean cartridge refused it and wrote nothing")
+            "a", results["a"],
+            required=[r"(?m)^TX hello\b", r"(?m)^PROBE_SETTLED writes=0 rx=0$"],
+            forbidden=[rf"(?m)^RX (?:{partner_cmds})\b", r"(?m)^\[client\] \[SLink-gen3\] refused"])
+        problems += gen3_refused_side_problems("b", results["b"])
+        problems += gen3_refused_server_problems(self._status(), "b", self._links_json())
+        self._gen3_raise(problems, "clean_rr_refused REFUSAL PROOF: the clean RR was refused at launch (needs the "
+                                   "SLink companion patch), never connected, linked nothing and wrote nothing; "
+                                   "the companion side stayed quiet")
 
     def _run_oracle(self, results):
         """Revalidate the family contract and run its injected evidence stages.
@@ -9874,6 +10644,7 @@ class DuoRun:
             raise RuntimeError(f"the receipt's source is +dirty ({', '.join(dirty[:5])}"
                                f"{', ...' if len(dirty) > 5 else ''}): a G4 receipt must come "
                                f"from a clean cut")
+        self._gen3_require_companion_admission(results)
         global _CONSUMED_MARKERS
         _CONSUMED_MARKERS = consumed = []
         try:
@@ -9915,6 +10686,8 @@ class DuoRun:
             # Match __init__'s default for bare runners used by lifecycle unit tests.
             validate_pipeline(self, evidence_contract(getattr(self, "game", "legacy")),
                               self.cfg)
+            if getattr(self, "is_gen3_battery", False) and (launch_problems := self._gen3_launch_refusal_problems()):
+                raise RuntimeError("; ".join(launch_problems))
             if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
                 from tools.gen2_source_data import shared_contexts
                 with shared_contexts(), self._timed("preflight"):   # one verified context per title per run
@@ -9922,6 +10695,8 @@ class DuoRun:
                 self._clear_attempt_artifacts()  # startup waits must not see an older RESULT
             if self.cfg.get("gen3_rand"):
                 self._prepare_gen3_rand()
+            if self.cfg.get("gen3_probe_flip"):
+                self._prepare_gen3_probe_flip()
             if self.cfg.get("gen3_native_trade"):
                 self._prepare_native_trade()
             if self.scenario == "admit_randomized_new":
@@ -9937,6 +10712,7 @@ class DuoRun:
                     self.orchestrate()
             except GameRngMiss:
                 ra, rb = self.wait_results()
+                self.assert_gen1_synth_setup({"a": ra, "b": rb}, complete=False)
                 if not retryable_gen1_rng(self.game, {"a": ra, "b": rb}, self.attempt,
                                           scenario_attempt_limit(self.scenario, self.game), scenario=self.scenario):
                     raise  # an unrelated failed half is never a game-RNG retry
@@ -9946,6 +10722,7 @@ class DuoRun:
             self._note_result_lines({"a": ra, "b": rb})
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
+            self.assert_gen1_synth_setup({"a": ra, "b": rb}, complete=pa and pb)
             if pa and pb:
                 if scenario_family(getattr(self, "game", "")) == "gen2_new":
                     self._wait_gen2_exit_flush()
@@ -9984,7 +10761,7 @@ class DuoRun:
                         key = GEN2_WAVE_C[self.scenario][1]
                         reason += f" scenario={self.scenario} {key}={self._gen2_verified_facts[key]}"
                     if self.scenario in GEN2_TRADE_SCENARIOS:
-                        reason += f" scenario={self.scenario} admission_scope=HARNESS_ONLY_OVERLAY"
+                        reason += f" scenario={self.scenario} admission_scope=PHYSICAL_RECEIPTED"
                     if self.scenario in GEN2_CLAUSE_SCENARIOS:
                         extra = ("clause", "rerolls") if self.scenario == "gen2_species_clause" else ("clause", "rejected", "ending")
                         reason += f" scenario={self.scenario} " + " ".join(
@@ -10001,6 +10778,13 @@ class DuoRun:
             if self.args.keep_alive:
                 input("[duo] --keep-alive: press Enter to tear down…")
         except ClientFinishedEarly as exc:
+            if self.cfg.get("gen1_synth") == "explode":
+                try:
+                    self.assert_gen1_synth_setup(
+                        {inst: self._read_receipt(inst) or "" for inst in ("a", "b")}, complete=False)
+                except RuntimeError as binding_error:
+                    self._pydec_note(f"PYDEC: FAIL {binding_error}")
+                    raise
             if self.scenario == "gen2_species_clause":
                 # Preserve the pre-cleanup process/RESULT observation: cleanup kills A before
                 # its normal waiting-for-link timeout when B exhausts the duplicate hunt.
@@ -10057,7 +10841,7 @@ def list_lines(game):
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")
         if name in GEN2_TRADE_SCENARIOS:
-            lines[-1] += " artifact=overlay admission=HARNESS_ONLY_OVERLAY"
+            lines[-1] += " artifact=overlay admission=PHYSICAL_RECEIPTED"
     return lines
 
 
@@ -10296,6 +11080,13 @@ def run_scenario_with_rng_retry(name, args):
                         for inst in ("a", "b") for line in (receipts.get(inst) or "").splitlines())):
             print(f"[duo] {name}: a side ran out of the aide's natural Balls; retrying fresh lane")
             continue
+        if (not ok and name in GEN2_TRADE_SCENARIOS and scenario_family(args.game) == "gen2_new"
+                and attempt < limit
+                and any(line.startswith("RESULT: FAIL") and GEN2_ROUTE_BATTLE_LOST in line
+                        for inst in ("a", "b") for line in (receipts.get(inst) or "").splitlines())):
+            print(f"[duo] {name}: the route's wild battle was lost on attempt {attempt}; retrying fresh lane "
+                  f"on the next pinned clock minute")
+            continue
         if SCENARIOS[name].get("battle_window_case"):
             classification = battle_window_failure(name, receipts, attempt) if not ok else None
             if classification:
@@ -10321,7 +11112,7 @@ def run_scenario_with_rng_retry(name, args):
             return ok, attempt
         why = ("B's first wild foe shared no type with A" if name == "type_clause_gen3" and
                "RESULT: FAIL (RNG: type first encounter has no overlap)" in
-               (receipts.get("b") or "").splitlines() else "the cartridge's only ball missed")
+               (receipts.get("b") or "").splitlines() else "the game reported a retryable RNG result")
         print(f"[duo] {name}: {why}; restarting attempt {attempt + 1} of {limit} "
               "with a fresh server, run directory and SaveRAM seeds")
     return False, limit
@@ -10373,6 +11164,8 @@ def main():
     ap.add_argument("--speed-percent", type=int, default=None,
                     help="Gen 2 duo emulator speed (O-36): 100-6400, or 0 = unthrottled; default 300. "
                          "Qualification gates are never run through here and stay at 100")
+    ap.add_argument("--gen2-artifact", choices=("clean", "overlay"), default=None,
+                    help="executed Gen 2 artifact for every scenario (native trade requires overlay)")
     ap.add_argument("--idle-jitter", type=int, default=0,
                     help="extra idle frames before the first hunt; each RNG retry adds 37 per "
                          "attempt")
@@ -10386,7 +11179,13 @@ def main():
                          "tests/fixtures/gen3/wire/<scenario>_<player>_gen3_new.jsonl")
     ap.add_argument("--list", action="store_true",
                     help="print the scenarios --scenario all would run for --game, then exit")
+    ap.add_argument("--gen3-companion", action="store_true",
+                    help="boot the PATCHED FR/LG/Emerald companion cartridges (patch/build/slink_*.gba, sha1-pinned to "
+                         "patch/dist/gen3_companions.json) instead of the clean dumps; each client's own admission line must "
+                         "say `companion by hash` (recorded as COMPANION_ADMISSION). Opt-in per run; not for RR/expansion")
     args = ap.parse_args()
+    if args.gen3_companion and gen3_companion_game_problem(args.game):
+        sys.exit(f"[duo] {gen3_companion_game_problem(args.game)}")
 
     if args.list:
         for line in list_lines(args.game):

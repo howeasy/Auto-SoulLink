@@ -4,17 +4,10 @@
   Contract: Codex's P4.3e FOR DRIVER v1 + refinements (scenario keys gen2_trade_new / _decline_new / _timeout /
   _reset_wait / _reset_commit / _refuse_item); the consumer is tools/gen2_trade_oracles.py.
 
-  1. HARNESS_ONLY_OVERLAY composition override. Production refuses an overlay ROM (lua/gen2/entry.lua admits
-     only the clean catalog kind, asserts the clean profile sha1 twice, passes artifact_kind=nil). This file
-     text-patches lua/gen2/entry.lua IN MEMORY (T.PATCHES, each fragment exactly once in the source) and serves
-     that chunk to the unmodified lua/gen2/run.lua through a dofile interception scoped to the run.lua load.
-     Only the published overlay sha1s (T.load_pins: data/gen2/overlay_provenance.json outputs, read at load
-     and bound by its sha256 in the manifest; never hardcoded, the overlays get republished) are admitted, each only for
-     its own title and only when the profile's overlay block names it. The patched graph reports qualification
-     "HARNESS_ONLY_OVERLAY" (never "PHYSICAL_RECEIPTED": the U1/U2 receipts it re-validates are the CLEAN ones).
-     Disclosure: TRADE_OVERRIDE <manifest json> (entry/run source sha256, the patches, the pins) and
-     TRADE_ADMISSION {admission_scope, override_manifest_sha256 = sha256(that exact json text), ...}.
-     Production JSON and source are unchanged.
+  1. Production overlay composition. The published overlay is hash-bound, and
+     lua/gen2/run.lua loads Entry unchanged. TRADE_SOURCE records source hashes;
+     no text rewriting, custom catalog grant or fake romhash is installed.
+     Historical HARNESS_ONLY_OVERLAY receipts stay historical, never current.
 
   2. The native trade, normal buttons only. Both players: the `link` catch (Route 29, linked, native save),
      walk to the Cherrygrove #MON CENTER 2F (the U1f legs + SLINK_GEN2_TRADE_FACTS, tools/gen2_trade_facts.py),
@@ -26,8 +19,8 @@
      wait (SlinkTradeWaitFrame exits on B) except A's disclosed decline/refuse cancel.
 
   MARKERS (JSON after the tag; frames are emu.framecount(); sites are overlay .sym {symbol, bank, address}):
-    TRADE_OVERRIDE {...manifest}  TRADE_ADMISSION {admission_scope, overlay_sha1, base_sha1, title,
-        override_manifest_sha256, trade_manifest_sha256, run_id}                      after CLIENT
+    TRADE_SOURCE {...manifest}  TRADE_ADMISSION {admission_scope, overlay_sha1, base_sha1, title,
+        source_manifest_sha256, trade_manifest_sha256, run_id}                      after CLIENT
     TRADE_BASELINE / TRADE_NATIVE_SAVE / TRADE_FINAL   immutable images: {frame, snapshot_path, snapshot_sha256,
         cartram_sha256, snapshot_bytes=32790, cartram_bytes=32768, kind}; BASELINE adds party[{species_marker,
         blob_hex(70)}] + dex {primary,backup}{caught_hex,seen_hex} read from the SAVED image, slot/count/key;
@@ -93,9 +86,9 @@
     RECEIPT {schema "gen2-duo-trade-v1", case, variant, outcome, ...}   PASS only
 --]]
 local T = {}
-T.SCOPE = "HARNESS_ONLY_OVERLAY"
+T.SCOPE = "PHYSICAL_RECEIPTED"
 T.SCHEMA = "gen2-duo-trade-v1"
-T.OVERRIDE_SCHEMA = "gen2-duo-overlay-override-v1"
+T.SOURCE_SCHEMA = "gen2-duo-production-entry-v1"
 -- The published overlays (d09e76c1; data/gen2/overlay_provenance.json outputs.*.sha1, profile overlay blocks).
 T.OVERLAY_SHA1 = {}   -- filled by T.load_pins from the published provenance
 T.PROVENANCE = "data/gen2/overlay_provenance.json"
@@ -148,38 +141,6 @@ end
 T.hex = hex
 
 -- ── 1. the composition override (pure parts first) ──────────────────────────────────────────────
-T.PATCHES = {
-    {id="catalog", from='for _, row in ipairs(assert(data.admission.artifacts, "artifact catalog required")) do',
-     to='for _, row in ipairs(SLINK_HARNESS.catalog(title, profile, data.admission.artifacts)) do'},
-    {id="kind", from='if mode == "sha1" and candidate.row.kind == "clean" then return "clean" end',
-     to='if mode == "sha1" and SLINK_HARNESS.overlay(candidate.title, candidate.row) then return "overlay" end'},
-    {id="compose_hash", from='assert(Admission.sha1(read_rom, size) == profile.rom_sha1, "candidate ROM hash mismatch")',
-     to='assert(Admission.sha1(read_rom, size) == SLINK_HARNESS.rom_sha1(title, profile), "candidate ROM hash mismatch")'},
-    {id="final_hash", from='and Admission.sha1(read_rom, size) == profile.rom_sha1',
-     to='and Admission.sha1(read_rom, size) == SLINK_HARNESS.rom_sha1(title, profile)'},
-    {id="artifact_kind", from='artifact_kind=(not production) and deps.artifact_kind or nil,',
-     to='artifact_kind=(not production) and deps.artifact_kind or "overlay",'},
-    {id="client_rom_sha1", from='rom_sha1=profile.rom_sha1, log=deps.log,',
-     to='rom_sha1=SLINK_HARNESS.rom_sha1(title, profile), log=deps.log,'},
-    {id="qualification", from='qualification=production and "PHYSICAL_RECEIPTED" or "SOURCE_MODEL_CANDIDATE"',
-     to='qualification=production and "HARNESS_ONLY_OVERLAY" or "SOURCE_MODEL_CANDIDATE"'},
-}
-T.PREFIX = "local SLINK_HARNESS = ...; "     -- same line as the source's first line: line numbers unchanged
-
--- Pure: source text -> patched text, or nil + why. Every fragment must occur exactly once.
-function T.patch_entry(text)
-    local out = text
-    for _, p in ipairs(T.PATCHES) do
-        local first = text:find(p.from, 1, true)
-        if not first or text:find(p.from, first + 1, true) then
-            return nil, "entry.lua fragment " .. p.id .. (first and " occurs twice" or " not found")
-        end
-        local at = out:find(p.from, 1, true)
-        out = out:sub(1, at - 1) .. p.to .. out:sub(at + #p.from)
-    end
-    return T.PREFIX .. out
-end
-
 -- The published overlay pins: {title -> sha1} from outputs[*].slink_title/sha1; returns the file's sha256.
 function T.load_pins(root, json, sha256_text)
     local raw = T.read(root .. "/" .. T.PROVENANCE)
@@ -197,49 +158,14 @@ function T.load_pins(root, json, sha256_text)
     return pins
 end
 
--- The harness seam the patched chunk receives as `...`. Exact-hash: only T.OVERLAY_SHA1[title], only when the
--- profile's overlay block names that sha1 over the profile's own clean base.
-function T.harness()
-    local H = {}
-    local function pinned(title, profile)
-        local sha = T.OVERLAY_SHA1[title]
-        local ov = type(profile) == "table" and profile.overlay or nil
-        return sha ~= nil and type(ov) == "table" and ov.rom_sha1 == sha and ov.base_sha1 == profile.rom_sha1 and sha or nil
-    end
-    -- The catalog's own BUILT overlay row (selection FUTURE in production) over this profile's clean base; the
-    -- harness grants only its selection. Nothing else of the catalog reaches the admission engine.
-    function H.catalog(title, profile, rows)
-        local sha = pinned(title, profile)
-        if not sha then return {} end
-        for _, row in ipairs(rows or {}) do
-            if row.kind == "overlay" and row.sha1 == sha and row.base_sha1 == profile.rom_sha1 and row.status == "BUILT" then
-                local copy = {}
-                for k, v in pairs(row) do copy[k] = v end
-                copy.selection, copy.harness, copy.production_selection = "SELECTED", T.SCOPE, row.selection
-                return {copy}
-            end
-        end
-        return {}
-    end
-    function H.overlay(title, row)
-        return type(row) == "table" and row.kind == "overlay" and row.harness == T.SCOPE and row.sha1 == T.OVERLAY_SHA1[title]
-    end
-    function H.rom_sha1(title, profile)
-        return assert(pinned(title, profile), "HARNESS_ONLY_OVERLAY: no pinned overlay for " .. tostring(title))
-    end
-    return H
-end
-
+-- Source witness for the unmodified production loader and its published executed identity.
 -- Pure: the disclosed manifest (json.encode sorts keys, so its text is canonical).
 function T.manifest(sha256_text, entry_text, run_text, title, running_sha1)
-    local patches = {}
-    for i, p in ipairs(T.PATCHES) do patches[i] = {id=p.id, from=p.from, to=p.to} end
-    return {schema=T.OVERRIDE_SCHEMA, admission_scope=T.SCOPE, prefix=T.PREFIX, patches=patches,
+    return {schema=T.SOURCE_SCHEMA, admission_scope=T.SCOPE,
             entry={path="lua/gen2/entry.lua", sha256=sha256_text(entry_text)},
             run={path="lua/gen2/run.lua", sha256=sha256_text(run_text)},
             overlay_sha1=T.OVERLAY_SHA1, provenance={path=T.PROVENANCE, sha256=T.provenance_sha256},
-            title=title, running_sha1=running_sha1,
-            dofile_scope="lua/gen2/run.lua load only"}
+            title=title, running_sha1=running_sha1, dofile_scope="unmodified production run.lua"}
 end
 
 local function read(path)
@@ -250,49 +176,37 @@ local function read(path)
 end
 T.read = read
 
--- The scripted-gate view over the overlay (lua/tests/gen2_panel_gate.lua's binding): the running ROM must be the
+-- The scripted-gate identity over the overlay: the running ROM must be the
 -- pinned overlay of SLINK_GEN2_TITLE; the clean facts then bind to its base (the overlay moves no RAM symbol and
--- none of the UI/observer sites: each site's bytes are still re-validated at registration).
+-- the banked sites and checkpoint are selected through the artifact view and re-validated at registration).
 function T.context_api(api, getenv)
-    local title = getenv("SLINK_GEN2_TITLE")
-    local root = assert(getenv("SLINK_ROOT"), "SLINK_ROOT missing")
+    local root, title = assert(getenv("SLINK_ROOT")), getenv("SLINK_GEN2_TITLE")
     T.load_pins(root, dofile(root .. "/lua/json_codec.lua"))
-    local want = T.OVERLAY_SHA1[title or ""]
-    assert(want, "no pinned overlay for SLINK_GEN2_TITLE " .. tostring(title))
     local running = tostring(api.romhash()):lower()
-    assert(running == want, fmt("running ROM %s is not the pinned %s overlay %s", running, tostring(title), want))
-    local env_ov = getenv("SLINK_GEN2_OVERLAY_SHA1")
-    assert(env_ov == nil or env_ov:lower() == want, "SLINK_GEN2_OVERLAY_SHA1 differs from the pin")
-    local base = assert(getenv("SLINK_GEN2_ROM_SHA1"), "SLINK_GEN2_ROM_SHA1 missing"):lower()
-    T.running = {title=title, overlay_sha1=want, base_sha1=base}
-    return setmetatable({romhash=function() return base end}, {__index=api})
+    assert(running == T.OVERLAY_SHA1[title], "running ROM is not the published overlay")
+    local executed = getenv("SLINK_GEN2_EXEC_SHA1")
+    assert(executed and executed:lower() == running, "executed overlay identity differs")
+    local base = assert(getenv("SLINK_GEN2_BASE_SHA1"), "base identity missing"):lower()
+    assert(base ~= running, "overlay cannot use clean identity")
+    T.running = {title=title, overlay_sha1=running, base_sha1=base}
+    return api
 end
 
--- The unmodified run.lua, served the patched entry.lua. Returns client, parts (run.lua's globals).
+-- The unmodified production loader; no Entry interception. Returns client, parts (run.lua's globals).
 function T.start_production(root, SG, json)
     local sha = function(text) return SG.sha256(function(i) return text:byte(i + 1) end, #text) end
     T.load_pins(root, json, sha)
     local entry_path, run_path = root .. "/lua/gen2/entry.lua", root .. "/lua/gen2/run.lua"
-    local entry_text, run_text = read(entry_path), read(run_path)
-    local patched = assert(T.patch_entry(entry_text))
-    local chunk = assert(load(patched, "@" .. entry_path, "t", _G))
-    local Entry = chunk(T.harness())
-    assert(type(Entry) == "table" and type(Entry.build) == "function", "patched entry.lua returned no Entry")
-    local running = T.running or {}
-    local manifest = T.manifest(sha, entry_text, run_text, running.title, running.overlay_sha1)
+    local manifest = T.manifest(sha, read(entry_path), read(run_path),
+                                (T.running or {}).title, (T.running or {}).overlay_sha1)
     T.manifest_text = assert(json.encode(manifest))
     T.manifest_sha256 = sha(T.manifest_text)
-    local real = dofile
-    dofile = function(path, ...)
-        if type(path) == "string" and path:gsub("\\", "/"):sub(-#"lua/gen2/entry.lua") == "lua/gen2/entry.lua" then
-            return Entry
-        end
-        return real(path, ...)
-    end
-    local ok, err = pcall(real, run_path)
-    dofile = real
-    if not ok then error(err, 0) end
-    return SLINK_GEN2_CLIENT, SLINK_GEN2_PARTS
+    dofile(run_path)
+    local parts = SLINK_GEN2_PARTS
+    assert(parts and parts.production_admitted == true and parts.qualification == T.SCOPE
+           and parts.artifact_kind == "overlay", "unmodified overlay production client did not start")
+    assert(parts.runtime_rom_sha1 == (T.running or {}).overlay_sha1, "production executed SHA1 differs")
+    return SLINK_GEN2_CLIENT, parts
 end
 
 -- ── 2. facts, saved-image reads (pure) ──────────────────────────────────────────────────────────
@@ -578,9 +492,9 @@ function T.attach(e)
     local mine = manifest.players and manifest.players[D.player]
     assert(manifest.evidence_class == T.SCOPE and mine and mine.rom_sha1 == T.running.overlay_sha1
            and mine.title == ctx.env.title and mine.artifact_kind == "overlay", "trade manifest does not admit this side")
-    e.log("TRADE_OVERRIDE " .. T.manifest_text)
+    e.log("TRADE_SOURCE " .. T.manifest_text)
     jlog("TRADE_ADMISSION", {admission_scope=T.SCOPE, overlay_sha1=T.running.overlay_sha1, base_sha1=T.running.base_sha1,
-        title=ctx.env.title, override_manifest_sha256=T.manifest_sha256, trade_manifest_sha256=msha,
+        title=ctx.env.title, source_manifest_sha256=T.manifest_sha256, trade_manifest_sha256=msha,
         run_id=manifest.run_id, qualification=tostring(e.parts.qualification)})
 
     local st = {armed=false, errors={}, exec={}, writes={}, hit={}, disarm={}, rearm=false, unarm=false,
@@ -1152,9 +1066,9 @@ function T.verdict(lines, json, case, player)
     local head, client, adm = one("DUO_GEN2"), one("CLIENT"), one("TRADE_ADMISSION")
     one("BOOTED"); one("HELLO")
     need(v(client).qualification == T.SCOPE and v(client).production_admitted == true,
-         "client is not the disclosed HARNESS_ONLY_OVERLAY composition")
+         "client is not the unmodified PHYSICAL_RECEIPTED overlay composition")
     local a = v(adm)
-    need(a.admission_scope == T.SCOPE and hex64(a.override_manifest_sha256) and hex64(a.trade_manifest_sha256)
+    need(a.admission_scope == T.SCOPE and hex64(a.source_manifest_sha256) and hex64(a.trade_manifest_sha256)
          and type(a.run_id) == "string" and a.run_id ~= "" and hexbytes(a.overlay_sha1, 20),
          "trade admission disclosure incomplete or not the pinned overlay")
     need((seen.CAUGHT or 0) == 1 and #all("ENGINE_CAPTURE") >= 1, "the linked catch was not reported")
@@ -1553,7 +1467,7 @@ function T.scenario(case)
         h.jlog("RECEIPT", {schema=T.SCHEMA, case="gen2_trade_" .. case, variant=h.trade.variant or h.json.null,
             outcome=plan.outcome, player=h.player, title=hd.title, rom_sha1=facts.admission.overlay_sha1,
             base_sha1=facts.admission.base_sha1, admission_scope=T.SCOPE,
-            override_manifest_sha256=facts.admission.override_manifest_sha256,
+            source_manifest_sha256=facts.admission.source_manifest_sha256,
             trade_manifest_sha256=facts.admission.trade_manifest_sha256, run_id=facts.admission.run_id,
             attempt=hd.attempt, fixture_sha256=hd.fixture_sha256, visit_state=plan.visit,
             role=facts.role,

@@ -112,6 +112,10 @@ def verify(text: str, facts: dict, title: str, staged: bytes) -> dict:
     assert receipt["schema"] == "gen2-phone-gate-v2", receipt
     assert receipt["title"] == title and receipt["fixture"] == f"{title}_battle", receipt
     assert receipt["overlay_sha1"] == facts["overlay_sha1"] and receipt["evidence_level"] == "PHYSICAL", receipt
+    # B2: the executed identity, OBSERVED in the emulator (real.romhash) and cross-checked against the
+    # independently hashed staged bytes.
+    assert receipt["observed_rom_sha1"] == live.identity(title, "overlay")["rom_sha1"], \
+        "the gate ran other bytes than the staged overlay"
     assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"
     (seed,) = receipt["harness_write_scopes"]
     assert seed["value"] == facts["robbed"], seed
@@ -122,17 +126,17 @@ def verify(text: str, facts: dict, title: str, staged: bytes) -> dict:
 def test_phone_on_the_patched_rom(emuhawk, title):  # noqa: F811
     spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
-              or live.receipt_missing_reason(spec.name))
+              or live.receipt_missing_reason(spec.name, kind="overlay"))
     if reason:
         pytest.skip(reason)
     from run_gb_gate import run_gate
 
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
-    live.qualified_identity(spec.name, staged)
-    qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    live.qualified_identity(spec.name, staged, kind="overlay")
+    qualification = json.loads(live.receipt_file(f"{spec.name}.qualification.json", "overlay").read_text(encoding="utf-8"))
     facts = phone_facts(title)
-    env = live.inspect_env(spec, staged)
+    env = live.inspect_env(spec, staged, kind="overlay")
     env["SLINK_GEN2_PHONE_FACTS"] = json.dumps(facts)
     env["SLINK_GEN2_QUALIFICATION_ATTEMPT"] = qualification["attempt_id"]
     passed, path, text = run_gate(GATE, rom_key=f"{title}_overlay", target=spec.target, timeout=2400,
@@ -142,5 +146,9 @@ def test_phone_on_the_patched_rom(emuhawk, title):  # noqa: F811
     assert fixture.read_bytes() == staged, "fixture changed while the gate ran"
     receipt = verify(text, facts, title, staged)
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
-    (REPO / live.RECEIPTS / f"{title}_overlay.phone_gate.json").write_text(
+    # B1: overlay evidence lands in the overlay namespace, never beside the clean receipts.
+    identity = live.identity(title, "overlay")
+    receipt.update(artifact_kind=identity["kind"], rom_sha1=identity["rom_sha1"],
+                   base_sha1=identity["base_sha1"], binding_sha256=identity["binding_sha256"])
+    live.receipt_file(f"{title}.phone_gate.json", "overlay").write_text(
         json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")

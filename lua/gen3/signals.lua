@@ -22,6 +22,15 @@
 -- sp / frame are RECORDED separately, never used as the identity test. A fire whose
 -- callback address disagrees is rejected and counted; it is never queued or dispatched.
 --
+-- Mirror aliases (optional, pack-driven): a site may carry `mirror_offsets`, a list of
+-- offsets added to the hook address (the expansion pack lists ROM_SIZE, 0x02000000: script
+-- handlers reached through callnative/gScriptCmdTable run at their 0x0A ROM-mirror alias,
+-- which an exec hook on the 0x08 address never matches). Each offset is one extra
+-- registration (so `registered` counts every hook armed, not every site) and its callback
+-- address passes the identity test; any OTHER address is still rejected. The dispatched
+-- signal keeps the CANONICAL address (= address + capture_offset); callback_address is the
+-- real PC. A site without `mirror_offsets` is hooked at exactly one address.
+--
 -- Everything arrives through injected tables; no BizHawk global is named here:
 --   io.read_u8/read_u16/read_u32(addr)   io.read_bytes(addr, len)   io.rom_read(off, len)
 --   io.framecount()                      io.register(name) -> number ("R15", "CPSR", "R13")
@@ -77,6 +86,30 @@ function S.new(profile, sites, io, ev, on_fire)
 
     -- Load-time anchor: every site's bytes must be in the ROM where the pack says.
     local bad = {}
+    -- Mirror aliases are pack data like any other field: a malformed list must be a NAMED
+    -- refusal BEFORE a single hook is armed, never an arithmetic error inside register_all()
+    -- (which would surface as a bare pcall string) and never a half-armed set.
+    local bad_mirror = {}
+    for kind, site in pairs(sites) do
+        local offs = site.mirror_offsets
+        if offs ~= nil then
+            if type(offs) ~= "table" then
+                bad_mirror[#bad_mirror + 1] = kind .. " (not a table)"
+            else
+                for i, off in ipairs(offs) do
+                    if type(off) ~= "number" or off <= 0 then
+                        bad_mirror[#bad_mirror + 1] =
+                            string.format("%s (mirror_offsets[%d]=%s)", kind, i, tostring(off))
+                    end
+                end
+            end
+        end
+    end
+    if #bad_mirror > 0 then
+        table.sort(bad_mirror)
+        error("engine site " .. table.concat(bad_mirror, "; ")
+              .. ": mirror_offsets must be a list of positive numbers", 0)
+    end
     for kind, site in pairs(sites) do
         local n = #site.expected_hex // 2
         if type(site.rom_offset) ~= "number" or type(site.address) ~= "number"
@@ -95,8 +128,14 @@ function S.new(profile, sites, io, ev, on_fire)
         -- The identity test. mGBA reports the registered address; a disagreement means the
         -- callback is not this site's, so it is counted and dropped, never dispatched.
         if callback_address ~= nil and callback_address ~= hook_address then
-            self.rejected = self.rejected + 1
-            return
+            local mirrored = false
+            for _, off in ipairs(site.mirror_offsets or {}) do
+                if callback_address == hook_address + off then mirrored = true break end
+            end
+            if not mirrored then
+                self.rejected = self.rejected + 1
+                return
+            end
         end
         local spec = S.KINDS[kind] or {}
         if spec.filter and not spec.filter(io, profile, site) then return end
@@ -130,13 +169,19 @@ function S.new(profile, sites, io, ev, on_fire)
     local function register_all()
         for kind, site in pairs(sites) do
             local hook_address = site.address + (site.capture_offset or 0)
-            local id = ev.on_bus_exec(function(callback_address)
-                fire(kind, site, callback_address and math.floor(callback_address) or nil)
-            end, hook_address, "SLink-gen3-" .. kind)
-            assert(id and not is_null_guid(id),
-                   "engine signal registration failed: " .. kind)
-            self.hooks[#self.hooks + 1] = id
-            self.registered = self.registered + 1
+            local addrs = { { hook_address, "SLink-gen3-" .. kind } }
+            for _, off in ipairs(site.mirror_offsets or {}) do
+                addrs[#addrs + 1] = { hook_address + off, string.format("SLink-gen3-%s@%X", kind, off) }
+            end
+            for _, a in ipairs(addrs) do
+                local id = ev.on_bus_exec(function(callback_address)
+                    fire(kind, site, callback_address and math.floor(callback_address) or nil)
+                end, a[1], a[2])
+                assert(id and not is_null_guid(id),
+                       "engine signal registration failed: " .. kind)
+                self.hooks[#self.hooks + 1] = id
+                self.registered = self.registered + 1
+            end
         end
     end
     local armed, why = pcall(register_all)

@@ -1,7 +1,7 @@
 # Gen 1 companion patch — the panel, and the SLINK TRADE receptionist
 
-**Status: shipping. It carries the in-game SLINK panel and the SLINK TRADE receptionist, and
-it does NOT play sound.**
+**Status: shipping. It carries the in-game SLINK panel, the SLINK TRADE receptionist and native
+sound (semantic codes at mailbox `+7`, played on the main thread; see "How sound is played" below).**
 
 > **pureRGB:** this binary patch does not apply to pureRGB (ROM0 is full, the RST vectors are live
 > code, `$DEE2` is inside pureRGB's box data). The same panel, receptionist and an APEX collision
@@ -12,8 +12,9 @@ it does NOT play sound.**
 This started as a spike answering *can SLink inject code into Pokémon Red/Blue cleanly?*
 The answer was yes. What it grew into is a START-menu row that opens a full-screen Soul Link
 panel the player can read without leaving the game, and a Cable Club receptionist that runs
-the in-game trade. It enforces no Soul Link rule on its own and the Lua client does not
-require it.
+the in-game trade. It enforces no Soul Link rule on its own, but since 2026-10-02 the launcher
+and the server REQUIRE it for Red/Blue: a clean Red/Blue is refused (Yellow has no free WRAM, so it
+has no patch and stays admitted clean). The Lua rule paths still work on any admitted cartridge.
 
 ## What it carries
 
@@ -22,6 +23,20 @@ One manifest, `patch/gen1/tools/manifest.py` — 17 spans, Red and Blue byte-ide
 * **The START-menu row and the panel.** A `SLINK` row appended after EXIT (so every existing
   index keeps its position), a ROM0 stub that draws it, and a bank-`$3F` entry that opens the
   panel and returns to the menu. Pairs, badges and dead zones, paged with A and closed with B.
+* **The title screen and the main menu.** The 16-pixel band under the Pokemon logo keeps its "Red Version" line and gains a
+  SoulLink logo in the Pokemon logo's style on its left; the title carries no version. One routine in
+  bank `$3F` (`tools/title_screen.py`) replaces `PrintGameVersionOnTitleScreen`. The art comes from
+  `tools/gen_gen1_title.py`. The patch version (`SoulLink dev`, or `SoulLink vX.Y.Z[-dev]` from
+  `build.py --version`) is printed on the New Game / Continue screen instead: `MainMenu.next2`'s `call UpdateSprites`
+  is redirected to a 13-byte stub in the free ROM0 tail that makes the call and then `PlaceString`s the text on tile
+  row 17, the one row neither menu box nor the Continue info box (rows 7-16) covers; `ClearScreen` wipes it on every
+  re-entry and the same hook draws it again. The title graphics and
+  the credits' copyright text are untouched. The title's mon swap used to scroll from tile row 9, so its start line
+  is moved to row 10 (one byte) and the band stays still. `inject.py --version` stamps randomized builds the same way;
+  the Manager's randomized runs are stamped `dev` until it passes a release version.
+  The text is a fixed-width 20-byte field at `0x3FE2` (text, `$50`, zero padding), so a release stamp changes only that
+  field and the global checksum: the build's canonical identity (sha1 with both zeroed, `patch/tools/rom_identity.py`,
+  recorded per title in `patch/dist/companion_pins.json` by `tools/gen_companion_pins.py`) is the same for every version.
 * **The SLINK TRADE receptionist.** The Cable Club receptionist in every Pokémon Center now
   opens a `SLINK TRADE` menu (`trade_receptionist.asm`), fed by a foreground service that runs
   from the `DelayFrame` bridge in the reserved RST padding (`trade_service.asm`). Three
@@ -33,8 +48,10 @@ One manifest, `patch/gen1/tools/manifest.py` — 17 spans, Red and Blue byte-ide
   service picks a request up only on an overworld frame where START could open (review
   1b33bc31, `tests/unit/test_gen1_trade_save.py`).
 
-**The receptionist has not yet been driven on a running cartridge.** The panel gates pass on
-this trade-carrying build; launching the menu itself is open (requirements row T-1, `P` ◐).
+**The receptionist is driven live on Red and Blue** (`2bab8bc`; `docs/gen1_requirements.md` row T-1, receipts
+`tests/fixtures/gen1/receipts/test_gen1_receptionist_gate_{red,blue}_result.txt`), and the trade duos
+`trade_new`/`trade_decline_new` run on this build (`docs/gen1_gen2_runtime_checks.md` T-1..T-4).
+Physical coverage is one Center, not all 12 + Indigo; trade evolution and save reload stay MODEL.
 
 ## Why so little
 
@@ -42,7 +59,7 @@ Unlike Gen 3, **Gen 1 needs no patch for correctness**. Radical Red required the
 patch for Rival Team Swap because `gEnemyParty` is encrypted and checksummed. Gen 1's enemy
 party is plaintext at a fixed address, so the swap, Explode Mode, memorialize and party
 sync are all plain RAM writes on an unmodified cartridge — and they are live-tested that
-way (`tests/e2e/test_duo_gen1.py`).
+way (`tests/e2e/test_duo_gen1_new.py`).
 
 So the patch buys **zero additional rules**. What it buys is what the cartridge's screen can
 show: the panel, and a trade that happens with the game's own UI.
@@ -99,8 +116,8 @@ the bridge (never from an interrupt), and the fade case is held rather than drop
 
 | | Base ROM md5 | Patched md5 (current build) |
 |---|---|---|
-| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `cd0af68e5097b8cfa9733225ef055e8a` |
-| Blue | `50927e843568814f7ed45ec4f944bd8b` | `40cc749ee03edfd4a9b31bf088c1a4d2` |
+| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `c5c715cda8b0fa178ab30f4fd9e4d821` |
+| Blue | `50927e843568814f7ed45ec4f944bd8b` | `cc5d142b0d1c4df8b5e155ded2894e84` |
 
 `patch/dist/SLink-RB-Red.ups` and `-Blue.ups`, generated from the built ROMs:
 
@@ -138,8 +155,9 @@ being silently corrupted.
 
 ## What the mailbox carries
 
-Mailbox `+7` is a sound-request byte, kept for compatibility and **drained without being
-played** — see "Why there is no sound" above. `+8` is the capability byte a client reads to
+Mailbox `+7` is the sound-request byte: a semantic code (1 success, 2 failure, 3 boo) that
+`SlinkSfxService` plays on the main thread — see "How sound is played (and why not from VBlank)"
+above. `+8` is the capability byte a client reads to
 learn what this build can actually do, rather than inferring it from the ABI number; `+9`,
 `+10` and `+11` are the panel handshake, the page the patch wants painted, and the page count
 the client publishes back. The trade runs over its own lease (16 bytes at

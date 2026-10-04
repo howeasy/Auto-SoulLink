@@ -82,7 +82,7 @@ def test_gen2_refusal_preflight_binds_crystal11(monkeypatch, tmp_path, fault):
     refused_hash = hashlib.sha1(wrong.read_bytes()).hexdigest()
     if fault:
         wrong.write_bytes(b"different")
-    context = SimpleNamespace(source_dir=tmp_path, artifact="pokecrystal", lock={"outputs": {
+    context = SimpleNamespace(rom=rom.read_bytes(), source_dir=tmp_path, artifact="pokecrystal", lock={"outputs": {
         "pokecrystal": {"filename": rom.name},
         "pokecrystal11": {"filename": wrong.name, "sha1": refused_hash}}},
         source_record=lambda: {"rom_sha1": admitted_hash})
@@ -134,6 +134,7 @@ def test_gen2_reconnect_stages_immutable_seeds_and_rebinds_boot_fingerprint(monk
 
     monkeypatch.setattr(duo_module, "BUILD", str(tmp_path))
     run = object.__new__(DuoRun)
+    run._gen2_artifact = "clean"
     run.game, run.scenario, run._lane = "gen2_new", "gen2_reconnect", "cc"
     run.cfg = SCENARIOS[run.scenario]
     source = tmp_path / "source.SaveRAM"
@@ -314,9 +315,11 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert not GAMES[game].get("server_rom_routes")
     trade_fixtures = {scenario: duo_module.GEN2_TRADE_FIXTURES.get(game) for scenario in trade}
     trade_fixtures["gen2_trade_evolve"] = duo_module.GEN2_TRADE_EVOLVE_FIXTURES[game]   # A boots the O-33 seed
+    # every Gen 2 trade scenario has ONE retry, on the next pinned clock minute, and only when the link route's own
+    # wild battle was lost (tools/e2e_duo.py GEN2_ROUTE_BATTLE_LOST; tests/unit/test_e2e_duo_gen2_trade_retry.py)
     assert duo_list_lines(game) == [
-        f"{scenario}  attempts=1  targets=a:{trade_fixtures[scenario]['a']}, b:{trade_fixtures[scenario]['b']} "
-        "artifact=overlay admission=HARNESS_ONLY_OVERLAY"
+        f"{scenario}  attempts=2  targets=a:{trade_fixtures[scenario]['a']}, b:{trade_fixtures[scenario]['b']} "
+        "artifact=overlay admission=PHYSICAL_RECEIPTED"
         for scenario in trade] + [
         f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets="
         f"a:{'gold_battle_errand' if scenario == 'gen2_poison' and game == 'gen2_gold_silver' else fixtures['a']}, "
@@ -360,7 +363,7 @@ def test_gen2_pairing_preflight_binds_each_source_and_fixture(
         if fault == f"rom_{side}":
             rom.write_bytes(b"wrong ROM")
         contexts[title] = SimpleNamespace(
-            source_dir=source_dir, artifact=title,
+            rom=rom.read_bytes(), source_dir=source_dir, artifact=title,
             lock={"outputs": {title: {"filename": rom.name}}},
             source_record=lambda pin=pin: {"rom_sha1": pin})
         raw = b"same" if fault == "same_bytes" else name.encode()
@@ -372,14 +375,15 @@ def test_gen2_pairing_preflight_binds_each_source_and_fixture(
         expected[side] = {"title": title, "name": name, "rom": rom, "rom_sha1": pin,
                           "fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(),
                           "ot_id": ot_id, "qualification": receipt,
-                          "qualification_attempt_id": f"qualified-{side}"}
+                          "qualification_attempt_id": f"qualified-{side}", "artifact_kind": "clean",
+                          "source_rom_sha1": pin, "binding_sha256": None}
 
     def load(title, *, root):
         assert root == tmp_path
         loaded.append(title)
         return contexts[title]
 
-    def identity(name, raw, *, repo):
+    def identity(name, raw, *, repo, kind="clean"):
         assert repo == tmp_path
         assert raw == (fixture_dir / f"{name}.SaveRAM").read_bytes()
         qualified.append(name)
@@ -585,6 +589,7 @@ def test_gen2_faint_prelaunch_requires_its_driver_and_oracle(monkeypatch, tmp_pa
         del callbacks["check_save_witness" if missing == "witness" else oracle_name]
     monkeypatch.setitem(sys.modules, "gen2_duo_oracles", SimpleNamespace(**callbacks))
     run = object.__new__(DuoRun)
+    run.args = SimpleNamespace(gen2_artifact="clean")
     run.game, run.scenario = "gen2_new", scenario
     run.gcfg = GAMES[run.game]
     if missing == "driver":
@@ -625,8 +630,8 @@ def test_gen3_rr_selection_is_exactly_the_radical_red_set():
     assert sorted(scenarios_for("gen3_rr")) == sorted([
         "faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3", "linked_faint_active_whiteout_gen3",
-        "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
-        "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3", "linked_faint_active_lhammer_gen3",
+        "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "clean_rr_refused_gen3",
+        "linked_faint_active_lhammer_gen3",
         "linked_faint_active_mega_gen3", "trade_gen3", "trade_decline_gen3", "infopanel_gen3", "infopanel_dex_gen3",
         "species_clause_gen3", "gender_clause_gen3", "type_clause_gen3", "release_gen3", "ball_gate_gen3"])
 
@@ -689,6 +694,102 @@ def test_the_wrapper_lists_exactly_the_gen1_new_scenarios():
     mod = __import__("test_duo_gen1_new")
     assert mod.GAME == "gen1_new"
     assert sorted(mod.SCENARIOS) == sorted(GEN1_NEW_SCENARIOS)
+
+
+class _Launched(Exception):
+    pass
+
+
+def _outcome(call, *args):
+    """How a wrapper call ended: "launched", or "fail: ..." / "skip: ...". A pytest.skip raised
+    inside the wrapper would otherwise propagate and mark THIS test skipped, not failed."""
+    try:
+        call(*args)
+    except _Launched:
+        return "launched"
+    except pytest.fail.Exception as exc:
+        return f"fail: {exc}"
+    except pytest.skip.Exception as exc:
+        return f"skip: {exc}"
+    return "returned without launching"
+
+
+def _duo_wrapper(monkeypatch, tmp_path, name, *, companion, clean=True):
+    """A wrapper module whose every input but the companion artifact is present.
+
+    `companion` False: no vanilla companion build under REPO and the overlay applier raises
+    FileNotFoundError -- absent, the case that used to skip. True: both present, and the wrapper
+    must get as far as launching the runner (the positive control). `clean` False leaves out
+    every row's clean dumps, which only the admission gate reads."""
+    import e2e_duo
+    import gen1_playthrough as play
+
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    new = __import__("test_duo_gen1_new")
+    mod = __import__(name)
+    emuhawk = tmp_path / "EmuHawk.exe"
+    emuhawk.write_bytes(b"")
+    monkeypatch.setattr(play, "EMUHAWK", str(emuhawk))
+    if clean:
+        for row in ("gen1_new", "gen1_pure", "gen1_pure_green"):
+            for rel in e2e_duo.GAMES[row]["rom"].values():
+                (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+                (tmp_path / rel).write_bytes(b"")
+    for module in {new, mod}:
+        monkeypatch.setattr(module, "REPO", str(tmp_path))
+    if companion:
+        for rom in ("slink_red.gb", "slink_blue.gb"):
+            (tmp_path / "patch" / "gen1" / "build").mkdir(parents=True, exist_ok=True)
+            (tmp_path / "patch" / "gen1" / "build" / rom).write_bytes(b"")
+        monkeypatch.setattr(play, "staged_rom", lambda key: f"patch/build/gen1_{key}.gbc")
+    else:
+        def absent(key):
+            raise FileNotFoundError(f"pureRGB {key} is not here")
+        monkeypatch.setattr(play, "staged_rom", absent)
+
+    def launched(*_args, **_kwargs):
+        raise _Launched
+
+    monkeypatch.setattr(mod.subprocess, "run", launched)
+    return mod
+
+
+_WRAPPER_CASES = [("test_duo_gen1_new", "test_gen1_new_duo", ("link_new",)),
+                  ("test_duo_gen1_new", "test_gen1_new_duo", ("admit_randomized_new",)),
+                  ("test_duo_gen1_pure", "test_gen1_pure_duo", ("gen1_pure", "link_new")),
+                  ("test_duo_gen1_pure", "test_gen1_pure_duo", ("gen1_pure_green", "trade_new"))]
+
+
+@pytest.mark.parametrize("name,test,args", _WRAPPER_CASES)
+def test_a_missing_companion_artifact_fails_the_duo_wrapper_never_skips(monkeypatch, tmp_path,
+                                                                          name, test, args):
+    mod = _duo_wrapper(monkeypatch, tmp_path, name, companion=False)
+    outcome = _outcome(getattr(mod, test), *args)
+    assert outcome.startswith("fail: ") and "companion" in outcome, outcome
+
+
+@pytest.mark.parametrize("name,test,args", _WRAPPER_CASES)
+def test_a_present_companion_reaches_the_runner(monkeypatch, tmp_path, name, test, args):
+    mod = _duo_wrapper(monkeypatch, tmp_path, name, companion=True)
+    assert _outcome(getattr(mod, test), *args) == "launched"
+
+
+@pytest.mark.parametrize("name,test,args", [case for case in _WRAPPER_CASES
+                                            if "admit_randomized_new" not in case[2]])
+def test_absent_clean_dumps_never_skip_a_companion_scenario(monkeypatch, tmp_path, name, test, args):
+    """The instances boot the companion builds, so with those present and every clean dump
+    absent the wrapper still launches the runner -- a skip here would let a machine without
+    the (refused) clean dumps count as having nothing to prove."""
+    mod = _duo_wrapper(monkeypatch, tmp_path, name, companion=True, clean=False)
+    assert _outcome(getattr(mod, test), *args) == "launched"
+
+
+def test_the_admission_gate_fails_without_its_clean_sources(monkeypatch, tmp_path):
+    """admit_randomized_new provisions its randomized companion pair FROM the clean dumps, so
+    for it alone a missing clean dump fails (never skips)."""
+    mod = _duo_wrapper(monkeypatch, tmp_path, "test_duo_gen1_new", companion=True, clean=False)
+    outcome = _outcome(mod.test_gen1_new_duo, "admit_randomized_new")
+    assert outcome.startswith("fail: clean a source ROM missing"), outcome
 
 
 def test_whiteout_new_is_registered_for_gen1_new_and_nothing_else():
@@ -817,9 +918,8 @@ GEN3_FRLG_SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_ge
 # P5 (card C5-5): gen3_rr runs the shared Gen 3 scenarios (their `games` tuples EXTENDED,
 # never renamed) plus the RR-only scenarios (docs/gen3/PLAN.md §14 P5, minus the retired old
 # client's trade/ghost/infopanel rows and trade_abort, a later card).
-GEN3_RR_ONLY_SCENARIOS = ("rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
+GEN3_RR_ONLY_SCENARIOS = ("rival_swap_gen3", "rival_swap_real_gen3", "clean_rr_refused_gen3",
                           # G4-PH: RR rows R2/R3/R5 (rr_active_faint_parity_scope §5.5)
-                          "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3",
                           "linked_faint_active_lhammer_gen3", "linked_faint_active_mega_gen3",
                           # G5: the PC trade NPC and the SOULLINK panel, rebuilt on the new client
                           "trade_gen3", "trade_decline_gen3", "infopanel_gen3", "infopanel_dex_gen3")
@@ -839,7 +939,9 @@ GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3", "spe
 # around) -- see its comment in tools/e2e_duo.py SCENARIOS.
 GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "species_family_gen3", "gift_gen3", "egg_hatch_gen3", "shiny_bonus_gen3")
 GEN3_RR_EXPLICIT_SCENARIOS = ("trade_reset_commit_gen3", "trade_reset_success_gen3",
-                              "trade_lock_probe_gen3")
+                              "trade_lock_probe_gen3", "nature_change_gen3",
+                              "borrowed_party_menu_gen3", "borrowed_party_opponent_gen3",
+                              "borrowed_party_battle_gen3")
 
 
 @pytest.mark.parametrize("name,module,target", (
@@ -858,7 +960,7 @@ def test_randomized_frlg_registration(name, module, target):
     assert callable(getattr(DuoRun, row["oracle"]))
     assert callable(getattr(DuoRun, f"orchestrate_{name}"))
     # link_gen3_rand throws Poke Balls: the Gen 1 ball_hunt retry (out-of-balls / lost catch battle)
-    assert scenario_attempt_limit(name, "gen3_frlg") == (3 if name == "link_gen3_rand" else 1)
+    assert scenario_attempt_limit(name, "gen3_frlg") == (6 if name == "link_gen3_rand" else 1)
     assert not scenario_applies(name, "gen3_rr")
 
 
@@ -896,7 +998,7 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
             assert not set(scenarios_for(game)) & set(GEN3_RR_SCENARIOS), game
     for name in SCENARIOS:
         if name not in (GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + GEN3_NAT_SCENARIOS
-                        + tuple(duo_module.GEN3_RAND_SCENARIOS)):
+                        + tuple(duo_module.GEN3_RAND_SCENARIOS) + ("probe_protected_span_flip_gen3",)):   # the opt-in LIVE PROBE row
             assert not scenario_applies(name, "gen3_frlg"), name
         if name not in GEN3_RR_SCENARIOS + GEN3_RR_NAT_SCENARIOS + GEN3_RR_EXPLICIT_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr"), name
@@ -916,7 +1018,8 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
     for name in GEN3_RR_EXPLICIT_SCENARIOS:
         assert SCENARIOS[name]["games"] == ("gen3_rr",) and SCENARIOS[name]["explicit_only"] is True
     assert set(scenarios_for("gen3_exp")) == {"faint_cmd_gen3", "link_gen3", "whiteout_gen3",
-                                              "boxsync_gen3", "linked_faint_active_gen3"}
+                                              "boxsync_gen3", "linked_faint_active_gen3",
+                                              "release_gen3"}
     assert {n for n in GEN3_FRLG_SCENARIOS if SCENARIOS[n].get("ball_hunt")} == {
         "link_gen3", "deadzone_gen3", "species_clause_gen3", "gender_clause_gen3", "type_clause_gen3", "ball_gate_gen3"}
     for name in GEN3_RR_ONLY_SCENARIOS:
@@ -1116,14 +1219,16 @@ def test_gold_poison_a_plays_the_post_errand_save():
 
 def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
     """A 255-char SaveRAM path was never written by BizHawk (silent); the lane refuses at 240 before any launch."""
-    assert duo_module.bizhawk_path_problem(["C:/x/" + "a" * 200]) is None
-    long = "C:/x/" + "a" * 250
-    assert duo_module.bizhawk_path_problem(["C:/x/short", long]) == os.path.abspath(long)
+    # absolute on THIS platform: a literal "C:/x" is relative on Linux and would gain the cwd prefix
+    root = os.path.abspath(os.sep)
+    assert duo_module.bizhawk_path_problem([root + "x/" + "a" * 200]) is None
+    long = root + "x/" + "a" * 250
+    assert duo_module.bizhawk_path_problem([root + "x/short", long]) == os.path.abspath(long)
     run = object.__new__(DuoRun)
-    run._gen2_plans = {"a": {"directory": "C:/x", "saveram_name": "s.SaveRAM"}}
-    run._result_path = lambda inst: "C:/x/e2e_gen2_changebox_a_result.txt"
+    run._gen2_plans = {"a": {"directory": root + "x", "saveram_name": "s.SaveRAM"}}
+    run._result_path = lambda inst: root + "x/e2e_gen2_changebox_a_result.txt"
     run._check_bizhawk_paths()   # short: fine
-    run._gen2_plans["a"]["directory"] = "C:/" + "d" * 240
+    run._gen2_plans["a"]["directory"] = root + "d" * 240
     with pytest.raises(RuntimeError, match="path too long for BizHawk"):
         run._check_bizhawk_paths()
 

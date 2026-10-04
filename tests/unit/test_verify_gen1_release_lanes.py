@@ -21,7 +21,7 @@ import verify_gen1_release as gate  # noqa: E402  (tools/ is not a package; the 
 LANE_ORDER = ["unit", "rom-layout", "lua-parse", "profile-generated",
               "profile-generated-purergb", "statics-generated", "fixtures", "patch-build",
               "live-gates", "live-new-gates", "inspect-purergb", "apex-purergb",
-              "live-trade-gates", "inspect-purergb-overlay", "live-trade-gates-purergb",
+              "live-trade-gates", "live-trade-gates-purergb",
               "apex-refusal-purergb", "duo-pairs", "duo-pairs-purergb"]
 
 
@@ -62,7 +62,7 @@ def test_the_fixtures_lane_reason_matches_the_legacy_set():
 def test_slow_lanes_are_exactly_the_emulator_lanes():
     """--quick's promise is that it stops before anything that needs an emulator."""
     assert {"live-gates", "live-new-gates", "inspect-purergb", "apex-purergb",
-            "live-trade-gates", "duo-pairs", "inspect-purergb-overlay",
+            "live-trade-gates", "duo-pairs",
             "live-trade-gates-purergb", "apex-refusal-purergb", "duo-pairs-purergb"} == gate._SLOW
 
 
@@ -83,7 +83,7 @@ def test_the_pure_lanes_are_fail_closed():
             f"an ALLOWED_SKIPS fragment would excuse the pure lane's own skip: {reason}")
     pure = [lane for lane in gate.LANES if lane.name.endswith("purergb") or "purergb" in lane.name]
     assert {lane.name for lane in pure} == {"profile-generated-purergb", "inspect-purergb",
-                                            "apex-purergb", "inspect-purergb-overlay",
+                                            "apex-purergb",
                                             "live-trade-gates-purergb", "apex-refusal-purergb",
                                             "duo-pairs-purergb"}
     for lane in pure:
@@ -91,7 +91,8 @@ def test_the_pure_lanes_are_fail_closed():
     inspect = next(lane for lane in pure if lane.name == "inspect-purergb")
     # The subset is selected by env, not by -k: the lane scorer counts a deselection as a failure.
     assert "-k" not in inspect.argv
-    assert inspect.env.get("SLINK_GEN1_ROMS", "").split() == ["purered", "pureblue", "puregreen"]
+    assert inspect.env.get("SLINK_GEN1_ROMS", "").split() == [
+        "purered_overlay", "pureblue_overlay", "puregreen_overlay"]
     profile = next(lane for lane in pure if lane.name == "profile-generated-purergb")
     assert profile.argv[-2:] == ["--foundation", "purergb"]
     apex = next(lane for lane in pure if lane.name == "apex-purergb")
@@ -100,16 +101,10 @@ def test_the_pure_lanes_are_fail_closed():
     assert apex.argv[3] == ("tests/live/test_gen1_new_gates.py"
                             "::test_apex_chip_contract_on_a_pure_cartridge")
     assert "-k" not in apex.argv
-    assert apex.env.get("SLINK_GEN1_ROMS") == "purered"
+    assert apex.env.get("SLINK_GEN1_ROMS") == "purered_overlay"
     assert apex.env.get("SLINK_LIVE") == "1"
 
-    # The M3 overlay lanes (PLAN §6): all three select by node id, same reasoning as apex-purergb.
-    inspect_overlay = next(lane for lane in pure if lane.name == "inspect-purergb-overlay")
-    assert "-k" not in inspect_overlay.argv
-    assert inspect_overlay.argv[3] == ("tests/live/test_gen1_new_gates.py"
-                                       "::test_inspect_gate_overlay_round_trip")
-    assert inspect_overlay.env.get("SLINK_LIVE") == "1"
-
+    # The M3 overlay lanes (PLAN §6) select by node id, same reasoning as apex-purergb.
     trade_overlay = next(lane for lane in pure if lane.name == "live-trade-gates-purergb")
     assert "-k" not in trade_overlay.argv
     assert trade_overlay.argv[3] == (
@@ -122,6 +117,43 @@ def test_the_pure_lanes_are_fail_closed():
     assert apex_refusal.argv[1:4] == ["tools/run_gb_gate.py",
                                       "lua/tests/test_gen1_apex_refusal_gate.lua", "--rom"]
     assert "purered_overlay" in apex_refusal.argv
+
+
+# ── the companion is REQUIRED (owner 2026-10-02): no emulator lane boots a clean Red/Blue/pure ──
+
+_CLEAN_REFUSED = {"red", "blue", "purered", "pureblue", "puregreen"}
+
+
+def _selections():
+    """{lane name: the SLINK_GEN1_ROMS keys it selects} for every lane running test_gen1_new_gates."""
+    return {lane.name: lane.env["SLINK_GEN1_ROMS"].split() for lane in gate.LANES
+            if any("test_gen1_new_gates.py" in arg for arg in lane.argv)}
+
+
+def test_no_gen1_lane_selects_a_clean_cartridge_the_launcher_refuses():
+    for lane in gate.LANES:
+        keys = lane.env.get("SLINK_GEN1_ROMS", "").split()
+        assert not set(keys) & _CLEAN_REFUSED, (lane.name, keys)
+        if "--rom" in lane.argv:
+            assert lane.argv[lane.argv.index("--rom") + 1] not in _CLEAN_REFUSED, lane.name
+
+
+def test_every_new_gates_case_is_selected_by_some_lane():
+    """The lane-selection skip is the one Gen 1 skip ALLOWED_SKIPS excuses, so a cartridge that no
+    lane selects would be skipped -- and excused -- everywhere: lost coverage reading as green.
+    Every key the module parametrizes over, and the apex test's key, must be some lane's pick, and
+    every lane's pick must be a key the module knows (an unknown key raises at collection)."""
+    sys.path.insert(0, os.path.join(_REPO, "tests", "live"))
+    import test_gen1_new_gates as live
+
+    selections = _selections()
+    assert set(selections) == {"live-new-gates", "inspect-purergb", "apex-purergb"}
+    chosen = {key for keys in selections.values() for key in keys}
+    assert set(live.ALL_ROMS) <= chosen
+    assert chosen <= set(live.ALL_ROMS)
+    assert live.APEX_ROM in selections["apex-purergb"]
+    for rom in ("red_patched", "blue_patched"):          # the Red/Blue-only cases
+        assert rom in selections["live-new-gates"]
 
 
 def test_the_lane_selection_skip_is_the_only_gen1_skip_that_is_excused():

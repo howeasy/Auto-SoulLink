@@ -1,0 +1,43 @@
+# gen3_final_cut row=frlgc_type_clause_gen3_fr_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario type_clause_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:33:17 cpu=50% emuhawk=1 python=9
+start_utc=2026-10-03T08:33:15Z tracked_clean_before=True
+
+========== scenario: type_clause_gen3 ==========
+[duo] type_clause_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=3b50a0f353881c8952ee8998cc2052288307b7ce3fe4503a9266fc015ecbe409 b=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=a604eb2bf5f190562035d03fe356b7ff0771944f30a9f2e31e2570a470958a2b write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=49950 http=49951 data=F:\slink-work\tmp\duo_il_hlze_
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_il_hlze_ path=F:\slink-work\tmp\duo_il_hlze_\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_il_hlze_ path=F:\slink-work\tmp\duo_il_hlze_\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 24.5s
+[duo] timing results 3.5s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_frlg/firered (companion by hash) player a -> 127.0.0.1:49950 (rom 96df1dd0)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_frlg/leafgreen (companion by hash) player b -> 127.0.0.1:49950 (rom 55fb6e9b)
+[duo] SAVE_WITNESS_SHA256 inst=a site=72145608dea7b423195befac90714260d4999ddba943e90ee7b8d009169a6bd1 file=72145608dea7b423195befac90714260d4999ddba943e90ee7b8d009169a6bd1 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=5a1b4109134ce2b67bafcbc811baf900a8d0995ed44699dcd9d318995319a94d file=5a1b4109134ce2b67bafcbc811baf900a8d0995ed44699dcd9d318995319a94d match=true saves=1 counter=4->5 rtc=normalized
+[duo] type: B rejected and memorial saved; A quarantined; area retryable
+[duo] timing oracle 0.6s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] type_clause_gen3: a=PASS b=PASS
+
+========== summary ==========
+  type_clause_gen3: PASS (attempt 1 of 3)
+exit=0 end_utc=2026-10-03T08:33:48Z tracked_clean_after=True classification=pass

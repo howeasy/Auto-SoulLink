@@ -70,6 +70,11 @@ def _boot(root: Path, title: str, monkeypatch: pytest.MonkeyPatch, artifact: str
     monkeypatch.delenv("SLINK_ROOT", raising=False)  # force run.lua's own-path self-location
     profile = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
     rom = (ROOT / f".cache/gen2-build/{_ROM_REPO[title]}/{artifact or profile['artifact']}.gbc").read_bytes()
+    if artifact is None:
+        # Patch-first: the production cartridge is the overlay (the clean build + the shipped UPS)
+        from patch.tools.make_ups import ups_apply
+        rows = json.loads((ROOT / f"data/games/gen2_{title}/admission.json").read_text())["artifacts"]
+        rom = ups_apply(rom, (ROOT / next(x for x in rows if x["kind"] == "overlay")["ups"]["file"]).read_bytes())
     lua = LuaRuntime(unpack_returned_tuples=True)
     logs = lua.table()
     frames, callbacks = lua.execute(RUN_HOST)(rom, root.as_posix(), logs)
@@ -111,7 +116,7 @@ def test_a_manifest_entry_missing_from_the_bundle_refuses_every_candidate(tmp_pa
     original = make_release._DATA_GAME_LUA["gen2_gold"]
     monkeypatch.setitem(
         make_release._DATA_GAME_LUA, "gen2_gold",
-        [f for f in original if f != "receipts/gold_town.qualification.json"],
+        [f for f in original if f != "receipts/overlay/gold_town.qualification.json"],
     )
     broken = _extract_bundle("bundle-boot-broken", tmp_path)
 

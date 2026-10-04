@@ -135,11 +135,12 @@ from test_gen3_rr_save_layout import _compressed  # noqa: E402
 from test_gen3_scripted_play import _in_battle_cp, bag_stubbed  # noqa: E402,F401
 
 from server.adapters import gen3_codec as codec  # noqa: E402
+from tools import rr_companion  # noqa: E402
 
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3")
 # P5 (card C5-5): RR-only, added on top of GEN3 above (which now also runs on gen3_rr).
-GEN3_RR_ONLY = ("rival_swap_gen3", "native_absent_gen3")
+GEN3_RR_ONLY = ("rival_swap_gen3", "clean_rr_refused_gen3")
 OT_A = 0x99DE0D8A
 
 
@@ -732,100 +733,131 @@ def test_link_oracle_counts_the_thrown_balls(monkeypatch, tmp_path):
 
 
 # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────────
-def _native_absent_receipts():
-    a = ("RX apply_prepare\n"
-         "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n"
-         "PRESAVE_COUNTER before=4 after=5\n"
-         'TX apply_ready - {"event":"apply_ready","ok":true,"token":"native_absent_a"}\n'
-         "NATIVE_PREPARED phase=2 writes=3\nWRITES 3\n")
-    b = ("RX apply_prepare\n"
-         'TX apply_ready - {"event":"apply_ready","ok":false,"token":"native_absent_b"}\n'
-         "PROBE_SETTLED writes=0\nWRITES 0\n")
+REFUSAL = "this radical_red cartridge needs the SLink companion patch; prepare it through the Manager or /patcher"
+
+
+def _clean_rr_refused_receipts():
+    a = ("MYKEY 1 KA\nTX hello - {}\nPROBE_SETTLED writes=0 rx=0\nWRITES 0\n")
+    b = (f"[client] [SLink-gen3] refused: {REFUSAL}\n"
+         f"REFUSED_AT_LAUNCH [SLink-gen3] refused: {REFUSAL}\nWRITES 0\n")
     return {"a": a, "b": b}
 
 
-def test_native_absent_oracle_needs_a_native_presave_and_a_clean_refusal():
-    """RR-DURABLE redesign: the same valid apply_prepare. The companion answers ok only after its
-    native pre-save (a native write after the command, gSaveCounter advanced, producer READY);
-    the clean cartridge answers ok:false and writes nothing."""
-    # the companion half saves natively (its pre-save), so only the clean half is no_save;
-    # A's flash is byte-checked by the save-witness stage like every saving half
-    assert duo.SCENARIOS["native_absent_gen3"]["no_save"] == ("b",)
-    run = _oracle_run("native_absent_gen3", game="gen3_rr")
-    notes = []
-    run._pydec_note = notes.append
-    run._native_absent_keys = {"a": "KA", "b": "KB"}
-    receipts = _native_absent_receipts()
-    run.assert_native_absent_gen3_saved(receipts)
-    assert notes and "native pre-save" in notes[-1]
-    both_refuse = dict(receipts, a=receipts["b"])
-    with pytest.raises(RuntimeError, match="write native|ok.:true"):
-        run.assert_native_absent_gen3_saved(both_refuse)
-    unsaved = dict(receipts, a=receipts["a"].replace("after=5", "after=4"))
-    with pytest.raises(RuntimeError, match="pre-save"):
-        run.assert_native_absent_gen3_saved(unsaved)
-    not_ready = dict(receipts, a=receipts["a"].replace("NATIVE_PREPARED phase=2", "NATIVE_PREPARED phase=1"))
-    with pytest.raises(RuntimeError, match="NATIVE_PREPARED"):
-        run.assert_native_absent_gen3_saved(not_ready)
-    clean_wrote = dict(receipts, b=receipts["b"] + "[client] [SLink-gen3] write overworld 0x1 +2 frame 3\n")
-    with pytest.raises(RuntimeError, match="forbidden"):
-        run.assert_native_absent_gen3_saved(clean_wrote)
-    clean_ok = dict(receipts, b=receipts["b"].replace('"ok":false', '"ok":true'))
-    with pytest.raises(RuntimeError, match="ok.:false"):
-        run.assert_native_absent_gen3_saved(clean_ok)
-    # the companion's link panel writes native BEFORE the command; only a write after it counts
-    panel = "RX link_panel\n[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4\n"
-    panel_only = dict(receipts, a=panel + receipts["a"].replace(
-        "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n", ""))
-    with pytest.raises(RuntimeError, match="write native"):
-        run.assert_native_absent_gen3_saved(panel_only)
+def _clean_rr_refused_run(connected=False, links=()):
+    run = _oracle_run("clean_rr_refused_gen3", game="gen3_rr")
+    run.notes = []
+    run._pydec_note = run.notes.append
+    run._status = lambda: {"players": {"a": {"connected": True}, **({"b": {"connected": True}} if connected else {})}}
+    run._links_json = lambda: list(links)
+    return run
 
 
-# ── G5-RR-CLEAN-2: faint_cmd_clean_gen3's registration and its ROM-provenance oracle wrapper ──
-def _clean_gen3_receipts(a_kind="companion", b_kind="clean", a_hash="AAAAAAAA", b_hash="BBBBBBBB"):
-    return {
-        "a": (f"[client] [SLink-gen3] gen3_rr/radical_red ({a_kind} by hash) player a -> "
-             f"127.0.0.1:1 (rom {a_hash})\n"),
-        "b": (f"[client] [SLink-gen3] gen3_rr/radical_red ({b_kind} by hash) player b -> "
-             f"127.0.0.1:1 (rom {b_hash})\n"),
-    }
+def test_clean_rr_refused_is_the_clean_rr_refusal_proof():
+    """Owner policy 2026-10-02 (companion REQUIRED): the clean RR is refused at launch with the
+    companion verdict, links nothing and writes nothing; the companion side A boots alone and stays
+    quiet. Neither side saves."""
+    row = duo.SCENARIOS["clean_rr_refused_gen3"]
+    assert row["no_save"] == ("a", "b") and row["expect_refused"] == ("b",)
+    assert row["rom_kind"] == {"a": "companion", "b": "clean"}
+    run = _clean_rr_refused_run()
+    receipts = _clean_rr_refused_receipts()
+    run.assert_clean_rr_refused_gen3_saved(receipts)
+    assert run.notes and "refused" in run.notes[-1]
 
 
-def test_faint_cmd_clean_gen3_is_registered_with_rom_kind_and_aliases():
-    assert duo.SCENARIOS["faint_cmd_clean_gen3"]["rom_kind"] == {"a": "companion", "b": "clean"}
-    assert duo.DuoRun.orchestrate_faint_cmd_clean_gen3 is duo.DuoRun.orchestrate_faint_cmd_gen3
-    assert callable(duo.DuoRun.assert_faint_cmd_clean_gen3_saved)
-    # the oracle "alias" now wraps the reused faint_cmd_gen3 oracle rather than literally being it
-    # (the provenance check runs first) -- prove it still delegates through, exactly once
-    run = _oracle_run("faint_cmd_clean_gen3", game="gen3_rr")
-    calls = []
-    run.assert_faint_cmd_gen3_saved = lambda results: calls.append(results)
-    receipts = _clean_gen3_receipts()
-    run.assert_faint_cmd_clean_gen3_saved(receipts)
-    assert calls == [receipts]
+@pytest.mark.parametrize("side, mutate, problem", [
+    # B: the refusal line is the evidence; every way the cartridge could have worked is red
+    ("b", lambda t: t.replace("needs the SLink companion patch", "is not an admitted cartridge"), "missing"),
+    ("b", lambda t: t.replace("REFUSED_AT_LAUNCH", "NOTHING"), "REFUSED_AT_LAUNCH"),
+    ("b", lambda t: t.replace("WRITES 0", "WRITES 1"), "WRITES 0"),
+    ("b", lambda t: t + "MYKEY 1 KB\n", "forbidden"),
+    ("b", lambda t: t + "TX hello - {}\n", "forbidden"),
+    ("b", lambda t: t + "RX apply_prepare key=KB\n", "forbidden"),
+    ("b", lambda t: t + "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n", "forbidden"),
+    ("b", lambda t: t + "[client] [SLink-gen3] gen3_rr/radical_red (clean by hash) player b -> 127.0.0.1:1 (rom AB)\n",
+     "forbidden"),
+    ("b", lambda t: t + "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n", "forbidden"),
+    # A: the companion booted and connected, and nothing B-shaped reached it
+    ("a", lambda t: t.replace("TX hello - {}\n", ""), "hello"),
+    ("a", lambda t: t.replace("PROBE_SETTLED writes=0 rx=0\n", ""), "PROBE_SETTLED"),
+    ("a", lambda t: t.replace("writes=0 rx=0", "writes=2 rx=0"), "PROBE_SETTLED"),
+    ("a", lambda t: t.replace("writes=0 rx=0", "writes=0 rx=1"), "PROBE_SETTLED"),
+    ("a", lambda t: t + "RX apply_prepare key=KA\n", "forbidden"),
+    ("a", lambda t: t + "RX force_faint key=KA\n", "forbidden"),
+])
+def test_clean_rr_refused_oracle_is_red_on_every_way_the_clean_side_could_work(side, mutate, problem):
+    run = _clean_rr_refused_run()
+    receipts = _clean_rr_refused_receipts()
+    receipts[side] = mutate(receipts[side])
+    with pytest.raises(RuntimeError, match=problem):
+        run.assert_clean_rr_refused_gen3_saved(receipts)
 
 
-def test_faint_cmd_clean_gen3_provenance_needs_hash_admitted_companion_a_clean_b():
-    run = _oracle_run("faint_cmd_clean_gen3", game="gen3_rr")
-    assert run._gen3_rom_provenance_problems({"a": "companion", "b": "clean"},
-                                             _clean_gen3_receipts()) == []
-    kind_swapped = run._gen3_rom_provenance_problems(
-        {"a": "companion", "b": "clean"}, _clean_gen3_receipts(b_kind="companion", b_hash="AAAAAAAA"))
-    assert any("clean by hash" in p for p in kind_swapped), kind_swapped
-    same_dump = run._gen3_rom_provenance_problems(
-        {"a": "companion", "b": "clean"}, _clean_gen3_receipts(b_hash="AAAAAAAA"))
-    assert any("same ROM hash" in p for p in same_dump), same_dump
-    no_line = run._gen3_rom_provenance_problems({"a": "companion", "b": "clean"}, {"a": "", "b": ""})
-    assert len(no_line) == 2, no_line
+def test_clean_rr_refused_oracle_reads_the_server_for_no_partner_and_no_link():
+    receipts = _clean_rr_refused_receipts()
+    with pytest.raises(RuntimeError, match="b connected"):
+        _clean_rr_refused_run(connected=True).assert_clean_rr_refused_gen3_saved(receipts)
+    with pytest.raises(RuntimeError, match="persisted link"):
+        _clean_rr_refused_run(links=[{"a": {"key": "KA"}, "b": {"key": "KB"}, "status": "alive"}]
+                           ).assert_clean_rr_refused_gen3_saved(receipts)
+    gone = _clean_rr_refused_run()
+    gone._status = lambda: None
+    with pytest.raises(RuntimeError, match="status"):
+        gone.assert_clean_rr_refused_gen3_saved(receipts)
 
 
-def test_the_clean_oracle_rejects_a_receipt_whose_b_side_is_companion():
-    """The whole point of the provenance wrap: a receipt claiming B ran the companion ROM must
-    never reach (or pass) faint_cmd_gen3's own memorial checks."""
-    run = _oracle_run("faint_cmd_clean_gen3", game="gen3_rr")
-    receipts = _clean_gen3_receipts(b_kind="companion", b_hash="AAAAAAAA")   # A and B: same ROM
-    with pytest.raises(RuntimeError, match="clean by hash"):
-        run.assert_faint_cmd_clean_gen3_saved(receipts)
+def test_clean_rr_refused_orchestration_waits_for_a_alone_then_b_refusal_then_releases_a():
+    run = _clean_rr_refused_run()
+    calls, receipts = [], {"a": "", "b": ""}
+    run._read_receipt = lambda inst: receipts[inst]
+    run.wait_for = lambda desc, pred, timeout: calls.append(desc) or pred() or calls.append("PRED_FALSE")
+    run.go = lambda *args: calls.append("go")
+    receipts.update(a="MYKEY 1 KA\n", b=_clean_rr_refused_receipts()["b"])
+    run._status = lambda: {"players": {"a": {"connected": True}}}
+    run.orchestrate_clean_rr_refused_gen3()
+    assert calls == ["a: MYKEY line", "a: hello accepted", "b: refused at launch", "go"], calls
+    # B never produces keys or a hello: the orchestration must not wait on either
+    receipts["b"] = ""
+    calls.clear()
+    run.orchestrate_clean_rr_refused_gen3()
+    assert "PRED_FALSE" in calls
+
+
+def test_a_refused_side_is_launched_with_expect_refused():
+    run = _oracle_run("clean_rr_refused_gen3", game="gen3_rr")
+    assert run._gen3_expect_refused("b") is True and run._gen3_expect_refused("a") is False
+    assert _oracle_run("faint_cmd_gen3", game="gen3_rr")._gen3_expect_refused("b") is False
+
+
+def _launch_verdict():
+    """The driver's REAL launch_verdict (lua/tests/duo/duo_gen3_main.lua), lifted by name."""
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    text = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format("launch_verdict"), text, re.M | re.S)
+    assert found, "duo_gen3_main.lua has no launch_verdict"
+    return runtime.execute(found.group(0) + "\nreturn launch_verdict")
+
+
+def test_the_driver_passes_a_refused_launch_only_when_refusal_was_expected():
+    verdict = _launch_verdict()
+    says = f"[SLink-gen3] refused: {REFUSAL}"
+    # expected refusal with the companion verdict: done, pass
+    done, ok, msg = verdict(None, says, True)
+    assert (done, ok) == (True, True) and "companion" in msg
+    # expected refusal but a different refusal (a bad hash, not the companion rule): done, FAIL
+    done, ok, msg = verdict(None, "[SLink-gen3] refused: header BPEE is not an admitted Gen 3 cartridge", True)
+    assert (done, ok) == (True, False)
+    # expected refusal but no refusal at all, and no client: FAIL
+    assert verdict(None, None, True)[:2] == (True, False)
+    # expected refusal but the cartridge was ADMITTED and a client built: FAIL, never carry on
+    done, ok, msg = verdict({}, None, True)
+    assert (done, ok) == (True, False) and "admitted" in msg
+    # ordinary rows: a built client carries on; a refusal with none expected is the old failure
+    assert verdict({}, None, False) is False   # a built client: nothing to decide, carry on
+    done, ok, msg = verdict(None, says, False)
+    assert (done, ok) == (True, False) and "built no client" in msg
 
 
 def test_rival_swap_is_only_a_negative_characterization():
@@ -903,6 +935,8 @@ def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_pa
     args = argparse.Namespace(game="gen3_frlg", lane="t", scenario=scenario, idle_jitter=0)
     run = duo.DuoRun(scenario, args, attempt=1)
     monkeypatch.setattr(run, "_gen3_rom", lambda inst: f"patch/build/gen3_{inst}.gba")
+    # a clean dump (the fake ROM path is no file): the cartridge-kind decision is tested in test_e2e_duo_gen3_companion_battery.py
+    monkeypatch.setattr(run, "_gen3_companion_cart", lambda inst, title: False)
     run.launch_instance("a")
     battery = Path(run._saveram_dir("a")) / "Pokemon - FireRed Version (USA).SaveRAM"
     assert battery.read_bytes() == fixture
@@ -922,6 +956,13 @@ def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_pa
 
 
 def test_gen3_rom_prefers_the_dump_then_the_staged_copy(monkeypatch, tmp_path):
+    # Hermetic: _gen3_rom walks up EVERY parent of REPO for the dump, so a real FireRed dump anywhere above the pytest
+    # temp root (a checkout root, F:/slink-work, ...) would satisfy the search the test expects to fail. Only the dump this
+    # test creates under tmp_path may exist.
+    import pathlib
+    real_is_file = pathlib.Path.is_file
+    monkeypatch.setattr(pathlib.Path, "is_file", lambda self: real_is_file(self) and not (
+        self.name == "Pokemon - FireRed Version (USA).gba" and tmp_path not in self.parents))
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.gcfg, run.cfg = dict(duo.GAMES["gen3_frlg"]), dict(duo.SCENARIOS["link_gen3"])
     root = tmp_path / "main" / "wt"
@@ -959,10 +1000,10 @@ def test_gen3_rr_rom_companion_missing_build_refuses(monkeypatch, tmp_path):
 
 
 def test_gen3_rr_rom_clean_kind_searches_the_raw_dump(monkeypatch, tmp_path):
-    """native_absent_gen3's `rom_kind: {"b": "clean"}` bypasses `staged` and searches for the
+    """clean_rr_refused_gen3's `rom_kind: {"b": "clean"}` bypasses `staged` and searches for the
     raw dump (patch/tools/build.py:91 DEFAULT_RR / patch/README.md:18), same rule as firered."""
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["clean_rr_refused_gen3"])
     root = tmp_path / "main" / "wt"
     root.mkdir(parents=True)
     monkeypatch.setattr(duo, "REPO", str(root))
@@ -984,7 +1025,7 @@ def test_gen3_rr_battery_path_clean_kind_computes_the_saveram_name(monkeypatch, 
     """No hand-transcribed saveram name for the clean side: it is derived from whatever
     `_gen3_rom` actually staged (gen3_fixtures.saveram_name), avoiding a transcription error."""
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["clean_rr_refused_gen3"])
     run._saveram_dir = lambda inst: str(tmp_path)
     monkeypatch.setattr(run, "_gen3_rom", lambda inst: "patch/build/gen3_Pokemon_-_Radical_Red.gba")
     path = run._gen3_battery_path("b")
@@ -1391,6 +1432,13 @@ function FAKE(scenario, player, phase, spec)
     local gone, boxed, used, writes = {}, {}, 0, spec.writes or 0
     if spec.gone then gone[spec.gone] = true end     -- a record the server moved out (quarantine)
     ctx.find = function(k) for _, m in ipairs(party) do if m.key == k and not gone[k] then return m end end end
+    -- clean_rr_refused's A: spec.drift_writes / spec.drift_rx land inside the 600-frame settle window
+    local rx_extra, base_frames = 0, ctx.frames
+    ctx.frames = function(n)
+        if n == 600 then writes = writes + (spec.drift_writes or 0); rx_extra = rx_extra + (spec.drift_rx or 0) end
+        return base_frames(n)
+    end
+    ctx.rx_count = function() return rx_extra end
     ctx.sent = function(event)
         if event == "box_mon_failed" or event == "sync_retrieve_failed" then
             return spec.failed == event and 1 or 0
@@ -1765,9 +1813,7 @@ def _run_module(lua, scenario, player, phase, spec):
     # explode runs on the P+H model (_PH_MODEL, case "explode")
     ("rival_swap", "b", "initial", {}, ["READY_IN_BATTLE"]),
     ("rival_swap", "a", "initial", {}, []),
-    ("native_absent", "a", "initial", {}, ["PRESAVE_COUNTER before=4 after=4",
-                                           "NATIVE_PREPARED phase=2 writes=3"]),
-    ("native_absent", "b", "initial", {}, ["PROBE_SETTLED writes=0"]),
+    ("clean_rr_refused", "a", "initial", {}, ["PROBE_SETTLED writes=0 rx=0"]),
 ])
 def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spec, markers):
     ok, passed, msg, logs = _run_module(lua, scenario, player, phase, spec)
@@ -1787,10 +1833,9 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
     ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
     ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='window_closed'}"}, "expected error=stale_battle_id"),
-    ("native_absent", "b", "initial", {"received": "lua:false"}, "apply_prepare never arrived"),
-    ("native_absent", "b", "initial", {"writes": 1}, "the clean cartridge wrote 1 time(s)"),
-    ("native_absent", "a", "initial", {"ready_ok": "lua:false"}, "the companion refused the valid prepare"),
-    ("native_absent", "b", "initial", {"ready_ok": "lua:true"}, "the clean cartridge said ok"),
+    ("clean_rr_refused", "a", "initial", {"drift_writes": 2}, "wrote 2 time(s)"),
+    ("clean_rr_refused", "a", "initial", {"drift_rx": 1}, "received 1 command(s)"),
+    ("clean_rr_refused", "b", "initial", {}, "refusal-proof side"),
     # finding 2's falsifier: the mirrored deposit ACKed (stats_cache) but moved nothing
     ("whiteout", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
     ("boxsync", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
@@ -2200,10 +2245,17 @@ def test_explode_receipt_cannot_omit_or_forge_the_pp_witness(ph):
 
 def test_no_driver_pokes_game_memory():
     """Scripted normal inputs only: no scenario module or the driver writes the cartridge."""
-    texts = [DRIVER.read_text(encoding="utf-8")] + [
-        f.read_text(encoding="utf-8") for f in (REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua")]
-    for text in texts:
-        assert not re.search(r"memory\.write", text)
+    files = [DRIVER] + list((REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua"))
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        if f.name == "scenario_gen3_static_wild.lua":
+            # The ONE disclosed SYNTH write (XG3 "runtime SFC32 Rock state"): rock_rng_prep stages the
+            # 16-byte expansion RNG so the Rock Smash roll is deterministic. It must stay exactly that.
+            staged = 'memory.write_u8(f.rock_rng_address+i,tonumber(f.rock_rng_state_hex:sub(i*2+1,i*2+2),16),"System Bus")'
+            assert text.count("memory.write") == 1 and text.count(staged) == 1
+            assert text.index("local function rock_rng_prep") < text.index(staged) < text.index("return before")
+        else:
+            assert not re.search(r"memory\.write", text), f.name
         assert "zero_hp" not in text
 
 
@@ -2547,6 +2599,9 @@ BITS = { A = 1, Right = 0x10, Left = 0x20, Up = 0x40, Down = 0x80 }
 RR_MOVES = 0x9000
 profile = { rom = { BATTLE_MOVES_ADDR = S.gBattleMoves }, derived = { BATTLE_MOVE_ENTRY_SIZE = 12 } }
 M.foe_hits, M.foe_hp, M.hunts, M.rr = true, 12, 0, false
+-- the expansion's 64-byte MoveInfo table (X3): effect = u16 at +8, power = 9 bits at +10 >> 7
+EXP_MOVES = 0xA000
+EXP_EFFECT = {}
 LOGS = {}
 function start(intro)                    -- the action menu comes up `intro` frames into the battle
     M.after = { n = intro, to = ACT, fill = true }
@@ -2559,6 +2614,11 @@ memory = {
         if a == GMAIN + 0x2E then return 0 end
         if a == S.gBattleMons + 0x28 then return M.lead_hp end
         if a == S.gBattleMons + 0x58 + 0x28 then return M.foe_hp end
+        if a >= EXP_MOVES and a < EXP_MOVES + 0x4000 then
+            local off, id = (a - EXP_MOVES) % 64, (a - EXP_MOVES) // 64
+            if off == 8 then return EXP_EFFECT[id] or 0 end
+            return off == 10 and (POWER[id] or 0) << 7 or 0
+        end
         return M.filled and M.moves[(a - S.gBattleMons - 0x0C) // 2 + 1] or 0
     end,
     read_u8 = function(a)
@@ -2627,6 +2687,7 @@ emu = { frameadvance = function()                           -- one frame: ReadKe
         end
     end
 end }
+emu.framecount = function() return M.frame end
 G = { spent = 0, budget = 1e9, shot = function() end,
       finish = function(_, why) error("G.finish: " .. tostring(why), 0) end }
 function G.advance() emu.frameadvance() end
@@ -2670,13 +2731,26 @@ def battle_model():
     # X3: the vanilla gBattleMons/move-table geometry (the driver's BM table) and its power read
     geometry = re.search(r"^local BM = \{.*?effect_off = 0 \}$", text, re.M | re.S)
     assert geometry, "duo_gen3_main.lua must define the vanilla BM geometry"
+    exp_consts = []
+    for n in ("EXP_EFFECT_HIT", "EXP_SELF_KO_HITS"):
+        found = re.search(rf"^local {n} = .*$", text, re.M)
+        assert found, f"duo_gen3_main.lua must define a one-line `local {n} = ...` (battle_model extracts it)"
+        exp_consts.append(found.group(0))
     menus = re.findall(r"^local function (?:ctrl0|action_menu_up|move_menu_up)\(\).*$", text, re.M)
     assert consts and outcome and self_damage and len(menus) == 3
     runtime.execute("\n".join([consts.group(0), outcome.group(0), *menus,
                                _lua_defs(DRIVER, ["game_press"]),
                                "local function press(btn, gap) return game_press(btn, joypad.set, G.advance,"
                                " function() return memory.read_u16_le(GMAIN + 0x2C) end, gap, 30) end",
-                               self_damage.group(0), geometry.group(0), _lua_defs(DRIVER, ["move_power"]),
+                               self_damage.group(0), *exp_consts, geometry.group(0),
+                               # swap the vanilla BM for the expansion's: same battler geometry, the
+                               # MoveInfo power/effect bitfields (offsets/shifts from facts.json)
+                               "function USE_EXP_BM(pw, ef) local b = {} for k, v in pairs(BM)"
+                               " do b[k] = v end b.effect_off = nil"
+                               " b.power = { off = pw[1], width = pw[2], shift = pw[3], mask = (1 << pw[4]) - 1 }"
+                               " b.effect = { off = ef[1], width = ef[2], shift = ef[3], mask = (1 << ef[4]) - 1 }"
+                               " BM = b end",
+                               _lua_defs(DRIVER, ["move_power"]),
                                _lua_defs(DRIVER, ["move_effect", "steer", "ctx.choose_action",
                                                   "ctx.status_move_slot", "any_move_slot", "ctx.use_move",
                                                   "ctx.lose_active"]),
@@ -2900,7 +2974,7 @@ ctx = { hunt = function() return true end, choose_action = function() return tru
         wait_until = function(pred) return true end, bag_input_ready = function() return true end,
         await_turn = function() return "action" end,                  -- every ball misses
         run_away = function() return RAN[1], RAN[2] end,
-        last_sent = function() end, party = function() return {} end }
+        last_sent = function() end, sent = function() return 0 end, party = function() return {} end }
 function CATCH() local key, why = ctx.catch("t"); return key, tostring(why) end
 """
 
@@ -4431,7 +4505,6 @@ def test_p_h_rows_are_registered_with_their_cases():
              "linked_faint_active_whiteout_gen3": ("whiteout", ("gen3_frlg", "gen3_rr")),
              "linked_faint_active_trainer_gen3": ("trainer", ("gen3_frlg",)),
              "active_end_gen3": ("command", ("gen3_frlg",)),
-             "linked_faint_active_clean_gen3": ("wild", ("gen3_rr",)),
              "linked_faint_active_lhammer_gen3": ("lhammer", ("gen3_rr",)),
              "linked_faint_active_mega_gen3": ("mega", ("gen3_rr",)),
              "explode_gen3": ("explode", ("gen3_frlg", "gen3_rr", "gen3_emerald"))}
@@ -4444,13 +4517,16 @@ def test_p_h_rows_are_registered_with_their_cases():
         for game in games:
             assert duo.scenario_applies(name, game)
     # RR fixtures: R1/R2/R3 need rr_battle2 (a second mon, balls); R4 and explode run on rr_battle
-    rr = {"linked_faint_active_gen3": "battle2", "linked_faint_active_clean_gen3": "battle2",
+    rr = {"linked_faint_active_gen3": "battle2",
           "linked_faint_active_lhammer_gen3": "battle2", "linked_faint_active_whiteout_gen3": "battle",
           "explode_gen3": "battle"}
     for name, target in rr.items():
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == target, name
     assert duo.scenario_target(duo.SCENARIOS["linked_faint_active_gen3"], "gen3_frlg") == "battle"
-    assert duo.SCENARIOS["linked_faint_active_clean_gen3"]["rom_kind"] == {"a": "companion", "b": "clean"}
+    # patch-first (2026-10-02): the clean-RR link rows are retired -- a clean RR is refused at launch
+    for gone in ("linked_faint_active_clean_gen3", "faint_cmd_clean_gen3"):
+        assert gone not in duo.SCENARIOS, gone
+        assert not hasattr(duo.DuoRun, "orchestrate_" + gone), gone
     # G4-SYNTH-TRAINER (6e85ddfc): the cached-native trainer fixture replaces the T2 walk
     trainer = duo.SCENARIOS["linked_faint_active_trainer_gen3"]
     assert trainer["target"] == {"a": "battle", "b": "trainer"}
@@ -4487,7 +4563,7 @@ def test_rr_rows_skip_until_their_battle_fixtures_exist(monkeypatch, tmp_path):
     assert "rr_battle2" in duo.skip_reason("linked_faint_active_lhammer_gen3", "gen3_rr")[0]
     (tmp_path / "rr_battle2.sav").write_bytes(b"")
     (tmp_path / "rr_battle2_b.sav").write_bytes(b"")
-    for name in ("linked_faint_active_gen3", "linked_faint_active_clean_gen3", "linked_faint_active_lhammer_gen3"):
+    for name in ("linked_faint_active_gen3", "linked_faint_active_lhammer_gen3"):
         assert duo.skip_reason(name, "gen3_rr") is None, name
     why, allowed = duo.skip_reason("linked_faint_active_mega_gen3", "gen3_rr")
     assert why.startswith("SIGNED LIMIT: owner ruling 20") and allowed is True
@@ -4876,13 +4952,16 @@ FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
 
 RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLink ships
     "964f951a0fdaf209e4ea1344883ef0d557bb3a80": RR_DUMP,
-    "da579690db7d6933a0952a1f490312842793f71a": REPO / "patch" / "build" / "slink_RR.gba",
+    rr_companion.rom_sha1(): REPO / "patch" / "build" / "slink_RR.gba",     # patch/dist/companion_pins.json, written by the build
 }
 
 
 # (the companion no longer carries a Task_HandleChooseMonInput 0x0811FB29 literal: its party chooser
 # calls RR's ChoosePartyMonByMenuType, which owns that reference)
-COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x08379D84]}
+# 0x0802EA11's companion referrer moved 0x08379D84 -> 0x08379D88 when the title/menu-version payload (companion
+# sha1 e87a6a7e, patch/dist/companion_pins.json) grew the payload by 4 bytes ahead of it: a pure relocation (the
+# count 8 + 1 is unchanged and every other pinned referrer is where it was)
+COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x08379D88]}
 
 
 def _pret_battle_berries():
@@ -5117,7 +5196,7 @@ def test_rr_rows_that_link_or_throw_boot_rr_battle2():
     """G5-RR-BATTERY (live 3fa789da: KeyError 1 on slot-1 links over the one-mon rr_town, no
     balls on rr_battle): every RR row that links/trades slot 1 or throws a ball boots rr_battle2."""
     for name in ("faint_cmd_gen3", "boxsync_gen3", "whiteout_gen3", "link_gen3", "deadzone_gen3",
-                 "reconnect_gen3", "native_absent_gen3", "linked_faint_active_gen3"):
+                 "reconnect_gen3", "clean_rr_refused_gen3", "linked_faint_active_gen3"):
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == "battle2", name
     fr = {"faint_cmd_gen3": "town", "link_gen3": "catch_synth", "boxsync_gen3": {"a": "battle", "b": "town"}}
     for name, want in fr.items():
@@ -5457,11 +5536,12 @@ def test_emerald_admission_is_production_only():
     profile = json.loads((REPO / "data/games/gen3_emerald/profile.json").read_text(encoding="utf-8"))
     assert profile["titles"]["emerald"]["admitted"] is True
     entry = (REPO / "lua/gen3/entry.lua").read_text(encoding="utf-8")
-    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}",
-                      entry)
+    from lupa import LuaRuntime
+    routes = dict(LuaRuntime().execute(entry).ROUTED.items())
+    assert set(routes) == {"gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"}
+    assert all(value is True for value in routes.values())
     assert "test_admission_codec" not in entry
-    # X3: the seam is back for gen3_exp ONLY (test_e2e_duo_gen3_exp.py); it never touches Emerald
-    assert 'if game ~= "gen3_exp"' in DRIVER.read_text(encoding="utf-8")
+    assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
 
 
 def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():
@@ -5575,3 +5655,770 @@ def test_emerald_whiteout_lands_on_the_raw_heal_tile_and_fr_still_projects():
     assert (dest.group, dest.num, dest.x, dest.y) == (5, 4, 7, 4)     # Viridian Center, unchanged
     with pytest.raises(LuaError, match="whiteout_heal_unsupported"):
         mod.whiteout_destination(cp, lua.eval("{group=0, num=10, warp=255, x=6, y=17}"))  # FR: no raw tile
+
+
+# ── X3-WHITEOUT: the expansion's damaging fallback (EXP-WHITEOUT-HARNESS) ─────────────────────
+# Live gen3_exp whiteout_gen3: "battler 0 has no no-damage move with PP (turn 43, hp 2, hunts 3)" --
+# Growl's PP spent, and the expansion BM has no effect_off, so any_move_slot always returned nil.
+# The expansion reads MoveInfo.effect (facts.json bitfield) and takes only a plain EFFECT_HIT with
+# power. Ids are the pinned source's (moves.h): Tackle 33, Double-Edge 38, Growl 45, Self-Destruct
+# 120, Explosion 153, Struggle 165; effects (battle_move_effects.h): HIT 1, STAT_CHANGE 2,
+# STRUGGLE 227, RECOIL 271.
+_EXP_FACTS = json.loads((REPO / "data/games/gen3_exp/28877d73/facts.json").read_text(encoding="utf-8"))["structs"]["MoveInfo"]["bitfields"]
+
+
+def _exp_lead(lua, moves, pp):
+    """The model, switched to the expansion title: 64-byte MoveInfo table, power/effect bitfields."""
+    lua.execute("POWER[45], POWER[38], POWER[120], POWER[153], POWER[165] = 0, 120, 200, 250, 50")
+    lua.execute("EXP_EFFECT[33], EXP_EFFECT[45], EXP_EFFECT[38], EXP_EFFECT[120], EXP_EFFECT[153],"
+                " EXP_EFFECT[165] = 1, 2, 271, 1, 1, 227")
+    lua.execute("profile.rom.BATTLE_MOVES_ADDR, profile.derived.BATTLE_MOVE_ENTRY_SIZE = EXP_MOVES, 64")
+    p, e = _EXP_FACTS["power"], _EXP_FACTS["effect"]
+    # the same facts.json fields the driver reads (offset/width/shift/bits), mask = (1 << bits) - 1
+    lua.execute("USE_EXP_BM({%s}, {%s})" % tuple(
+        ", ".join(str(f[k]) for k in ("offset", "width", "shift", "bits")) for f in (p, e)))
+    lua.execute(f"M.moves = {{ {', '.join(map(str, moves))} }}; M.pp = {{ {', '.join(map(str, pp))} }}")
+    lua.execute("M.foe_hp = 999")                       # the fallback alone never wins here
+    lua.globals().start(40)
+
+
+def test_exp_lose_active_falls_back_to_a_plain_hit_once_growl_pp_is_spent(battle_model):
+    """Growl (45) has 1 PP; slot 1 is Double-Edge (EFFECT_RECOIL 271, power 120, PP left) and slot 2
+    Tackle (33): turn 1 Growl, then the fallback must pick Tackle (slot 2) until the lead faints --
+    not the "no no-damage move with PP" refusal, and not the recoil move the CFRU-set guard would
+    let through (reverting any_move_slot's BM.effect branch picks slot 1; reverting move_effect's
+    BM.effect branch finds no readable effect and refuses)."""
+    lua = battle_model
+    _exp_lead(lua, [45, 38, 33, 0], [1, 5, 35, 0])
+    ok, why = lua.globals().LOSE()
+    m, logs = lua.globals().M, list(lua.globals().LOGS.values())
+    assert ok is True, (why, logs)
+    assert list(m.used.values())[:2] == [45, 33], (m.used, logs)
+    assert 38 not in set(m.used.values()), (m.used, logs)
+    assert m.lead_hp == 0 and any(line.startswith("LOSE_FALLBACK K0 turn=2 slot=2") for line in logs), logs
+
+
+@pytest.mark.parametrize("move, label", [(38, "Double-Edge (EFFECT_RECOIL)"), (120, "Self-Destruct"),
+                                         (153, "Explosion"), (165, "Struggle (EFFECT_STRUGGLE)")])
+def test_exp_lose_active_never_picks_a_self_damaging_fallback(battle_model, move, label):
+    """The only move with PP left after Growl is one that can KO or hurt the lead itself: refuse
+    it by name. Explosion/Self-Destruct are EFFECT_HIT in the expansion (moves_info.h:3268,4182),
+    so the effect id alone is not enough -- they are excluded by id."""
+    lua = battle_model
+    _exp_lead(lua, [45, move, 0, 0], [1, 5, 0, 0])
+    ok, why = lua.globals().LOSE()
+    assert ok is False and "no no-damage move with PP" in why, (label, why)
+    assert move not in set(lua.globals().M.used.values()), label
+
+
+def test_non_expansion_bm_still_refuses_an_unreadable_fallback(battle_model):
+    """The default (CFRU/pret) BM is untouched: same model without USE_EXP_BM, an effect-0 Tackle
+    with PP left is picked via the original effect_off path (the recoil refusal stays covered by
+    test_lose_active_refuses_a_self_damaging_fallback)."""
+    lua = battle_model
+    lua.execute("M.moves = { 39, 33, 0, 0 }; M.pp = { 1, 35, 0, 0 }; M.foe_hp = 999")
+    lua.globals().start(40)
+    ok, why = lua.globals().LOSE()
+    assert ok is True and list(lua.globals().M.used.values())[:2] == [39, 33], why
+
+
+# ── frlgc 2026-10-03: reconnect_gen3's same-save window with a companion cartridge ─────────────────────
+# Evidence (F:/slink-work/tmp/duo_2jsg2y18, the Emerald same_save result file): one client session sends THREE `TX hello` lines in the
+# first ~550 frames -- the connect hello, then capability refreshes after `resolved_areas/config/dead_keys` and the native link-panel
+# write -- all with the same artifact_kind/foundation/companion_abi/badges/ball_count and the same party; only area_id may differ (the
+# map settles after CONTINUE). The phase driver logs ONE `RECONNECT_HELLO same_save count=N` line (N = hellos sent so far).
+def _tx_hello(area="oldale_town", kind="companion", abi=2, badges=0, balls=5, foundation="gen3_emerald"):
+    return ('TX hello - {"area_id":"%s","artifact_kind":"%s","badges":%d,"ball_count":%d,"battle_identity":true,'
+            '"companion_abi":%d,"event":"hello","foundation":"%s","has_pokeballs":true,"in_battle":fal\n'
+            % (area, kind, badges, balls, abi, foundation))
+
+
+def _same_save_window(count=3, hellos=3, **kw):
+    return ("booted\n" + "".join(_tx_hello(**kw) for _ in range(hellos))
+            + f"RECONNECT_HELLO same_save count={count}\n")
+
+
+@pytest.mark.parametrize("count, hellos", [(1, 1), (2, 2), (3, 3), (3, 1)])
+def test_same_save_hello_wait_accepts_the_companions_extra_hellos(count, hellos):
+    window = _same_save_window(count, hellos)
+    assert duo.same_save_hello_seen(window) is True and duo.same_save_hello_problems(window) == []
+
+
+def test_same_save_hello_wait_is_not_satisfied_by_nothing_or_count_zero():
+    for text in ("", "booted\n", "RECONNECT_HELLO same_save count=0\n"):
+        assert duo.same_save_hello_seen(text) is False and duo.same_save_hello_problems(text) == []
+
+
+def test_a_refresh_may_change_the_area_but_not_the_identity_fields():
+    areas = ("booted\n" + _tx_hello(area="viridian_city") + _tx_hello(area="viridian_city_mart")
+             + "RECONNECT_HELLO same_save count=2\n")
+    assert duo.same_save_hello_problems(areas) == []
+    for field, bad in (("kind", "clean"), ("abi", 1), ("badges", 3), ("balls", 4), ("foundation", "gen3_frlg")):
+        window = "booted\n" + _tx_hello() + _tx_hello(**{field: bad}) + "RECONNECT_HELLO same_save count=2\n"
+        problems = duo.same_save_hello_problems(window)
+        assert problems and "hello #2 differs from hello #1" in problems[0], (field, problems)
+        with pytest.raises(RuntimeError, match="not one save"):
+            duo.same_save_hello_seen(window)
+
+
+def test_a_mixed_same_and_different_save_window_fails_and_never_waits_out_the_timeout():
+    """RED case: the window holds a same_save hello AND a hello for another save (or a line nobody can parse)."""
+    mixed = _same_save_window(2, 2) + "RECONNECT_HELLO wrong_save count=1\n"
+    assert any("another save" in p and "wrong_save" in p for p in duo.same_save_hello_problems(mixed))
+    with pytest.raises(RuntimeError, match="wrong_save"):
+        duo.same_save_hello_seen(mixed)
+    only_other = "RECONNECT_HELLO wrong_save count=1\n"                   # a wrong_save-only window is no same-save hello
+    with pytest.raises(RuntimeError, match="another save"):
+        duo.same_save_hello_seen(only_other)
+    for odd in ("RECONNECT_HELLO other_save count=1\n", "RECONNECT_HELLO same_save\n", "RECONNECT_HELLO same_save count=x\n"):
+        problems = duo.same_save_hello_problems(_same_save_window(1, 1) + odd)
+        assert problems, odd
+        with pytest.raises(RuntimeError):
+            duo.same_save_hello_seen(_same_save_window(1, 1) + odd)
+
+
+def test_the_orchestration_waits_with_the_checked_predicate_and_re_checks_at_the_oracle():
+    import inspect
+
+    src = inspect.getsource(duo.DuoRun.orchestrate_reconnect_gen3)
+    assert "same_save_hello_seen(text(same_path))" in src            # the wait predicate (raises on a violation)
+    assert "same_save_hello_problems(text(same_path))" in src        # and the final problems list
+    assert "accepted_reconnect_hellos(baseline" in src and "RECONNECT_HELLO same_save count=1" not in src
+
+
+def test_the_driver_logs_per_hello_what_the_tx_line_truncates():
+    """HELLO_FACTS (duo_gen3_main.lua hello_facts): the party a hello carried and whether it was withheld -- the two facts that decide
+    whether a '0 mons' hello is safe (server/state.py:1958-1959 vs :2087)."""
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    source = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format("hello_facts"), source, re.M | re.S)
+    assert found, "duo_gen3_main.lua has no hello_facts"
+    facts = runtime.execute(found.group(0) + "\nreturn hello_facts")
+    assert facts(runtime.eval("{party = {}, party_hidden = true}")) == "HELLO_FACTS party=0 party_hidden=true"
+    assert facts(runtime.eval("{party = {1, 2}}")) == "HELLO_FACTS party=2 party_hidden=false"
+    assert facts(runtime.eval("{party = {}}")) == "HELLO_FACTS party=0 party_hidden=false"
+    assert facts(runtime.eval("{}")) == "HELLO_FACTS party=absent party_hidden=false"
+    assert facts(runtime.eval("{party_hidden = false}")) == "HELLO_FACTS party=absent party_hidden=false"
+    assert facts("not a table") == "HELLO_FACTS party=absent party_hidden=false"
+    assert 'if name == "hello" then log(hello_facts(msg)) end' in source          # and every sent hello is logged with it
+
+
+# ── probe_protected_span_flip_gen3: a live OBSERVATION row, in no plan ───────────────────────────────────────────────
+PROBE = "probe_protected_span_flip_gen3"
+_PROBE_SLOT = b"\xcd\xe3\xe9\xe0\xc6\xdd\xe2\xdf\x00\xd8\xd9\xea\xff" + b"\x00" * 7        # "dev" text, 0xFF terminator, zero padding
+
+
+def _probe_rom_and_row(slot=_PROBE_SLOT):
+    rom = bytearray(b"\x55" * 0x400)
+    rom[0x100 + 0x20:0x100 + 0x20 + len(slot)] = slot
+    row = {"protected_spans": [{"offset": 0x100, "size": 0x100}, {"offset": 0x300, "size": 8}],
+           "payload_version_slot": {"offset": 0x20, "length": len(slot)}}
+    return bytes(rom), row
+
+
+def test_the_probe_flips_the_last_padding_byte_of_the_version_slot_by_a_fixed_rule():
+    rom, row = _probe_rom_and_row()
+    choice = duo.gen3_probe_flip_choice(rom, row, [(0x10, 8)])
+    assert choice == {"offset": 0x100 + 0x20 + 19, "before": 0, "after": 1, "span": 0, "rule": "version-slot padding byte",
+                      "span_offset": 0x100, "span_size": 0x100}
+    assert duo.gen3_probe_flip_choice(rom, row, [(0x10, 8)]) == choice                  # deterministic
+    flipped = rom[:choice["offset"]] + bytes([choice["after"]]) + rom[choice["offset"] + 1:]
+    assert [i for i in range(len(rom)) if rom[i] != flipped[i]] == [choice["offset"]]   # exactly one byte differs
+
+
+def test_the_probe_falls_back_when_the_slot_is_not_a_terminated_padded_string():
+    rom, row = _probe_rom_and_row(slot=b"\xcd" * 20)                                    # no 0xFF terminator, no padding
+    choice = duo.gen3_probe_flip_choice(rom, row, [])
+    assert choice["rule"] == "first non-slot payload byte" and choice["offset"] == 0x100
+    assert choice["offset"] not in range(0x100 + 0x20, 0x100 + 0x20 + 20)
+
+
+def test_the_probe_byte_must_be_in_a_protected_span_and_off_every_anchor():
+    rom, row = _probe_rom_and_row()
+    with pytest.raises(ValueError, match="on an anchor"):
+        duo.gen3_probe_flip_choice(rom, row, [(0x100 + 0x20 + 18, 4)])                  # an anchor covering the chosen byte
+    duo.gen3_probe_flip_choice(rom, row, [(0x100 + 0x20 + 19, 0)])                      # a zero-length anchor covers nothing
+    outside = {**row, "protected_spans": [{"offset": 0x100, "size": 0x10}]}                # the slot sits past the span
+    with pytest.raises(ValueError, match="not inside a protected span"):
+        duo.gen3_probe_flip_choice(rom, outside, [])
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
+def test_the_probe_byte_of_the_real_builds_is_padding_inside_a_span_off_the_anchors(title):
+    """Needs the real, uncommitted clean dump: a named skip when it is absent (tests/TESTING.md)."""
+    from tools.gen3_companions import published
+    from tools.gen3_final_cut import ROOT_DUMPS, main_checkout
+
+    root = os.environ.get("SLINK_GEN3_ROMS") or main_checkout()
+    dump = os.path.join(root, ROOT_DUMPS[title])
+    if not os.path.isfile(dump):
+        pytest.skip(f"clean {title} dump absent: {dump}")
+    patched, row = published(title, open(dump, "rb").read())
+    pack = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_emerald"}[title]
+    anchors = json.loads((REPO / "data" / "games" / pack / "write_checkpoint.json").read_text(encoding="utf-8"))[title]["anchors"]
+    spans = [(a["rom_offset"], len(a["expected_hex"]["companion"]) // 2) for a in anchors.values()]
+    choice = duo.gen3_probe_flip_choice(patched, row, spans)
+    assert choice["rule"] == "version-slot padding byte" and (choice["before"], choice["after"]) == (0, 1)
+    assert any(s["offset"] <= choice["offset"] < s["offset"] + s["size"] for s in row["protected_spans"])
+    assert not any(a <= choice["offset"] < a + n for a, n in spans)
+    slot = row["payload_version_slot"]
+    base = row["protected_spans"][0]["offset"] + slot["offset"]
+    from patch.tools.gen3_title import menu_field
+    field = menu_field(row["menu_version"])                                                # the stamped string, terminator, zero padding
+    assert bytes(patched[base:base + slot["length"]]) == field and field[-1] == 0
+    assert choice["offset"] == base + slot["length"] - 1                                    # behind the string's terminator
+    assert duo.gen3_probe_flip_choice(patched, row, spans) == choice
+
+
+def test_the_probe_is_opt_in_and_in_no_plan(monkeypatch):
+    from tools import gen3_final_cut as fc
+
+    row = duo.SCENARIOS[PROBE]
+    assert row["explicit_only"] is True and row["gen3_probe_flip"] is True and row["no_save"] == ("a", "b")
+    assert set(row["games"]) == {"gen3_frlg", "gen3_lgfr", "gen3_emerald"}
+    for game in ("gen3_frlg", "gen3_lgfr", "gen3_emerald"):
+        assert PROBE not in duo.scenarios_for(game) and duo.scenario_applies(PROBE, game)
+    # applicable to exactly the three per-title games and to NO other pairing row
+    assert sorted(g for g in duo.GAMES if duo.scenario_applies(PROBE, g)) == ["gen3_emerald", "gen3_frlg", "gen3_lgfr"]
+    cut = "c" * 40
+    if not os.environ.get("SLINK_GEN3_RAND_ROMS"):
+        monkeypatch.setenv("SLINK_GEN3_RAND_ROMS", "R:/rand")   # restored after the test; a bare setdefault leaked into later tests
+    for plan in (fc.build_plan, fc.build_plan_rr, fc.build_plan_emerald, fc.build_plan_exp, fc.build_plan_frlgc, fc.build_plan_frlgc_rand):
+        assert not any("probe_protected_span_flip" in " ".join(r.argv) or "probe_flip" in r.id for r in plan(cut, "L:/lane", "L:/m")), plan
+    assert len(fc.build_plan_frlgc(cut, "L:/lane", "L:/m")) == 65 and len(fc.build_plan_frlgc_rand(cut, "L:/lane", "L:/m")) == 13
+    assert callable(duo.DuoRun.orchestrate_probe_protected_span_flip_gen3) and callable(duo.DuoRun.assert_probe_protected_span_flip_gen3_saved)
+
+
+def _probe_run(receipt_b, status_b=None):
+    run = object.__new__(duo.DuoRun)
+    run._probe_flip = {"title": "firered", "offset": 0xEB2E27, "before": 0, "after": 1, "span": 0, "span_offset": 0xEB2000,
+                       "span_size": 0x4000, "anchors_checked": 11}
+    notes, went = [], []
+    run._pydec_note = notes.append
+    run._read_receipt = lambda side: receipt_b
+    run._status = lambda: {"players": {"b": status_b or {}}}
+    run.wait_for = lambda desc, pred, timeout: pred() or (_ for _ in ()).throw(TimeoutError(desc))
+    run.go = lambda *a, **k: went.append(True)
+    return run, notes, went
+
+
+def test_the_probe_records_a_launch_refusal_without_judging_it():
+    run, notes, went = _probe_run("PROBE_ADMISSION client=refused_at_launch reason=[SLink-gen3] refused: this firered cartridge ...\n")
+    run.orchestrate_probe_protected_span_flip_gen3()
+    assert run._probe_observed["client"] == "refused_at_launch" and went == [True]
+    assert any("PROBE_FLIP_OBSERVED" in n and "client=refused_at_launch" in n for n in notes)
+    run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
+
+
+@pytest.mark.parametrize("player, expect", [({"admission": "admitted", "admission_reason": "ok"}, "server=admitted"),
+                                            ({"admission": "rejected", "admission_reason": "companion_abi differs"}, "server=rejected"),
+                                            ({"identity_error": "Identity mismatch"}, "server=identity_error")])
+def test_the_probe_records_an_admitted_client_and_the_servers_verdict_either_way(player, expect):
+    run, notes, went = _probe_run("TX hello - {}\nHELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n", player)
+    run.orchestrate_probe_protected_span_flip_gen3()
+    assert went == [True] and any(expect in n and "client=admitted" in n for n in notes)
+    run.assert_probe_protected_span_flip_gen3_saved(
+        {"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n"})
+
+
+def test_the_probe_oracle_names_what_was_observed_never_a_bare_pass():
+    run, notes, _ = _probe_run("PROBE_ADMISSION client=refused_at_launch reason=x\n")
+    run.orchestrate_probe_protected_span_flip_gen3()
+    notes.clear()
+    run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
+    assert len(notes) == 1 and notes[0].startswith("OBSERVED refused_at_launch (an observation, not a verdict)")
+    run, notes, _ = _probe_run("HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n", {"admission": "admitted"})
+    run.orchestrate_probe_protected_span_flip_gen3()
+    notes.clear()
+    run.assert_probe_protected_span_flip_gen3_saved(
+        {"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\nPROBE_CLIENT admitted kind=companion\n"})
+    assert len(notes) == 1 and notes[0].startswith("OBSERVED admitted (an observation, not a verdict)")
+
+
+def test_the_probe_fails_only_when_the_harness_itself_broke():
+    run, _notes, went = _probe_run("")                                       # B did nothing at all: no observation possible
+    with pytest.raises(TimeoutError, match="launch outcome"):
+        run.orchestrate_probe_protected_span_flip_gen3()
+    assert went == []
+    with pytest.raises(RuntimeError, match="no admission observation"):
+        run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": ""})
+    run._probe_observed = {"client": "admitted", "reason": "", "server": "admitted", "server_reason": ""}
+    with pytest.raises(RuntimeError, match="not in its own receipt"):          # the claim must be in the side's own receipt
+        run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "HELLO_FACTS party=2 party_hidden=false\n"})
+
+
+def test_the_driver_lets_a_probe_record_a_refusal_but_nothing_else_changes():
+    from lupa import LuaRuntime
+
+    source = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format("launch_verdict"), source, re.M | re.S)
+    verdict = LuaRuntime(unpack_returned_tuples=True).execute(found.group(0) + "\nreturn launch_verdict")
+    refused = "[SLink-gen3] refused: this firered cartridge needs the SLink companion patch; prepare it through the Manager or /patcher"
+    done, ok, msg = verdict(None, refused, False, True)
+    assert (done, ok) == (True, True) and msg.startswith("OBSERVED refused: ") and "probe observed: refused at launch" in msg
+    assert verdict(None, "x", False, False)[:2] == (True, False)                    # an ordinary row: still a failure
+    assert verdict(None, "x", False)[:2] == (True, False)                           # the old three-argument call
+    assert verdict({}, None, False, True) is False                                  # a built client carries on, probe or not
+    assert verdict({}, None, True, True)[:2] == (True, False)                       # expect_refused still wins over a probe
+    assert 'PROBE_ADMISSION client=refused_at_launch reason=' in source and "D.probe_admission" in source
+
+
+def test_the_probe_scenario_module_records_what_the_client_announced_and_writes_nothing():
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute("""
+        logs = {}
+        ctx = { last_sent = function() return { artifact_kind = "companion", companion_abi = 2, rom_sha1 = "ab" } end,
+                log = function(s) logs[#logs + 1] = s end, wait_go = function() return true end, frames = function() end,
+                writes = function() return 0 end }
+        module = dofile(WT .. "/lua/tests/duo/scenario_gen3_probe_flip.lua")
+    """.replace("WT", repr(str(REPO).replace(chr(92), "/"))))
+    ok, msg = runtime.eval("module(ctx)")
+    assert ok is True and msg.startswith("OBSERVED admitted: ")
+    logs = list(runtime.eval("logs").values())
+    assert logs[0] == "PROBE_CLIENT admitted artifact_kind=companion companion_abi=2 rom_sha1=ab" and logs[-1] == "PROBE_PASSIVE writes=0"
+
+
+# ── link_gen3_rand: attempt budget 6, and nothing else's budget moved ───────────────────────────────────────────────────
+# Every scenario/game pair whose scenario_attempt_limit was not 1 at d5a26da9 (snapshot of 1417 pairs; link_gen3_rand excluded -- it is
+# the one row that changed). Pairs not listed were 1.
+ATTEMPT_LIMITS_AT_D5A26DA9 = {
+    "active_end_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "admit_randomized_emerald": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "admit_randomized_frlg": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "admit_randomized_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "ball_gate_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_frlg": 8, "gen3_lgfr": 8, "gen3_rr": 8},
+    "borrowed_party_battle_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "borrowed_party_menu_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "borrowed_party_opponent_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "boxsync": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "boxsync_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "center_controls_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "changebox_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "choice_gift_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "clean_rr_refused_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "deadzone_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 3},
+    "deadzone_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "egg_hatch_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "egg_receive_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "evolve_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_altering0_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_altering1_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_fish_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_grass_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_rock_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_static_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_static_run_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "exp_static_surf_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "explode_bench_battle_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "explode_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "explode_new": {"gen1_new": 4, "gen1_pure": 4, "gen1_pure_green": 4},
+    "faint": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "faint_cmd_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_admit_wrong_rom": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_ball_gate": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 2, "gen2_gold_silver": 2, "gen2_new": 2},
+    "gen2_boxed_capture": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_changebox": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_egg_hatch": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_evolution": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_faint": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_faint_active": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_faint_active_trainer": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_gender_clause": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 3, "gen2_gold_silver": 3, "gen2_new": 3},
+    "gen2_gift": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_npc_trade": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_pc_ops": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_poison": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_reconnect": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_soft_reset": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_species_clause": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 3, "gen2_gold_silver": 3, "gen2_new": 3},
+    "gen2_trade_decline_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_evolve": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_refuse_item": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_reset_commit": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_reset_wait": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_trade_timeout": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_type_clause": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen2_crystal_gold": 3, "gen2_gold_silver": 3, "gen2_new": 3},
+    "gen2_whiteout": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gen2_whiteout_rebuild": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gender_clause_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 8},
+    "gift_box_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "gift_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "infopanel_dex_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "infopanel_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "link": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "link_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 3},
+    "link_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_lhammer_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_mega_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_trainer_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_active_whiteout_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_bench_battle_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "linked_faint_bench_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "native_trade_decline_firered": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "native_trade_firered": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "nature_change_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "npc_trade_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "pc_ops_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "poison_faint_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "poison_new": {"gen1_new": 4, "gen1_pure": 4, "gen1_pure_green": 4},
+    "reconnect_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "reconnect_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "release_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "rival_swap_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "rival_swap_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "rival_swap_real_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "save_then_write_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "shiny_bonus_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_frlg": 8, "gen3_lgfr": 8, "gen3_rr": 8},
+    "soft_reset_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "species_clause_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen2_crystal_gold": 8, "gen2_gold_silver": 8, "gen2_new": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_fr_trade": 8, "gen3_frlg": 8, "gen3_lg_trade": 8, "gen3_lgfr": 8, "gen3_rr": 8},
+    "species_clause_new": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8},
+    "species_family_gen3": {"gen1_new": 8, "gen1_pure": 8, "gen1_pure_green": 8, "gen2_crystal_gold": 8, "gen2_gold_silver": 8, "gen2_new": 8, "gen3_emerald": 8, "gen3_exp": 8, "gen3_fr_trade": 8, "gen3_frlg": 8, "gen3_lg_trade": 8, "gen3_lgfr": 8, "gen3_rr": 16},
+    "trade_decline_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_decline_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_lock_probe_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_reset_commit_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trade_reset_success_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "trainer_bench_gen3": {"gen1_new": 2, "gen1_pure": 2, "gen1_pure_green": 2, "gen2_crystal_gold": 2, "gen2_gold_silver": 2, "gen2_new": 2, "gen3_emerald": 2, "gen3_exp": 2, "gen3_fr_trade": 2, "gen3_frlg": 2, "gen3_lg_trade": 2, "gen3_lgfr": 2, "gen3_rr": 2},
+    "trainer_panel_gen3_rand": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "type_clause_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3, "gen3_emerald": 3, "gen3_exp": 3, "gen3_frlg": 3, "gen3_lgfr": 3, "gen3_rr": 8},
+    "type_clause_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "whiteout_gen3": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3},
+    "whiteout_new": {"gen1_new": 3, "gen1_pure": 3, "gen1_pure_green": 3}
+}
+RAND_WHITEOUT = "RESULT: FAIL (hunt ended whiteout)"
+
+
+# The snapshot above is d5a26da9's. Three SETS of rows have changed since, each for a named, intended reason; nothing else may drift:
+#   1. link_gen3_rand: "rng_attempts": 6 (this task's own change; asserted separately as exactly 6 on FR/LG and Emerald).
+#   2. Gen 2 96b65c48 ("a Gen 2 trade scenario retries once ... when its route battle is lost"): every `GEN2_TRADE_SCENARIOS` scenario on a
+#      `scenario_family(game) == "gen2_new"` pairing (gen2_new, gen2_gold_silver, gen2_crystal_gold) may be 2. The set comes from the module's own
+#      GEN2_TRADE_SCENARIOS (absent on a tree without the change: then those rows must still equal the snapshot).
+#   3. Gen 1 O-8 (codex/o8-gen1; 2aa11f88 "bind synth catches ...", 2dec7f9e): the gen1_synth rows carry `"rng_attempts"` in their SCENARIOS
+#      entry instead of being keyed by name AND game inside scenario_attempt_limit (the old `if name == "explode_new": return 4` is gone). The
+#      entry value applies on every rng-retry family, so the same rows drift on the Gen 3 pairings (e.g. linked_faint_active_new on gen3_frlg,
+#      1 -> 3): those pairs never run (the rows are `games: gen1_new`) and the drift is accepted EXPLICITLY, with the exact values pinned below.
+O8_GEN1_SYNTH_LIMITS = {"linked_faint_active_new": 3, "explode_bench_battle_new": 3, "explode_new": 4}
+_GEN2_BALL_GATE_RETRY = "        return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)\n"
+_GEN2_TRADE_RETRY = "        return 2   # one retry, only when the route's own wild battle was lost (GEN2_ROUTE_BATTLE_LOST)\n"
+
+
+def _allowed_attempt_limits(snapshot, name, family, trade_scenarios, rng_family=False, o8_rows=()):
+    """The limits one scenario/game pair may have: the d5a26da9 `snapshot` value, plus (see the three sets above) exactly 2 for a Gen 2 trade
+    scenario of `trade_scenarios` on a `gen2_new` pairing, plus the pinned O-8 value for a gen1_synth row of `o8_rows` on an rng-retry family
+    (`rng_family`)."""
+    allowed = {snapshot}
+    if name in trade_scenarios and family == "gen2_new":
+        allowed.add(2)
+    if name in o8_rows and rng_family:
+        allowed.add(O8_GEN1_SYNTH_LIMITS[name])
+    return allowed
+
+
+def _o8_rows(module):
+    """The module's gen1_synth rows that carry `rng_attempts` (derived, not listed); only the pinned names are allowed a new value."""
+    return {n for n, row in module.SCENARIOS.items() if row.get("gen1_synth") and row.get("rng_attempts") and n in O8_GEN1_SYNTH_LIMITS}
+
+
+def _attempt_budget_problems(module):
+    """Every scenario/game pair whose scenario_attempt_limit left its allowed set, except link_gen3_rand (6) and the probe row (new, 1).
+    [(name, game, snapshot, now)]"""
+    trade = getattr(module, "GEN2_TRADE_SCENARIOS", ())
+    o8 = _o8_rows(module)
+    problems = []
+    for game in module.GAMES:
+        for name in module.SCENARIOS:
+            if name in ("link_gen3_rand", "probe_protected_span_flip_gen3"):      # (the probe row did not exist at d5a26da9)
+                continue
+            was = ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1)
+            now = module.scenario_attempt_limit(name, game)
+            if now not in _allowed_attempt_limits(was, name, module.scenario_family(game), trade, module.rng_retry_family(game), o8):
+                problems.append((name, game, was, now))
+    return problems
+
+
+def test_the_attempt_limit_expectation_builder_in_both_modes():
+    # Gen 2 trade rows
+    assert _allowed_attempt_limits(1, "gen2_trade_x", "gen2_new", ()) == {1}                       # symbol absent: snapshot unchanged
+    assert _allowed_attempt_limits(1, "gen2_trade_x", "gen2_new", ("gen2_trade_x",)) == {1, 2}      # present: the trade rows may be 2
+    assert _allowed_attempt_limits(1, "gen2_trade_x", "gen3_frlg", ("gen2_trade_x",)) == {1}        # ... only on the gen2_new pairings
+    assert _allowed_attempt_limits(3, "link_gen3", "gen2_new", ("gen2_trade_x",)) == {3}            # ... and only for those scenarios
+    # Gen 1 O-8 rows: the pinned value, only for a named row that carries rng_attempts, only on an rng-retry family
+    assert _allowed_attempt_limits(1, "explode_new", "gen3_frlg", (), True, {"explode_new"}) == {1, 4}
+    assert _allowed_attempt_limits(1, "explode_new", "gen2_new", (), False, {"explode_new"}) == {1}
+    assert _allowed_attempt_limits(1, "explode_new", "gen3_frlg", (), True, set()) == {1}
+    assert _allowed_attempt_limits(1, "link_gen3", "gen3_frlg", (), True, {"explode_new"}) == {1}
+    assert sorted(g for g in duo.GAMES if duo.scenario_family(g) == "gen2_new") == ["gen2_crystal_gold", "gen2_gold_silver", "gen2_new"]
+
+
+def _fake_module(trade_rows_at=None, with_symbol=False, o8=True):
+    """A module-shaped object around the real tables, whose scenario_attempt_limit is the SNAPSHOT value everywhere except what the caller
+    says (the Gen 2 trade rows at `trade_rows_at`, the O-8 rows at their pinned values)."""
+    import types
+
+    def limit(name, game):
+        was = ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1)
+        if name in ("link_gen3_rand", "probe_protected_span_flip_gen3"):
+            return duo.scenario_attempt_limit(name, game)
+        if trade_rows_at is not None and name in duo.GEN2_TRADE_SCENARIOS and duo.scenario_family(game) == "gen2_new":
+            return trade_rows_at
+        if o8 and name in O8_GEN1_SYNTH_LIMITS and duo.rng_retry_family(game):
+            return O8_GEN1_SYNTH_LIMITS[name]
+        return was
+
+    module = types.SimpleNamespace(GAMES=duo.GAMES, SCENARIOS=duo.SCENARIOS, scenario_family=duo.scenario_family,
+                                   rng_retry_family=duo.rng_retry_family, scenario_attempt_limit=limit)
+    if with_symbol:
+        module.GEN2_TRADE_SCENARIOS = duo.GEN2_TRADE_SCENARIOS
+    return module
+
+
+def test_the_snapshot_check_works_on_a_module_without_the_symbol():
+    """STRICT no-symbol mode: a module with no GEN2_TRADE_SCENARIOS is held to the plain snapshot (+ link6 + O-8), so a Gen 2 trade row at 2
+    is a problem there -- and is the ONLY problem. With the symbol the same limits are fine."""
+    trade_pairs = sorted((n, g) for g in duo.GAMES for n in duo.GEN2_TRADE_SCENARIOS if duo.scenario_family(g) == "gen2_new")
+    assert len(trade_pairs) == 21
+    bare = _fake_module(trade_rows_at=2)
+    assert not hasattr(bare, "GEN2_TRADE_SCENARIOS")
+    assert sorted((n, g) for n, g, _was, _now in _attempt_budget_problems(bare)) == trade_pairs
+    assert _attempt_budget_problems(_fake_module(trade_rows_at=2, with_symbol=True)) == []
+    assert _attempt_budget_problems(_fake_module()) == []                          # no symbol, snapshot values: clean
+    assert sorted((n, g) for n, g, _was, _now in _attempt_budget_problems(_fake_module(trade_rows_at=3, with_symbol=True))) == trade_pairs
+    # O-8: without its rows' `rng_attempts` the drifted pairs are NOT excused
+    stripped = _fake_module()
+    stripped.SCENARIOS = {n: {k: v for k, v in row.items() if k != "rng_attempts"} if n in O8_GEN1_SYNTH_LIMITS else row
+                          for n, row in duo.SCENARIOS.items()}
+    drifted = {n for n, _g, _was, _now in _attempt_budget_problems(stripped)}
+    assert drifted == set(O8_GEN1_SYNTH_LIMITS)
+
+
+def test_only_link_gen3_rand_changed_its_attempt_budget_and_it_has_six():
+    assert _attempt_budget_problems(duo) == []
+    assert [duo.scenario_attempt_limit("link_gen3_rand", g) for g in ("gen3_frlg", "gen3_emerald")] == [6, 6]    # the Emerald twin too
+    assert [duo.scenario_attempt_limit("probe_protected_span_flip_gen3", g) for g in ("gen3_frlg", "gen3_emerald")] == [1, 1]
+    assert [n for n, row in duo.SCENARIOS.items() if row.get("rng_attempts") == 6] == ["link_gen3_rand"]
+    assert not any("rehunt" in k for row in duo.SCENARIOS.values() for k in row)
+
+
+def test_the_gen2_and_gen1_changed_sets_are_exactly_the_named_ones():
+    """Name every drift the snapshot excuses, so a new one cannot hide inside the allowed sets."""
+    drifted = {}
+    for game in duo.GAMES:
+        for name in duo.SCENARIOS:
+            if name in ("link_gen3_rand", "probe_protected_span_flip_gen3"):
+                continue
+            was = ATTEMPT_LIMITS_AT_D5A26DA9.get(name, {}).get(game, 1)
+            now = duo.scenario_attempt_limit(name, game)
+            if now != was:
+                drifted.setdefault(name, set()).add((game, was, now))
+    gen2 = {n: v for n, v in drifted.items() if n in duo.GEN2_TRADE_SCENARIOS}
+    assert set(gen2) <= set(duo.GEN2_TRADE_SCENARIOS)
+    for name, rows in gen2.items():
+        assert {game for game, _w, now in rows} <= {"gen2_new", "gen2_gold_silver", "gen2_crystal_gold"} and {now for _g, _w, now in rows} == {2}, name
+    o8 = {n: v for n, v in drifted.items() if n in O8_GEN1_SYNTH_LIMITS}
+    for name, rows in o8.items():
+        assert {now for _g, _w, now in rows} == {O8_GEN1_SYNTH_LIMITS[name]}, name
+        assert all(duo.rng_retry_family(game) and not duo.scenario_applies(name, game) for game, _w, _n in rows), name    # pairs that never run
+    assert set(drifted) == set(gen2) | set(o8), sorted(set(drifted) - set(gen2) - set(o8))
+    assert {n for n, row in duo.SCENARIOS.items() if row.get("gen1_synth") and row.get("rng_attempts")} >= set(O8_GEN1_SYNTH_LIMITS)
+    assert all(duo.SCENARIOS[n]["rng_attempts"] == v for n, v in O8_GEN1_SYNTH_LIMITS.items())
+
+
+def _module_from_source(source, tmp_path):
+    import importlib.util
+
+    # a fresh name per variant: a same-size edit written within the same second would otherwise load the stale __pycache__ entry
+    path = tmp_path / f"e2e_duo_variant_{len(list(tmp_path.glob('e2e_duo_variant_*.py')))}.py"
+    path.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("e2e_duo_variant", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["e2e_duo_variant"] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop("e2e_duo_variant", None)
+    return module
+
+
+def test_the_snapshot_catches_any_other_drift_in_the_real_source(tmp_path):
+    """Mutate THIS tree's e2e_duo.py source and run the same check on the variant: every kind of other drift is a problem."""
+    source = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert _attempt_budget_problems(_module_from_source(source, tmp_path)) == []                    # the unmutated source is clean
+
+    def variant(old, new):
+        assert source.count(old) == 1, old
+        return _attempt_budget_problems(_module_from_source(source.replace(old, new), tmp_path))
+    assert source.count(_GEN2_TRADE_RETRY) == 1 and source.count(_GEN2_BALL_GATE_RETRY) == 1
+    third = variant(_GEN2_TRADE_RETRY, _GEN2_TRADE_RETRY.replace("return 2", "return 3"))             # a third attempt on a trade row
+    assert {n for n, *_ in third} == set(duo.GEN2_TRADE_SCENARIOS)
+    moved_gate = variant(_GEN2_BALL_GATE_RETRY, _GEN2_BALL_GATE_RETRY.replace("return 2", "return 3"))    # ball_gate moved
+    assert {n for n, *_ in moved_gate} == {"gen2_ball_gate"}
+    anchor = '    entry = SCENARIOS.get(name, {})\n    if entry.get("rule_kind") == "family"'
+    gen3 = variant(anchor, '    if name == "link_gen3" and scenario_family(game) == "gen3_frlg":\n        return 2\n' + anchor)
+    assert sorted((n, g, now) for n, g, _w, now in gen3) == [("link_gen3", "gen3_frlg", 2), ("link_gen3", "gen3_lgfr", 2)]   # (lgfr = the family)
+    gen1 = variant('"gen1_synth": "explode", "rng_attempts": 4, "no_setup"', '"gen1_synth": "explode", "rng_attempts": 5, "no_setup"')
+    assert {n for n, *_ in gen1} == {"explode_new"} and {now for *_x, now in gen1} == {5}            # a gen1 row beyond its new value
+    no_entry = variant('"gen1_synth": "explode", "rng_attempts": 4, "no_setup"', '"gen1_synth": "explode", "no_setup"')
+    assert {n for n, *_ in no_entry} <= {"explode_new"}                                              # (explode_new is back to the default)
+
+
+@pytest.mark.parametrize("game", ["gen3_frlg", "gen3_emerald"])
+def test_attempts_past_two_retry_a_link_gen3_rand_whiteout_and_nothing_else(game):
+    receipts = {"a": RAND_WHITEOUT, "b": None}
+    for attempt in (1, 2, 3, 4, 5):
+        assert duo.retryable_gen1_rng(game, receipts, attempt, 6, scenario="link_gen3_rand"), attempt
+    assert not duo.retryable_gen1_rng(game, receipts, 6, 6, scenario="link_gen3_rand")        # the budget ends at 6
+    partner = "RESULT: FAIL (runner never released B (A_PENDING))"
+    assert duo.retryable_gen1_rng(game, {"a": RAND_WHITEOUT, "b": partner}, 4, 6, scenario="link_gen3_rand")
+    # an out-of-balls miss keeps the ordinary two retries; past them it is final (the late clause is for a whiteout only)
+    assert duo.retryable_gen1_rng(game, {"a": duo.RNG_OUT_OF_BALLS, "b": None}, 2, 6, scenario="link_gen3_rand")
+    assert not duo.retryable_gen1_rng(game, {"a": duo.RNG_OUT_OF_BALLS, "b": None}, 3, 6, scenario="link_gen3_rand")
+    assert not duo.retryable_gen1_rng(game, {"a": RAND_WHITEOUT, "b": duo.RNG_OUT_OF_BALLS}, 3, 6, scenario="link_gen3_rand")
+
+
+@pytest.mark.parametrize("scenario", ["link_gen3", "trainer_panel_gen3_rand", "admit_randomized_frlg", "ball_gate_gen3", None])
+def test_the_late_whiteout_retry_does_not_fire_for_other_rows(scenario):
+    receipts = {"a": RAND_WHITEOUT, "b": None}
+    assert not duo.retryable_gen1_rng("gen3_frlg", receipts, 3, 6, scenario=scenario)
+    assert not duo.retryable_gen1_rng("gen3_frlg", receipts, 3, 2, scenario="link_gen3_rand")      # only at its own declared budget
+
+
+def test_only_the_flipped_instance_is_launched_as_a_probe():
+    source = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
+    assert 'duo["probe_admission"] = bool(self.cfg.get("gen3_probe_flip")) and inst == "b"' in source
+
+
+@pytest.mark.parametrize("game, flipped", [("gen3_frlg", "leafgreen"), ("gen3_lgfr", "firered"), ("gen3_emerald", "emerald")])
+def test_each_probe_game_flips_one_named_title_on_the_b_cart(game, flipped):
+    """gen3_frlg is FireRed(A)/LeafGreen(B), gen3_lgfr is LeafGreen(A)/FireRed(B), gen3_emerald is Emerald/Emerald: B is the flipped cart,
+    so the three games observe LeafGreen, FireRed and Emerald. Their fixtures are the ordinary party_town battery pair."""
+    sides = duo.GAMES[game]["sides"]
+    assert sides["b"][0] == flipped and duo.GAMES[game]["scenario_prefix"] == "gen3_"
+    assert duo.scenario_target(duo.SCENARIOS[PROBE], game) == "town"
+    assert duo.scenario_applies(PROBE, game)
+
+
+def test_the_observed_line_names_which_title_was_flipped_and_where():
+    run, notes, _ = _probe_run("PROBE_ADMISSION client=refused_at_launch reason=x\n")
+    run.orchestrate_probe_protected_span_flip_gen3()
+    observed = next(n for n in notes if n.startswith("PROBE_FLIP_OBSERVED"))
+    for fact in ("flipped_title=firered", "cart=b", "offset=0xeb2e27", "inside_protected_span=0xeb2000+0x4000", "on_anchor=false",
+                 "checked 11 anchors", "client=refused_at_launch"):
+        assert fact in observed, fact
+    notes.clear()
+    run.assert_probe_protected_span_flip_gen3_saved({"a": "", "b": "PROBE_ADMISSION client=refused_at_launch reason=x\n"})
+    assert "flipped_title=firered" in notes[0] and "inside_protected_span=0xeb2000+0x4000" in notes[0]
+
+
+# ── ctx.catch is strict about the client's capture event (the party scan only for named exemptions, of which there are none) ──────────
+NO_CAPTURE_MESSAGE = "caught, but the client never sent a capture event"
+CATCH_CALLER_MODULES = {"clause", "deadzone", "link", "shiny_bonus", "static_wild"}     # (+ rand_link and ball_gate, which dofile() link)
+
+
+def _caught_key_world(scenario="link_gen3", exempt=(), party="{}", sent="", on_frame="nil"):
+    from lupa import LuaRuntime
+
+    source = DRIVER.read_text(encoding="utf-8")
+    found = re.search(_LUA_DEF.format(re.escape("ctx.caught_key")), source, re.M | re.S)
+    assert found, "duo_gen3_main.lua has no ctx.caught_key"
+    window = int(re.search(r"CAPTURE_TX_WINDOW_FRAMES = (\d+)", source)[1])
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute(f"""
+        D = {{ scenario = {scenario!r} }}
+        boot_keys = {{ BOOT = true }}
+        CAPTURE_TX_WINDOW_FRAMES = {window}
+        tx = {{ {sent} }}
+        frames_run = 0
+        on_frame = {on_frame}
+        ctx = {{ catch_without_capture_event = {{ {"".join(f"[{name!r}] = true," for name in exempt)} }} }}
+        function ctx.last_sent(ev) for i = #tx, 1, -1 do if tx[i].event == ev then return tx[i].msg end end end
+        function ctx.sent(ev) local n = 0 for _, e in ipairs(tx) do if e.event == ev then n = n + 1 end end return n end
+        function ctx.frames(n) frames_run = frames_run + n; if on_frame then on_frame(frames_run) end end
+        function ctx.party() return {party} end
+        {found.group(0)}
+    """)
+    return runtime, window
+
+
+def _call(runtime, captures_before):
+    """ctx.caught_key's (key, why) with a Lua nil as None (a Lua table would drop it)."""
+    returned = runtime.eval("ctx.caught_key")(captures_before)
+    returned = list(returned) if isinstance(returned, tuple) else [returned]
+    return tuple(returned + [None] * (2 - len(returned)))
+
+
+def _capture(key):
+    return "{ event = 'capture', msg = { key = '%s' } }" % key
+
+
+def test_a_capture_tx_already_sent_names_the_key_without_waiting():
+    runtime, _ = _caught_key_world(sent=_capture("K1"))
+    assert _call(runtime, 0) == ("K1", None) and runtime.eval("frames_run") == 0
+
+
+def test_a_capture_tx_that_arrives_late_within_the_frame_window_is_used():
+    runtime, window = _caught_key_world(on_frame="function(n) if n == %d then tx[#tx + 1] = %s end end" % (window_minus_one(), _capture("K2")))
+    assert _call(runtime, 0) == ("K2", None)
+    assert runtime.eval("frames_run") == window_minus_one() and window_minus_one() < window
+
+
+def window_minus_one():
+    return int(re.search(r"CAPTURE_TX_WINDOW_FRAMES = (\d+)", DRIVER.read_text(encoding="utf-8"))[1]) - 1
+
+
+def test_no_capture_tx_inside_the_window_fails_by_name_even_with_a_new_mon_in_the_party():
+    runtime, window = _caught_key_world(party="{ { key = 'NEW' } }")
+    got = _call(runtime, 0)
+    assert got[0] is None and got[1] == NO_CAPTURE_MESSAGE                         # strict: the party scan does NOT rescue it
+    assert runtime.eval("frames_run") == window == 600                             # a FRAME window, not wall clock
+    assert "wait_until" not in re.search(_LUA_DEF.format(re.escape("ctx.caught_key")),
+                                          DRIVER.read_text(encoding="utf-8"), re.M | re.S)[0]
+
+
+def test_an_earlier_mons_capture_or_a_boot_key_is_not_this_catchs_event():
+    stale, _ = _caught_key_world(sent=_capture("OLD"))
+    assert _call(stale, 1)[1] == NO_CAPTURE_MESSAGE      # one capture was already sent on entry
+    boot, _ = _caught_key_world(sent=_capture("BOOT"))
+    assert _call(boot, 0)[1] == NO_CAPTURE_MESSAGE
+
+
+def test_a_named_exemption_still_scans_the_party_and_nothing_else_does():
+    runtime, _ = _caught_key_world(scenario="exempt_row", exempt=("exempt_row",), party="{ { key = 'BOOT' }, { key = 'NEW' } }")
+    got = _call(runtime, 0)
+    assert got[0] == "NEW" and runtime.eval("frames_run") == 0                      # no wait for an event nobody sends
+    empty, _ = _caught_key_world(scenario="exempt_row", exempt=("exempt_row",), party="{ { key = 'BOOT' } }")
+    assert _call(empty, 0)[1] == "caught, but no new key in the party"
+    other, _ = _caught_key_world(scenario="not_exempt", exempt=("exempt_row",), party="{ { key = 'NEW' } }")
+    assert _call(other, 0)[1] == NO_CAPTURE_MESSAGE
+
+
+def test_every_ctx_catch_caller_gets_the_strict_behaviour_because_the_exemption_list_is_empty():
+    source = DRIVER.read_text(encoding="utf-8")
+    assert "ctx.catch_without_capture_event = {}" in source                       # EMPTY, in the driver
+    callers = {path.stem.removeprefix("scenario_gen3_") for path in (REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua")
+               if "ctx.catch(" in path.read_text(encoding="utf-8")}
+    assert callers == CATCH_CALLER_MODULES, callers        # a NEW caller must be looked at: does it expect a capture event?
+    for name in duo.SCENARIOS:                              # no scenario of any row is exempt
+        runtime, _ = _caught_key_world(scenario=name, party="{ { key = 'NEW' } }")
+        assert _call(runtime, 0)[1] == NO_CAPTURE_MESSAGE, name
+    assert "return ctx.caught_key(captures_before)" in source and "local captures_before = ctx.sent(\"capture\")" in source
+
+
+def test_the_missing_capture_event_failure_is_never_retried_for_any_scenario():
+    for reason in (NO_CAPTURE_MESSAGE, "link_new prerequisite failed: hunt ended " + NO_CAPTURE_MESSAGE):
+        for prefix in ("hunt ended ", "native catch failed: ", ""):
+            text = f"RESULT: FAIL ({prefix}{reason})"
+            assert duo.classify_gen1_result(text) == "FINAL", text                          # classification=real, not CAUSE_RNG
+            for name in duo.SCENARIOS:
+                for game in duo.GAMES:
+                    limit = duo.scenario_attempt_limit(name, game)
+                    for attempt in range(1, limit + 1):
+                        assert not duo.retryable_gen1_rng(game, {"a": text, "b": None}, attempt, limit, scenario=name), (name, game, attempt)

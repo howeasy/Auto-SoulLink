@@ -334,6 +334,15 @@ def test_private_projection_does_not_override_the_published_cartridge_identity(m
     if not (directory / "probe.gba").exists():
         pytest.skip("T5 private FR candidate build absent")
     rom, receipt = t5.candidate_inputs(ROOT, title)
+    # publication retains the tested bytes and adds only the static SoulLink title wordmark (patch/tools/gen3_title.py);
+    # the payload, and so every tested behaviour, is the candidate's
+    from patch.tools import gen3_title
+
+    published = bytearray(rom)
+    gen3_title.apply_title(published, title)
+    manifest = json.loads((ROOT / "patch/dist/gen3_companions.json").read_text())["titles"][title]
+    slot = manifest["version_slot"]                                          # plus the release stamp (tools/stamp_release.py)
+    published[slot["offset"]:slot["offset"] + slot["length"]] = gen3_title.menu_field(manifest["menu_version"])
     projected = t5.private_pack(ROOT, rom, receipt)
     assert receipt["production"] is False
     assert projected["sites"]["titles"][title]["artifacts"]["companion"]["harness_only"] is True
@@ -345,15 +354,22 @@ def test_private_projection_does_not_override_the_published_cartridge_identity(m
         lua.table(
             root=ROOT.as_posix(),
             json=codec,
-            rom_hash=receipt["sha1"],
+            rom_hash=hashlib.sha1(published).hexdigest(),
             header_code={"firered": "BPRE", "leafgreen": "BPGE"}[title],
-            rom_read=lambda at, n: lua.table(*rom[at : at + n]),
+            rom_read=lambda at, n: lua.table(*published[at : at + n]),
         )
     )
     shipped = json.loads((ROOT / "data/games/gen3_frlg/engine_signals.json").read_text())
     public=shipped["titles"][title]["artifacts"]["companion"]
     assert public["production"] is True and not public.get("harness_only")
-    assert public["rom_sha1"]==receipt["sha1"]  # publication deliberately retained tested bytes
+    assert public["rom_sha1"]==hashlib.sha1(published).hexdigest()
+    from tools import gen3_companions as gc
+    assert manifest["rom_sha1"]==public["rom_sha1"] and gc.accepts(manifest, "payload_sha256", receipt["payload_sha256"])
+    # version-masked identity: the tested candidate and the published build are the same canonical payload, and the published
+    # ROM's canonical sha1 is its bytes with the fixed-width version field zeroed
+    from patch.tools import rom_identity
+    assert manifest["canonical_payload_sha256"]==receipt["canonical_payload_sha256"]
+    assert manifest["canonical_sha1"]==rom_identity.canonical_sha1(bytes(published),[manifest["version_slot"]])
     assert result.kind=="companion" and result.admitted_by=="hash"
 
 

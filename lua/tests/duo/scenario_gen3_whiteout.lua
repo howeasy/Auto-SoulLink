@@ -71,12 +71,22 @@ local function a_side(ctx, linked)
     end)
     local wline, wmissing, wat
     ctx.on_write("overworld", function() wline, wmissing, wat = ctx.center_state() end)
+    if ctx.D.game=="gen3_exp" then
+        ctx.watch(function()
+            if not ctx.action_menu_up() then return false end
+            local lead=(ctx.party() or {})[1]
+            if not lead then return false end
+            ctx.jlog("WHITEOUT_NATIVE_LEAD",{frame=emu.framecount(),key=lead.key,
+                hp=lead.hp,max_hp=lead.max_hp,level=lead.level,synth=true})
+            return true
+        end,"whiteout-first-native-turn-hp")
+    end
     local ok, err = ctx.try(function()
         ctx.walk_pc_to_grass("whiteout a")
         if not ctx.hunt("whiteout a") then error("no wild encounter", 0) end
         local lead = (ctx.party() or {})[1]
         if not lead then error("party unreadable in battle", 0) end
-        local fainted, lwhy = ctx.lose_active(lead.key, "whiteout a")
+        local fainted, lwhy = ctx.lose_active(lead.key, "whiteout a", {stop_on_faint = true})
         if not fainted then error("the lone starter did not faint: " .. tostring(lwhy), 0) end
     end)
     if not ok and not (type(err) == "table" and err.whiteout) then

@@ -1,4 +1,4 @@
-; TITLE-VERSION part A (docs/gen2/POST_RC_CARDS.md): "SLINK vX.Y.Z" on the main menu at tile (1,10),
+; TITLE-VERSION part A (docs/gen2/POST_RC_CARDS.md): "SoulLink dev" / "SoulLink vX.Y.Z" on the main menu at tile (1,10),
 ; clear of the menu box, both time boxes and the G/S debug menu. tools/build_gen2_companion.py
 ; defines SLINK_BUILD_VERSION from its required --version and rewrites the one `call SetUpMenu`
 ; (MainMenuJoypadLoop) to `call SlinkMainMenuBridge`, same size.
@@ -19,6 +19,10 @@ SlinkPrintVersion:
 	ld de, .text
 	jp PlaceString
 .text
-	db "SLINK {SLINK_BUILD_VERSION}@"
+	db "SoulLink {SLINK_BUILD_VERSION}@"
 .end
-ASSERT .end - .text - 1 <= SCREEN_WIDTH - 2
+	; a FIXED-WIDTH field (patch/tools/rom_identity.py FIELD = 20): stamping a release version changes only these bytes,
+	; so the build's canonical identity (field and global checksum masked) never moves
+	ds 20 - (.end - .text), 0
+ASSERT .end - .text - 1 <= SCREEN_WIDTH - 1
+ASSERT .end - .text <= 20

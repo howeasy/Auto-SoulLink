@@ -34,6 +34,7 @@ data/gen2/*.map -text whitespace=cr-at-eol
 data/gen2_sources.lock.json text eol=lf
 data/gen2/*.json text eol=lf
 data/games/gen2_*/*.json text eol=lf
+data/games/gen2_*/overlay/*.json text eol=lf
 data/games/gen2_*/charmap.lua text eol=lf
 
 # Gen 2 coverage-map lane hashes these raw working-tree bytes against pins in
@@ -49,3 +50,7 @@ docs/gen2/gen2_coverage_map.md text eol=lf
 data/games/gen1_purergb/write_checkpoint_overlay.json text eol=lf
 # generated harness table: its --check compares bytes, so a CRLF checkout must not rewrite it
 lua/tests/gen3_title_syms_exp_28877d73.lua text eol=lf
+
+# patch/dist/companion_version.json records the sha256 of every shipped file in patch/dist, and the
+# tools write them with LF; a CRLF checkout would make make_release refuse its own release.
+patch/dist/*.json text eol=lf

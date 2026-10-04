@@ -136,7 +136,9 @@ def expected_members(m) -> tuple[dict[str, str], set[str], set[str]]:
             add(f"data/games/{gen}/{f}", f"data/games/{gen}/{f}")
     # Companion members exist only with --with-patch/--rom; when present they are still blobs.
     add("companion/SLink-RR.ups", m._COMPANION_UPS, opt=True)
-    for f in m._GB_COMPANION_UPS:
+    # Gen 2's overlay UPS ship only once that title's overlay row is ADMITTED (make_release.overlay_state),
+    # so they are allowed members here, never required ones.
+    for f in m._GB_COMPANION_UPS + tuple(m._GEN2_OVERLAY_UPS.values()):
         add(f"companion/{f}", f"patch/dist/{f}", opt=True)
     add("companion/COMPANION_PATCH.md", m._COMPANION_README, opt=True)
     # A bundled pre-patched ROM is a gitignored build artifact: nothing to compare it to.

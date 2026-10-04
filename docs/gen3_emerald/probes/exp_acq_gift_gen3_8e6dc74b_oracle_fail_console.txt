@@ -1,0 +1,37 @@
+DEV SOURCE=8e6dc74b23de48e2b16203bf6dbb726e7ae4c36b; no final-cut claim
+
+========== scenario: gift_gen3 ==========
+[duo] gift_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=785ea537dc3437f19790c3e2647e8c39e9cd5ff1eb9e09c48b93b587fe495142 b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=489c6a1a341fd8cd813f75ba573f3605f1861951167f1cccc6708cdef26cbc92 write_checkpoint.json=c8675dbf23403dc7a2b7c90ec5e98fac7afd8a6799c39f1779c1f15272b8b90b profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=8e6dc74b23de48e2b16203bf6dbb726e7ae4c36b
+[duo] server up: tcp=53638 http=53639 data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_vuc88dii
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 15:37:36,315 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 15:37:36,315 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for gift_gen3: e2e_gift_gen3_a_attempt1_result.txt, e2e_gift_gen3_a_result.txt, e2e_gift_gen3_b_attempt1_result.txt, e2e_gift_gen3_b_result.txt, e2e_gift_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_vuc88dii path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_vuc88dii\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.5s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_vuc88dii path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_vuc88dii\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.5s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 6.1s
+[duo] timing results 1.6s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=7b297cd66f973cfb1058effdf28e6ff76c5b5ad9266974fcd2169120e4f65d2d file=7b297cd66f973cfb1058effdf28e6ff76c5b5ad9266974fcd2169120e4f65d2d match=true saves=1 counter=3->4 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=2b0e7deeed576868cc0a69d1f3fb8ee8d0efa2d88f66000edc26d5089fe7a9ff file=2b0e7deeed576868cc0a69d1f3fb8ee8d0efa2d88f66000edc26d5089fe7a9ff match=true saves=1 counter=4->5 rtc=normalized
+[duo] timing oracle 0.3s
+[duo] PYDEC: FAIL not enough values to unpack (expected 3, got 2)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_vuc88dii
+[duo] gift_gen3: attempt 1 aborted — ValueError: not enough values to unpack (expected 3, got 2)
+
+========== summary ==========
+  gift_gen3: FAIL (attempt 1 of 1) — ValueError: not enough values to unpack (expected 3, got 2)
+
+exit=1

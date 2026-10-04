@@ -511,6 +511,15 @@ def build(title: str, root: Path = ROOT) -> dict:
             "source": ctx.source_record(), "write_authority": "NONE", "titles": {title: selected}}
 
 
+def slink_abi_version(root: Path) -> int:
+    """SLINK_ABI_VERSION from the shared GB mailbox include every SLink build assembles against."""
+    text = (root / "patch/gb/slink_abi.inc").read_text(encoding="utf-8")
+    found = re.findall(r"^DEF\s+SLINK_ABI_VERSION\s+EQU\s+(\d+)\s*(?:;.*)?$", text, re.M)
+    if len(found) != 1 or int(found[0]) <= 0:
+        raise ValueError("patch/gb/slink_abi.inc: exactly one positive SLINK_ABI_VERSION required")
+    return int(found[0])
+
+
 def overlay_block(ctx, title: str, root: Path) -> dict | None:
     """The SLink build of this title, from data/gen2/overlay_provenance.json and its pinned .sym.
 
@@ -546,7 +555,9 @@ def overlay_block(ctx, title: str, root: Path) -> dict | None:
             raise ValueError(f"{name}: {sym} outside WRAM0")
         ram[sym] = address
     block = {"artifact": f"{title}_overlay", "base_sha1": clean_sha1, "rom_sha1": out["sha1"],
-             "md5": out["md5"], "sym": name, "sym_sha256": sha, "ram": ram}
+             "md5": out["md5"], "sym": name, "sym_sha256": sha, "ram": ram,
+             # the mailbox ABI the server admits a hello against (hello.companion_abi, read from cartridge RAM)
+             "abi": slink_abi_version(root)}
     trade = trade_block(symbols, name)
     if trade is not None:
         block["trade"] = trade

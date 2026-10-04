@@ -1,0 +1,102 @@
+# gen3_final_cut row=frlgc_ball_gate_gen3_lg_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_lgfr --scenario ball_gate_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:36:01 cpu=59% emuhawk=1 python=9
+start_utc=2026-10-03T08:36:00Z tracked_clean_before=True
+
+========== scenario: ball_gate_gen3 ==========
+[duo] ball_gate_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=4b48978785397477a53a868a817373b992afb86df6cfa54d9b0d2cd3ff45a5b0 b=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=2d6a46ed4367f0b676b4efc222b63b813632ee487937c78ae41b879d63a0b6a7 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=63984 http=63985 data=F:\slink-work\tmp\duo_nbyrvchq
+[duo] timing server 1.1s
+[duo] cleared 9 stale artifact(s) for ball_gate_gen3: e2e_ball_gate_gen3_a_1_witness.bin, e2e_ball_gate_gen3_a_attempt1_result.txt, e2e_ball_gate_gen3_a_post_flip_result.txt, e2e_ball_gate_gen3_a_result.txt, e2e_ball_gate_gen3_b_1_witness.bin, e2e_ball_gate_gen3_b_attempt1_result.txt, e2e_ball_gate_gen3_b_post_flip_result.txt, e2e_ball_gate_gen3_b_result.txt, e2e_ball_gate_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_nbyrvchq path=F:\slink-work\tmp\duo_nbyrvchq\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_nbyrvchq path=F:\slink-work\tmp\duo_nbyrvchq\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=BC73F9B0:1C600D89 b=2D356A90:99DE0D8A
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] SAVE_WITNESS_SHA256 inst=a site=c214ed7e0ed042a144dfff7e412146ce24651b4afa56dcd4f9ce3cd15ed08dd4 file=c214ed7e0ed042a144dfff7e412146ce24651b4afa56dcd4f9ce3cd15ed08dd4 match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=7dcbd3bcec94b11a51343a3384988d8eb57d94df9cbcad97bb80b4d4803215b9 file=7dcbd3bcec94b11a51343a3384988d8eb57d94df9cbcad97bb80b4d4803215b9 match=true saves=1 counter=7->8 rtc=normalized
+[duo] {"after": 20, "before": 1, "checksum_offset": 86006, "label": "SYNTH post-flip stock", "quantity_offset": 82994, "sha256": "736bf8d7a5939438d611b87028f89dc33c3aed520223a8aeee2d92200d64d8aa", "source_sha256": "2badf4d788332f82cf2cf28512371aa73d3b77b389deae9f76976341f1c38852", "title": "leafgreen"}
+[duo] {"after": 20, "before": 1, "checksum_offset": 40950, "label": "SYNTH post-flip stock", "quantity_offset": 37938, "sha256": "6322d0f8c579360a0df940148bc3fdf344b66ef3b19d08fd2463987fb5dd9eae", "source_sha256": "d1198f56939b79522a9081407ec26e7cbed550e9d77ac7cfa35493fd5704e291", "title": "firered"}
+[duo] JOURNAL attempt=1 inst=a phase=post_flip scope=private data=F:\slink-work\tmp\duo_nbyrvchq path=F:\slink-work\tmp\duo_nbyrvchq\slink_gen3_trade
+[duo] launched a phase=post_flip seed=True
+[duo] JOURNAL attempt=1 inst=b phase=post_flip scope=private data=F:\slink-work\tmp\duo_nbyrvchq path=F:\slink-work\tmp\duo_nbyrvchq\slink_gen3_trade
+[duo] launched b phase=post_flip seed=True
+[duo] keys: a=BC73F9B0:1C600D89 b=2D356A90:99DE0D8A
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 31.9s
+[duo] RESULT_LINE a: (none)
+[duo] RESULT_LINE b: RESULT: FAIL (post-flip SYNTH stock was not read back)
+[duo] PYDEC: FAIL client RESULT before both instances to catch a wild mon
+[duo] ball_gate_gen3: a client finished before 'both instances to catch a wild mon' (a: no RESULT; b: RESULT: FAIL (post-flip SYNTH stock was not read back))
+--- ball_gate_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] box scan stopped at box 0: gPokemonStoragePtr is null
+[client] [SLink-gen3] baseline(quiet): boxes ok=false n=0 gen=0 party=0
+[client] [SLink-gen3] box scan stopped at box 0: gPokemonStoragePtr is null
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"viridian_city","artifact_kind":"companion","badges":0,"ball_count":0,"battle_identity":true,"companion_abi":2,"event":"hello","foundation":"gen3_frlg","has_pokeballs":false,"in_battle":fal
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"","artifact_kind":"companion","badges":0,"ball_count":0,"battle_identity":true,"companion_abi":2,"event":"hello","foundation":"gen3_frlg","has_pokeballs":false,"in_battle":false,"loc_name"
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX area_enter - {"area_id":"pallet_town","event":"area_enter","loc_name":"pallet_town","player":"a","seq":3}
+RX link_panel
+TX area_enter - {"area_id":"viridian_forest","event":"area_enter","loc_name":"viridian_forest","player":"a","seq":7}
+[client] [gen3] phase field frame=756 map=(1,0)
+MYKEY 0 BC73F9B0:1C600D89
+PARTY slot=0 key=BC73F9B0:1C600D89 species=7 level=6 hp=0/23
+MYKEY 1 F6B6A64D:1C600D89
+PARTY slot=1 key=F6B6A64D:1C600D89 species=17 level=25 hp=70/70
+booted frame=756 map=map=256 at=(4,41) balls=20
+JITTER requested=0 applied=0 attempt=1
+BALL_STOCK_READY {"active":true,"balls":20}
+--- ball_gate_gen3 b result (last 25 lines) ---
+[client] [SLink-gen3] baseline(quiet): boxes ok=false n=0 gen=0 party=0
+[client] [SLink-gen3] box scan stopped at box 0: gPokemonStoragePtr is null
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"viridian_city","artifact_kind":"companion","badges":0,"ball_count":0,"battle_identity":true,"companion_abi":2,"event":"hello","foundation":"gen3_frlg","has_pokeballs":false,"in_battle":fal
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"","artifact_kind":"companion","badges":0,"ball_count":0,"battle_identity":true,"companion_abi":2,"event":"hello","foundation":"gen3_frlg","has_pokeballs":false,"in_battle":false,"loc_name"
+[client] [SLink-gen3] write native 0x0201B044 +4 frame 595
+[client] [SLink-gen3] write native 0x0201B800 +4 frame 595
+[client] [SLink-gen3] write native 0x0201B808 +1 frame 595
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=756 map=(1,0)
+MYKEY 0 2D356A90:99DE0D8A
+PARTY slot=0 key=2D356A90:99DE0D8A species=7 level=9 hp=0/27
+MYKEY 1 263620B6:99DE0D8A
+PARTY slot=1 key=263620B6:99DE0D8A species=17 level=25 hp=68/68
+booted frame=756 map=map=256 at=(4,41) balls=20
+JITTER requested=0 applied=0 attempt=1
+WRITES 3
+RESULT: FAIL (post-flip SYNTH stock was not read back)
+[duo] data dir kept: F:\slink-work\tmp\duo_nbyrvchq
+
+========== summary ==========
+  ball_gate_gen3: FAIL (attempt 1 of 8)
+exit=1 end_utc=2026-10-03T08:36:35Z tracked_clean_after=True classification=real

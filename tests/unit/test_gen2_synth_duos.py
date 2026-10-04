@@ -170,12 +170,12 @@ def oracle_text(inst, name, save_path, cart, key):
     j = json.dumps
     boot = (FIX / f"{name}.SaveRAM").read_bytes()
     duo = {"player": inst, "scenario": "gen2_egg_hatch", "attempt": 1,
-           "case": synth.build_named(name)[1]["base_fixture"], "title": "crystal", "rom_sha1": "deadbeef" * 5,
+           "case": synth.build_named(name)[1]["base_fixture"], "title": "crystal", "rom_sha1": oracles._executed_identity("crystal")[0],
            "fixture_sha256": hashlib.sha256(boot).hexdigest(), "synth": name}
     witness = {"frame": 50, "save_completed_frame": 49, "gate_saves": 1, "client_saves": 1,
                "cartram_sha256": hashlib.sha256(cart).hexdigest(), "cartram_bytes": len(cart),
                "saveram_path": str(save_path), "saveram_bytes": len(cart) + 22, "flushed_matches": True}
-    rows = [f"DUO_GEN2 {j(duo)}", "CLIENT " + j({"title": "crystal", "rom_sha1": "deadbeef" * 5,
+    rows = [f"DUO_GEN2 {j(duo)}", "CLIENT " + j({"title": "crystal", "rom_sha1": duo["rom_sha1"],
                                                    "production_admitted": True}),
             "ENGINE_CAPTURE " + j({"frame": 10, "site_id": "hatch_finalized", "acquisition": "egg_hatch",
                                    "destination": "party", "area_id": "gift_daycare", "key": key, "species_id": 16}),

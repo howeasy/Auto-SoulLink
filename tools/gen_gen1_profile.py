@@ -99,7 +99,7 @@ RAM_SYMBOLS = [
     "wForceEvolution", "wEvolutionOccurred",
     "wTradedPlayerMonSpecies", "wTradedEnemyMonSpecies",
     "wInGameTradeGiveMonSpecies", "wInGameTradeReceiveMonSpecies",
-    "wLinkEnemyTrainerName", "wSerialPartyMonsPatchList", "wSurroundingTiles", "wTileMapBackup",
+    "wLinkEnemyTrainerName", "wTradingWhichPlayerMon", "wSerialPartyMonsPatchList", "wSurroundingTiles", "wTileMapBackup",
     # SRAM
     "sPlayerName", "sMainData", "sSpriteData", "sPartyData", "sCurBoxData", "sTileAnimations",
     "sMainDataCheckSum", "sGameData", "sGameDataEnd", "sHallOfFame",

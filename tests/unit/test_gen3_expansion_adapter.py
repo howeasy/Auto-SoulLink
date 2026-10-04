@@ -12,24 +12,17 @@ from server.adapters import (
 )
 from server.adapters.base import GamePresentationAdapter, GameRulesAdapter
 
-# The expansion is REFUSED in production (ruling 39). The cases below that put its rom_type on
-# the wire therefore run inside the logged TEST-ONLY route the gen3_exp duo lane opens; the
-# refusal, and that route's own boundary, are pinned in test_gen3_expansion_refusal.py.
-from tests.unit.test_gen3_expansion_refusal import expansion_routed  # noqa: F401,E402
-
 ROM_TYPE = "emerald_expansion_28877d73"
 
 
-def test_reference_build_is_registered_but_unrouted():
-    """Ruling 39: the adapter class and its pack are here, and the cartridge routes to
-    nothing. The refusal and the TEST-ONLY route that re-opens it for the duo lane are
-    pinned in tests/unit/test_gen3_expansion_refusal.py."""
+def test_reference_build_is_registered_and_routed():
+    """The approved exact expansion build routes directly to its own adapter."""
     adapter = get_adapter("gen3_exp", rom_type=ROM_TYPE)
     assert isinstance(adapter, (GameRulesAdapter, GamePresentationAdapter))
     assert adapter.game_id == "gen3_exp"
     assert adapter.rom_type == ROM_TYPE
-    assert game_id_for_rom_type(ROM_TYPE) is None
-    assert foundation_for_rom_type(ROM_TYPE) is None
+    assert game_id_for_rom_type(ROM_TYPE) == "gen3_exp"
+    assert foundation_for_rom_type(ROM_TYPE) == "gen3_exp"
     assert variant_label(ROM_TYPE) == "Emerald Expansion 1.17.0 (28877d73)"
     # Bulbasaur, Pikachu and Pound in pinned include/constants + src/data tables.
     assert adapter.species_name(1) == "Bulbasaur"
@@ -88,7 +81,10 @@ def test_reference_presentation_and_explicit_unsupported_surfaces():
     assert a.parse_ot_id("12345678:87654321") == "87654321"
     assert a.status_token(0x88) == "TOX"
     assert a.gift_link_area("route_101") == "gift_route_101"
-    assert not a.is_fixed_species_gift("gift_beldum")  # no unextracted static policy
+    # EXP-ADAPTER-POLICY: fixed-species policy is census-derived (was a pinned limitation);
+    # "gift_beldum" is not a real area id, the real one is mossdeep_city_stevens_house.
+    assert not a.is_fixed_species_gift("gift_beldum")
+    assert a.is_fixed_species_gift("mossdeep_city_stevens_house")
     assert a.area_pack == "gen3_exp/28877d73"
     assert a.pairing_kind("companion") == "companion"
 
@@ -244,25 +240,24 @@ def test_expansion_party_layout_matches_facts_json_bitfields():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("other", ["emerald", "firered", "leafgreen", "firered_rr"])
 @pytest.mark.parametrize("exp_first", [True, False])
-@pytest.mark.usefixtures("expansion_routed")
 async def test_expansion_refuses_mixed_foundations_without_mutating_run(tmp_path, other, exp_first):
     from server.server import SLinkServer
+    from tests.unit.companion_evidence import companion  # a patched cartridge for each companion title
     from tests.unit.test_mixed_foundations import _hello, _refused, _session, _snapshot
 
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     first, second = (ROM_TYPE, other) if exp_first else (other, ROM_TYPE)
     try:
-        assert not _refused(await send(_hello("a", {"rom_type": first, "artifact_kind": "clean"})))
+        assert not _refused(await send(_hello("a", {"rom_type": first, "artifact_kind": "clean", **companion(first)})))
         before = _snapshot(srv)
-        assert _refused(await send(_hello("b", {"rom_type": second, "artifact_kind": "clean"})))
+        assert _refused(await send(_hello("b", {"rom_type": second, "artifact_kind": "clean", **companion(second)})))
         assert _snapshot(srv) == before
     finally:
         await close()
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("expansion_routed")
 async def test_reference_pairs_with_itself_and_unknown_build_stays_unrouted(tmp_path):
     from server.server import SLinkServer
     from tests.unit.test_mixed_foundations import _hello, _refused, _session
@@ -484,7 +479,7 @@ def test_every_base_contract_method_has_a_decided_expansion_answer():
         "parse_ot_id", "is_valid_mon_key", "species_name", "type_name", "rival_trainer_ids",
         "party_blob_size", "supports_abilities", "status_token", "info_panel_width",
         "reports_box_census", "supports_info_panel", "supports_explode_mode", "set_artifact_kind",
-        "pairing_kind", "supports_randomized", "pairing_kind_for", "native_trade_ui",
+        "pairing_kind", "companion_refusal", "supports_randomized", "pairing_kind_for", "native_trade_ui",
         "supports_trade_recovery", "trade_unavailable_reason", "refused_trade_recovery",
         # presentation
         "sprite_html", "ability_name", "ability_description", "trainer_info", "item_name",
@@ -504,6 +499,8 @@ def test_every_base_contract_method_has_a_decided_expansion_answer():
     assert not a.reports_box_census()
     assert not a.supports_randomized(ROM_TYPE)
     assert a.pairing_kind_for("clean", None) == "clean"
+    # patch-first (2026-10-02): the expansion's companion does not exist yet, so it is exempt and stays clean
+    assert a.companion_refusal({"rom_type": ROM_TYPE, "artifact_kind": "clean"}) is None
     assert not a.supports_trade_recovery() and a.refused_trade_recovery()
     assert a.calc_species(258) == "Mudkip"
     assert a.form_sprite_url(258) is None

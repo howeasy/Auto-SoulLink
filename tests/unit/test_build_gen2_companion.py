@@ -629,13 +629,13 @@ def test_phone_binary_pin_rejects_table_or_dispatch_drift(tmp_path, title, fault
 
 # ---------------------------------------------------------------- TITLE-VERSION part A
 
-@pytest.mark.parametrize("version", ["v0.0.0-dev", "v1.2.3", "v10.20.30", "v1.2.3-rc.1"])
+@pytest.mark.parametrize("version", ["dev", "v0.0.0-dev", "v1.2.3", "v10.20.30", "v0.3.0-dev"])
 def test_version_accepts_a_release_tag_that_fits_the_row(version):
     assert bc.check_version(version) == version
 
 
-@pytest.mark.parametrize("version", [None, "", "1.2.3", "v1.2", "v1.2.3 ", "V1.2.3", "v1.2.3-RC",
-                                     "v1.2.3-toolongsuffix", 'v1.2.3"'])
+@pytest.mark.parametrize("version", [None, "", "1.2.3", "v1.2", "v1.2.3 ", "V1.2.3", "v1.2.3-RC", "DEV",
+                                     "v1.2.3-rc.1", "v1.2.3-toolongsuffix", 'v1.2.3"'])
 def test_version_rejects_anything_else(version):
     with pytest.raises(RuntimeError, match="--version"):
         bc.check_version(version)
@@ -768,3 +768,44 @@ def test_gitattributes_pins_the_overlay_sources_lf():
     out = subprocess.run(["git", "check-attr", "eol", "--", "patch/gen2/src/phone.asm", "patch/gen2/src/version.asm",
                           "patch/gb/slink_abi.inc"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
     assert out.count("eol: lf") == 3, out
+
+
+# ---------------------------------------------------------------- version identity (owner ruling 2026-10-02)
+
+def _gen2_rom(text: bytes, tmp_path):
+    """A 2 MiB image with a Stadium table and a version field at bank $75 $5008, plus the sym naming it."""
+    rom = bytearray(0x200000)
+    rom[len(rom) - 520:len(rom) - 514] = b"N64PS3"
+    offset = 0x75 * 0x4000 + (0x5008 - 0x4000)
+    rom[offset:offset + 20] = text + bytes([0x50]) + bytes(19 - len(text))
+    sym = tmp_path / "x.sym"
+    sym.write_text("75:5008 SlinkPrintVersion.text" + chr(10), encoding="utf-8")
+    return bytes(rom), sym
+
+
+def _gen2_text(version: bytes) -> bytes:
+    return bc.GEN2_MENU_PREFIX + version
+
+
+def test_gen2_identity_masks_the_whole_field_and_the_stadium_table(tmp_path):
+    dev, sym = _gen2_rom(_gen2_text(bytes([0x83, 0x84, 0x95])), tmp_path)              # "dev"
+    rel, _ = _gen2_rom(_gen2_text(bytes([0xB5, 0xF6, 0xE8, 0xF9])), tmp_path)          # "v0.3"
+    stamped = bytearray(rel)
+    stamped[len(stamped) - 100] = 0x77                                                  # inside the Stadium table
+    a = bc.version_identity(dev, sym, "dev", None)
+    b = bc.version_identity(bytes(stamped), sym, "v0.3", {"sha1": "1" * 40, "canonical_sha1": a["canonical_sha1"]})
+    assert a["canonical_sha1"] == b["canonical_sha1"] and b["equivalent_sha1s"] == ["1" * 40]
+    assert a["version_slot"] == {"offset": 0x75 * 0x4000 + 0x1008, "length": 20} and len(a["canonical_slots"]) == 2
+    legacy = bytearray(dev)                                    # the mask the published hashes were taken with, spelled out by hand
+    legacy[a["version_slot"]["offset"]:a["version_slot"]["offset"] + 20] = bytes(20)
+    legacy[0x14E:0x150] = bytes(2)
+    legacy[len(legacy) - 544:] = bytes(544)
+    assert a["canonical_sha1"] == hashlib.sha1(legacy).hexdigest()
+
+
+def test_gen2_build_refuses_a_field_whose_wordmark_is_not_soullink(tmp_path):
+    bad = bytearray(_gen2_text(bytes([0x83, 0x84, 0x95])))
+    bad[4] ^= 0x20                                                                       # one prefix byte
+    rom, sym = _gen2_rom(bytes(bad), tmp_path)
+    with pytest.raises(RuntimeError, match="does not start with 'SoulLink '"):
+        bc.version_identity(rom, sym, "dev", None)

@@ -62,11 +62,13 @@ end
 Entry.PACKS = {
     gen3_frlg = {
         randomizable = true,
+        companion_required = true,
         trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { firered = "firered", leafgreen = "leafgreen" },
         header_code = { BPRE = "firered", BPGE = "leafgreen" },
     },
     gen3_rr = {
+        companion_required = true,
         trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { radical_red = "firered_rr" },
     },
@@ -74,16 +76,17 @@ Entry.PACKS = {
     -- joined Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row, owner ruling 24).
     gen3_emerald = {
         randomizable = true,
+        companion_required = true,
         trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { emerald = "emerald" },
         header_code = { BPEE = "emerald" },
     },
     -- X3: the pokeemerald-expansion reference build (ROM 28877d73), registered so its hash names
-    -- its own pack (never gen3_emerald's) -- NOT routed and its profile NOT admitted until the
-    -- owner's XG gates (docs/gen3_emerald/PLAN.md X3). No header_code: an unknown-hash expansion
-    -- build is admitted by exact sha1 only, never by name.
+    -- its own pack (never gen3_emerald's). Only the known reference digest is admitted;
+    -- no header_code or anchor fallback can admit another expansion build.
     gen3_exp = {
         rom_type = { emerald_expansion_28877d73 = "emerald_expansion_28877d73" },
+        hash_only = true,
     },
 }
 -- Every pack file Entry.build/Entry.admit reads, as literal repo-relative paths: the release
@@ -127,7 +130,7 @@ Entry.PACK_FILES = {
 -- table; the launcher keeps no copy of it. gen3_rr joined at G5 (C5-6), gen3_emerald at EG4
 -- (owner ruling 24): every admitted pack is routed, and anything else on a GBA core is
 -- refused by the launcher.
-Entry.ROUTED = { gen3_frlg = true, gen3_rr = true, gen3_emerald = true }
+Entry.ROUTED = { gen3_frlg = true, gen3_rr = true, gen3_emerald = true, gen3_exp = true }
 
 Entry.ROM_TYPE = {}
 for _, pack in pairs(Entry.PACKS) do
@@ -172,8 +175,14 @@ function Entry.admission_table(root, json)
             for kind, artifact in pairs(artifacts) do
                 local row = { pack = pack, title = title, kind = kind,
                               rom_type = def.rom_type[title], production = artifact.production }
-                for _, key in ipairs({ "rom_sha1", "rom_md5" }) do
-                    local digest = artifact[key]
+                -- equivalent_sha1s: earlier stamps of this same canonical build (only the menu-version
+                -- field differs), still on players' cartridges, so they admit as this artifact.
+                local digests = { { "rom_sha1", artifact.rom_sha1 }, { "rom_md5", artifact.rom_md5 } }
+                for _, sha1 in ipairs(artifact.equivalent_sha1s or {}) do
+                    digests[#digests + 1] = { "equivalent_sha1", sha1 }
+                end
+                for _, pair in ipairs(digests) do
+                    local key, digest = pair[1], pair[2]
                     if digest then
                         digest = digest:lower()
                         local prior = table_[digest]
@@ -243,7 +252,10 @@ function Entry.admit(args)
     end
     local code = tostring(args.header_code or "")
     if args.rom_read then
-        local matches = Entry.anchor_matches(args)
+        local matches = {}
+        for _, match in ipairs(Entry.anchor_matches(args)) do
+            if not Entry.PACKS[match.pack].hash_only then matches[#matches + 1] = match end
+        end
         if #matches == 1 then
             local m = matches[1]
             if m.production == false then return nil, "non-production cartridge is not admitted" end
@@ -284,10 +296,19 @@ function Entry.admit_routed(args)
     if admitted.admitted_by == "header" then
         return nil, "this " .. tostring(admitted.title) .. " build (header "
                     .. tostring(args.header_code) .. ") is not a pinned cartridge -- "
-                    .. "Archipelago builds and unknown hacks are not supported yet"
+                    .. "other builds and hacks are not supported yet"
     end
     if not Entry.ROUTED[admitted.pack] then
         return nil, "the " .. tostring(admitted.pack) .. " pack is not yet routed to the Gen 3 client"
+    end
+    -- Patch-first (owner 2026-10-02): a pack that marks `companion_required` refuses its CLEAN
+    -- artifacts (kind clean / rand; header-only "named" was refused above). gen3_exp, which has
+    -- no companion artifact, never sets it, so the Emerald Expansion keeps booting clean.
+    -- (Not `production = false` in the generated engine_signals: that also makes Entry.build refuse
+    -- the clean artifact, which every clean-world unit test builds, and is the Gen 3 lane's call.)
+    if Entry.PACKS[admitted.pack].companion_required and (admitted.kind == "clean" or admitted.kind == "rand") then
+        return nil, "this " .. tostring(admitted.title) .. " cartridge needs the SLink companion patch; "
+                    .. "prepare it through the Manager or /patcher"
     end
     return admitted
 end
@@ -375,8 +396,8 @@ local function build_production(deps, c)
     -- writes policy. Attaching late left deps.native nil, so native_idle could report idle while
     -- the real mailbox was busy (Codex REV2). The session does not exist yet, so send resolves it
     -- lazily. The FULL pack profile is read here: the arena lives at profile.native, outside
-    -- titles (Codex REV on C5-1). FR's ABI2 binding additionally requires explicit
-    -- production metadata; no FR companion is currently shipped/admitted.
+    -- titles (Codex REV on C5-1). FR/LG/Emerald's ABI2 binding additionally requires explicit
+    -- production metadata (their companion rows and patch/dist/gen3_companions.json carry it).
     local session   -- not `client`: that is a BizHawk global name (test_gen3_signals BizHawk-globals scan)
     local full_profile = load_json(c.json, c.root .. "/" .. files.profile)
     local fr_native = ((pack == "gen3_frlg" and (c.title == "firered" or c.title == "leafgreen"))
@@ -450,6 +471,9 @@ local function build_production(deps, c)
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
         foundation = pack, artifact_kind = (c.parts.kind == "rand" or c.parts.kind == "rand_companion") and c.parts.kind or c.artifact_kind,
         native = native, log = deps.log, core = core,
+        -- the hello's companion evidence (server companion_refusal): the pack's pinned ABI when this
+        -- cartridge's own mailbox is live, whatever the launcher's artifact kind says
+        companion_abi = function() return L("lua/gen3/native.lua").companion_live(full_profile.native, io_) end,
         trade_policy = Entry.PACKS[pack].trade_policy,
         rom_size = deps.rom_size,
         rom_content_new = deps.rom_content_new or function(tbl, rom_io)

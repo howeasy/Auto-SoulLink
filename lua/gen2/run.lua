@@ -1,9 +1,11 @@
 -- lua/gen2/run.lua — BizHawk entry for the Gen 2 PRODUCTION client.
 --
 -- Builds the graph through Entry.build only: the cartridge must be admitted by its actual
--- sha1 (G1 ADMITTED, owner ruling O-22, with its U1/U2 PHYSICAL receipts re-validated at
--- load): Crystal 1.0, Gold, Silver. Anything else (Crystal 1.1, an unknown hash, a non-Gen 2
--- cartridge) is refused here with a console line and no client. Everything game-related is
+-- sha1, as a CLEAN cartridge (G1 ADMITTED, owner ruling O-22) or an ACTIVATED OVERLAY cartridge (its row
+-- SELECTED+ADMITTED behind its own G4 grant and binding pin), each with ITS OWN U1/U2 PHYSICAL receipts
+-- re-validated at load: Crystal 1.0, Gold, Silver. Anything else (Crystal 1.1, an unknown hash, a non-Gen 2
+-- cartridge) is refused here with a console line and no client. Its kind and executed sha1 are the admission
+-- decision's (parts.artifact_kind / parts.runtime_rom_sha1), never a caller's. Everything game-related is
 -- built by lua/gen2/entry.lua; this file only supplies the BizHawk-shaped live io, the
 -- LuaSocket transport, the HUD and the frame loop.
 --
@@ -94,9 +96,9 @@ if not ok then
     console.log("[SLink-gen2] refused to start: " .. tostring(err))
     return
 end
-console.log(string.format("[SLink-gen2] %s/%s PRODUCTION (%s, G1 %s) player %s -> %s:%d (rom %s)",
-                          parts.pack, parts.title, parts.qualification, parts.data.admission.gate.state,
-                          player, host, port, parts.profile.rom_sha1:sub(1, 8)))
+console.log(string.format("[SLink-gen2] %s/%s %s PRODUCTION (%s) player %s -> %s:%d (rom %s)",
+                          parts.pack, parts.title, parts.artifact_kind, parts.qualification,
+                          player, host, port, parts.runtime_rom_sha1:sub(1, 8)))
 
 SLINK_GEN2_CLIENT, SLINK_GEN2_PARTS, SLINK_GEN2_CHECKPOINT = gen2, parts, parts.checkpoint
 

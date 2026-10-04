@@ -42,6 +42,11 @@ def runner(tmp_path, monkeypatch):
     source_dir.mkdir(parents=True)
     (source_dir / "gen1_red.gb").write_bytes(b"clean-red")
     (source_dir / "gen1_blue.gb").write_bytes(b"clean-blue")
+    # the companion builds the row's instances boot (GAMES["gen1_new"]["patched_saves"])
+    companion_dir = tmp_path / "patch" / "gen1" / "build"
+    companion_dir.mkdir(parents=True)
+    (companion_dir / "slink_red.gb").write_bytes(b"companion-red")
+    (companion_dir / "slink_blue.gb").write_bytes(b"companion-blue")
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.scenario = "admit_randomized_new"
     run.cfg = dict(duo.SCENARIOS[run.scenario])
@@ -64,26 +69,37 @@ def runner(tmp_path, monkeypatch):
 
 
 def _fake_pipeline(monkeypatch):
+    """server.cartridges.provision, faked: the companion composition itself is
+    test_cartridges.py's; here only what the scenario asks for and does with the result."""
+    from server import cartridges
+
     called = []
     monkeypatch.setattr(upr_pipeline, "find_upr_jar", lambda: "fake.jar")
     mapping = {b"random-red": "a" * 64, b"random-blue": "b" * 64,
-               b"clean-blue": "c" * 64, b"clean-red": "d" * 64}
+               b"clean-blue": "9" * 64, b"clean-red": "d" * 64,
+               b"companion-blue": "c" * 64, b"companion-red": "e" * 64}
     monkeypatch.setattr(scan, "fingerprint_rom", lambda raw: mapping[raw])
 
-    def prepare(jar, settings, sources, out_dir):
-        called.append((jar, settings, sources, out_dir))
-        Path(out_dir).mkdir(parents=True)
-        players = {}
-        for player, raw in (("a", b"random-red"), ("b", b"random-blue")):
-            output = Path(out_dir) / f"{player}_randomized.gbc"
+    def provision(run_dir, sources, *, companion, randomize, jar=""):
+        called.append((run_dir, sources, companion, randomize, jar))
+        roms = Path(run_dir) / "roms"
+        roms.mkdir(parents=True)
+        players, contract_players = {}, {}
+        for player, raw, seed in (("a", b"random-red", "1"), ("b", b"random-blue", "2")):
+            output = roms / f"{player}.gb"
             output.write_bytes(raw)
             players[player] = {"output": str(output), "fingerprint": mapping[raw],
-                               "seed": 1 if player == "a" else 2,
-                               "sha1": hashlib.sha1(raw).hexdigest()}
-        return {"upr_version": "4.6.1", "settings_sha256": "f" * 64,
-                "categories": ["wild"], "spec": {"wild": "random"}, "players": players}
+                               "rom_sha1": hashlib.sha1(raw).hexdigest(), "kind": "rand_companion"}
+            contract_players[player] = {"fingerprint": mapping[raw], "seed": seed,
+                                        "rom_sha1": hashlib.sha1(raw).hexdigest()}
+        contract = {"upr_version": "4.6.1", "settings_sha256": "f" * 64, "categories": ["wild"],
+                    "players": contract_players}
+        (Path(run_dir) / "rom_contract.json").write_text(json.dumps(contract), encoding="utf-8")
+        return {"family": "vanilla", "companion": companion, "randomizer": {}, "players": players}
 
-    monkeypatch.setattr(upr_pipeline, "prepare_pair", prepare)
+    monkeypatch.setattr(cartridges, "provision", provision)
+    monkeypatch.setattr(upr_pipeline, "prepare_pair",
+                        lambda *args: pytest.fail("randomized outside the companion composition"))
     return called
 
 
@@ -91,11 +107,11 @@ def test_contract_and_staged_rom_are_ready_before_server(runner, monkeypatch):
     called = _fake_pipeline(monkeypatch)
     contract = runner.prepare_admit_randomized_new()
     assert len(called) == 1
-    jar, settings, sources, out_dir = called[0]
-    assert jar == "fake.jar"
-    assert Path(settings).read_bytes() == build_categories({"wild"})
+    run_dir, sources, companion, randomize, jar = called[0]
+    # the cartridges a randomized companion run hands out: companion ON, from the clean sources
+    assert companion is True and jar == "fake.jar" and run_dir == runner.data_dir
+    assert Path(randomize["settings_path"]).read_bytes() == build_categories({"wild"})
     assert sources == {p: os.path.join(duo.REPO, runner.gcfg["rom"][p]) for p in ("a", "b")}
-    assert out_dir == os.path.join(runner.data_dir, "roms")
     path = Path(runner.data_dir) / "rom_contract.json"
     assert json.loads(path.read_text(encoding="utf-8")) == contract
     assert set(contract) == {"upr_version", "settings_sha256", "categories", "players"}
@@ -103,8 +119,11 @@ def test_contract_and_staged_rom_are_ready_before_server(runner, monkeypatch):
     assert contract["players"]["a"]["seed"] == "1"
     staged = Path(duo.REPO) / runner._admit_roms["a"]
     assert staged.suffix == ".gb" and staged.read_bytes() == b"random-red"
-    assert runner._admit_roms["b"] == runner.gcfg["rom"]["b"]
-    assert runner._admit_extra_saves == {"a": "slink red randomized.SaveRAM"}
+    # B boots its companion build (a clean cartridge is refused before any contract check), and
+    # the reported fingerprint ("c") is the one read off THOSE bytes, not the clean source's ("9")
+    assert set(runner._admit_roms) == {"a"}
+    assert runner._rom_for("b") == "patch/gen1/build/slink_blue.gb"
+    assert runner._gen1_save_name("a") == "slink red randomized.SaveRAM"
     assert runner._admit_fingerprints == {"expected_b": "b" * 64, "reported_b": "c" * 64}
 
 
@@ -115,8 +134,8 @@ def test_missing_jar_fails_before_any_contract_is_written(runner, monkeypatch):
     assert not (Path(runner.data_dir) / "rom_contract.json").exists()
 
 
-def test_randomized_save_seeds_base_and_fallback_names(runner, monkeypatch):
-    runner._admit_extra_saves = {"a": GENS["gen1"]["patched"]["red_rand_patched"][2]}
+def test_each_save_is_seeded_under_the_one_name_its_cartridge_boots(runner, monkeypatch):
+    runner._admit_roms = {"a": "build/e2e_admit_randomized_new/slink_red_randomized.gb"}
 
     def seed(rom, target, dest_dir):
         assert target == "town"
@@ -130,9 +149,12 @@ def test_randomized_save_seeds_base_and_fallback_names(runner, monkeypatch):
     runner._seed_instance_save("b")
     a_dir = Path(runner._saveram_dir("a"))
     b_dir = Path(runner._saveram_dir("b"))
-    assert (a_dir / GENS["gen1"]["saveram_names"]["red"]).read_bytes() == b"red-town"
+    # A boots the staged randomized cartridge, B its companion: each fixture lands under that
+    # cartridge's name only -- no clean-named or companion-named copy is left beside A's save
+    # for an oracle to read by mistake
     assert (a_dir / "slink red randomized.SaveRAM").read_bytes() == b"red-town"
-    assert (b_dir / GENS["gen1"]["saveram_names"]["blue"]).read_bytes() == b"blue-town"
+    assert len(list(a_dir.iterdir())) == 1
+    assert (b_dir / "slink blue.SaveRAM").read_bytes() == b"blue-town"
     assert len(list(b_dir.iterdir())) == 1
 
 
@@ -388,6 +410,12 @@ def test_jitter_matching_the_harness_value_passes(text, expected):
     assert duo.jitter_problems(text, expected) == []
 
 
+def _gen1_client_receipt(run, inst, text):
+    digest = hashlib.sha1((Path(duo.REPO) / run._rom_for(inst)).read_bytes()).hexdigest()
+    title = run.gcfg["fixture"][inst]
+    return (f"client built: title={title} pack=gen1_rby kind=named player={inst} "
+            f"rom={digest[:8]} -> 127.0.0.1:54321\n{text}")
+
 def test_a_gen1_new_run_without_the_jitter_echo_is_a_harness_finding(runner):
     """No echo means the check did not run; a silent pass would be the harness lying."""
     runner.scenario = "reconnect_new"
@@ -397,7 +425,8 @@ def test_a_gen1_new_run_without_the_jitter_echo_is_a_harness_finding(runner):
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: None
-    runner.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    runner.wait_results = lambda: tuple(_gen1_client_receipt(runner, inst, "RESULT: PASS")
+                                        for inst in ("a", "b"))
     runner.cleanup = lambda passed: None
     runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
     with pytest.raises(RuntimeError, match="JITTER marker missing"):
@@ -412,7 +441,8 @@ def test_a_gen1_new_run_whose_echo_matches_is_unaffected(runner):
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: None
-    runner.wait_results = lambda: (f"RESULT: PASS\n{_JITTER_1}", f"RESULT: PASS\n{_JITTER_1}")
+    runner.wait_results = lambda: tuple(_gen1_client_receipt(runner, inst, f"RESULT: PASS\n{_JITTER_1}")
+                                        for inst in ("a", "b"))
     runner.cleanup = lambda passed: None
     runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
     assert runner.run() is True
@@ -473,7 +503,8 @@ def test_reconnect_cannot_pass_on_two_client_passes_when_wrong_save_leg_was_not_
     runner.start_server = lambda: None
     runner.start_instances = lambda: None
     runner.orchestrate = lambda: runner._live_complete.update(reconnect_new=False)
-    runner.wait_results = lambda: (f"RESULT: PASS\n{_JITTER_1}", f"RESULT: PASS\n{_JITTER_1}")
+    runner.wait_results = lambda: tuple(_gen1_client_receipt(runner, inst, f"RESULT: PASS\n{_JITTER_1}")
+                                        for inst in ("a", "b"))
     runner.cleanup = lambda passed: None
     runner.args = type("Args", (), {"keep_alive": False, "idle_jitter": 0})()
     assert runner.run() is False
@@ -528,8 +559,8 @@ def test_reconnect_kills_only_a_and_leaves_b_process_running(runner, monkeypatch
 def test_existing_red_town_is_not_a_second_ot_save():
     town = REPO / "tests/fixtures/gen1/red_town.SaveRAM"
     battle = REPO / "tests/fixtures/gen1/red_battle.SaveRAM"
-    if not town.exists() or not battle.exists() or not (REPO / "patch/build/gen1_red.gb").exists():
-        pytest.skip("Red town/battle saves or clean ROM absent")
+    if not town.exists() or not battle.exists() or not (REPO / "patch/gen1/build/slink_red.gb").exists():
+        pytest.skip("Red town/battle saves or the companion Red build absent")
     profile = json.loads((REPO / "data/games/gen1_rby/profile.json").read_text(
         encoding="utf-8"))["titles"]["red"]["ram"]
     offset = codec.SRAM_LAYOUT["sMainData"] + profile["wPlayerID"] - profile["wMainDataStart"]
@@ -893,7 +924,9 @@ def _put_fainted_in_box12(sram, rom):
 
 def _oracle_runner(tmp_path, scenario):
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.scenario = scenario
+    run.scenario, run.game, run.attempt = scenario, "gen1_new", 1
+    run.data_dir = str(tmp_path)
+    run._pydec_path = str(tmp_path / "pydec.txt")
     run.cfg = duo.SCENARIOS[scenario]
     run.gcfg = duo.GAMES["gen1_new"]
     run._saveram_dir = lambda inst: str(tmp_path / f"save_{inst}")
@@ -904,9 +937,16 @@ def _oracle_runner(tmp_path, scenario):
 
     run.emus = [Finished(), Finished()]
     paths = {}
+    for inst in ("a", "b"):
+        companion = Path(duo.REPO) / run._rom_for(inst)
+        if not companion.is_file():
+            pytest.skip(f"companion input absent: {companion}")
     for inst, title in (("a", "red"), ("b", "blue")):
         sram, rom = _fixture_save(title)
-        path = Path(run._saveram_dir(inst)) / GENS["gen1"]["saveram_names"][title]
+        if run.cfg.get("gen1_synth"):
+            # The model starts from the same qualified/disclosed input as the live row.
+            sram = bytearray(Path(run._prepare_gen1_explode_fixture(inst)).read_bytes())
+        path = Path(run._saveram_dir(inst)) / run._gen1_save_name(inst)   # the companion's save, as the oracle reads it
         path.parent.mkdir(parents=True)
         paths[inst] = (path, sram, rom)
         start = codec.SRAM_LAYOUT["sPartyData"]
@@ -953,7 +993,14 @@ def _linked_faint_fixture(tmp_path, scenario):
     run, paths = _oracle_runner(tmp_path, scenario)
     run.data_dir = str(tmp_path)
     run._link_keys = {}
+    hunts = {}
     for inst, (path, sram, rom) in paths.items():
+        if run.cfg.get("gen1_synth"):
+            balls = codec.bag_quantity(sram, codec.POKE_BALL)
+            hunts[inst] = (f"[hunt] encounter 1 at (10,35) mode=catch balls={balls}\n"
+                           f"[hunt] threw ball index 0 -> caught balls_before={balls} balls_after={balls-1}\n")
+            sram[codec._BAG_COUNT + 2] = balls - 1  # model one native prerequisite throw
+            _seal_main(sram)
         run._link_keys[inst] = _put_fainted_in_box12(sram, rom)
         path.write_bytes(sram)
     (tmp_path / "links.json").write_text(json.dumps({"links": [{
@@ -971,7 +1018,7 @@ def _linked_faint_fixture(tmp_path, scenario):
               f'RX memorialize key={run._link_keys["b"]}\n'
               'GAME_OVER RX game_over\n'
               'TX {"event":"memorialize_done"}\n')
-    return run, paths, a_text, b_text
+    return run, paths, hunts.get("a", "") + a_text, hunts.get("b", "") + b_text
 
 
 def test_synthetic_bench_faint_oracle_passes_then_rejects_status_corruption(tmp_path, capsys):
@@ -1532,8 +1579,9 @@ def test_explode_oracle_reads_the_markers_and_delegates_the_shared_half(tmp_path
     assert calls[0]["explode"] is True, (
         "the delegate has to be told this is Explode Mode's half, or it demands the markers "
         "the scenario asserts absent")
-    assert calls[0]["saved_state"] == run._patched_saved_state, (
-        "the shared half must read the patched saves, not the clean-title defaults")
+    # no per-scenario save resolver any more: `_saved_gen1_party`'s own default reads the
+    # companion cartridge's save (test_e2e_duo_lane_isolation pins that default)
+    assert "saved_state" not in calls[0]
 
 
 def test_explode_oracle_passes_a_synthetic_explode_receipt_through_the_REAL_delegate(
@@ -1559,7 +1607,7 @@ def test_explode_oracle_passes_a_synthetic_explode_receipt_through_the_REAL_dele
     b_party = codec.decode_party(bytes(b_image)[start:start + codec.PARTY_LAYOUT["size"]])
     run._link_keys = {"a": key_a, "b": key_b}
     run._boot_keys = {"a": codec.key(a_party[0]), "b": codec.key(b_party[0])}
-    run._patched_saved_state = lambda inst: (
+    run._saved_gen1_party = lambda inst: (
         bytes(a_image if inst == "a" else b_image),
         a_party if inst == "a" else b_party, [], codec)
     run._links_json = lambda: [{"area_id": "route_1", "status": "memorial", "cause": "battle",
@@ -1925,7 +1973,7 @@ def test_soft_reset_oracle_refuses_a_stat_for_a_mon_that_was_never_booted(tmp_pa
 
 def test_admit_randomized_launches_b_first_and_waits_for_its_contract_verdict():
     """F-4 is B's CONTRACT verdict. If A's randomized hello commits the run's artifact kind
-    first, a pure clean B is refused earlier by the mixed-kinds gate (server.py
+    first, an un-randomized B is refused earlier by the mixed-kinds gate (server.py
     _mixed_games_error), which records no admission verdict, and the live wait times out
     (gen1_pure lane, 2026-09-25). B hellos alone first; A launches only after B's verdict."""
     run = duo.DuoRun.__new__(duo.DuoRun)
@@ -1947,3 +1995,408 @@ def test_admit_randomized_launches_b_first_and_waits_for_its_contract_verdict():
     run.start_instances()
     assert order[0] == "b" and order[-1] == "a" and order.index("a") > order.index("status")
     assert order.count("a") == order.count("b") == 1
+
+
+@pytest.mark.parametrize("game,scenario,expected", [
+    ("gen1_new", "link_new", []),
+    ("gen1_new", "admit_randomized_new", ["red", "blue"]),
+    ("gen1_pure", "link_new", ["purered", "pureblue", "purered_overlay", "pureblue_overlay"]),
+    ("gen1_pure_green", "link_new",
+     ["purered", "puregreen", "purered_overlay", "puregreen_overlay"]),
+])
+def test_gen1_start_stages_clean_dumps_only_when_they_are_inputs(runner, monkeypatch,
+                                                              tmp_path, game, scenario, expected):
+    import gen1_playthrough as play
+
+    runner.game, runner.scenario = game, scenario
+    runner.gcfg, runner.cfg = dict(duo.GAMES[game]), dict(duo.SCENARIOS[scenario])
+    runner.battery_boot = True
+    staged, launched = [], []
+
+    def stage(key):
+        if game == "gen1_new" and scenario != "admit_randomized_new":
+            raise FileNotFoundError(f"clean dump is absent: {key}")
+        staged.append(key)
+        rel = f"patch/build/{key}.gb"
+        (tmp_path / rel).write_bytes(key.encode())
+        return rel
+
+    monkeypatch.setattr(play, "staged_rom", stage)
+    runner._clear_attempt_artifacts = lambda: None
+    runner._timed = lambda _phase: contextlib.nullcontext()
+    runner.launch_instance = lambda inst, **_kw: launched.append(inst)
+    runner.wait_for = lambda *_args, **_kwargs: None
+    runner.start_instances()
+    assert staged == expected
+    assert launched == (["b", "a"] if scenario == "admit_randomized_new" else ["a", "b"])
+
+
+@pytest.mark.parametrize("game,scenario", [
+    ("gen1_new", "admit_randomized_new"), ("gen1_pure", "link_new"),
+])
+def test_gen1_start_still_requires_real_randomization_or_ups_bases(runner, monkeypatch, game, scenario):
+    import gen1_playthrough as play
+
+    runner.game, runner.scenario = game, scenario
+    runner.gcfg, runner.cfg = dict(duo.GAMES[game]), dict(duo.SCENARIOS[scenario])
+    runner.battery_boot = True
+
+    def absent(key):
+        raise FileNotFoundError(f"required clean input missing: {key}")
+
+    monkeypatch.setattr(play, "staged_rom", absent)
+    runner.launch_instance = lambda *_a, **_kw: pytest.fail("launched without its input")
+    with pytest.raises(FileNotFoundError, match="required clean input missing"):
+        runner.start_instances()
+
+
+def test_saved_gen1_party_reports_rom_scan_failure_as_named_qualification(runner, monkeypatch, tmp_path):
+    import gen1_fixtures
+
+    rom = tmp_path / "randomized-overlay.gbc"
+    rom.write_bytes(b"randomized overlay with damaged anchors")
+    runner._admit_roms = {"a": str(rom)}
+    save = Path(runner._saveram_dir("a")) / runner._gen1_save_name("a")
+    save.parent.mkdir()
+    save.write_bytes(b"saved party")
+    seen = []
+
+    def qualify(sram, rom_bytes, notes):
+        seen.append((sram, rom_bytes))
+        raise scan.RomScanError("neither the clean nor the overlay anchor set holds")
+
+    monkeypatch.setattr(gen1_fixtures, "qualify", qualify)
+    with pytest.raises(RuntimeError, match="qualification: neither the clean nor the overlay anchor set holds"):
+        runner._saved_gen1_party("a")
+    assert seen == [(b"saved party", rom.read_bytes())]
+
+
+def test_prepared_admission_cartridge_remains_selected_at_oracle_time(runner, monkeypatch):
+    _fake_pipeline(monkeypatch)
+    runner.prepare_admit_randomized_new()
+    expected = runner._admit_roms["a"]
+    runner.game = "gen1_new"
+    runner.emus = []
+    observed = []
+    runner.assert_stub_oracle = lambda _results: observed.append(runner._rom_for("a"))
+    results = {}
+    for inst in ("a", "b"):
+        rom = Path(duo.REPO) / runner._rom_for(inst)
+        prefix = hashlib.sha1(rom.read_bytes()).hexdigest()[:8]
+        kind = "named"  # Entry's vanilla companion fallback, including randomized companions
+        results[inst] = (f"client built: title=red pack=gen1_rby kind={kind} player={inst} "
+                         f"rom={prefix} -> 127.0.0.1:54321")
+    runner._run_oracle(results)
+    assert observed == [expected] and runner._admit_roms == {"a": expected}
+    assert (Path(duo.REPO) / expected).read_bytes() == b"random-red"
+
+
+@pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
+@pytest.mark.parametrize("fault", ["untouched_save", "untouched_receipt", "missing_receipt"])
+def test_synth_catch_oracle_requires_spent_balls(tmp_path, scenario, fault):
+    run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
+    proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
+              + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
+              + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
+              + "TILEMAP_FAINTED offset=123\nBATTLE_RESULT b 2\n")
+    def receipt(text):
+        return text if "balls_before=" in text else text + "[hunt] threw ball index 0 -> caught balls_before=20 balls_after=19\n"
+    results = {"a": receipt(a_text), "b": receipt(proper)}
+    run.assert_linked_faint_saved(results, active=True)
+    if fault == "untouched_save":
+        path, sram, _rom = paths["a"]
+        sram[codec._BAG_COUNT + 2] = 20
+        _seal_main(sram)
+        path.write_bytes(sram)
+    elif fault == "untouched_receipt":
+        results["a"] = results["a"].replace("balls_after=19", "balls_after=20")
+    else:
+        results["a"] = "\n".join(line for line in results["a"].splitlines() if "threw ball" not in line)
+    with pytest.raises(RuntimeError, match="SYNTH catch"):
+        run.assert_linked_faint_saved(results, active=True)
+
+
+
+def test_oracle_fixture_skips_when_private_companion_input_is_absent(monkeypatch, tmp_path):
+    monkeypatch.setattr(duo, "REPO", str(tmp_path))
+    with pytest.raises(pytest.skip.Exception, match="companion input absent"):
+        _oracle_runner(tmp_path, "link_new")
+
+
+def test_hunt_logs_driver_ball_counts_for_the_oracle():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{(REPO / "lua/tests/gen1_rb_hunt_inputs.lua").as_posix()}")')
+    logs, menus = [], []
+    def menu(_budget):
+        menus.append(True)
+        return lua.table(ok=len(menus) == 1, frames=1, why="battle_over")
+    driver = lua.table(wait_menu=menu,
+                       use_item=lambda *_: lua.table(why="caught", balls_before=20, balls_after=19))
+    route = module.new(lua.table(player="a"), lua.table(driver=driver, step=lambda _: None,
+        rd=lambda a: {1: 1, 2: 4, 3: 20, 4: 0, 5: 1, 6: 0, 7: 14}.get(a, 0),
+        symbols=lua.table(wNumBagItems=1, wBagItems=2, wEnemyMonHP=4, wEnemyMonMaxHP=6),
+        mode="catch", log=lambda line: logs.append(str(line))))
+    battle = lua.table(map=12, x=10, y=35, battle=1, battle_type=0, party_hp=19,
+                       party_count=1, font_loaded=False, joy_ignore=0)
+    route.step(None, None, battle, 1)
+    assert "[hunt] threw ball index 0 -> caught balls_before=20 balls_after=19" in logs
+
+
+@pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
+@pytest.mark.parametrize("case", ["one", "three", "wrong_delta", "untouched", "saved_disagrees",
+                                  "no_caught", "two_caught", "noncontiguous", "extra_miss",
+                                  "later_miss", "later_hunt_no_throw"])
+def test_synth_catch_decrement_matches_recorded_throws(tmp_path, scenario, case):
+    run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
+    proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
+              + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
+              + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
+              + "TILEMAP_FAINTED offset=123\nBATTLE_RESULT b 2\n")
+    throws = [("caught", 20, 19)] if case == "one" else [
+        ("missed", 20, 19), ("missed", 19, 18), ("caught", 18, 17)]
+    saved = 19 if case == "one" else 17
+    if case == "wrong_delta":
+        throws[-1] = ("caught", 18, 16)
+        saved = 16  # receipt agrees with save, but four balls for three throws is false
+    elif case == "untouched":
+        saved = 20
+    elif case == "saved_disagrees":
+        saved = 18
+    elif case == "no_caught":
+        throws[-1] = ("missed", 18, 17)
+    elif case == "two_caught":
+        throws[0] = ("caught", 20, 19)
+    elif case == "extra_miss":
+        throws = [("missed", 20, 20), ("caught", 20, 19)]
+        saved = 19
+    elif case == "later_miss":
+        saved = 16
+    elif case == "noncontiguous":
+        throws[1] = ("missed", 18, 17)  # total decrement still equals count; chain is impossible
+    path, sram, _rom = paths["a"]
+    sram[codec._BAG_COUNT + 2] = saved
+    _seal_main(sram)
+    path.write_bytes(sram)
+    lines = []
+    for line in a_text.splitlines():
+        if line.startswith("[hunt] threw ball"):
+            lines.extend(f"[hunt] threw ball index 0 -> {why} balls_before={before} balls_after={after}"
+                         for why, before, after in throws)
+            if case in ("later_miss", "later_hunt_no_throw"):
+                # These rows' later A hunt is sacrifice; it cannot reach use_item.
+                lines.append("[hunt] encounter 1 at (10,35) mode=sacrifice balls=17")
+                if case == "later_miss":
+                    lines.append("[hunt] threw ball index 0 -> missed balls_before=17 balls_after=16")
+        else:
+            lines.append(line)
+    results = {"a": "\n".join(lines) + "\n", "b": proper}
+    if case in ("one", "three", "later_hunt_no_throw"):
+        run.assert_linked_faint_saved(results, active=True)
+    else:
+        with pytest.raises(RuntimeError, match="SYNTH catch"):
+            run.assert_linked_faint_saved(results, active=True)
+
+
+# ── frlgc 2026-10-03: a companion cartridge's 2-3 accepted A hellos in ONE same-save reconnect ──────────
+# Server events as events.json stores them (NEWEST FIRST, area_id differs between refreshes, same "Connected (rom, N mons)" text).
+def _hello_row(text="Connected (firered, 2 mons)", area="viridian_city", player="a"):
+    return {"player": player, "type": "hello", "text": text, "area_id": area, "key": ""}
+
+
+def _multi(events, n=3, **kw):
+    areas = ["viridian_city", "viridian_city_mart", "pallet_town"]
+    return _with_new_events(events, *[_hello_row(area=areas[k % 3], **kw) for k in range(n)])
+
+
+@pytest.mark.parametrize("n", [1, 2, 3])
+def test_two_or_three_accepted_refresh_hellos_pass_every_downstream_step(n):
+    before, after, events = _reconnect_snapshots()
+    resumed = _multi(events, n)
+    assert duo.accepted_reconnect_hellos(events, resumed) is True
+    assert duo.reconnect_same_problems(before, after, events, resumed, "AAAA:1111:01", "1234",
+                                       allow_accepted_refreshes=True) == []
+    # B's hello rows and area_enter rows between them are not A's reconnect hellos
+    noisy = _with_new_events(resumed, {"player": "b", "type": "hello", "text": "Connected (leafgreen, 2 mons)"},
+                             {"player": "a", "type": "area_enter", "text": "Entered Viridian City"})
+    assert duo.accepted_reconnect_hellos(events, noisy) is True
+    assert duo.reconnect_same_problems(before, after, events, noisy, "AAAA:1111:01", "1234",
+                                       allow_accepted_refreshes=True) == []
+
+
+def test_the_strict_one_hello_form_still_rejects_the_multi_hello_shape():
+    before, after, events = _reconnect_snapshots()
+    problems = duo.reconnect_same_problems(before, after, events, _multi(events, 3), "AAAA:1111:01", "1234")
+    assert any("exactly one accepted reconnect hello" in p for p in problems)
+
+
+@pytest.mark.parametrize("name, mutate, expect", [
+    ("a refused hello among them",
+     lambda ev: _with_new_events(_multi(ev, 2), _hello_row("REJECTED — wrong save/slot")), "only accepted reconnect hellos"),
+    ("a hello from another cartridge",
+     lambda ev: _with_new_events(_multi(ev, 2), _hello_row("Connected (leafgreen, 2 mons)")), "another identity"),
+    ("a hello with another party size",
+     lambda ev: _with_new_events(_multi(ev, 2), _hello_row("Connected (firered, 3 mons)")), "another identity"),
+    ("a duplicated gameplay event",
+     lambda ev: _with_new_events(_multi(ev, 3), {"player": "a", "type": "capture", "text": "duplicate"}), "count changed"),
+    ("a duplicated link event",
+     lambda ev: _with_new_events(_multi(ev, 2), {"player": "b", "type": "linked", "text": "again"}), "count changed"),
+    ("no hello at all",
+     lambda ev: _with_new_events(ev, {"player": "b", "type": "hello", "text": "Connected (leafgreen, 2 mons)"}),
+     "only accepted reconnect hellos"),
+    ("a rewritten log",
+     lambda ev: [_hello_row(), *ev[2:]], "shrank or was rewritten"),
+])
+def test_the_failing_multi_hello_shapes_are_each_rejected(name, mutate, expect):
+    before, after, events = _reconnect_snapshots()
+    mutated = mutate(events)
+    problems = duo.reconnect_same_problems(before, after, events, mutated, "AAAA:1111:01", "1234",
+                                           allow_accepted_refreshes=True)
+    assert any(expect in p for p in problems), (name, problems)
+    if "gameplay" not in name and "link event" not in name:
+        assert duo.accepted_reconnect_hellos(events, mutated) is False, name
+
+
+def test_the_multi_hello_shape_still_needs_the_servers_accepted_identity():
+    before, after, events = _reconnect_snapshots()
+    resumed = _multi(events, 3)
+    refused = {**after, "status": {"players": {**after["status"]["players"],
+                                               "a": {**after["status"]["players"]["a"], "identity_error": "Identity mismatch"}}}}
+    assert any("accepted identity" in p for p in duo.reconnect_same_problems(
+        before, refused, events, resumed, "AAAA:1111:01", "1234", allow_accepted_refreshes=True))
+    assert any("OT ID changed" in p for p in duo.reconnect_same_problems(
+        before, after, events, resumed, "AAAA:1111:01", "9999", allow_accepted_refreshes=True))
+
+
+# ── a WITHHELD (party_hidden) refresh hello reports 0 mons and is accepted; nothing else that differs is ──────────────
+# Evidence: duo_9ghb41vi (fc_frlgc_reconnect_gen3_fr_as_a_companion_d5a26da9): A's hellos 2, then 0 mons ("hello ... party=0",
+# server.py:2228 counts len(msg.get("party", []))). The Gen 3 client always sends `party` (empty when withheld, lua/gen3/client.lua:1171-1195)
+# plus party_hidden=true; server/state.py:1958-1959 and 2065 leave the stored party intact for that, but an EMPTY party that is not
+# withheld replaces it (:2067, :2087). The 200-char TX hello cannot show party_hidden, so the driver logs HELLO_FACTS per hello.
+FACTS_VISIBLE = {"party": 2, "hidden": False}
+FACTS_WITHHELD = {"party": 0, "hidden": True}
+FACTS_EMPTY = {"party": 0, "hidden": False}
+
+
+def _baselined(events):
+    return _with_new_events(events, _hello_row("Connected (firered, 2 mons)", "viridian_city"))
+
+
+def _after(base, *rows):
+    return _with_new_events(base, *rows)          # `rows` given NEWEST FIRST, as the server stores them
+
+
+def _verdict(base, after, facts):
+    before, aft, _events = _reconnect_snapshots()
+    return (duo.accepted_reconnect_hellos(base, after, facts),
+            duo.reconnect_same_problems(before, aft, base, after, "AAAA:1111:01", "1234",
+                                        allow_accepted_refreshes=True, hello_facts=facts))
+
+
+def test_hello_facts_are_read_in_order_from_the_clients_log():
+    text = ("booted\nHELLO_FACTS party=2 party_hidden=false\nTX hello - {}\nHELLO_FACTS party=0 party_hidden=true\n"
+            "HELLO_FACTS party=absent party_hidden=false\n")
+    assert duo.hello_facts_from(text) == [{"party": 2, "hidden": False}, {"party": 0, "hidden": True},
+                                          {"party": None, "hidden": False}]
+    assert duo.hello_facts_from("") == [] and duo.hello_facts_from("HELLO_FACTS party=x party_hidden=true") == []
+
+
+def test_a_withheld_zero_mon_refresh_hello_is_accepted():
+    _b, _a, events = _reconnect_snapshots()
+    base = _baselined(events)
+    after = _after(base, _hello_row("Connected (firered, 0 mons)", "viridian_city_mart"), _hello_row("Connected (firered, 2 mons)"))
+    assert _verdict(base, after, [FACTS_VISIBLE, FACTS_WITHHELD]) == (True, [])
+    three = _after(base, _hello_row("Connected (firered, 0 mons)"), _hello_row("Connected (firered, 2 mons)"),
+                   _hello_row("Connected (firered, 2 mons)"))
+    assert _verdict(base, three, [FACTS_VISIBLE, FACTS_VISIBLE, FACTS_WITHHELD]) == (True, [])
+    assert _verdict(base, _after(base, _hello_row("Connected (firered, 2 mons)")), []) == (True, [])   # no odd row: no facts needed
+
+
+@pytest.mark.parametrize("name, rows, facts, expect", [
+    ("present-and-empty, not withheld (the server empties party_keys)",
+     ["Connected (firered, 0 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, FACTS_EMPTY], "was not withheld"),
+    ("a hello whose party field was absent and not withheld",
+     ["Connected (firered, 0 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, {"party": None, "hidden": False}],
+     "was not withheld"),
+    ("a different non-zero count",
+     ["Connected (firered, 3 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, FACTS_VISIBLE], "baseline party is 2"),
+    ("a withheld hello that reports a count",
+     ["Connected (firered, 1 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, {"party": 1, "hidden": True}],
+     "baseline party is 2"),
+    ("facts that cannot be matched to the rows",
+     ["Connected (firered, 0 mons)", "Connected (firered, 2 mons)"], [FACTS_WITHHELD], "cannot be matched"),
+    ("no facts at all for an odd row",
+     ["Connected (firered, 0 mons)", "Connected (firered, 2 mons)"], [], "cannot be matched"),
+    ("another rom",
+     ["Connected (leafgreen, 2 mons)", "Connected (firered, 2 mons)"], [FACTS_VISIBLE, FACTS_VISIBLE], "another identity"),
+    ("only withheld hellos: nothing re-asserted the party",
+     ["Connected (firered, 0 mons)"], [FACTS_WITHHELD], "baseline party"),
+    ("the withheld fact belongs to a different hello",
+     ["Connected (firered, 2 mons)", "Connected (firered, 0 mons)"], [FACTS_VISIBLE, FACTS_WITHHELD], "was not withheld"),
+])
+def test_every_other_zero_or_different_party_hello_still_fails(name, rows, facts, expect):
+    _b, _a, events = _reconnect_snapshots()
+    base = _baselined(events)
+    after = _after(base, *[_hello_row(text) for text in rows])
+    ok, problems = _verdict(base, after, facts)
+    assert ok is False and any(expect in p for p in problems), (name, problems)
+
+
+def test_the_relaxation_leaves_every_other_gate_of_the_multi_hello_shape_in_place():
+    before, aft, events = _reconnect_snapshots()
+    base = _baselined(events)
+    mix = [_hello_row("Connected (firered, 0 mons)"), _hello_row("Connected (firered, 2 mons)")]
+    facts = [FACTS_VISIBLE, FACTS_WITHHELD]
+
+    def problems(after, status=aft, ot="1234"):
+        return duo.reconnect_same_problems(before, status, base, after, "AAAA:1111:01", ot, allow_accepted_refreshes=True,
+                                           hello_facts=facts)
+    assert problems(_after(base, *mix)) == []
+    assert any("only accepted" in p for p in problems(_after(base, _hello_row("REJECTED — wrong save/slot"), *mix)))
+    assert any("count changed" in p for p in problems(_after(base, {"player": "a", "type": "capture", "text": "dup"}, *mix)))
+    refused = {**aft, "status": {"players": {**aft["status"]["players"],
+                                             "a": {**aft["status"]["players"]["a"], "identity_error": "x"}}}}
+    assert any("accepted identity" in p for p in problems(_after(base, *mix), status=refused))
+    assert any("OT ID changed" in p for p in problems(_after(base, *mix), ot="9999"))
+
+@pytest.mark.parametrize("scenario", ["explode_new", "linked_faint_active_new", "explode_bench_battle_new"])
+@pytest.mark.parametrize("case", ["timeout_catch", "miss_then_timeout", "timeout_then_caught", "post_catch_reorder", "no_capture", "wrong_key", "duplicate_capture", "saved_disagrees"])
+def test_synth_timeout_throw_requires_later_capture_and_durable_ball_spend(tmp_path, scenario, case):
+    run, paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
+    proper = (b_text + "LOOP_HEAD_WRITE key=" + run._link_keys["b"] + "\n"
+              + "BATTLE_FAINT_SITE " + run._link_keys["b"] + "\n"
+              + f'TX {{"event":"faint","key":"{run._link_keys["b"]}"}}\n'
+              + "TILEMAP_FAINTED offset=123\nBATTLE_RESULT b 2\n")
+    # Producer-shaped replay of 5be32214's explode_new A receipt, lines 33-50:
+    # the 600-frame wait returns before PARTY_COUNT and capture TX; the eventual
+    # after-battle observation and saved bag agree that one ball was consumed.
+    throws = "[hunt] threw ball index 0 -> timeout balls_before=20 balls_after=20\n"
+    spent = 1
+    if case == "miss_then_timeout":
+        throws = ("[hunt] threw ball index 0 -> missed balls_before=20 balls_after=19\n"
+                  "[hunt] threw ball index 0 -> timeout balls_before=19 balls_after=19\n")
+        spent = 2
+    elif case == "timeout_then_caught":
+        throws += "[hunt] threw ball index 0 -> caught balls_before=19 balls_after=18\n"
+        spent = 2
+    capture_key = "FFFF:FFFF:FF" if case == "wrong_key" else run._link_keys["a"]
+    capture = 'TX ' + json.dumps({"event": "capture", "gift": False, "key": capture_key,
+                                 "player": "a", "area_id": "route_1"}) + "\n"
+    if case == "no_capture":
+        capture = ""
+    elif case == "duplicate_capture":
+        capture *= 2
+    observed = (throws + "PARTY_COUNT 1 -> 2 @4986\n" + capture
+                + f"[hunt] after battle: outcome=battle_over result=2 party=2 balls={20-spent} -> caught\n")
+    if case == "post_catch_reorder":
+        observed += "CAUGHT " + run._link_keys["a"] + "\nPARTY_COUNT 2 -> 1 @5615\nPARTY_COUNT 1 -> 2 @5616\n"
+    a_text = a_text.replace("[hunt] threw ball index 0 -> caught balls_before=20 balls_after=19\n", observed)
+    path, sram, _rom = paths["a"]
+    sram[codec._BAG_COUNT + 2] = 20 - spent + (case == "saved_disagrees")
+    _seal_main(sram)
+    path.write_bytes(sram)
+    results = {"a": a_text, "b": proper}
+    if case in ("timeout_catch", "miss_then_timeout", "timeout_then_caught", "post_catch_reorder"):
+        run.assert_linked_faint_saved(results, active=True)
+    else:
+        with pytest.raises(RuntimeError, match="SYNTH catch"):
+            run.assert_linked_faint_saved(results, active=True)

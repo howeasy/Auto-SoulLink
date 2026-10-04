@@ -48,18 +48,20 @@ def test_emerald_requires_the_fork_even_if_a_stock_jar_were_trusted(tmp_path, mo
         if entry == "prepare_pair":
             P.prepare_pair(str(jar), str(settings), {"a": source, "b": source}, str(tmp_path / "out"))
         else:
-            cartridges.provision(str(tmp_path / "out"), {"a": source, "b": source}, companion=False,
+            cartridges.provision(str(tmp_path / "out"), {"a": source, "b": source}, companion=True,
                                  randomize={"settings_path": str(settings)}, jar=str(jar))
 
 
-def test_emerald_companion_and_clean_copy_need_no_randomizer(tmp_path):
+def test_emerald_companion_needs_no_randomizer_and_a_clean_copy_is_refused(tmp_path):
     source = str(_clean_path("emerald"))
     sources = {"a": source, "b": source}
     published=cartridges.provision(str(tmp_path / "published"), sources, companion=True, randomize=None)
     assert published["players"]["a"]["kind"]=="companion"
-    result = cartridges.provision(str(tmp_path / "copy"), sources, companion=False, randomize=None)
-    assert result["family"] == FAMILY and result["randomizer"] is None
-    assert (tmp_path / "copy/roms/a.gba").read_bytes() == Path(source).read_bytes()
+    assert published["family"] == FAMILY and published["randomizer"] is None
+    # patch-first (owner 2026-10-02): a clean copy of Emerald is never prepared, the companion cannot be turned off
+    with pytest.raises(cartridges.CartridgeError, match="needs the SLink companion patch"):
+        cartridges.provision(str(tmp_path / "copy"), sources, companion=False, randomize=None)
+    assert not (tmp_path / "copy/roms/a.gba").exists()
 
 
 @pytest.fixture(scope="module")
@@ -70,7 +72,7 @@ def manager_pair(tmp_path_factory):
     spec = {**U.default_spec(FAMILY), "statics": "random", "wild_held_items": True,
             "trainer_items_regular": True}
     settings.write_bytes(U.build_spec(spec, family=FAMILY))
-    result = cartridges.provision(str(folder), {"a": source, "b": source}, companion=False,
+    result = cartridges.provision(str(folder), {"a": source, "b": source}, companion=True,
                                  randomize={"settings_path": str(settings)}, jar=_jar())
     return folder, result
 
@@ -86,7 +88,8 @@ def test_manager_emerald_pair_contract_names_the_final_gba_files_and_audits(mana
         row = contract["players"][side]
         assert row["rom_sha1"] == hashlib.sha1(raw).hexdigest() == result["players"][side]["rom_sha1"]
         assert row["fingerprint"] == P.gen3_fingerprint_rom(raw)
-        assert P.gen3_site_mismatches(raw, "emerald") == []
+        # the randomizer output (before the companion hooks its engine sites) keeps every site and anchor
+        assert P.gen3_site_mismatches((folder / f"roms/{side}_randomized.gba").read_bytes(), "emerald") == []
         audit = result["randomizer"]["players"][side]["write_domain"]
         assert audit["changed"] > 0 and {"baseline", "wild", "trainer_parties"} <= set(audit["domains"])
 

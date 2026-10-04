@@ -17,6 +17,11 @@ a PLAYER state drawn on a half, never a pair state drawn on a row.
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
+
+from server.adapters.base import companion_required_reason
+
+_COMPANION_REFUSAL = re.compile(re.escape(companion_required_reason("{title}")).replace(re.escape("{title}"), ".+"))
 
 SECTION_LABELS = {
     "party": "In party",
@@ -220,6 +225,9 @@ def connection_state(p: dict, live: bool) -> dict:
     if not live:
         return state("stopped", "Not started", "The run is stopped. Start it, then load the launcher in BizHawk.")
     err = p.get("identity_error") or ""
+    if _COMPANION_REFUSAL.fullmatch(err):
+        return state("companion", "Companion patch required",
+                     "Patch this cartridge using the run's cartridge download or /patcher.")
     if err.startswith("Trade recovery extension unavailable"):
         return state("wrong_game", "Unsupported recovery",
                      f"{err}. Use a client/cartridge build with supported trade recovery.")
@@ -290,3 +298,85 @@ def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live
         "hp_class": hp_class,
         "bond_glyph": bond_glyph,
     }
+
+# ── the run's story (/timeline) ──────────────────────────────────────────────────────────
+# Built from what the run already keeps; nothing new is recorded for it. links.json holds
+# no link time, only `killed_at` (UTC) on a death or dead zone. Link and memorial times come
+# from the event log (events.json, local time), which keeps the last 200 events, so an
+# older link or burial has no time and the page says so instead of inventing one.
+
+_EPOCH = datetime.min.replace(tzinfo=UTC)
+_CAUSES = {"battle": "fainted in battle", "whiteout": "whiteout", "dead_zone": "dead zone",
+           "identity_lost": "identity lost", "npc_trade_clause": "NPC trade clause violation"}
+
+
+def _when(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt.astimezone()   # naive (the event log) is local time; aware is converted to it
+
+
+def _mon(src: dict, pid: str) -> dict | None:
+    if not src.get(f"{pid}_key"):
+        return None
+    return {"name": src.get(f"{pid}_nickname") or src.get(f"{pid}_species_name") or "?",
+            "species": src.get(f"{pid}_species_name") or "",
+            "level": src.get(f"{pid}_level") or 0,
+            "sprite": src.get(f"{pid}_sprite_html") or ""}
+
+
+def timeline(status: dict) -> dict:
+    """The run in the order it happened: pairs formed, deaths, dead zones, burials, then
+    the areas still open. Each entry's `ts` is None when the run never recorded one."""
+    events = status.get("recent_events") or []
+
+    def first_event(kind: str, area: str) -> datetime | None:
+        times = [t for e in events if e.get("type") == kind and e.get("area_id") == area
+                 and (t := _when(e.get("ts")))]
+        return min(times) if times else None
+
+    killfeed = {k.get("area_id"): k for k in status.get("killfeed") or []}
+    items = []   # (sort time, order, entry)
+    for i, link in enumerate(status.get("links") or []):
+        area = link.get("area_id") or ""
+        name = link.get("area_display") or area_name(area)
+        a, b = _mon(link, "a"), _mon(link, "b")
+        death = killfeed.get(area)
+        if a and b and (death or {}).get("cause") != "dead_zone":
+            ts = first_event("linked", area)
+            # A link the event log no longer holds is older than everything it does hold.
+            items.append((ts or _EPOCH, i, {"kind": "linked", "ts": ts, "area": name, "a": a, "b": b}))
+        if death:
+            ts = _when(death.get("killed_at"))
+            killer = death.get("killer") or {}
+            entry = {"kind": "dead_zone" if death.get("cause") == "dead_zone" else "death",
+                     "ts": ts, "area": name, "a": _mon(death, "a"), "b": _mon(death, "b"),
+                     "cause": _CAUSES.get(death.get("cause"), (death.get("cause") or "").replace("_", " ")),
+                     "killer": killer.get("trainer_name") or killer.get("species_name") or "",
+                     "by": (death.get("initiating_player") or "").upper(),
+                     "met": {pid: (death.get(f"{pid}_enc_species_name"), death.get(f"{pid}_enc_level"))
+                             for pid in PIDS if death.get(f"{pid}_enc_species_name")}}
+            items.append((ts or _EPOCH, i, entry))
+            if link.get("status") == "memorial":
+                mts = first_event("memorialize", area)
+                # unrecorded: placed just after the death it follows
+                items.append((mts or ts or _EPOCH, i + 0.5,
+                              {"kind": "memorial", "ts": mts, "area": name, "a": a, "b": b}))
+    items.sort(key=lambda t: (t[0], t[1]))
+    for _, _, e in items:
+        e["when"] = e["ts"].strftime("%Y-%m-%d %H:%M") if e["ts"] else ""
+
+    resolved = {link.get("area_id") for link in status.get("links") or []}
+    pending = status.get("pending_captures") or {}
+    open_ids = sorted({a for a, s in (status.get("area_states") or {}).items()
+                       if s not in ("linked", "dead_zone") and a not in resolved} | set(pending))
+    open_areas = [{"area": area_name(a), "caught": {pid: m.get("nickname") or m.get("species_name") or "?"
+                                                     for pid, m in (pending.get(a) or {}).items()}}
+                  for a in open_ids]
+    entries = [e for _, _, e in items]
+    return {"entries": entries, "open_areas": open_areas,
+            "untimed": sum(1 for e in entries if not e["ts"])}

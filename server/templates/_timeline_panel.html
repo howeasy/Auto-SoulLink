@@ -1,0 +1,62 @@
+{#
+  _timeline_panel.html — the run's story, oldest first: pairs formed, deaths, dead zones,
+  burials, then the areas still open. `story` is server.board.timeline(status); `players`
+  is status.players (trainer names). Times are only what the run recorded: an entry with
+  none says so rather than guessing.
+#}
+{% set pa = (players.get('a') or {}).get('trainer_name') or 'A' %}{% set pb = (players.get('b') or {}).get('trainer_name') or 'B' %}
+{% macro mon(m, pid) -%}
+  {%- if m -%}
+  <span class="tl-mon"><span class="mk-side small">{{ pid | upper }}</span>{% if m.sprite %}<span class="mk-spr">{{ m.sprite | safe }}</span>{% endif %}<b>{{ m.name }}</b>{% if m.species and m.species != m.name %} <span class="mk-sub">{{ m.species }}</span>{% endif %}{% if m.level %} <span class="mk-sub">Lv <span class="num">{{ m.level }}</span></span>{% endif %}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+<div class="mk-zones">
+<section class="mk-zone" aria-labelledby="tl-story">
+  <h2 class="mk-h2" id="tl-story"><span>Timeline</span><i></i><em><span class="num">{{ story.entries | length }}</span> event{{ '' if story.entries | length == 1 else 's' }}</em></h2>
+  {% if story.untimed %}
+    <p class="mk-note">{{ story.untimed }} of these have no time: the run stores no time for a link, and its event log keeps only the last 200 events, so older links and burials are listed in the order they happened, without one.</p>
+  {% endif %}
+  {% if story.entries %}
+  <ol class="mk-card tl-list">
+    {% for e in story.entries %}
+      <li class="tl-ev {{ e.kind }}">
+        <span class="tl-when num">{% if e.when %}<time datetime="{{ e.ts.isoformat() }}">{{ e.when }}</time>{% else %}<span class="mk-sub">time not recorded</span>{% endif %}</span>
+        <span class="tl-what">
+          {% if e.kind == 'linked' %}
+            <span class="tl-head">Pair formed on <b>{{ e.area }}</b></span>
+            <span class="tl-mons">{{ mon(e.a, 'a') }}<span class="tl-tie" aria-hidden="true">&lt;&gt;</span>{{ mon(e.b, 'b') }}</span>
+          {% elif e.kind == 'death' %}
+            <span class="tl-head">Pair from <b>{{ e.area }}</b> fell: {{ e.cause }}{% if e.killer %} · {{ e.killer }}{% endif %}{% if e.by %} <span class="mk-sub">(on {{ pa if e.by == 'A' else pb }}'s side)</span>{% endif %}</span>
+            <span class="tl-mons">{{ mon(e.a, 'a') }}{% if e.a and e.b %}<span class="tl-tie" aria-hidden="true">&gt;&lt;</span>{% endif %}{{ mon(e.b, 'b') }}</span>
+          {% elif e.kind == 'dead_zone' %}
+            <span class="tl-head">Dead zone: <b>{{ e.area }}</b> is closed to both players</span>
+            <span class="tl-mons">
+              {% for pid in ('a', 'b') %}{% if e.met[pid] %}<span class="tl-mon"><span class="mk-side small">{{ pid | upper }}</span>met {{ e.met[pid][0] }}{% if e.met[pid][1] %} <span class="mk-sub">Lv <span class="num">{{ e.met[pid][1] }}</span></span>{% endif %}, no catch</span>{% endif %}{% endfor %}
+              {{ mon(e.a, 'a') }}{{ mon(e.b, 'b') }}
+            </span>
+          {% elif e.kind == 'memorial' %}
+            <span class="tl-head">Laid to rest in the memorial box: the pair from <b>{{ e.area }}</b></span>
+          {% endif %}
+        </span>
+      </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+    <div class="mk-card mk-empty">Nothing has happened yet: the first catch both players make in the same area starts the story.</div>
+  {% endif %}
+</section>
+
+<section class="mk-zone" aria-labelledby="tl-open">
+  <h2 class="mk-h2" id="tl-open"><span>Still open</span><i></i><em><span class="num">{{ story.open_areas | length }}</span> area{{ '' if story.open_areas | length == 1 else 's' }}</em></h2>
+  <p class="mk-note">Areas a player has entered without the pair being settled. An area nobody has entered yet is open too, but the run does not list those.</p>
+  {% if story.open_areas %}
+  <ul class="mk-card tl-list">
+    {% for o in story.open_areas %}
+      <li class="tl-ev open"><span class="tl-what"><span class="tl-head"><b>{{ o.area }}</b></span>
+        <span class="mk-sub">{% if o.caught %}{% for pid, n in o.caught.items() %}{{ pa if pid == 'a' else pb }} caught {{ n }}; {% endfor %}waiting on {{ pb if 'a' in o.caught else pa }}{% else %}entered, no catch yet{% endif %}</span></span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+</div>

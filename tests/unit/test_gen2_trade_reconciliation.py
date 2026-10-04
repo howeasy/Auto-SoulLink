@@ -33,7 +33,7 @@ def _row(seq, side, message, before, after, last, *, watchdog=None, watchdog_las
             result.setdefault("problem", "")
         return result
 
-    return {"seq": seq, "source": "server_dispatch", "evidence_class": "HARNESS_ONLY_OVERLAY",
+    return {"seq": seq, "source": "server_dispatch", "evidence_class": "PHYSICAL_RECEIPTED",
             "run_id": "fixture", "scenario": "gen2_trade_reset_commit", "player": side,
             "message": {"player": side, **message}, "outcome": {
                 "dispatch": "returned", "pending_trade_before": deepcopy(before),
@@ -75,6 +75,14 @@ def test_committed_receipt_requires_both_later_independently_matched_parties():
     assert result["evidence"] == {"a": {"kind": "party", "seq": 3},
                                   "b": {"kind": "party", "seq": 4}}
     assert evidence == original
+
+
+def test_historical_harness_journal_cannot_prove_production_reconciliation():
+    evidence = _committed()
+    for row in evidence["journal"]:
+        row["evidence_class"] = "HARNESS_ONLY_OVERLAY"
+    with pytest.raises(RuntimeError, match="journal provenance"):
+        verify_reconciliation(**evidence)
 
 
 def test_late_duplicate_trade_done_is_not_hidden_by_a_cleared_pending_trade():

@@ -1,0 +1,84 @@
+DEV SOURCE=65e667e62c5aecd80759c876b7d65bfbdbcc5367; native expansion test-only row; no final-cut claim
+
+========== scenario: exp_static_surf_gen3 ==========
+[duo] exp_static_surf_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=4bfdd1c5ae72ae20b7edc21fab1ee88bf6f5630f11fce473b61932ce6083dd94 b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=ea112a2f1b0a633a866169856c1375bf233f74acdaab6313549520f776e2e514 write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=65e667e62c5aecd80759c876b7d65bfbdbcc5367
+[duo] server up: tcp=54399 http=54400 data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_jtnpknka
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 18:29:15,567 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 18:29:15,567 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_jtnpknka path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_jtnpknka\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 2.3s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_jtnpknka path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_jtnpknka\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 2.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 18.9s
+[duo] RESULT_LINE a: (none)
+[duo] RESULT_LINE b: RESULT: FAIL (helper: static/wild: the throw never committed (callback2 BattleMainCB2, no bag task, pocket 18 -> 18, want one fewer) within 600 frames)
+[duo] PYDEC: FAIL client RESULT before a: native encounter settled
+[duo] exp_static_surf_gen3: a client finished before 'a: native encounter settled' (a: no RESULT; b: RESULT: FAIL (helper: static/wild: the throw never committed (callback2 BattleMainCB2, no bag task, pocket 18 -> 18, want one fewer) within 600 frames))
+--- exp_static_surf_gen3 a result (last 25 lines) ---
+JITTER requested=0 applied=0 attempt=1
+STATIC_WILD_BEFORE {"balls":20,"captures":0,"no_catch":0}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2515,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2544,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2572,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2601,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2629,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2658,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2686,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2715,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2743,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2772,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":2800,"name":"StandardWildEncounter","r0":16}
+STATIC_WILD_BATTLE {"field_probe":true,"level":27,"method":"water_mons","moves":[401,583,392,240],"scope":"set0; nonzero is selection-characterization only","selector":0,"species":183}
+[client] [gen3] phase ball-thrown frame=3481 item=1 expected_item=1 debit=1, gLastUsedItem 0 -> 0, balls 20 -> 19
+THREW 1
+[client] [gen3] phase ball-thrown frame=4637 item=1 expected_item=1 debit=1, gLastUsedItem 1 -> 1, balls 19 -> 18
+THREW 2
+[client] [gen3] phase ball-thrown frame=5950 item=1 expected_item=1 debit=1, gLastUsedItem 1 -> 1, balls 18 -> 17
+THREW 3
+[client] [gen3] phase ball-thrown frame=7663 item=1 expected_item=1 debit=1, gLastUsedItem 1 -> 1, balls 17 -> 16
+THREW 4
+TX capture 295D1FD2:20250925 {"area_id":"route_102","event":"capture","held_item_id":0,"hp":75,"is_egg":false,"key":"295D1FD2:20250925","level":27,"maxHP":75,"nickname":"Marill","player":"a","seq":281,"species_id":183,"stats":{"attack":22,"defense":36,"level":27,"maxHP":75,"pp1":9,"pp2":9,"pp3":20,"pp4":4,"spAtk":19,"spDef":39,"speed":29}}
+RX box_mon key=295D1FD2:20250925
+TX safe - {"event":"safe","player":"a","seq":284}
+--- exp_static_surf_gen3 b result (last 25 lines) ---
+STATIC_METHOD_PROBE {"address":136549744,"frame":3771,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":3800,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":3828,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":3857,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":3885,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":3914,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":3942,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":3971,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":3999,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":4028,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":4056,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":4085,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":4113,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":4142,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":4170,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":4199,"name":"StandardWildEncounter","r0":16}
+STATIC_METHOD_PROBE {"address":136549744,"frame":4227,"name":"StandardWildEncounter","r0":16}
+STATIC_WILD_BATTLE {"field_probe":true,"level":17,"method":"water_mons","moves":[61,204,21,340],"scope":"set0; nonzero is selection-characterization only","selector":0,"species":183}
+[client] [gen3] phase ball-thrown frame=4908 item=1 expected_item=1 debit=1, gLastUsedItem 0 -> 0, balls 20 -> 19
+THREW 1
+[client] [gen3] phase ball-thrown frame=5945 item=1 expected_item=1 debit=1, gLastUsedItem 1 -> 1, balls 19 -> 18
+THREW 2
+RX hud_show text=Partner caught Marill in Route 102
+[client] [gen3] RESULT: FAIL static/wild: the throw never committed (callback2 BattleMainCB2, no bag task, pocket 18 -> 18, want one fewer) within 600 frames
+RESULT: FAIL (helper: static/wild: the throw never committed (callback2 BattleMainCB2, no bag task, pocket 18 -> 18, want one fewer) within 600 frames)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_surf_gen3_jtnpknka
+
+========== summary ==========
+  exp_static_surf_gen3: FAIL (attempt 1 of 1)
+
+EXIT 1

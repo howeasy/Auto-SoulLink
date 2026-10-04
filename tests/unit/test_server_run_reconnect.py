@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from server.server import SLinkServer
+from tests.unit.companion_evidence import companion
 from tests.unit.test_mixed_foundations import _hello
 
 
@@ -75,7 +76,7 @@ async def _replace(srv, replacement):
 @pytest.mark.parametrize("replacement", ["reset", "rollback"])
 async def test_contractless_run_reconnects_and_processes_events(tmp_path, rom_type, replacement):
     srv = SLinkServer(data_dir=str(tmp_path))
-    hello = _hello("a", {"rom_type": rom_type, "artifact_kind": "clean"})
+    hello = _hello("a", {"rom_type": rom_type, **companion(rom_type)})
     async with _tcp(srv) as (connect, _):
         old = await connect()
         await _send(old, hello)
@@ -101,7 +102,7 @@ async def test_run_replacement_closes_all_sockets_including_unidentified(tmp_pat
     async with _tcp(srv) as (connect, _):
         sockets = [await connect() for _ in range(4)]
         for connection, player in zip(sockets, ("a", "a", "b"), strict=False):
-            await _send(connection, _hello(player, {"rom_type": "red", "artifact_kind": "clean"}))
+            await _send(connection, _hello(player, {"rom_type": "red", **companion("red")}))
         # The fourth connection has not declared a player yet.
         await _replace(srv, replacement)
         for connection in sockets:
@@ -111,7 +112,7 @@ async def test_run_replacement_closes_all_sockets_including_unidentified(tmp_pat
 @pytest.mark.asyncio
 async def test_old_disconnect_does_not_mark_live_replacement_disconnected(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
-    hello = _hello("a", {"rom_type": "red", "artifact_kind": "clean"})
+    hello = _hello("a", {"rom_type": "red", **companion("red")})
     async with _tcp(srv) as (connect, tasks):
         old = await connect()
         await _send(old, hello)
@@ -125,3 +126,57 @@ async def test_old_disconnect_does_not_mark_live_replacement_disconnected(tmp_pa
         assert srv.connected_players["a"]["connected"]
         await _send(fresh, {"event": "no_catch", "player": "a", "area_id": "route_1"})
         assert srv.state.area_states["route_1"].value == "dead_zone"
+
+
+@pytest.mark.asyncio
+async def test_a_hello_from_a_does_not_admit_b_on_the_same_socket(tmp_path, monkeypatch):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    dispatched = []
+    dispatch = srv._dispatch
+    def record(player, message):
+        dispatched.append((player, message.get("event")))
+        return dispatch(player, message)
+    monkeypatch.setattr(srv, "_dispatch", record)
+    async with _tcp(srv) as (connect, _):
+        socket = await connect()
+        await _send(socket, _hello("a", {"rom_type": "red"}))
+        tick = {"event": "tick", "player": "b", "party": []}
+        refused = await _send(socket, tick)
+        assert any(c.get("refused") == "no_hello" for c in refused["commands"])
+        assert not srv.connected_players.get("b", {}).get("connected")
+        assert ("b", "tick") not in dispatched
+        await _send(socket, _hello("b", {"rom_type": "red"}))
+        await _send(socket, tick)
+        assert srv.is_admitted("b") and ("b", "tick") in dispatched
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_area", [False, True])
+async def test_non_hello_adapter_error_refuses_and_keeps_the_socket(tmp_path, monkeypatch, caplog, bad_area):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    async with _tcp(srv) as (connect, _):
+        socket = await connect()
+        await _send(socket, _hello("a", {"rom_type": "red"}))
+        adapter = srv.state._adapter_for("a")
+        def broken(_area):
+            raise RuntimeError("pack decode failed")
+        monkeypatch.setattr(adapter, "is_gift_area", broken)
+        reply = await _send(socket, {"event": "capture", "player": "a", "area_id": ["route_1"] if bad_area else "route_1",
+                                     "key": "A:1", "species_id": 19, "level": 5})
+        assert any(c.get("refused") == "error" for c in reply["commands"])
+        assert "capture" in caplog.text
+        assert ("unhashable" if bad_area else "pack decode failed") in caplog.text
+        tick = await _send(socket, {"event": "tick", "player": "a", "party": []})
+        assert not any(c.get("refused") for c in tick["commands"])
+        assert srv.connected_players["a"]["connected"] and srv.connected_players["a"]["last_event"] == "tick"
+
+
+def test_hello_dispatch_error_still_rolls_back_and_raises(tmp_path, monkeypatch):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    adapter = srv.adapter
+    def broken(*_args):
+        raise RuntimeError("hello decode failed")
+    monkeypatch.setattr(srv.state, "handle_event", broken)
+    with pytest.raises(RuntimeError, match="hello decode failed"):
+        srv._dispatch("a", _hello("a", {"rom_type": "red"}))
+    assert srv.adapter is adapter and srv.state.adapter is adapter

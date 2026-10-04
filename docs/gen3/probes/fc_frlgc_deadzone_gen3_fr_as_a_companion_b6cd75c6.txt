@@ -1,0 +1,203 @@
+# gen3_final_cut row=frlgc_deadzone_gen3_fr_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario deadzone_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T03:59:55 cpu=69% emuhawk=1 python=7
+start_utc=2026-10-03T07:59:53Z tracked_clean_before=True
+
+========== scenario: deadzone_gen3 ==========
+[duo] deadzone_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=60494 http=60495 data=F:\slink-work\tmp\duo_j_3k8ex_
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_j_3k8ex_ path=F:\slink-work\tmp\duo_j_3k8ex_\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_j_3k8ex_ path=F:\slink-work\tmp\duo_j_3k8ex_\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_1
+[duo] go-file written for b
+[duo] timing orchestrate 18.9s
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: FAIL (hunt ended out-of-balls)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] deadzone_gen3: a=PASS b=FAIL
+--- deadzone_gen3 a result ---
+RX link_panel
+[client] [SLink-gen3] write native 0x0201B700 +256 frame 903
+[client] [SLink-gen3] write native 0x0201B6E8 +4 frame 903
+[client] [SLink-gen3] write native 0x0201B6E0 +4 frame 903
+[client] [SLink-gen3] write native 0x0201B6E4 +2 frame 903
+[client] [gen3] phase encounter-found frame=1125 deadzone a: cycle 3 mid-step Down at (13,37)
+[client] [gen3] phase battle-state-saved frame=1125 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":2,"player":"a","seq":33,"species_id":16}
+TX safe - {"event":"safe","player":"a","seq":34}
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0201B700 +256 frame 1758
+[client] [SLink-gen3] write native 0x0201B6E8 +4 frame 1758
+[client] [SLink-gen3] write native 0x0201B6E0 +4 frame 1758
+[client] [SLink-gen3] write native 0x0201B6E4 +2 frame 1758
+NO_CATCH area=route_1 species=16
+[client] [gen3] phase save-menu frame=1849 counter=7
+[client] [gen3] phase save-dialog frame=1931 row=4
+[client] [gen3] phase saved frame=2458 counter=7->8
+SAVE_WITNESS_DUMP path=patch/build/e2e_deadzone_gen3_a_1_witness.bin bytes=131072 saves=1 frame=2712 counter=8
+[client] [gen3] phase slot-complete frame=2722 sectors=14/14
+SAVE_WITNESS deadzone counter=7->8
+WRITES 15
+RESULT: PASS (ran; route locked)
+--- deadzone_gen3 b result ---
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX area_enter - {"area_id":"pallet_town","event":"area_enter","loc_name":"pallet_town","player":"b","seq":3}
+RX link_panel
+TX area_enter - {"area_id":"route_1","event":"area_enter","loc_name":"route1","player":"b","seq":7}
+[client] [gen3] phase field frame=778 map=(3,19)
+MYKEY 0 BC73F9B0:1C600D89
+PARTY slot=0 key=BC73F9B0:1C600D89 species=7 level=6 hp=23/23
+MYKEY 1 F6B6A64D:1C600D89
+PARTY slot=1 key=F6B6A64D:1C600D89 species=19 level=3 hp=15/15
+booted frame=778 map=map=787 at=(12,37) balls=2
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase encounter-found frame=2206 deadzone b: cycle 2 mid-step Left at (13,38)
+[client] [gen3] phase battle-state-saved frame=2206 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+THREW 1
+THREW 2
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":2,"player":"b","seq":147,"species_id":19}
+TX safe - {"event":"safe","player":"b","seq":148}
+WRITES 0
+RESULT: FAIL (hunt ended out-of-balls)
+[duo] data dir kept: F:\slink-work\tmp\duo_j_3k8ex_
+[duo] deadzone_gen3: the cartridge's only ball missed; restarting attempt 2 of 3 with a fresh server, run directory and SaveRAM seeds
+[duo] deadzone_gen3: attempt 2 of 3
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=57971 http=57972 data=F:\slink-work\tmp\duo_18fzcxwl
+[duo] timing server 1.0s
+[duo] cleared 3 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_1_witness.bin, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_result.txt
+[duo] JOURNAL attempt=2 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_18fzcxwl path=F:\slink-work\tmp\duo_18fzcxwl\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=2 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_18fzcxwl path=F:\slink-work\tmp\duo_18fzcxwl\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_1
+[duo] go-file written for b
+[duo] timing orchestrate 19.0s
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: FAIL (hunt ended out-of-balls)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] deadzone_gen3: a=PASS b=FAIL
+--- deadzone_gen3 a result ---
+[client] [SLink-gen3] write native 0x0201B808 +1 frame 973
+[client] [SLink-gen3] write native 0x0201B700 +256 frame 974
+[client] [SLink-gen3] write native 0x0201B6E8 +4 frame 974
+[client] [SLink-gen3] write native 0x0201B6E0 +4 frame 974
+[client] [SLink-gen3] write native 0x0201B6E4 +2 frame 974
+[client] [gen3] phase encounter-found frame=1176 deadzone a: cycle 3 mid-step Down at (13,37)
+[client] [gen3] phase battle-state-saved frame=1176 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":3,"player":"a","seq":34,"species_id":19}
+TX safe - {"event":"safe","player":"a","seq":35}
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0201B700 +256 frame 1812
+[client] [SLink-gen3] write native 0x0201B6E8 +4 frame 1812
+[client] [SLink-gen3] write native 0x0201B6E0 +4 frame 1812
+[client] [SLink-gen3] write native 0x0201B6E4 +2 frame 1812
+NO_CATCH area=route_1 species=19
+[client] [gen3] phase save-menu frame=1903 counter=7
+[client] [gen3] phase save-dialog frame=1985 row=4
+[client] [gen3] phase saved frame=2512 counter=7->8
+SAVE_WITNESS_DUMP path=patch/build/e2e_deadzone_gen3_a_2_witness.bin bytes=131072 saves=1 frame=2766 counter=8
+[client] [gen3] phase slot-complete frame=2776 sectors=14/14
+SAVE_WITNESS deadzone counter=7->8
+WRITES 15
+RESULT: PASS (ran; route locked)
+--- deadzone_gen3 b result ---
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0201B800 +4 frame 912
+[client] [SLink-gen3] write native 0x0201B808 +1 frame 912
+RX link_panel
+[client] [SLink-gen3] write native 0x0201B700 +256 frame 987
+[client] [SLink-gen3] write native 0x0201B6E8 +4 frame 987
+[client] [SLink-gen3] write native 0x0201B6E0 +4 frame 987
+[client] [SLink-gen3] write native 0x0201B6E4 +2 frame 987
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0201B700 +256 frame 1893
+[client] [SLink-gen3] write native 0x0201B6E8 +4 frame 1893
+[client] [SLink-gen3] write native 0x0201B6E0 +4 frame 1893
+[client] [SLink-gen3] write native 0x0201B6E4 +2 frame 1893
+JITTER requested=37 applied=37 attempt=2
+[client] [gen3] phase encounter-found frame=2223 deadzone b: cycle 2 mid-step Left at (13,38)
+[client] [gen3] phase battle-state-saved frame=2223 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+THREW 1
+THREW 2
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":2,"player":"b","seq":136,"species_id":16}
+TX safe - {"event":"safe","player":"b","seq":137}
+WRITES 15
+RESULT: FAIL (hunt ended out-of-balls)
+[duo] data dir kept: F:\slink-work\tmp\duo_18fzcxwl
+[duo] deadzone_gen3: the cartridge's only ball missed; restarting attempt 3 of 3 with a fresh server, run directory and SaveRAM seeds
+[duo] deadzone_gen3: attempt 3 of 3
+[duo] JITTER requested=74 attempt=3
+[duo] IDENTITY a=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=58001 http=58002 data=F:\slink-work\tmp\duo_vli673pz
+[duo] timing server 1.0s
+[duo] cleared 3 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_2_witness.bin, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_result.txt
+[duo] JOURNAL attempt=3 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_vli673pz path=F:\slink-work\tmp\duo_vli673pz\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=3 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_vli673pz path=F:\slink-work\tmp\duo_vli673pz\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_1
+[duo] go-file written for b
+[duo] B caught 4F8BD3D0:1C600D89 in the dead zone; force-fainted, memorialized
+[duo] links.json: 1 dead_zone entry for route_1; B's 4F8BD3D0:1C600D89 retired
+[duo] timing orchestrate 16.9s
+[duo] timing results 3.0s
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: PASS (dead-zone capture 4F8BD3D0:1C600D89 retired)
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_frlg/firered (companion by hash) player a -> 127.0.0.1:58001 (rom 96df1dd0)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_frlg/leafgreen (companion by hash) player b -> 127.0.0.1:58001 (rom 55fb6e9b)
+[duo] SAVE_WITNESS_SHA256 inst=a site=855fd08ae3076cc07b1b64936e03110d5edb20c000e38103cc033e1dbbc9e7cb file=855fd08ae3076cc07b1b64936e03110d5edb20c000e38103cc033e1dbbc9e7cb match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=6673dbf9ef213d5fc26eb296f5ef196b3508d39ace4be7cde9f20d4f13388b1b file=6673dbf9ef213d5fc26eb296f5ef196b3508d39ace4be7cde9f20d4f13388b1b match=true saves=1 counter=4->5 rtc=normalized
+[duo] deadzone: route_1 locked by A's no_catch (species 16); B's 4F8BD3D0:1C600D89 saved only in the memorial box
+[duo] MARKER b: FAINTED 4F8BD3D0:1C600D89 frame=4159 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=4F8BD3D0:1C600D89
+[duo] MARKER b: TX memorialize_done 4F8BD3D0:1C600D89 {"box":13,"event":"memorialize_done","key":"4F8BD3D0:1C600D89","player":"b","seq":114}
+[duo] timing oracle 0.5s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] deadzone_gen3: a=PASS b=PASS
+
+========== summary ==========
+  deadzone_gen3: PASS (attempt 3 of 3)
+exit=0 end_utc=2026-10-03T08:00:58Z tracked_clean_after=True classification=pass

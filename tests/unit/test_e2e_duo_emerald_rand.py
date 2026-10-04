@@ -68,15 +68,26 @@ def test_emerald_preparation_keeps_distinct_seeds_and_all_negative_controls(monk
     monkeypatch.setattr(duo, "gen3_rand_dependencies", lambda: [])
     monkeypatch.setattr(cut, "rom_pins", lambda _: pins)
     monkeypatch.delenv("SLINK_STATE_DIR", raising=False)
+    # patch-first: every randomized cartridge launches WITH the published companion overlay, and the plain
+    # companion (byte-pinned build) is the mixed-kind / clean-equivalent partner
+    from tools.gen3_companions import overlay_randomized, published
+
+    patched, _row = published("emerald", cartridges["clean"])
+    companion = staged.parent / "slink_Emerald_pinned.gba"
+    companion.write_bytes(patched)
+    overlay = lambda raw: hashlib.sha1(overlay_randomized("emerald", cartridges["clean"], raw)).hexdigest()  # noqa: E731
     run = duo.DuoRun("admit_randomized_emerald", SimpleNamespace(game="gen3_emerald", lane="e-rand-test"))
     run._pydec_note = lambda _: None
+    run._gen3_companion_rom = lambda title: companion.relative_to(tmp_path).as_posix()
     run._prepare_gen3_rand()
     got = run._rand_facts
-    assert got["a"]["sha1"] == hashlib.sha1(cartridges["a"]).hexdigest()
-    assert got["b"]["sha1"] == hashlib.sha1(cartridges["b"]).hexdigest()
+    assert got["a"]["sha1"] == overlay(cartridges["a"])
+    assert got["b"]["sha1"] == overlay(cartridges["b"])
+    assert got["companion_b"]["sha1"] == hashlib.sha1(patched).hexdigest()
     assert got["a"]["content_fingerprint"] != got["b"]["content_fingerprint"]
-    assert got["forbidden_a"]["sha1"] == hashlib.sha1(cartridges["widest"]).hexdigest()
-    assert got["equivalent_a"]["sha1"] != got["clean_a"]["sha1"]
+    assert got["forbidden_a"]["sha1"] == overlay(cartridges["widest"])
+    assert run._rand_inputs["clean_b"]["expect_refused"] is True
+    assert got["equivalent_a"]["sha1"] not in (got["clean_a"]["sha1"], got["companion_b"]["sha1"])
     assert got["equivalent_a"]["payload"] == got["clean_a"]["payload"]
     assert json.loads(Path(run.data_dir, "rom_contract.json").read_text()) == duo.gen3_rand_contract(got)
 

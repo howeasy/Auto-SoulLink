@@ -1,0 +1,29 @@
+DEV SOURCE=41ee8c667679331dda20ba737dc98ed9505b380a; changedRock postbootlog/native-state screenshots; nofinalcutclaim
+
+========== scenario: exp_static_rock_gen3 ==========
+[duo] exp_static_rock_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=edb785a095337bc5904e3827ecb398a151600d3624886b4e5b5f229248bd744d b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=0b022a5fcaf9635d4ca53775201758a11944e11b1c2d49e484a9c2e2346e046a write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=41ee8c667679331dda20ba737dc98ed9505b380a
+[duo] server up: tcp=57681 http=57682 data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_d_ax3c7u
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 19:45:15,066 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 19:45:15,066 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for exp_static_rock_gen3: e2e_exp_static_rock_gen3_a_attempt1_result.txt, e2e_exp_static_rock_gen3_a_result.txt, e2e_exp_static_rock_gen3_b_attempt1_result.txt, e2e_exp_static_rock_gen3_b_result.txt, e2e_exp_static_rock_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_d_ax3c7u path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_d_ax3c7u\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 1.9s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_d_ax3c7u path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_d_ax3c7u\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 1.9s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] CONNECT_TIMEOUT {"players": {"a": {"connected": true, "last_event": "tick"}, "b": {"connected": false, "last_event": "\u2014"}}}
+[duo] timing orchestrate 124.6s
+[duo] PYDEC: FAIL timed out after 120s waiting for both players hello'd
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_d_ax3c7u
+[duo] exp_static_rock_gen3: attempt 1 aborted — TimeoutError: timed out after 120s waiting for both players hello'd
+
+========== summary ==========
+  exp_static_rock_gen3: FAIL (attempt 1 of 1) — TimeoutError: timed out after 120s waiting for both players hello'd
+
+EXIT 1

@@ -33,7 +33,8 @@ def test_an_unsupported_randomized_committed_run_is_refused_even_for_a_clean_can
     # The committed title must be checked even when a candidate doesn't declare randomization.
     reason = server._mixed_games_error("a", title if title != "unknown-persisted-title" else "firered", "clean")
     assert "committed" in reason and title in reason and "binding" in reason
-    verdict = server._decide_admission("a", hello("firered", "clean"))
+    # the candidate is a PATCHED FireRed ("companion"): a clean one is refused for the companion first
+    verdict = server._decide_admission("a", hello("firered", "companion"))
     assert verdict["state"] == "rejected" and "committed" in verdict["reason"]
 
 

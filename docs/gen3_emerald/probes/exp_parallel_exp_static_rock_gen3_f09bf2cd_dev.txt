@@ -1,0 +1,85 @@
+DEV SOURCE=f09bf2cd3d9c0e64d2d521f1c75a4b1c8fdf8e6b; TEST-ONLY; native action-menu diagnostic; no final-cut claim
+
+========== scenario: exp_static_rock_gen3 ==========
+[duo] exp_static_rock_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=ec5846b2bf9b9e4db84413363975190dc6fdb5dfcfc994d953c7c545a02f836a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=d27a56c97a80ca958f862b4510f185183da0427bec9847dc21a796dce8388d81 write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=f09bf2cd3d9c0e64d2d521f1c75a4b1c8fdf8e6b
+[duo] server up: tcp=55525 http=55526 data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_x5kab53h
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 20:45:11,022 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 20:45:11,022 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.7s
+[duo] cleared 5 stale artifact(s) for exp_static_rock_gen3: e2e_exp_static_rock_gen3_a_attempt1_result.txt, e2e_exp_static_rock_gen3_a_result.txt, e2e_exp_static_rock_gen3_b_attempt1_result.txt, e2e_exp_static_rock_gen3_b_result.txt, e2e_exp_static_rock_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_x5kab53h path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_x5kab53h\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 2.6s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_x5kab53h path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_x5kab53h\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 3.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 95.9s
+[duo] RESULT_LINE a: (none)
+[duo] RESULT_LINE b: RESULT: FAIL (native catch failed: capture scene did not settle: scene did not settle within budget (1800 frames))
+[duo] PYDEC: FAIL client RESULT before a: native encounter settled
+[duo] exp_static_rock_gen3: a client finished before 'a: native encounter settled' (a: no RESULT; b: RESULT: FAIL (native catch failed: capture scene did not settle: scene did not settle within budget (1800 frames)))
+--- exp_static_rock_gen3 a result (last 25 lines) ---
+SYNTH_ROCK_RNG_DRAW {"callback_address":136203144,"counter":19,"draw":2,"frame":2350,"modulus":2880,"phase":"after","result":-1803388442}
+STATIC_ENEMY_ENTRY {"hp":38,"level":15,"species":74}
+STATIC_ENEMY_READY {"hp":38,"level":15,"moves":[111,397,205,523],"species":74}
+STATIC_WILD_BATTLE {"field_probe":true,"level":15,"method":"rock_smash_mons","moves":[111,397,205,523],"scope":"set0; nonzero is selection-characterization only","selector":0,"selector_pointer":33619680,"species":74}
+[client] [gen3] phase ball-thrown frame=3477 item=4 expected_item=4 debit=1, gLastUsedItem 0 -> 0, balls 1 -> 0
+THREW 1
+RX hud_show text=Partner caught Geodude in Route 111
+TX capture 7CB0A909:20250925 {"area_id":"route_111","event":"capture","held_item_id":0,"hp":38,"is_egg":false,"key":"7CB0A909:20250925","level":15,"maxHP":38,"nickname":"Geodude","player":"a","seq":142,"species_id":74,"stats":{"attack":29,"defense":36,"level":15,"maxHP":38,"pp1":40,"pp2":20,"pp3":20,"pp4":20,"spAtk":17,"spDef":18,"speed":14}}
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 4763
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 4763
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 4763
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 4763
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 4763
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 4763
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 4763
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 4763
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 4763
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 4763
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 4763
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 4763
+RX msgbox text=Geodude and Geodude linked!
+RX party_mon key=7CB0A909:20250925
+TX safe - {"event":"safe","player":"a","seq":145}
+[client] [SLink-gen3] held: party_mon x1 (C:/slink-wt/exp-xg3/lua/gen3/safety.lua:105: forbidden state: script_context_status)
+--- exp_static_rock_gen3 b result (last 25 lines) ---
+STATIC_WILD_BATTLE {"field_probe":true,"level":15,"method":"rock_smash_mons","moves":[111,397,205,523],"scope":"set0; nonzero is selection-characterization only","selector":0,"selector_pointer":33619704,"species":74}
+[client] [gen3] phase ball-thrown frame=2424 item=4 expected_item=4 debit=1, gLastUsedItem 0 -> 0, balls 1 -> 0
+THREW 1
+TX capture 7CB0A909:DFDAF6DA {"area_id":"route_111","event":"capture","held_item_id":0,"hp":38,"is_egg":false,"key":"7CB0A909:DFDAF6DA","level":15,"maxHP":38,"nickname":"Geodude","player":"b","seq":107,"species_id":74,"stats":{"attack":29,"defense":36,"level":15,"maxHP":38,"pp1":40,"pp2":20,"pp3":20,"pp4":20,"spAtk":17,"spDef":18,"speed":14}}
+RX box_mon key=7CB0A909:DFDAF6DA
+TX safe - {"event":"safe","player":"b","seq":110}
+RX play_sound
+[client] [SLink-gen3] write sound 0x03005438 +4 frame 3752
+[client] [SLink-gen3] write sound 0x03005440 +1 frame 3752
+[client] [SLink-gen3] write sound 0x03005441 +1 frame 3752
+[client] [SLink-gen3] write sound 0x03005444 +4 frame 3752
+[client] [SLink-gen3] write sound 0x03001F48 +4 frame 3752
+[client] [SLink-gen3] write sound 0x03001F48 +1 frame 3752
+[client] [SLink-gen3] write sound 0x03001F57 +1 frame 3752
+[client] [SLink-gen3] write sound 0x03001F5B +1 frame 3752
+[client] [SLink-gen3] write sound 0x03001F61 +1 frame 3752
+[client] [SLink-gen3] write sound 0x03001F68 +4 frame 3752
+[client] [SLink-gen3] write sound 0x03001F88 +4 frame 3752
+[client] [SLink-gen3] write sound 0x0300543C +4 frame 3752
+RX msgbox text=Geodude and Geodude linked!
+RX party_mon key=7CB0A909:DFDAF6DA
+[client] [SLink-gen3] party_mon cancels the queued box_mon 7CB0A909:DFDAF6DA
+[client] [SLink-gen3] held: party_mon x1 (C:/slink-wt/exp-xg3/lua/gen3/safety.lua:105: forbidden state: script_context_status)
+WRITES 12
+RESULT: FAIL (native catch failed: capture scene did not settle: scene did not settle within budget (1800 frames))
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_rock_gen3_x5kab53h
+
+========== summary ==========
+  exp_static_rock_gen3: FAIL (attempt 1 of 1)
+
+EXIT 1

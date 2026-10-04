@@ -46,6 +46,10 @@ import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from tools import rr_companion  # noqa: E402
+
 SRC = "lua/games/gen3_frlge.lua"
 HANDLERS_SRC = "patch/src/handlers.c"
 PRET_PIN = "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788"
@@ -204,10 +208,11 @@ RR_DERIVED = {
 }
 
 # RR-P5 binary witnesses: file offsets, NOT GBA virtual addresses. These bytes
-# were read from the admitted companion SHA1 below and checked against clean RR.
-# Keep complete reader bodies + literal pools, so a pointer alone is not evidence
+# were read from the admitted companion build and checked against clean RR. The build is named by its CANONICAL sha1 (the ROM with
+# its fixed-width version field zeroed, patch/tools/rom_identity.py; patch/dist/companion_pins.json), so a release stamp does not
+# rewrite every citation. Keep complete reader bodies + literal pools, so a pointer alone is not evidence
 # for which field is being accessed. No Capstone dependency in the generator.
-RR_WITNESS_SHA1 = "da579690db7d6933a0952a1f490312842793f71a"
+RR_WITNESS_CANONICAL = rr_companion.canonical_sha1()
 RR_ROM_ANCHORS = {
     "controller_exec_marker": (0x17248,
         "00b50006030e0848006802210840002810d0064a06499800401801680907106808431060"
@@ -429,7 +434,7 @@ def rr_rom_facts(rom: bytes | None = None) -> dict:
             "intro_store_begin:LDR@0x123CC/0x123CE pools@0x123DC/0x123E0 STR@0x123D0 (the tail of "
             "BeginBattleIntro); the data-request phase is the intro_getmons_body anchor (0x12FAC)"),
     }
-    return {key: (value, f"rom:patch/build/slink_RR.gba sha1={RR_WITNESS_SHA1} {where}")
+    return {key: (value, f"rom:patch/build/slink_RR.gba canonical-sha1={RR_WITNESS_CANONICAL} {where}")
             for key, (value, where) in facts.items()}
 
 SCHEMA = "gen3-profile-v1"
@@ -761,7 +766,8 @@ def native_abi() -> dict:
     if constants.get("SLINK_ABI_VERSION") != 2 or "SlinkMailboxV2" not in structs:
         raise ValueError("unsupported companion ABI")
     return {"constants": constants, "structs": structs, "_src": citations,
-            "source_sha256": hashlib.sha256((REPO / ABI_SRC).read_bytes()).hexdigest()}
+            # LF-normalized: hashing raw bytes differs between a Windows (CRLF) checkout and CI
+            "source_sha256": hashlib.sha256((REPO / ABI_SRC).read_bytes().replace(b"\r\n", b"\n")).hexdigest()}
 
 
 def native_block(title: str | None = None) -> dict | None:
@@ -1567,6 +1573,19 @@ def build_expansion(context):
         ("SB2_OT_ID_OFFSET", "SaveBlock2", "playerTrainerId"),
     ):
         put(key, types[type_name]["fields"][member]["offset"], f"structs.{type_name}.fields.{member}.offset")
+    # playerGender is not in facts.json's probe (tools/expansion_offsets.c); the harness probe
+    # compiles it (tools/expansion_harness_offsets.c F(SaveBlock2, playerGender), checked by
+    # gen_expansion_harness_facts.check). reads.lua publishes player_gender only when this key
+    # exists, which is what makes the server's rival-by-gender panel filter live. ROM witness:
+    # ScrCmd_checkplayergender 0x081f9dc0 `ldrb r2, [r2, #8]` off gSaveBlock2Ptr (test_gen3_exp_player_gender.py).
+    harness = json.loads((context["directory"] / "harness_facts.json").read_text(encoding="utf-8"))
+    gender = harness["structs"]["SaveBlock2"]["fields"]["playerGender"]
+    if gender["size"] != 1:
+        raise ValueError("expansion SaveBlock2.playerGender is no longer a u8")
+    derived["SB2_PLAYER_GENDER_OFFSET"] = gender["offset"]
+    src["derived.SB2_PLAYER_GENDER_OFFSET"] = ("harness_facts.json:structs.SaveBlock2.fields.playerGender.offset; "
+        "pin e8bd1cd7:include/global.h:591 playerGender, MALE=0/FEMALE=1 include/constants/global.h:178-179; "
+        "ROM: ScrCmd_checkplayergender 0x081f9dc0 ldrb r2,[r2,#8] off gSaveBlock2Ptr")
     put("SB1_BALL_POCKET_OFFSET", types["SaveBlock1"]["fields"]["bag"]["offset"] + types["Bag"]["fields"]["pokeBalls"]["offset"], "SaveBlock1.bag + Bag.pokeBalls")
     put("BATTLE_MON_STAT_STAGES_OFF", types["BattlePokemon"]["fields"]["statStages"]["offset"] + const["STAT_ATK"], "BattlePokemon.statStages + constants.STAT_ATK")
     volatiles_off = types["BattlePokemon"]["fields"]["volatiles"]["offset"]
@@ -1615,16 +1634,16 @@ def build_expansion(context):
         "structs.BoxPokemon.bitfields.shinyModifier relative to hpLost's u16 lane")
     put("BASESTATS_ADDR_BY_GAME_CODE", {"BPEE": sections["rom"]["BASESTATS_ADDR"]}, "rom.BASESTATS_ADDR, exact ROM only")
     return {"schema": SCHEMA, "generator": "tools/gen_gen3_profile.py", "pack": "gen3_exp", "build": context["build"],
-            "source": context["source"], "titles": {EXPANSION_TITLE: {"admitted": False, "variant": EXPANSION_TITLE,
+            "source": context["source"], "titles": {EXPANSION_TITLE: {"admitted": True, "variant": EXPANSION_TITLE,
             "rom_sha1": EXPANSION_SHA1, "rom_thumb": _thumb_keys(sections["rom"]), "_src": src, **sections,
-            "unavailable": dropped, "open": ["Runtime admission/CPU census and write safety qualification pending"]}}}
+            "unavailable": dropped, "open": []}}}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if a committed profile differs from a fresh generation")
-    ap.add_argument("--expansion", choices=[EXPANSION_BUILD], help="generate only this unadmitted expansion build")
+    ap.add_argument("--expansion", choices=[EXPANSION_BUILD], help="generate only this admitted reference expansion build")
     ap.add_argument("--artifacts", type=pathlib.Path)
     args = ap.parse_args()
     try:

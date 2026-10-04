@@ -1,0 +1,13 @@
+SOURCE=5765395b22c2f8f9a16a874bc4d1ab40054abe46; SOURCE/MODEL SYNTH lead hiddenDamp slot2 via packABILITY_NUM_FIELD; native pending-seed CONTINUE/SAVE only
+RAW_SHA256=b197e51dfc1842e74c612408dc9e2fbddd54987735bc1d90d2793b1950d93b92
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=3
+phase overworld-cb2 frame=515 map=24.24 pos=(17,9)
+phase field frame=598 map=24.24 pos=(17,9) saveFileStatus=1
+phase save-menu frame=598 counter=3
+phase save-dialog frame=658 row=3/6
+phase saved frame=1185 counter=3->4
+phase flushed frame=1605 map=24.24 pos=(17,9)
+RESULT: PASS counter 3 -> 4 map=24.24 pos=(17,9)
+DAMP_PENDING_NATIVE_SAVE_PASS ability_num=2 raw=b197e51dfc1842e74c612408dc9e2fbddd54987735bc1d90d2793b1950d93b92 saved=4d1f12dfdbd7136a3066381b0a892d8be99b5c782710981d2663722bc518996b
+PREP abilityNum 1 -> 2 (Damp, hidden slot), SYNTH prep; native CONTINUE/SAVE preserves it; saved-party oracle treats abilityNum as invariant

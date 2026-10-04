@@ -1,1680 +1,571 @@
-# SLink — Soul Link Nuzlocke Automation
+# SLink technical reference
 
-SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
+SLink automates a Soul Link Nuzlocke across two Pokémon games running in two [BizHawk](https://github.com/TASEmulators/BizHawk) instances. A Lua client in each emulator reads game RAM every frame and sends JSON events (area entered, capture, faint, and so on) to a Python server over TCP. The server enforces the Soul Link rules and answers each event with the commands the client must carry out. A web UI shows the run, and stream overlays, an OBS scene switcher and a Twitch bot sit on top of it.
 
-**Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, clean or companion-patched)
-  — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the
-  frozen-cut gate passes FR/LG 43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`,
-  `G5_request_draft.md`); the owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM
-  hash (`lua/slink.lua`); randomized and other unpinned builds are refused by name.
-- **Gen 3** — Emerald (pinned US dump) — 🟡 **Release candidate** on its own `gen3_emerald` pack under
-  `lua/gen3/`; admitted by ROM hash or by its engine-site anchors (header-only builds refused) and pairs only with itself, never with FRLG/RR. The owner's EG4
-  sign-off is pending (`docs/gen3_emerald/PLAN.md` §10, `docs/gen3_emerald/`).
-- **Gen 3** — the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
-  the old Gen 3 client, archived at C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua`
-  refuses them by name until they are ported to `lua/gen3/`.
-- **Gen 1** — Red, Blue, Yellow (US English) — 🟡 **Partially verified.** The Soul Link
-  *mechanisms* are proven against running cartridges; a *playthrough* is not. Be precise about
-  which you are relying on:
-  - **Proven live** — **encounter linking from actual play**: both cartridges walk Route 1's
-    grass, meet real wild Pokémon, throw real Poké Balls, and the server pairs the two
-    captures by area on its own (`area=route_1`, nothing injected, Nuzlocke gate flipped by
-    the client's own bag read). Plus faint propagation and party→box sync across two real
-    cartridges; memorialize into Box 12; Explode Mode arming Explosion; the enemy-party
-    write; `force_faint`; box level at `box+0x03`; Yellow's −1 WRAM shift (reads); the
-    companion patch's VBlank hook, its START-menu row, and the in-game panel — including a
-    page turn and a close — on both a clean and a randomized+injected cartridge.
-    The rewritten client's duo harness (`tools/e2e_duo.py`, game `gen1_new`) runs **eighteen**
-    scenarios, all paired **Red (player A) against Blue (player B)** — there is no Yellow duo
-    pairing in this harness. Yellow's −1 WRAM shift is instead exercised by the non-duo
-    inspect/scripted live gates (`tests/live/test_gen1_new_gates.py`), which run on all three
-    cartridges individually.
-  - **Proven live, without injection** — encounter linking, the ball gate, the dead zone and
-    the species clause: `link_new`, `ball_gate_new`, `deadzone_new` and `species_clause_new`
-    walk Route 1's grass on both cartridges, meet real wild Pokemon and throw real Poke Balls,
-    and the server pairs the captures by area (`docs/gen1_requirements.md` D-1..D-4).
-  - **NOT proven live** — whiteout and the gender/type clauses; any map *transition* (every
-    playing scenario stays on Route 1, so 1 of 39 encounter areas is exercised); evolution
-    `key_change`; and the Archipelago variants, which have never been launched. The scripted
-    warp that would reach the other 38 is undrivable from Lua — `hWarpDestinationMap` at
-    `$FF81` is shared HRAM the renderer overwrites within the frame (measured three ways
-    before the probe was retired) — and the fly warp reaches thirteen destinations of which
-    two carry encounters.
-  Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no checksums).
-  The optional Red/Blue companion patch adds the in-game SLINK panel and **no sound**: the
-  VBlank `PlaySound` path ABI 2 used is swallowed during music fades and re-enters a
-  non-reentrant audio routine, so ABI 3 ships panel-only and says so in its capability bits.
-- **Gen 1 · pureRGB** — PureRed, PureBlue, PureGreen (v2.7.6 `7e7a4653`, one pinned release) —
-  🟡 **Same bar as Red/Blue.** A second Gen 1 *foundation* (`game_id gen1_purergb`, adapter
-  `server/adapters/gen1_purergb.py`, pack `data/games/gen1_purergb/`) on the same client, codec
-  and server machinery; every game fact is generated from the pinned source and byte-verified
-  in the built ROMs (`docs/purergb/PLAN.md`, §13.1 gate ledger). What differs from vanilla and
-  how it is handled:
-  - **Admission by full ROM sha1** (`admission.json`, `admission_overlay.json`; the pure headers
-    collide with vanilla's) — any other pureRGB version is refused. Randomized pure cartridges
-    are admitted by every engine-site anchor + the overworld checkpoint bytes (kind `rand` /
-    `rand_overlay`) and then by the preparation contract's fingerprint **and** sha1.
-  - **Reads through the flat `WRAM` domain** for `$D000-$DFFF` and writes gated on
-    `WRAM BANK ∈ {0,1}`: pureRGB runs the overworld at GBC 2× and selects WRAM bank 2 inside
-    its palette-buffer loop with interrupts enabled. BizHawk **Console Mode GBC**, not SGB.
-  - **Overworld checkpoint** `PC == $0040`, `[SP] == DelayFrame+24`, `[SP+2] == OverworldLoop+1`,
-    `wDelayFrameBank == 0` (`write_checkpoint.json`, generated with source asserts).
-  - **Species by internal index**, never dex: 151 + 13 non-dex records (7 transformation forms,
-    5 uncatchable spirits, MissingNo `$B5`) with pureRGB's default typings (the per-save Type
-    Guy toggles are ignored by design) and `PokedexOrder` for the species clause.
-  - **Identity:** script transformations (`ChangePartyPokemonSpecies`, 10 sites) and the APEX
-    CHIP (DVs → `$FFFF`) are `key_change{reason: transform | apex_chip}`, **acknowledged** by the
-    server (`key_change_ack` / `key_change_rejected`); a predicted collision (same species +
-    OT already at `$FFFF`) restores the DV bytes at the commit site and sends nothing; a
-    server-side rejection retires the pair (`identity_lost`). A transformed DEAD mon is
-    re-fainted (the engine heals it to full HP).
-  - **Explode Mode:** pureRGB's EXPLOSION only faints its user below ⅓ HP, so `force_explode`
-    first drops the active battler under `max/3` (profile `derived.explode_low_hp_fraction`).
-  - **Pairing:** pureRGB pairs only with pureRGB, same artifact kind (clean↔overlay is refused);
-    Cable Club trades between a vanilla and a pure cartridge are not supportable.
-  - **Companion overlay** (`patch/gen1/purergb/`, `patch/dist/SLink-Pure*.ups`): the vanilla
-    binary patch cannot apply (ROM0 is full, RST vectors are live code, the vanilla mailbox
-    address is inside pureRGB's box data), so the native trade, the START-menu SLINK row + panel
-    and an APEX collision guard are **source sections** linked into the pureRGB build: bank
-    `$3F`, 15 bytes of ROM0, a 12-byte mailbox at `$DEEA` (the bank-1 WRAM tail), ABI 3 / lease
-    `SLT1` unchanged. RAM/SRAM placement is proven equal to the clean build, and a clean save
-    loads on the overlay unchanged (A4 gate, `tests/unit/test_gen1_purergb_overlay.py`).
-  - **Randomizer:** the SLink fork of UPR ZX 4.6.1 (`patch/upr/*.patch`, `tools/build_upr_fork.py`,
-    jar `4.6.1-slink3`, fork revision 3 required) with lossless load→save for pure entries, generated INI rows
-    (`tools/gen_upr_gen1_ini.py`), a write-domain audit (`tools/upr_write_domain_diff.py`) and
-    every code-patching tweak refused (`server/upr_settings.py` pure family); one tweak allowed,
-    lower-case names (a data write over the species-name table, re-cased byte-for-byte in place).
-  - **Evidence:** unit pins mirror the vanilla contract (`tests/unit/test_gen1_purergb_*.py`);
-    live: inspect on all six pure cartridges (clean + overlay), APEX restore and APEX refusal
-    gates, receptionist/menu-row/panel on the overlay, GBC FADE stress; duo: the vanilla
-    scenario set on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing
-    (`tests/e2e/test_duo_gen1_pure.py`, lane `duo-pairs-purergb`), including
-    `admit_randomized_new` on the fork jar.
-- **Gen 2** — Gold, Silver, Crystal (GBC) — 🟡 **Partially verified.** Same shape as Gen 1: the
-  *mechanisms* are proven against real cartridges, a *playthrough* is not.
-  - One adapter serves all three titles: `server/adapters/gen2_gsc.py`, with `gen2_codec.py` (save and
-    party structs) and `gen2_rom_scan.py`, over the per-title packs `data/games/gen2_{crystal,gold,silver}/`,
-    all generated from the pinned pret decomps (`data/gen2_sources.lock.json`). The legacy Crystal-only
-    adapter was removed at the P3b.8 cutover.
-  - **Proven live** on real dumps of all three titles, in 98 PHYSICAL duo and gate cells (pairings C↔C,
-    G↔S, C↔G) judged from committed receipts by `tools/verify_gen2_release.py`. Duos: encounter linking,
-    the species/gender/type clauses, the ball gate, faint and active-battler faint (wild and trainer),
-    whiteout and whiteout-rebuild, overworld poison, PC deposit/withdraw/release and box changes, NPC
-    trade, evolution, gift, egg hatch, boxed capture, reconnect, soft reset, wrong-ROM admission, and
-    the native SLINK TRADE (commit, decline, refuse-item, trade-evolve, timeout, reset). Gates: read,
-    engine sites (all three titles) and write windows (Crystal, Gold; Silver shares Gold's, O-23); on
-    the companion overlay the START-menu panel, native sound, phone calls, the W6 write guard and the
-    battle-text stack low-water gate. The memorial box is the last box (`gen2_gsc.memorial_box_index`).
-  - **Not proven:** a full playthrough. The Gen 2 dead zone rides on the generation-independent server
-    rule that Gen 1's `deadzone_new` proves live; there is no Gen 2 dead-zone duo.
-  - **Companion overlay** (`patch/dist/SLink-{Crystal,Gold,Silver}.ups`): BUILT, not yet ADMITTED. It is
-    promoted only after the owner signs G4 (`docs/gen2/PLAN.md` §6.1).
-  - **Archipelago Crystal is refused** at admission (owner ruling O-8/O-25; `data/games/gen2_crystal/admission.json`).
-- **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ **Experimental**
-- **Gen 5** — Black, White, Black 2, White 2 — ⚠️ **Experimental**
+This page is for hosts and contributors. Players should start with the [README](../README.md) and the [companion patch guide](../patch/README.md). Field-level wire details live in [docs/protocol.md](protocol.md).
 
-> **Note:** Gen 1 and Gen 2 have live coverage of their mechanisms, not of a run — see the
-> per-generation caveats above before trusting either. Gen 3 has extensive live-play coverage.
-> Gens 4 and 5 have full feature pipelines
-> (moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, AP detection) and pass
-> their unit-test suites; static profile addresses are checked against pret decomps at review
-> time. They remain ⚠️ Experimental because nothing has run them against a cartridge.
->
-> That distinction is not academic, and Gen 2 proved it twice. Bringing Gen 1 up found defects no
-> static check could reach — a deferred-command queue that bound to a nil global and crashed the
-> client on the first box or memorialize command; a `party_to_box` debounce that could never
-> complete, so party/box sync was silently dead; a box level read from an offset past the end of
-> the box struct; Archipelago detection reading HRAM instead of ROM. Gen 2 then went in with a
-> larger unit suite than Gen 1 ever had and everything the static suite could not see was wrong:
-> Gold, Silver and AP Crystal routed to the **Gen 3** adapter, `party_blob_size()` inherited 0 so
-> every Gen 2 party blob was discarded, no profile declared `stats_offset` so every box deposit
-> dropped the stat block, and the Apricorn ball IDs pointed at SUN_STONE, which left the Nuzlocke
-> gate shut for anyone carrying balls Kurt made. All of it passed the unit suite and the Lua
-> syntax gate. Treat "unit tests pass" as necessary, not sufficient.
+## Supported games
 
----
+Both players must play the same family. The Manager's family keys come from `GAMES` in `server/manager.py`; the server refuses a second player whose cartridge belongs to another family.
 
-## Prerequisites
+| Manager family | Titles | Lua client | Server adapter | Companion patch | Randomizer |
+|---|---|---|---|---|---|
+| `gen1` | Red, Blue, Yellow (US) | `lua/gen1/` | `gen1_rby` | Required on Red and Blue; Yellow runs clean | Yes |
+| `gen1_purergb` | PureRed, PureBlue, PureGreen ([pureRGB](https://github.com/Vortyne/pureRGB) v2.7.6) | `lua/gen1/` | `gen1_purergb` | Required | Yes |
+| `gen2` | Gold, Silver (US), Crystal (US 1.0) | `lua/gen2/` | `gen2_gsc` | Required | No |
+| `gen3` | FireRed, LeafGreen (US 1.0) | `lua/gen3/` | `gen3_frlge` | Required | Yes |
+| `gen3_e` | Emerald (US) | `lua/gen3/` | `gen3_frlge` | Required | Yes |
+| `gen3_rr` | Radical Red 4.1 | `lua/gen3/` | `gen3_frlge` (RR mode) | Required | No |
+| `gen3_exp` | Emerald Expansion (a pinned reference build of pokeemerald-expansion 1.17.0, ROM sha1 `28877d73...`) | `lua/gen3/` | `gen3_exp` | None; runs clean | No |
+
+Gen 4 (HeartGold, SoulSilver, Platinum; `lua/clients/gen4_hgsspt_client.lua`, adapter `gen4_hgsspt`) and Gen 5 (Black, White, Black 2, White 2; `lua/clients/gen5_bw_client.lua`, adapter `gen5_bw`) have clients and adapters with unit tests but have never been run against a real cartridge. They are experimental and the Manager does not offer them; run them with `python -m server.server` and the `lua/slink_gen4.lua` or `lua/slink_gen5.lua` launcher.
+
+Cartridges are admitted by ROM hash. The Gen 1 and Gen 2 clients detect the title and admit or refuse it in `lua/gen1/entry.lua` and `lua/gen2/entry.lua`; the Gen 3 client admits by hash, then by engine-site anchors, and refuses header-only matches (`lua/gen3/entry.lua`, `Entry.admit_routed`). A randomized cartridge is admitted only when the run prepared it (see [Cartridges and the randomizer](#cartridges-and-the-randomizer)).
+
+Per-generation runtime coverage is tracked in [docs/gen1_gen2_runtime_checks.md](gen1_gen2_runtime_checks.md).
+
+## Requirements
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen, Radical Red, or Emerald ROMs (Emerald pairs only with Emerald, never with FRLG/RR). **Gen 4:** Two instances with US HGSS ROMs |
-| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 2:** Crystal (US 1.0 or 1.1), Gold, Silver (US); the overlay is applied from `patch/dist/SLink-*.ups`. **Gen 3:** the pinned FireRed/LeafGreen US 1.0 dumps, Radical Red 4.1 (clean or with the SLink companion patch), or the pinned Emerald (US) dump on its own `gen3_emerald` pack — admitted by ROM hash, randomized builds refused; Emerald pairs only with Emerald. **Gen 4:** HeartGold/SoulSilver US |
-| Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
-| Scripts in `lua/` | `slink.lua` (universal entry point), `gen3/`, `connector.lua`, `socket.lua` |
-| LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
-| Network | Both BizHawk instances must reach the Python server (localhost or LAN) |
+| Python | 3.11 or newer. `pip install -r requirements.txt` installs aiohttp, Jinja2 and aiohttp-jinja2. |
+| Optional Python packages | `pip install "twitchio>=3.0" "simpleobsws>=1.4" psutil` for the Twitch bot and the OBS scene switcher. Both are imported lazily. |
+| BizHawk | 2.11 or newer for Gen 1 and Gen 3 (`lua/slink.lua` refuses older versions). Gen 2 also runs on 2.9. |
+| LuaSocket | Committed at `lua/x64/socket-windows-5-4.dll`; nothing to install. |
+| ROMs | Your own dumps. None are distributed. |
+| Java | Only for the randomizer, which runs the SLink fork of Universal Pokémon Randomizer ZX. |
+| Node.js | Only to build the damage calculator (`cd calc && npm install && npm run build`). |
+| Network | Both emulators must reach the server's TCP port; viewers must reach the HTTP port. |
 
----
+## Running SLink
 
-## Quick Start
-
-### 1. Install Python dependencies
+### With the Run Manager
 
 ```bash
 pip install -r requirements.txt
+python -m server.manager --host 0.0.0.0
 ```
 
-### 2. Start the server
+Open `http://localhost:8090/`. Creating a run on the New-run form starts a dedicated `server.server` process for it with its own data directory (`data/runs/<run_id>/`), a game TCP port from 54321 up and an HTTP port from 8081 up. Ports are the first pair unused by the registry and bindable on the machine. The run page offers each player's setup ZIP (the release package with a launcher pre-set to the run's host, port and slot) and, where the Manager prepared them, each player's cartridge.
+
+Manager options (`python -m server.manager --help`):
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--host` | `0.0.0.0` | Bind address. |
+| `--port` | `8090` | Manager HTTP port. |
+| `--data-dir` | `data/runs` | Where runs live. A fresh directory is a fresh Manager. |
+| `--allow-host NAME` | | Extra Host name the web UI answers to, such as a tunnel name or `*.<tailnet>.ts.net`. Repeatable; also `SLINK_ALLOWED_HOSTS` (comma-separated). Runs inherit it. |
+| `--public-host ADDRESS` | this machine's LAN address | The address launchers and setup ZIPs connect to. Also settable on a run page (stored in `data/runs/settings.json`). |
+
+The Manager registry is `data/runs/registry.json`. A run directory under `data/runs/` that is missing from the registry is adopted as a stopped run.
+
+### A single server by hand
 
 ```bash
-python -m server.server --host 127.0.0.1 --port 54321
+python -m server.server                      # TCP :54321, HTTP :8080, state in data/
+python -m server.server --reset              # wipe state first
+python -m server.server --species-clause --gender-clause --type-clause
 ```
 
-The server writes state to `data/links.json` and `data/memorial.json`. Pass `--reset` to wipe state and start a fresh run.
+Server options (`python -m server.server --help`):
 
-### 3. Open the status page
+| Flag | Default | Meaning |
+|---|---|---|
+| `--host` | `0.0.0.0` | Bind address. |
+| `--port` | `54321` | Game TCP port. |
+| `--http-port` | `8080` | HTTP port. |
+| `--data-dir` | `data/` | Where `links.json`, `memorial.json`, `events.json` and `backups/` live. |
+| `--reset` | | Clear saved state and start a fresh run. |
+| `--run-id`, `--run-name` | | Run label for logs and display name for page titles. |
+| `--manager-port` | | Set by the Manager. A managed run redirects its HTML pages to the Manager. |
+| `--species-clause`, `--gender-clause`, `--type-clause` | off | Link clauses (see [Soul Link rules](#soul-link-rules)). |
+| `--explode-mode`, `--rival-team-swap`, `--overworld-presence`, `--native-messages`, `--native-sounds` | off | Run options (see [Run options](#run-options)). |
+| `--no-battle-calc`, `--no-pc-trade-npc`, `--no-phone-calls` | | Turn off run options that default on. |
+| `--verbose` | | DEBUG level for the console and `<data-dir>/slink.log` (the log file is always written, at INFO by default). |
+| `--wire-log DIR` | | Write every TCP line to `DIR/wire_<player>.jsonl`. |
+| `--allow-host NAME` | | As for the Manager. |
 
-Navigate to `http://localhost:8080/` in a browser. The page title dynamically shows "Pokémon Soul Link Tracker — \<Game Variant\> — \<Run Name\>" (e.g., "Pokémon Soul Link Tracker — Radical Red — MyRun") with a Pokéball favicon. The page is a Jinja2 template polled by **HTMX** every ~2 s; **idiomorph** swaps changed nodes in place so `<details open>`, scroll position, and table-search focus survive each refresh. SSE remains available at `/api/events` for the calc bridge and external consumers, but the page itself no longer needs it. The theme picker (an Alpine.js widget in the sidebar) persists to `localStorage` + a `slink-theme` cookie so the saved palette applies on the first byte (no FOUC). The page shows:
-- **Now** — one card per player in that player's column: trainer name, cartridge, badge pips, current area, Pokéball count, last event, then **the battle** — the player's active mon and each foe (`vs`), each with status, HP, stat stages and moves with PP, plus the trainer's class and name — or, out of battle, the party **lead** drawn the same way; then the wild encounters here and (Radical Red) the **Upcoming Key Trainers** panel with its "Open in Calc" button
-- **One row per linked pair** — A's half, the bond (route, tie glyph, state), B's half; both HP bars face the bond. Each half shows only its own game's state: two cartridges, two save files, two battles that need not coincide. The battle itself lives on the player's Now card; the pair row only marks the mon that is out (⚔ and a red edge on that half) and the partner's half says nothing about it — battle is a player state, never a pair state, since the board cannot know who is looking, and what the link means for the partner is the reader's to know. Ability and held item under each half where the cartridge has them (`capabilities`)
-- Rows sorted into zones: **In party · Pending link · Split (one half boxed) · Boxed · Linked (stopped run) · Fallen** (memorials and dead zones, with the cause)
-- The **Log** beside the board from 1400 px
-- Banners first: save failure, game over, identity mismatch, cartridge not admitted; the run phase and alive/fallen counts inside the polled fragment
-- Flicker-free auto-refresh via HTMX + idiomorph morph swaps — sprites, HP bars, and table structure are preserved across updates; only changed text/values are patched in-place via a `beforeAttributeUpdated` hook that explicitly preserves the `open` attribute on `<details>` elements
+Some `--help` strings still say "RR only" for `--explode-mode` and `--rival-team-swap`; the table under [Run options](#run-options) is what the code supports.
 
-Additional pages:
-- **Memorial wall** at `/memorial` — tombstone cards for each dead linked pair with species-accurate sprites (CFRU→NatDex conversion), RR sprite background removal, nicknames, species, cause of death. Live updates via HTMX morph swap.
-- **Debug console** at `/debug` — HTMX-polled status banner (connections/areas/link counts/queued commands), link management (create/unlink/override/revive with live table), mon key autofill (datalist from party/link/pending data), area ID autofill (183+ areas annotated with state), event injection, command queuing, state toggles, live state panel (lock rules, player identity, party keys, bonus keys, pending bonus queue), backup rollback (clickable slot rows, restores both `links.json` and `events.json`).
-- **Stream overlays** at `/stream` — individual overlay pages for OBS (party, links, deaths, areas, events, focus cards, encounter table, and more).
+### Loading the Lua client
 
-### 4. Load the Lua client in each BizHawk instance
+Load the cartridge and its save in BizHawk first, then open **Tools > Lua Console** and load the launcher.
 
-**Option A — Universal entry point (recommended):**
-1. Open the BizHawk Lua Console (**Tools → Lua Console**).
-2. Load `lua/slink_gen1.lua` (Gen 1), `lua/slink_gen3.lua` (Gen 3) or `lua/slink_gen4.lua` (Gen 4).
-3. Edit the top of the launcher to set `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` before loading.
+| Launcher | Use |
+|---|---|
+| The run's launcher (`slink_<run>_<player>.lua`, in the setup ZIP or from `/api/runs/{id}/launcher/{player}`) | Normal use. Host, port and player are set; on first load it asks for the SLink folder and caches it in `slink_path.cfg` next to the launcher. |
+| `lua/slink.lua` | Universal entry point. Detects the system and title and loads the right client. Defaults: `127.0.0.1:54321`, player `a`. |
+| `lua/slink_gen1.lua`, `lua/slink_gen3.lua`, `lua/slink_gen4.lua`, `lua/slink_gen5.lua` | Hand-edited launchers: set `SLINK_HOST`, `SLINK_PORT` and `SLINK_PLAYER` at the top, then load. Each one calls `lua/slink.lua`. There is no Gen 2 launcher; use a run launcher or `lua/slink.lua`. |
+| `GET /launcher/{player}` on a standalone server | A launcher whose host comes from the request's `Host` header. |
 
-Alternatively, load `lua/slink.lua` directly — it auto-detects the game but uses default connection settings (`127.0.0.1:54321`, player `"a"`).
-
-**Option B — Direct client load:**
-1. Open the BizHawk Lua Console.
-2. Load `lua/slink_gen3.lua` (Gen 3; it routes through `lua/slink.lua`) or `lua/clients/gen4_hgsspt_client.lua` (Gen 4).
-3. At the top of the script, set:
-   ```lua
-   local SERVER_HOST = "127.0.0.1"   -- IP of the machine running server.py
-   local SERVER_PORT = 54321          -- Gen 3 default; Gen 4 uses 54322
-   local PLAYER_ID   = "a"           -- "a" for one game, "b" for the other
-   ```
-4. The console shows `TCP: connected to 127.0.0.1:54321` and `hello sent` within a second or two.
-
-**Option C — Web download:** Open the Run Manager (port 8090) or status page and click the download button for Player A or B. The downloaded `.lua` file prompts for the SLink project root folder (the folder containing `lua/` and `server/`), validates by checking for `lua/slink.lua`, caches the path in `slink_path.cfg` next to the script, and auto-detects the game. Host, port, and player ID are pre-configured.
-
-> **Important:** Load the Lua script **after** loading your save file in BizHawk.The script validates SaveBlock pointers at startup; if the save isn't loaded yet, writes will be disabled until the validation passes (it re-checks automatically each frame and enables writes as soon as the game is ready).
-
----
+`lua/slink.lua` mirrors every `console.log` line to `slink_lua.log` in the project root, truncated on each load. A client that cannot reach the server logs "Cannot reach the server" once and retries with exponential backoff (about 0.5 s doubling to a 30 s cap, `lua/connector.lua`).
 
 ## Architecture
 
 ```
-[BizHawk – Gen 1 (GB)]             [BizHawk – Gen 1 (GB)]
-  lua/gen1/run.lua                    lua/gen1/run.lua
-  lua/gen1/entry.lua                  lua/gen1/entry.lua
-  lua/gen1/{client,reads,writes,...}  lua/gen1/{client,reads,writes,...}
+[BizHawk A] lua/slink.lua ─┐                 (routes to lua/gen1/, lua/gen2/, lua/gen3/,
+[BizHawk B] lua/slink.lua ─┤                  or lua/clients/gen4|gen5 for NDS)
+                           │ newline-delimited JSON over one TCP connection per player
+                           ▼
+              server/server.py      aiohttp app: TCP listener + HTTP pages and API
+              server/state.py       SoulLinkState: every Soul Link rule
+              server/adapters/      per-game rules and presentation
+              <data-dir>/           links.json, memorial.json, events.json, backups/
+                           │
+                           ▼
+              HTTP: board, timeline, debug, calc, /stream/* overlays, Twitch, OBS
 
-[BizHawk – Gen 3 (GBA)]            [BizHawk – Gen 3 (GBA)]
-  lua/gen3/run.lua                     lua/gen3/run.lua
-  lua/gen3/entry.lua                   lua/gen3/entry.lua
-  data/games/gen3_frlge/gen3_frlge_areas.lua
-
-[BizHawk – Gen 4 (NDS)]            [BizHawk – Gen 4 (NDS)]
-  lua/clients/gen4_hgsspt_client.lua
-  lua/memory_nds.lua
-  data/games/gen4_hgsspt/gen4_hgsspt_areas.lua
-
-[BizHawk – Gen 5 (NDS)]            [BizHawk – Gen 5 (NDS)]
-  lua/clients/gen5_bw_client.lua     lua/clients/gen5_bw_client.lua
-  lua/memory_nds.lua                 lua/memory_nds.lua
-  data/games/gen5_bw/gen5_bw_areas.lua
-         |  TCP JSON event                  |
-         +-────────────────────────────────-+
-                       ↓
-              [server/server.py]   aiohttp HTTP + TCP listener :54321
-              [server/state.py]    SoulLinkState FSM
-              [server/adapters/]   Game-specific adapters (gen1_rby, gen3_frlge, gen4_hgsspt, gen5_bw)
-              [data/links.json]    persisted link table
-              [data/memorial.json] persisted memorial log
-              [data/games/]        game-specific data (area maps, RR data)
-                       ↓
-              :8080/              status page
-              :8080/memorial      memorial wall
-              :8080/debug         debug console
-              :8080/stream/*      OBS overlays
-
-       [server/manager.py]        Run Manager :8090
-         creates/starts/stops server.py subprocesses
+              server/manager.py     Run Manager on :8090, one server.server process per run
 ```
 
-**Communication model:**
-- Lua clients read RAM every frame but only send a JSON event when state changes (area, capture, faint, party move, etc.)
-- The server returns commands in the TCP response: `{"commands": [{"cmd": "force_faint", "key": "..."}]}`
-- Lua dispatches commands immediately (for `force_faint`, `force_explode`, `replace_rival_team`, `play_sound`) or defers to the next overworld safe state (for `box_mon`, `party_mon`, `memorialize`). Safe-state checks use a fresh `isInOverworld()` call at execution time to avoid stale cached values.
-- A `tick` event is sent every ~60 frames as a heartbeat to flush queued cross-player commands and update the status page with current party data. During the intro (before save data is valid), ticks omit party/box/enemy data to prevent garbage on the status page.
-- **TCP connector** uses fully non-blocking connect (`settimeout(0)`) — zero emulator stutter when the server is down. Pending connects are probed via zero-byte send. Reconnect uses **exponential backoff**: 2s → 4s → 8s → 16s → 30s cap, resetting on success.
+The Gen 1, Gen 2 and Gen 3 clients are composition roots (`entry.lua`) over modules for reads, writes, signals, boxes and the native panel and trade, with shared pieces in `lua/core/` and `lua/*.lua` (connector, HUD, admission, write permits, hook registry). Game facts (addresses, engine sites, area maps, write checkpoints) are generated JSON under `data/games/<pack>/`, which the clients and adapters read directly. Gen 4 and Gen 5 still use the older single-file shape: `lua/clients/<gen>_client.lua` plus `lua/games/<gen>.lua` and `lua/memory_nds.lua`.
 
----
+A client diffs RAM each frame and sends an event only when something changes, plus a `tick` heartbeat every 30 frames carrying the party snapshot. The server replies on the same round trip. Commands that change party or box contents (`box_mon`, `party_mon`, `memorialize`, `apply_trade`) are deferred by the client until its own safe-state check passes; the rest act at once.
 
-## TCP Protocol
+State persists to `links.json` on every mutation. A background task copies `links.json` and `events.json` into `backups/` every 5 minutes, keeping 6 slots. `memorial.json` is the log of retired pairs.
 
-Lua clients and the server speak newline-delimited JSON over one persistent TCP connection per player. A client sends an **event** only when state changes; the server replies on the same round-trip with a `commands` array: `{"commands": [{"cmd": "force_faint", "key": "..."}]}`.
+### Adapters
 
-### Events (Lua → server)
+Game-specific behaviour lives behind two abstract classes in `server/adapters/base.py`:
 
-| Event | Notes |
+- `GameRulesAdapter`: mon keys, gift and egg areas, species, evolution, gender and types, admission and companion refusals, rival trainer IDs, memorial box, and the opt-in capabilities listed below.
+- `GamePresentationAdapter`: sprites, species, move, item, ability and area names, trainer info, the Upcoming Key Trainers panel and the damage-calculator hooks.
+
+The adapter is chosen from the client's `hello.rom_type` through `_ROM_TYPE_TO_GAME_ID` in `server/adapters/__init__.py` and committed to `links.json` once. Shared code (`server.py`, `state.py`, `base.py`, `pokemon_data.py`) never branches on a game ID: a game-specific behaviour gets an inert default on the base class and an override in the adapters that support it.
+
+| Method | Default | Overridden by |
+|---|---|---|
+| `supports_explode_mode()` | `False` | Gen 1, pureRGB, Gen 2, Gen 3 (FireRed, LeafGreen, Emerald, Radical Red) |
+| `rival_trainer_ids()` | empty | Gen 1, pureRGB, Gen 2, Radical Red |
+| `party_blob_size()` | `0` (no party blobs) | Gen 1 (66 bytes: struct plus OT name and nickname), Gen 2, Gen 3 (100) |
+| `supports_info_panel()` | `False` | Gen 1 Red and Blue, pureRGB and Gen 2 companion overlays, Gen 3 (FireRed, LeafGreen, Emerald, Radical Red) |
+| `native_trade_ui()` | `False` | Gen 1 Red and Blue, pureRGB and Gen 2 companion overlays (the cartridge's receptionist drives the trade menus) |
+| `supports_abilities()` | `True` | `False` on Gen 1 and Gen 2 |
+| `status_token()` | `""` | Each generation's status bitfield |
+| `gift_link_area()` | `gift_<area>` | Gen 2 |
+| `trainers_for_area()`, `trainer_party()`, `trainer_brief()` | empty | Gen 3 (all titles, including the Expansion) |
+| `calc_profile()` and the other `calc_*` methods | `None` (calc hidden) | Gen 1, pureRGB, Gen 2, Gen 3, Emerald Expansion |
+| `memorial_box_index()` | `-1` | Gen 1 and Gen 2: last box. Gen 3: Box 14, or Box 25 on Radical Red. Gen 4: Box 18. Gen 5: Box 24. |
+
+`server/adapters/gen4_hgsspt.py` is the simplest complete adapter and the best template for a new one. [docs/protocol.md](protocol.md) section 7 lists the full adapter contract.
+
+## Soul Link rules
+
+| Rule | Behaviour |
 |---|---|
-| `hello` | Handshake — `rom_type`, trainer name, party. Locks player identity; the reply carries `resolved_areas`. |
-| `area_enter` | Player entered a new area (`area_id`). |
-| `capture` | A mon was caught — `key`, `area_id`, `level`. Carries `gift=true` for gift/egg catches (routes the pair into the `gift_<area>` namespace). |
-| `faint` | A party mon hit 0 HP — drives faint propagation to the partner. |
-| `no_catch` | Player failed to catch in an area (run / KO / flee) → dead-zone candidate. |
-| `tick` | ~60-frame heartbeat; flushes queued cross-player commands and refreshes status-page party data. Occupied party slots carry `blob_hex` when `--rival-team-swap` is active. |
-| `trainer_battle_start` | A trainer battle began, with the trainer opponent ID. Gates the rival-team-swap match (`rival_trainer_ids()`); also an OBS trigger event. |
-| `rival_team_replaced` | Ack of a `replace_rival_team` command, with a species readback of the team written into `gEnemyParty` (or `error="patch_required"` on an unpatched ROM). |
-| `sync_retrieve_done` / `sync_retrieve_failed` | Confirms a `party_mon` retrieval succeeded / failed (paired party-room check). |
-| `whiteout` | Full party wipe — triggers whiteout propagation to the partner. |
-| `party_to_box` / `box_to_party` | A known mon moved between party and PC — drives party sync. |
-| `key_change` | Nature Changer NPC rewrote a mon's personality — old key → new key migration. |
-| `stats_cache` | Caches a boxed mon's party-only stat fields so `party_mon` can restore them. |
-| `memorialize_done` / `memorialize_failed` | Ack of a `memorialize` command. |
-| `status` | **Companion patch.** Reports patch presence/build info and per-feature availability. |
-| `ghost_pos` | **Companion patch, `--overworld-presence`.** The player's overworld position/facing; sent by the server, but the rewritten Gen 3 client's `ghost_pos` handler is a no-op (peer ghost is deferred post-RC). |
-| `peer_interact` | **Companion patch.** Player talked to the peer ghost / trade NPC — opens the trade flow. |
-| `trade_request` | **Companion patch.** Player initiated a trade with the partner. |
-| `menu_result` | **Companion patch.** Result of a native yes/no menu (`show_menu`) or multichoice (`show_choices`). |
-| `mon_chosen` | **Companion patch.** Result of the native "Choose a POKéMON" menu (`choose_mon`). |
-| `trade_done` | **Companion patch.** Ack that the native trade scene completed. |
+| Nuzlocke gate | The rules below stay inactive for a player until the client reports Poké Balls in the bag. |
+| Encounter linking | Each player's first capture in an area is paired with the other player's first capture there. |
+| Dead zone | If either player fails to catch in an area (runs, knocks the Pokémon out, or otherwise ends the encounter without a catch), the area is closed for both. The missed species and level are recorded. |
+| Unlinked capture | A capture waiting for its partner's catch is sent to the PC until the pair forms. |
+| Illegal capture | A capture in an area that is already linked or dead, or a second capture in the same area, is fainted and sent to the memorial box. |
+| Faint propagation | When a linked Pokémon faints, its partner is sent `force_faint` (or `force_explode` under Explode Mode) on the same round trip. |
+| Whiteout | When a player's whole party faints, the partners of their linked party Pokémon are fainted too, and the party is rebuilt from boxed survivors. |
+| Run over | Once both gates are open and at least one pair has formed, the run ends (`game_over`) when no live pair and no pending capture remain. |
+| PC release | Releasing a linked Pokémon kills its partner. |
+| Party sync | Both halves of a pair are in the party, or both in the PC. A withdrawal happens only when both players have party room. |
+| Memorial box | Dead pairs move to the adapter's memorial box once each game reports a safe overworld state. |
+| Gifts and eggs | Link in their own `gift_<area>` namespace (adapter `gift_link_area()`): they pair with each other, do not close or consume the real encounter area, skip the unlinked-capture quarantine and do not open the Nuzlocke gate. Day-care eggs are normal captures. |
+| Shiny bonus | Always on. A player who catches a shiny gives their partner a bonus encounter: the partner's next capture pairs with the shiny under the normal rules, and the triggering area is not consumed. Bonuses queue in order. Gen 1 has no shinies. |
+| Species clause (opt-in) | Refuses a link when both Pokémon share an evolution family, and refuses a capture when either player already has a live linked Pokémon of that family. A duplicate seen at the start of a wild battle prompts the player to reroll. |
+| Gender clause (opt-in) | Refuses a link when both Pokémon have the same gender. Genderless Pokémon are exempt. Not offered on Gen 1 or pureRGB. |
+| Type clause (opt-in) | Refuses a link when the two Pokémon share any type, using the adapter's type data. |
+| NPC trades | After an in-game NPC trade the enabled clauses are rechecked against the new Pokémon. A violation retires only that pair. |
 
-### Commands (server → Lua)
+A capture that breaks a clause is fainted and the area stays open for another try.
 
-| Command | Notes |
+### Player identity lock
+
+The first `hello` that carries a trainer ID (the hello's `ot_id`, or failing that the OT ID in the first party Pokémon's key) locks that slot to the save. A later hello from a different save is refused: the client shows "WRONG SAVE" on the HUD for about 10 seconds, the board shows an identity banner, and further events from that connection are ignored until the right save connects. Hellos with an empty party do not lock. Each slot locks independently, and the lock is stored in `links.json` under `player_identity`.
+
+## Run options
+
+The New-run form greys out what a family cannot do, with the reason, from `OPTION_SUPPORT` in `server/manager.py`. `RUN_FLAGS` maps each option to the server flag the Manager passes when the value differs from the default.
+
+| Option | Server flag | Default | Offered for |
+|---|---|---|---|
+| Species Clause | `--species-clause` | off | All families |
+| Gender Clause | `--gender-clause` | off | All except Gen 1 and pureRGB (no genders) |
+| Type Clause | `--type-clause` | off | All families |
+| Explode Mode | `--explode-mode` | off | All except Emerald Expansion |
+| Rival Swap | `--rival-team-swap` | off | All except Emerald Expansion |
+| Overworld Presence | `--overworld-presence` | off | None yet |
+| Native Messages | `--native-messages` | off | None yet |
+| Native Sounds | `--native-sounds` | off | All except Emerald Expansion; does nothing on an unpatched cartridge (Yellow) |
+| Phone Calls | `--no-phone-calls` | on | Gold, Silver, Crystal |
+| Battle Calc | `--no-battle-calc` | on | Radical Red, Emerald Expansion |
+| PC Trade NPC | `--no-pc-trade-npc` | on | FireRed, LeafGreen, Emerald, Radical Red |
+
+Explode Mode: when a linked Pokémon dies in battle, its partner's active battler is forced to use Explosion (`force_explode`); a benched partner is fainted normally. Gen 1 and Gen 2 need no patch for it, since the move choice is a plain RAM write.
+
+Rival Swap: on a `trainer_battle_start` against one of the adapter's rival IDs, the server sends `replace_rival_team` with the partner's live party blobs, and the client writes them over the enemy party. Gen 1 and Gen 2 write the plaintext enemy party directly; Gen 3 needs the companion patch because the enemy party is encrypted. On FireRed, LeafGreen and Emerald the Manager offers the option, but the Gen 3 adapter lists rival trainers only for Radical Red, so it has no effect there.
+
+Phone Calls: on Gen 2 the companion rings the Pokégear when a pair links, an area dies or a Pokémon falls. The HUD message shows either way.
+
+Battle Calc: the in-game damage and type-effectiveness display. It is separate from the board's damage preview and the web calculator.
+
+PC Trade NPC: on Gen 3 the in-game trade is offered by an NPC in the Pokémon Center. On Gen 1, pureRGB and Gen 2 the trade is at the Cable Club receptionist and is always available on a patched cartridge.
+
+Overworld Presence and Native Messages are accepted by the server and stored, but the Manager greys them out because the current clients do not implement them.
+
+## Companion patch
+
+Every title except Yellow and the Emerald Expansion needs the SLink companion patch, and the launcher or server refuses a clean cartridge of those titles. The list is `COMPANION_TITLES` in `server/cartridges.py`. The patch adds the SoulLink title screen, the SLINK panel in the START menu (`link_panel`), native sounds, the in-game trade and, on Gen 3, the native operations the Rival Swap needs.
+
+The Manager patches each cartridge it prepares. To patch your own, use `/patcher` on the Manager or a run server; it applies the UPS in the browser. The patches are in `patch/dist/` and are served at `/companion/{name}` (for example `/companion/SLink-RR.ups`). Build and design details are in [patch/README.md](../patch/README.md) and [patch/gen1/README.md](../patch/gen1/README.md).
+
+### In-game trade
+
+A player may trade a Pokémon only for its own linked partner: the two halves of a live pair swap games, and both must be in their owners' parties. On Gen 1, pureRGB and Gen 2 the Cable Club receptionist runs the trade; on Gen 3 the Pokémon Center NPC opens a Trade / Say hey menu. The server runs the trade as a small state machine (`trade_request`, `choose_mon`, `apply_prepare`, `apply_trade`, `trade_done`) with a watchdog. A trade the server cannot settle on its own shows a banner on the board, and `POST /api/debug/resolve_trade` settles it. The sub-protocol is in [docs/protocol.md](protocol.md) section 6.
+
+## Cartridges and the randomizer
+
+On the New-run form, the Cartridges step picks each player's ROM from the SLink folder, `roms/`, `patch/build/` and local `.cache` build folders (`.gb`, `.gbc`, `.gba`), or uploads one. The Manager then makes each player's cartridge (`server/cartridges.py`): a copy, the companion patch applied, and randomized if asked. Outputs land in the run directory as `roms/a.<ext>` and `roms/b.<ext>` and download from `/api/runs/{id}/rom/{player}`.
+
+The randomizer supports Red, Blue and Yellow, pureRGB, FireRed and LeafGreen, and Emerald (`FAMILIES` in `server/upr_settings.py`). Gen 2, Radical Red and the Emerald Expansion cannot be randomized, and the Manager refuses the request by name (`NON_RANDOMIZABLE_GAMES` in `server/manager.py`). Both cartridges get the same settings and different seeds. The run records the settings, both seeds and both ROM hashes in `rom_contract.json`, and the server then admits only those two cartridges.
+
+The randomizer is the SLink fork of Universal Pokémon Randomizer ZX (`tools/build_upr_fork.py`, patches in `patch/upr/`). Only a jar whose SHA-256 is listed in `data/upr_jars.json` is run. `find_upr_jar()` in `server/upr_pipeline.py` looks at `$SLINK_UPR_JAR`, then `PokeRandoZX.jar` in the repo root and `tools/`, then `.cache/slink-upr/` and `.cache/upr/`. A jar uploaded through the form is saved as the repo-root `PokeRandoZX.jar`. Settings can be saved as presets and exported or imported as UPR `.rnqs` files. Settings that change data the rules depend on (types, evolutions, moves, base stats) are refused (`forbidden_enabled` in `server/upr_settings.py`).
+
+## Web UI
+
+The run server and the Manager render the same templates (`server/templates/`), refreshed by HTMX every 2 seconds with idiomorph swaps so open `<details>`, scroll position and focus survive. The theme picker stores its choice in `localStorage` and a `slink-theme` cookie.
+
+### Board
+
+`GET /` on a run server, `/runs/{id}` on the Manager. `server/board.py` turns the status payload into rows; `server/templates/_board.html` draws them.
+
+Each player has a Now card: trainer, cartridge, badges, area, ball count and last event, then the current battle (the player's active Pokémon and each foe with status, HP, stat stages and moves with PP) or, out of battle, the party lead. In battle the card shows a damage preview for each move (`server/static/calc-preview.js`), for every game whose adapter has a `calc_profile()`. It needs the calculator to be built. On Gen 3 the card also lists Upcoming Key Trainers for the current area, with an Open in Calc button.
+
+Below, one row per linked pair (each player's half either side of the bond, with HP, ability and held item where the game has them), sorted into In party, Pending link, Split (one half boxed), Boxed, Linked (a stopped run, where each half sits is unknown) and Fallen. The event log runs beside the board on wide screens. Banners report a save failure, game over, a wrong save, a refused cartridge and unsettled trades.
+
+### Timeline
+
+`GET /timeline`, or `/runs/{id}/timeline` on the Manager: the run in order, from `server.board.timeline`. It lists pairs formed, deaths, dead zones and burials with their causes, then the areas still open.
+
+### Debug console
+
+`GET /debug`, or `/runs/{id}/debug` on the Manager: manual linking (by key or party slot), event injection, command queueing, Nuzlocke gate and area-state overrides, unlink and revive, trade and ambiguous-key resolution, a live state panel and backup rollback. Every action is an `/api/debug/*` call listed below.
+
+### Stream overlays
+
+Every overlay is an OBS browser source at `/stream/{slug}`, defined in `server/overlay_catalog.py` and drawn from `server/templates/stream/`. The overlay gallery (`/stream`, or Broadcast on the Manager) lists each URL with its recommended size. On the Manager, `/stream/{name}` proxies to the pinned run (else the most recent running one), so OBS URLs stay fixed across runs.
+
+| Slug | Shows |
 |---|---|
-| `force_faint` | Zero a mon's HP immediately (linked-death propagation, illegal capture, whiteout). |
-| `force_explode` | **RR-only, `--explode-mode`.** Replaces `force_faint` when a linked partner dies mid-battle — coerces the survivor's active mon into Explosion. Falls back to `force_faint` on vanilla/AP/Emerald and for bench mons. |
-| `replace_rival_team` | **RR-only, `--rival-team-swap`.** Byte-copies the partner run's party blobs (per-slot `blob_hex`) over the rival/Terry team via the companion patch's native `OP_SET_ENEMY_PARTY`, then refreshes the active battlers. Acked by `rival_team_replaced`. **Requires the RR companion patch** ([patch/README.md](../patch/README.md)) — there is no unpatched fallback; unpatched clients ack `error="patch_required"` and skip. |
-| `box_mon` / `party_mon` | Deposit / retrieve a mon — **deferred** to the next overworld safe state. |
-| `memorialize` | Move a dead pair to Box 13 ("Box 14" in-game) — deferred to safe state. |
-| `play_sound` / `hud_show` | Play an in-game SE / show a HUD overlay message (`message`, `color`, `duration`). |
-| `resolved_areas` | Sent in the `hello` reply — area states to treat as already resolved on reconnect. |
-| `config` | Sent in the `hello` reply — per-run toggles (`overworld_presence`, `native_messages`, `native_sounds`, `battle_calc`, `pc_trade_npc`). |
-| `unresolve_area` | Remove an area from the client's resolved set (shiny bonus-pair slot reopening). |
-| `link_panel` | Content for the native in-game SOULLINK screen: flat, pre-formatted `field\|field\|...` rows, built **per recipient** (the panel says "yours" and "your partner's"). Sent only when the content changes, and only to clients whose adapter returns `supports_info_panel()`. Rows are flat because the Lua client has no JSON decoder — `parse_command_list` is a pattern scraper. |
-| `gui_prompt` | Show a BizHawk GUI text prompt (e.g. clause-violation retry notice). |
-| `game_over` | The run is over (unrecoverable whiteout) — re-sent on reconnect. |
-| `rebuild_start` / `rebuild_done` | Bracket a post-whiteout party rebuild (restore boxed survivors, then resume normal sync). |
-| `msgbox` | **Companion patch.** Show a native in-game message box / in-battle text instead of the Lua HUD (`--native-messages`). |
-| `show_menu` / `show_choices` | **Companion patch.** Native yes/no menu / multichoice list; answered by `menu_result`. |
-| `choose_mon` | **Companion patch.** Native "Choose a POKéMON" party menu; answered by `mon_chosen`. |
-| `apply_trade` | **Companion patch.** Write the partner's traded mon into the party and run the native trade scene; acked by `trade_done`. |
-| `ghost_pos` | **Companion patch, `--overworld-presence`.** The partner's overworld position — would drive the peer-ghost NPC, but the client's handler is currently a no-op (deferred post-RC). |
+| `party-a`, `party-b` | A player's party: sprites, HP bars, levels. |
+| `links` | Live pairs as cards, dead pairs dimmed below. |
+| `linked-party` | Pairs with both halves in the party, with HP, levels and area. |
+| `boxed-links` | Live pairs with a half in the PC. Scrolls when it overflows. |
+| `focus-a`, `focus-b` | The player's active battler: sprite, HP, status, stat stages, moves with PP. |
+| `enemy-focus-a`, `enemy-focus-b` | The active foe or foes, wild or trainer, with moves and live PP. Both foes in a double battle. |
+| `enemy-trainer-a`, `enemy-trainer-b` | The opposing trainer's whole team, scrolling. Hidden in wild battles. |
+| `deaths` | Alive and dead pair counts. |
+| `attempts` | The run attempt counter (`POST /api/attempts`). |
+| `stream-memorial` | Memorial Scroll: every dead pair, scrolling. |
+| `badges-a`, `badges-b` | A player's badges, unearned ones dimmed. |
+| `areas` | Linked, dead and pending area counts. |
+| `events` | Live event feed. |
+| `encounters` | Total encounters, shiny count and the last linked pair. |
+| `ticker` | Horizontally scrolling event marquee. |
+| `enc-table-a`, `enc-table-b` | Wild encounter rates for the player's current area (Radical Red and Gen 1 Red/Blue/Yellow). |
+| `area-encounter` | Soul Link status of the most recently active area. |
 
-> The OBS-trigger event names in [OBS Scene Trigger Integration](#obs-scene-trigger-integration) are a *separate* concept (derived signals for scene switching) even where names overlap (e.g. `trainer_battle_start`).
+Each overlay polls its own `/stream/{slug}/fragment` every 2 seconds. Query parameters:
 
----
+| Parameter | Applies to | Values |
+|---|---|---|
+| `theme` | All | `default`, `light`, `transparent`, `funtastic-grape`, `funtastic-jungle`, `funtastic-fire`, `funtastic-ice`, `funtastic-watermelon`, `funtastic-smoke`. Falls back to the `slink-theme` cookie. |
+| `layout` | `party-a`, `party-b` (`h`, `thin-h`, `thin-v`); `boxed-links` (`thin-v`) | |
+| `speed` | Scrolling overlays | Multiplier from 0.25 to 3, default 1. |
+| `pause` | `boxed-links`, `enemy-trainer-*` | Seconds to pause after each loop, 0 to 10, default 2. |
 
-## HTTP Pages & API
+## Damage calculator
 
-The status server (default port 8080) exposes these pages and endpoints.
+`calc/` is a fork of the [RadicalRedShowdown damage calculator](https://github.com/RadicalRedShowdown/damage-calc), itself a fork of the Smogon calculator. The run server serves it at `/calc/` (which redirects to `/calc/normal.html`; `hardcore.html` is the other page) and the Manager at `/runs/{id}/calc`. Files resolve from `calc/src/` first, then `calc/dist/` (`server/calc_files.py`); the HTML entry points exist only in `dist/`, so the calculator, and the board's damage preview, need a build:
 
-### Quick Reference
+```bash
+cd calc && npm install && npm run build
+```
+
+The adapter's `calc_profile()` picks the mechanics, dex and trainer sets: Radical Red and the Emerald Expansion at generation 9 with their own sets; FireRed, LeafGreen and Emerald at generation 3; Gold, Silver and Crystal at generation 2 (only Crystal has trainer sets); Red, Blue and Yellow at generation 1; pureRGB at generation 1 with its own dex and sets. A game whose profile is `None` (Gen 4, Gen 5) has no calculator.
+
+The SLink panel inside the calculator (`calc/src/js/slink_bridge.js`) reads `GET /api/calc/mons` and refreshes on the `/api/events` server-sent events. It shows each player's party, linked Pokémon and current foes; clicking a row loads that Pokémon into the attacker or defender slot. Its Prep tab lists trainers for pre-battle planning, and the board's Open in Calc button opens a trainer there. The Radical Red key-trainer roster is generated:
+
+```bash
+python tools/gen_rr_priority_trainers.py   # data/games/gen3_frlge/rr_priority_trainers.json + calc/src/js/data/sets/slink_priority.js
+```
+
+More detail, including set matching and the generation and dex options, is in [calc/README.md](../calc/README.md).
+
+## Twitch bot
+
+The bot uses twitchio 3.x over EventSub. Configure it on `/twitch` (or Broadcast > Twitch on the Manager).
+
+1. Register an app at [dev.twitch.tv/console](https://dev.twitch.tv/console) (category Chat Bot, client type Confidential, OAuth redirect URL `https://twitchtokengenerator.com/`). Note the Client ID and create a Client Secret.
+2. At [twitchtokengenerator.com](https://twitchtokengenerator.com), make a Custom Scope Token with your Client ID and the scopes `user:read:chat`, `user:write:chat`, `user:bot` and `channel:bot`, authorizing as the account the bot should post as (your own, or a separate bot account).
+3. Set `TWITCH_ACCESS_TOKEN`, `TWITCH_REFRESH_TOKEN` and `TWITCH_CLIENT_SECRET` in the environment before starting the server or Manager. Tokens are never written to disk by SLink; twitchio may create `.tio.tokens.json` (gitignored).
+4. Set the channel, bot name, Client ID, prefix and cooldown on `/twitch`. They are saved to `twitch_bot.json` in the run's data directory (template: `data/twitch_bot.example.json`).
+
+| Command | Reply |
+|---|---|
+| `!soullink` | The Soul Link rules in plain English. |
+| `!clauses` | Which clauses are on. |
+| `!rip` | The most recent death and what caused it. |
+| `!runstats` | Attempt number, alive and dead counts, shinies, oldest pair. |
+| `!alltime` | Totals across runs. |
+| `!lastrun` | How the previous run ended. |
+| `!attempts` | Current attempt number. |
+| `!partner <name>` | A Pokémon's linked partner, by nickname. |
+| `!area <name>` | An area's link status. |
+
+## OBS scene triggers
+
+SLink can switch scenes in each player's OBS through obs-websocket v5 (`simpleobsws`).
+
+1. In OBS, enable **Tools > WebSocket Server Settings** (default port 4455).
+2. On `/obs` (or Broadcast > OBS on the Manager), enter host, port and password for each player's OBS, save and connect.
+
+The config is global, at `data/obs_config.json`; passwords are never returned by the API. Each rule maps an event to a scene, with a player filter (`any`, `a`, `b`), a target OBS (`own`, `a`, `b`, `both`) and, for area events, an area filter: an `area_id` or a group (`group:route`, `group:city`, `group:cave`, `group:forest`, `group:tower`, `group:building`, `group:water`, `group:gift`, `group:other`, from `classify_area` in `server/obs_controller.py`).
+
+Events: `battle_start`, `wild_battle_start`, `trainer_battle_start`, `battle_end`, `battle_start_new` (in an area with an open encounter), `area_enter`, `area_enter_new`, `faint`, `link_death`, `whiteout`, `capture`, `shiny`, `linked`, `dead_zone`, `party_to_box`, `box_to_party`, `memorialize_done`, `run_over`.
+
+Several events can fire at once. Rules are evaluated top to bottom and the first match per OBS instance wins; drag rules to reorder (saved through `POST /api/obs/triggers`). Each OBS connection has a one-slot queue, so a slow OBS only receives the latest scene, and reconnects with backoff from 5 s to 60 s. OBS failures never affect the game server.
+
+## TCP protocol
+
+One persistent TCP connection per player, carrying newline-delimited JSON. Every message from the client is an event with an `event` field; the reply is `{"commands": [...]}`, each command an object with a `cmd` field. [docs/protocol.md](protocol.md) has every field, ordering rule and acknowledgement.
+
+### Events (client to server)
+
+| Event | Meaning |
+|---|---|
+| `hello` | Handshake: `rom_type`, artifact kind, trainer name and ID, party, capabilities. Admission and the identity lock run here; the reply carries `config`, `resolved_areas` and `dead_keys`. |
+| `tick` | Heartbeat every 30 frames with the party snapshot, PC boxes and battle state. |
+| `safe` | The client is back in a safe overworld state. |
+| `area_enter` | Entered an area (`area_id`). |
+| `capture` | Caught a Pokémon: `key`, `area_id`, `level`, `gift` for gifts and eggs. |
+| `no_catch` | Left an encounter without catching: a dead-zone candidate. |
+| `faint`, `whiteout` | A party Pokémon fainted; the whole party fainted. |
+| `release` | A Pokémon was released from the PC. |
+| `party_to_box`, `box_to_party` | A known Pokémon moved between party and PC. |
+| `stats_cache` | Party-only stats of a Pokémon about to be boxed, so `party_mon` can restore them. |
+| `key_change` | A Pokémon's key changed (evolution, NPC trade, nature change, pureRGB transformation). |
+| `sync_retrieve_done`, `sync_retrieve_failed`, `box_mon_failed`, `memorialize_done`, `memorialize_failed` | Results of deferred commands. |
+| `trainer_battle_start` | A trainer battle began (`trainer_id`). Drives Rival Swap. |
+| `rival_team_replaced` | Result of `replace_rival_team`, with a species readback. |
+| `status` | Companion patch presence and features. |
+| `trade_request`, `trade_query`, `trade_offer`, `mon_chosen`, `menu_result`, `apply_ready`, `trade_done` | The in-game trade and native menus. |
+| `peer_interact`, `ghost_pos` | Overworld Presence. The server relays `ghost_pos` only when the option is on. |
+
+### Commands (server to client)
+
+| Command | Meaning |
+|---|---|
+| `force_faint` | Set a Pokémon's HP to 0 (linked death, illegal capture, whiteout). |
+| `force_explode` | Explode Mode: force the active battler to use Explosion. |
+| `box_mon`, `party_mon` | Deposit or withdraw a Pokémon. Deferred. |
+| `memorialize` | Move a dead Pokémon to the memorial box. Deferred. |
+| `hud_show`, `msgbox`, `gui_prompt` | HUD line (`text`, `r`, `g`, `b`, `frames`), native message box (falls back to the HUD), and a prominent prompt (clause rerolls). |
+| `play_sound` | A sound effect, through the cartridge when Native Sounds is on and the patch supports it. |
+| `config` | Per-run options, in every hello reply. |
+| `resolved_areas`, `unresolve_area` | Areas already decided (hello reply); reopen an area (shiny bonus, clause reroll). |
+| `dead_keys` | The player's dead Pokémon, so the client keeps their HP at 0. |
+| `key_change_ack`, `key_change_rejected` | Answer to `key_change`. |
+| `link_panel` | Rows for the in-game SLINK panel, built per recipient and sent only when they change. |
+| `replace_rival_team` | Rival Swap: the partner's party blobs to write over the enemy party. |
+| `rebuild_start`, `rebuild_done` | Bracket a party rebuild after a whiteout. |
+| `game_over` | The run has ended. Re-sent on reconnect. |
+| `show_menu`, `show_choices`, `choose_mon` | Native yes/no menu, multiple-choice list and party picker. |
+| `trade_mask`, `trade_offer_ack`, `apply_prepare`, `apply_trade`, `withdraw_trade`, `trade_final` | In-game trade steps. `apply_trade` is deferred. |
+| `ghost_pos` | Overworld Presence: the partner's position. |
+| `noop` | Nothing to do, or a refused message (`refused` says why). |
+
+The OBS event names above are a separate set derived on the server, even where a name matches a protocol event.
+
+## HTTP routes
+
+`tests/unit/test_routes_documented.py` fails if a route registered by either app is missing from this page.
+
+### Run server (default port 8080)
 
 | Path | Method | Description |
 |---|---|---|
-| `/` | GET | The pair board (also `/runs/{id}` on the Manager) |
-| `/memorial` | GET | Memorial wall — dead pairs |
-| `/obs` | GET | OBS scene trigger configuration |
-| `/debug` | GET | Debug console |
-| `/twitch` | GET | Twitch bot configuration and activity log |
-| `/stream` | GET | Stream overlay index |
-| `/stream/party-a` | GET | Overlay — Player A party |
-| `/stream/party-b` | GET | Overlay — Player B party |
-| `/stream/links` | GET | Overlay — linked pairs |
-| `/stream/linked-party` | GET | Overlay — both players' linked mons side-by-side |
-| `/stream/boxed-links` | GET | Overlay — boxed linked pairs |
-| `/stream/deaths` | GET | Overlay — death feed |
-| `/stream/attempts` | GET | Overlay — attempts counter |
-| `/stream/areas` | GET | Overlay — area states |
-| `/stream/events` | GET | Overlay — recent events log |
-| `/stream/badges-a` | GET | Overlay — Player A gym badges |
-| `/stream/badges-b` | GET | Overlay — Player B gym badges |
-| `/stream/encounters` | GET | Overlay — all encounter areas and states |
-| `/stream/stream-memorial` | GET | Overlay — memorial wall |
-| `/stream/ticker` | GET | Overlay — scrolling text ticker |
-| `/stream/focus-a` | GET | Overlay — Player A focused mon view |
-| `/stream/focus-b` | GET | Overlay — Player B focused mon view |
-| `/stream/enemy-focus-a` | GET | Overlay — Player A active enemy mon(s), focus-style |
-| `/stream/enemy-focus-b` | GET | Overlay — Player B active enemy mon(s), focus-style |
-| `/stream/enemy-trainer-a` | GET | Overlay — Player A enemy trainer team, party-style autoscroll |
-| `/stream/enemy-trainer-b` | GET | Overlay — Player B enemy trainer team, party-style autoscroll |
-| `/stream/area-encounter` | GET | Overlay — Soul Link status for the current area |
-| `/stream/enc-table-a` | GET | Overlay — wild encounter rates for Player A's current area |
-| `/stream/enc-table-b` | GET | Overlay — wild encounter rates for Player B's current area |
-| `/stream/{slug}/fragment` | GET | Every overlay above has a fragment twin: the `#root` subtree its page polls every 2 s (idiomorph swap). Same `?theme=&layout=` query. |
-| `/launcher/{player}` | GET | Download pre-configured launcher Lua script |
-| `/calc/`, `/calc/{path}` | GET | Damage calculator and its bundle (served from `calc/src/` when present, else `calc/dist/`) |
-| `/patcher` | GET | In-browser companion-ROM patcher (also mounted on the Manager port 8090) |
-| `/companion/SLink-RR.ups` | GET | Download the built companion UPS patch (also mounted on the Manager port 8090) |
-| `/api/status` | GET | Full state JSON dump |
-| `/api/events` | GET | SSE event stream |
-| `/api/calc/mons` | GET | Live party + enemy data for calc bridge |
-| `/api/bot/status` | GET | Bot status, config, and recent activity log |
-| `/api/bot/config` | POST | Save non-sensitive bot config (channel, client_id, prefix, etc.) |
-| `/api/bot/reload` | POST | Cancel and restart the bot connection |
-| `/api/bot/enable` | POST | Enable the bot and restart |
-| `/api/bot/disable` | POST | Disable the bot and cancel the task |
-| `/api/bot/preview` | POST | Preview what a command would reply (without sending to Twitch) |
-| `/obs` | GET | OBS scene trigger configuration page |
-| `/api/obs/status` | GET | OBS connection status + trigger rules (passwords redacted) |
-| `/api/obs/config` | POST | Save OBS config and hot-reload connections |
-| `/api/obs/connect` | POST | Connect one or both OBS players |
-| `/api/obs/disconnect` | POST | Disconnect one or both OBS players |
-| `/api/obs/scenes/{player}` | GET | List available scenes from a connected OBS instance |
-| `/api/obs/triggers` | POST | Save just the trigger rules list (auto-save on drag-reorder) |
-| `/api/obs/areas` | GET | Labeled area-group buckets for the trigger area filter picker |
-| `/api/obs/test` | POST | Test a scene switch for a player |
-| `/api/reset` | POST | Wipe all state and start fresh |
-| `/api/inject_link` | POST | Manually link two mons by key |
-| `/api/inject_link_by_slot` | POST | Manually link two mons by party slot index |
-| `/api/attempts` | POST | Set manual attempts counter |
-| `/api/debug/raw_state` | GET | Raw JSON state (links.json + live fields) |
-| `/api/debug/manual_link_data` | GET | Mon keys and area IDs for link UI |
-| `/api/debug/backups` | GET | List rolling backup slots |
-| `/api/debug/inject_event` | POST | Inject synthetic event through state machine |
-| `/api/debug/queue_command` | POST | Queue a command for a player |
-| `/api/debug/set_pokeballs` | POST | Set pokeballs_obtained for a player |
-| `/api/debug/set_area_state` | POST | Override an area's state |
-| `/api/debug/clear_pending` | POST | Clear pending captures |
-| `/api/debug/unlink` | POST | Remove a link entry |
-| `/api/debug/revive` | POST | Revive a dead/memorial link |
-| `/api/debug/resolve_trade` | POST | Settle a conflicted or stuck native trade (commit or rollback) |
-| `/api/debug/resolve_ambiguous_key` | POST | Clear an ambiguous-key latch after checking the cartridge (`{"player","key"}`) |
-| `/api/debug/rollback` | POST | Restore state from a backup slot |
+| `/` | GET | The board. |
+| `/timeline` | GET | The run's timeline. |
+| `/debug` | GET | Debug console. |
+| `/twitch` | GET | Twitch bot settings and activity. |
+| `/obs` | GET | OBS scene triggers. |
+| `/stream`, `/stream/` | GET | Overlay gallery. |
+| `/stream/{slug}` | GET | One overlay per slug in the table above, for example `/stream/party-a`, `/stream/party-b`, `/stream/links`, `/stream/linked-party`, `/stream/boxed-links`, `/stream/focus-a`, `/stream/focus-b`, `/stream/enemy-focus-a`, `/stream/enemy-focus-b`, `/stream/enemy-trainer-a`, `/stream/enemy-trainer-b`, `/stream/deaths`, `/stream/attempts`, `/stream/stream-memorial`, `/stream/badges-a`, `/stream/badges-b`, `/stream/areas`, `/stream/events`, `/stream/encounters`, `/stream/ticker`, `/stream/enc-table-a`, `/stream/enc-table-b`, `/stream/area-encounter`. |
+| `/stream/{slug}/fragment` | GET | The fragment each overlay polls. Same query parameters. |
+| `/launcher/{player}` | GET | A launcher for player `a` or `b`, host taken from the request. |
+| `/calc`, `/calc/` | GET | Redirect to `/calc/normal.html`. |
+| `/calc/{path}` | GET | Calculator pages and files. |
+| `/patcher` | GET | In-browser companion patcher. |
+| `/companion/{name}` | GET | A companion UPS from `patch/dist/`. |
+| `/static/...` | GET | CSS, JS, fonts, themes (`server/static/`). |
+| `/api/status` | GET | The full status payload. |
+| `/api/events` | GET | Server-sent events: a `ping` on each state change (clients then fetch `/api/status`), plus comment heartbeats. Used by the calculator panel. |
+| `/api/calc/mons` | GET | Calculator profile plus each player's party, linked Pokémon and foes with Showdown pastes. |
+| `/api/attempts` | POST | `{"count": N}` sets the attempt counter (persisted in `links.json`). |
+| `/api/reset` | POST | Delete `links.json` and start a fresh run with the same rules. |
+| `/api/inject_link` | POST | `{a_key, b_key, area_id, force?}`: link two Pokémon by key. A Pokémon pending in another area needs `force`. |
+| `/api/inject_link_by_slot` | POST | `{a_slot, b_slot, area_id, force?}`: link by party slot (0-based). |
+| `/api/bot/status` | GET | Bot status, config and activity log. |
+| `/api/bot/config` | POST | Save bot settings (no tokens). |
+| `/api/bot/reload`, `/api/bot/enable`, `/api/bot/disable` | POST | Restart, enable or disable the bot. |
+| `/api/bot/preview` | POST | What a command would reply, without posting. |
+| `/api/obs/status` | GET | Connection state and rules, passwords redacted. |
+| `/api/obs/config` | POST | Save OBS settings and reconnect. |
+| `/api/obs/connect`, `/api/obs/disconnect` | POST | Connect or disconnect one or both players' OBS. |
+| `/api/obs/scenes/{player}` | GET | Scene names from a connected OBS. |
+| `/api/obs/triggers` | POST | Save the rule list. |
+| `/api/obs/areas` | GET | Area groups for the area filter picker. |
+| `/api/obs/test` | POST | Test a scene switch. |
+| `/api/debug/raw_state` | GET | `links.json` plus live-only fields. |
+| `/api/debug/manual_link_data` | GET | Known keys and area IDs for the linking form. |
+| `/api/debug/backups` | GET | Backup slots with timestamps and counts. |
+| `/api/debug/rollback` | POST | `{"slot": N}`: restore `links.json` and `events.json` from a backup slot. The current files are kept as `*.pre_rollback.json`. |
+| `/api/debug/inject_event` | POST | `{player, event, ...}`: run a synthetic event through the state machine; returns the commands it produced. |
+| `/api/debug/queue_command` | POST | `{player, cmd, ...}`: queue any command for a player's next reply. |
+| `/api/debug/set_pokeballs` | POST | `{player, value}`: open or close a player's Nuzlocke gate. |
+| `/api/debug/set_area_state` | POST | `{area_id, state}` with `unseen`, `pending_a`, `pending_b`, `pending_both`, `linked` or `dead_zone`. |
+| `/api/debug/clear_pending` | POST | `{area_id?}`: clear pending captures, all or one area. |
+| `/api/debug/unlink` | POST | `{area_id, index?}`: remove a link and reset the area. |
+| `/api/debug/revive` | POST | `{area_id, index?}`: mark a dead pair alive. The Pokémon must be restored in-game by hand. |
+| `/api/debug/resolve_trade` | POST | `{token, action, sides?}` with `action` `commit`, `rollback` or `adopt`: settle an in-game trade the server could not. Check both parties first. |
+| `/api/debug/resolve_ambiguous_key` | POST | `{player, key}`: clear an ambiguous-key hold after checking the cartridge. |
 
-### Pages
+`/api/status` returns `players` (per player: connection, `rom_type`, trainer, area, `ball_count`, `nuzlocke_active`, `party_keys`, `party_details`, `pc_boxes`, `battle_state`, `encounter_table`, `capabilities`, admission and identity errors), `links`, `area_states`, `pending_captures`, `killfeed`, `recent_events`, `rules`, `attempts_count`, `run_over` and the trade and save-failure flags. The empty shape is `server/status_payload.py`.
 
-All pages refresh in-place via HTMX (2 s polling, idiomorph swaps) — no full reloads, no scroll jumps. SSE remains at `/api/events` for external consumers but is no longer used by the dashboard or overlays.
-
-**`GET /`** — The pair board. `server/board.py` joins the status payload into one row per bond and sorts the rows into zones; `server/templates/_board.html` draws it (the run server wraps it in `dashboard.html`, the Manager in `manager.html`). Polled every 2 s and morphed in place.
-
-**`GET /memorial`** — Tombstone cards for every dead linked pair with greyscale sprites, nicknames, species, level, cause of death, and killer details. Renders from `server/templates/memorial.html`.
-
-**`GET /debug`** — Full debug console with panels for manual linking, event injection, command queuing, state toggles, raw state viewer, and backup rollback. Prefer this UI over raw curl calls for one-off corrections.
-
-**`GET /stream`** — Index listing all available OBS overlays with browser source URLs, generated from `server/overlay_catalog.py`. Each overlay template lives in `server/templates/stream/`.
-
-### Stream Overlays
-
-All overlays are designed as OBS browser sources. Each is a Jinja2 template that polls its own `_root.html` fragment via HTMX every 2 s — picked over SSE so the dashboard plus N overlays don't hit Chrome's 6-connection-per-origin cap. Add them in OBS via **Sources → Browser** and paste the URL.
-
-URL parameters supported by all overlays:
-- `?theme=<id>` — one of `default`, `funtastic-grape`, `funtastic-jungle`, `funtastic-fire`, `funtastic-ice`, `funtastic-watermelon`, `funtastic-smoke`, `light`, `transparent`. Falls back to the `slink-theme` cookie when omitted (set by the dashboard/manager picker).
-- `?layout=h` / `?layout=thin-h` / `?layout=thin-v` (party overlays only)
-
-Scrolling overlays additionally accept:
-- `?speed=1` (default) — multiplier from `0.25`–`3.0`. Values on the index page's speed pill buttons update the URL automatically.
-- `?pause=2` (default, in seconds) — pause-after-loop on auto-scrolling overlays (`enemy-trainer-{a,b}`, `boxed-links`) when the doubled list overflows its mask. Range `0`–`10`. Values on the index page's pause pill buttons update the URL automatically.
-
-| Overlay | URL | Use |
-|---|---|---|
-| Player A party | `/stream/party-a` | Player A's live party |
-| Player B party | `/stream/party-b` | Player B's live party |
-| Linked pairs | `/stream/links` | All linked pairs and their status |
-| Linked party | `/stream/linked-party` | Both players' linked party mons side-by-side |
-| Boxed links | `/stream/boxed-links` | Linked pairs currently in the PC box, as a seamless auto-scrolling marquee. Honors `?speed=` (0.25–3, default 1) and `?pause=` (0–10 s, default 2). |
-| Death feed | `/stream/deaths` | Scrolling log of deaths with cause and killer |
-| Attempts counter | `/stream/attempts` | Current run attempt count (set via `POST /api/attempts`) |
-| Area states | `/stream/areas` | All encounter areas and their current state |
-| Events log | `/stream/events` | Recent game events (captures, faints, area changes) |
-| Player A badges | `/stream/badges-a` | Player A's earned gym badges |
-| Player B badges | `/stream/badges-b` | Player B's earned gym badges |
-| Encounters | `/stream/encounters` | All encounter areas and their current state |
-| Memorial wall | `/stream/stream-memorial` | Scrolling memorial for dead pairs |
-| Ticker | `/stream/ticker` | Scrolling text ticker |
-| Player A focus | `/stream/focus-a` | Player A focused mon view |
-| Player B focus | `/stream/focus-b` | Player B focused mon view |
-| Enemy focus A | `/stream/enemy-focus-a` | Player A's active enemy mon(s). Combines old `enemy-wild` and trainer-active overlays into one widget. Title shows "WILD ENCOUNTER" or trainer class/name; shows card + moves grid with live PP. In Gen 3 doubles, both active foes side-by-side. |
-| Enemy focus B | `/stream/enemy-focus-b` | Same for Player B. |
-| Enemy trainer A | `/stream/enemy-trainer-a` | Player A's enemy trainer's full team as a PARTY-style autoscrolling list (sprite, name, HP bar, status, Lv; active mons highlighted with stat-stage icons). Supports `?speed=` (0.25–3, default 1) and `?pause=` (0–10s, default 2). |
-| Enemy trainer B | `/stream/enemy-trainer-b` | Same for Player B. |
-| Area encounter | `/stream/area-encounter` | Soul Link status for the most-active area — linked pair, pending captures, or dead zone. Auto-follows the area with the most recent action. |
-| Wild encounters A | `/stream/enc-table-a` | Wild Pokémon encounter rates for Player A's current area (Radical Red and Gen 1 R/B/Y). Shows each method — Walking, Surfing, Fishing — with sprite, species, rate %, and level range. Auto-scrolls when the list is taller than the overlay; supports `?speed=` multiplier. |
-| Wild encounters B | `/stream/enc-table-b` | Wild Pokémon encounter rates for Player B's current area (Radical Red and Gen 1 R/B/Y). Same as above for Player B. |
-
-### Launcher Script
-
-**`GET /launcher/{player}`** — Returns a pre-configured `.lua` launcher script for the given player (`a` or `b`). The embedded server IP is taken from the HTTP `Host` header so the script works for LAN connections without editing.
+Example calls:
 
 ```bash
-# Download Player A launcher
-curl http://localhost:8080/launcher/a -o slink_a.lua
-
-# Download Player B launcher
-curl http://localhost:8080/launcher/b -o slink_b.lua
+curl http://localhost:8080/api/status
+curl -X POST http://localhost:8080/api/debug/inject_event -H "Content-Type: application/json" \
+  -d '{"player": "a", "event": "capture", "key": "12345678:87654321", "area_id": "route_1", "level": 12}'
+curl -X POST http://localhost:8080/api/debug/queue_command -H "Content-Type: application/json" \
+  -d '{"player": "a", "cmd": "hud_show", "text": "Route 3 is closed", "r": 255, "g": 80, "b": 80, "frames": 180}'
 ```
 
 ### Run Manager (port 8090)
 
 | Path | Method | Description |
 |---|---|---|
-| `/` | GET | The first running run's board, or the New-run form when there are no runs |
-| `/new` | GET | New-run form: game family, options greyed with reasons, preview; on a Gen 1 family, the Cartridges step — cartridges found in the SLink folder (grouped by family, the run's pair preselected), *Add file…*, the SLink companion (greyed with the reason for Yellow), Randomize with its options, presets, `.rnqs` export/import |
-| `/runs/{run_id}` | GET | A run's header (start / stop / pin / launchers — and, on a randomized run, the two cartridges / archive / delete) and its board — live from the run's server, or what it persisted once stopped. The rail's runs scroll on their own; archived runs fold under a count |
-| `/runs/{run_id}/board` | GET | The `#content` fragment the run page polls every 2 s |
-| `/runs/{run_id}/cartridges` (also `/randomizer`) | GET | Gen 1 runs: the cartridges page — what each player plays (the picks, the SLink companion, Randomize and its options), the downloads, the `.rnqs` a randomized pair was built with. Preparing cartridges is normally part of `/new` |
-| `/runs/{run_id}/debug` | GET | The run's debug tools (manual linking, event injection, state toggles, backup rollback) in the Manager's chrome; the panel's calls go through `/runs/{id}/api/*` |
-| `/runs/{run_id}/calc`, `/runs/{run_id}/calc/{path:.*}` | GET | The damage calculator for that run — entry points wrapped in the Manager's chrome, its files served verbatim; the bridge talks to the run through `/runs/{id}/api/*` |
-| `/calc/{path:.*}` | GET | The calc's absolute-path assets (its stylesheets link to `/calc/css/…`) |
-| `/runs/{run_id}/api/{tail:.*}` | GET / POST | Relayed verbatim to **that** run's `/api/{tail}`, the SSE stream `/api/events` included — what the debug panel and the calc bridge use from this origin |
-| `/broadcast` | GET | The overlay gallery wearing the Manager's rail (`/stream` serves the same page for OBS) |
-| `/broadcast/{tab:twitch|obs}` | GET | The pinned run's Twitch bot and OBS scene triggers, in the Manager's chrome (same panels as the run's `/twitch` and `/obs`) |
-| `/tools` | GET | The patcher and the randomized-pair builders |
-| `/stream/{name}`, `/stream/{name}/{suffix:fragment}` | GET | Proxied to the pinned (else most recent running) run — the URLs pasted into OBS |
-| `/api/runs` | GET | The registry |
-| `/api/runs/new` | POST | `{name, game?, ...options}` — creates and auto-starts; `game` is a family key from `manager.GAMES`. Ports are the first pair unused by the registry **and bindable on this machine**; a server that dies on startup is reported in `start_error` (the run exists, stopped) rather than recorded as running |
-| `/api/runs/{id}/start` · `/stop` · `/archive` · `/delete` | POST | Lifecycle |
-| `/api/runs/{id}/launcher/{player}` | GET | The player's launcher `.lua` |
-| `/api/runs/{id}/player-pack/{player}` | GET | The player's whole setup: the release ZIP (`tools/make_release.py`) with the run's launcher at its root and the run's host, game TCP port and slot baked into every launcher inside |
-| `/api/settings/public-host` | POST | `{host}` — the address launchers and setup ZIPs connect to (`data/runs/settings.json`; `--public-host` at start). `""` = work it out: the bound address, else this machine's LAN address (`manager.advertised_host`) — never the browser's `Host` header |
-| `/api/runs/{id}/live` | GET | The run's `/api/status`, same-origin |
-| `/api/runs/{id}/cartridges` | POST | `{rom_a, rom_b, companion?, randomize?, jar?, spec? \| categories? \| settings?}` — makes each player's cartridge (`server/cartridges.py`): a copy, the SLink companion on it (vanilla: the UPS on a clean dump, or the structural injector after randomizing; pureRGB: the companion overlay, which the fork then randomizes as an overlay), randomized when asked. Outputs `roms/{a,b}.<ext>` with the source's extension (`.gb` Red/Blue, `.gbc` Yellow and pureRGB); `rom_contract.json` only when randomized (the run then admits no other). Records `run.cartridges` (and `run.randomizer` when randomized) |
-| `/api/runs/{id}/randomize` | POST | `{jar?, rom_a, rom_b, spec? | categories? | settings?, fastest_text?}` — `spec` is any subset of `upr_settings.OPTIONS` (modes, level curves, difficulty, tweaks); builds the pair, records seeds/hashes/spec/summary, writes `rom_contract.json`. A run whose game names a family refuses a pair from the other (400, by name) |
-| `/api/runs/{id}/rom/{player}` | GET | Download that player's cartridge as the run made it, `slink_<run>_<player>` with the source's extension (`.gb` Red/Blue, `.gbc` Yellow and pureRGB — BizHawk picks the system by it) |
-| `/api/runs/{id}/settings.rnqs` | GET | The `.rnqs` the pair was built with, as UPR's GUI would open it |
-| `/api/randomizer/settings/export` | POST | `{spec, name?}` → a `.rnqs` (attachment): the same bytes `randomize` writes for that spec |
-| `/api/randomizer/settings/import` | POST | multipart `file` (a `.rnqs` from UPR's GUI or another run) → `{spec, summary}`, admitted by the pipeline's own gates (version, `forbidden_enabled`, `unexpected_settings`); a refusal names what the file changes |
-| `/api/presets` | GET / POST | Saved randomizer presets on this Manager (`data/runs/presets.json`): `[{name, spec, updated_at}]`; POST `{name, spec}` saves or replaces (case-insensitive), the spec validated by `build_spec` |
-| `/api/presets/delete` | POST | `{name}` |
-| `/api/randomizer/status` | GET | `?jar=&rom_a=&rom_b=` — jar found, Java on PATH, each ROM present and a clean dump |
-| `/api/roms` | GET | `?jar=` — every `.gb`/`.gbc` in the SLink folder, `roms/`, `patch/build/` and the `.cache/purergb*` build folders, each with the scanner's verdict (clean / not a Gen 1 cartridge) and its family (`gen1_rby` / `gen1_purergb`), for the run creator's pickers |
-| `/api/roms` | POST | multipart `file` — a ROM picked with the browser's file dialog lands in `roms/` (a `.jar` as `PokeRandoZX.jar`); a same-named different file gets a numbered name; 64 MiB cap |
-| `/api/stream/pin` | GET / POST | Which run the overlays show |
-| `/api/status`, `/api/attempts` | GET / POST | Proxied to the pinned run |
-| `/api/bot/{tail:.*}`, `/api/obs/{tail:.*}` | GET / POST | Relayed verbatim to the pinned run, so the Broadcast panels' own JS works from this origin |
-| `/patcher`, `/companion/{name}` | GET | The companion-ROM patcher, in the Manager's chrome |
+| `/` | GET | The first running run's board, or the New-run form when there are no runs. |
+| `/new` | GET | New-run form: family, options with reasons, the Cartridges step (pick, patch, randomize, presets, `.rnqs` import and export). |
+| `/runs/{run_id}` | GET | A run's page: start, stop, pin, launchers, cartridges and its board (live, or as persisted once stopped). |
+| `/runs/{run_id}/board` | GET | The board fragment the run page polls. |
+| `/runs/{run_id}/cartridges` | GET | What each player plays, the downloads and the `.rnqs` used. Also at `/runs/{run_id}/randomizer`. |
+| `/runs/{run_id}/timeline` | GET | The run's timeline. |
+| `/runs/{run_id}/debug` | GET | The run's debug console. |
+| `/runs/{run_id}/calc`, `/runs/{run_id}/calc/{path:.*}` | GET | The calculator for that run. |
+| `/calc/{path:.*}` | GET | Calculator assets requested by absolute path. |
+| `/runs/{run_id}/api/{tail:.*}` | GET, POST | Relayed to that run's `/api/{tail}`, including `/api/events`. |
+| `/broadcast` | GET | Overlay gallery (same page as `/stream`). |
+| `/tools` | GET | The patcher and cartridge tools. |
+| `/stream`, `/stream/` | GET | Overlay gallery. |
+| `/stream/{name}`, `/stream/{name}/{suffix:fragment}` | GET | Proxied to the pinned run, else the most recent running one. |
+| `/patcher`, `/companion/{name}` | GET | The patcher and companion UPS files. |
+| `/api/runs` | GET | The run registry. |
+| `/api/runs/new` | POST | `{name, game, ...options}`: create and start a run. `game` is a family key from `GAMES`. A server that fails to start is reported in `start_error`. |
+| `/api/runs/{id}/start` | POST | Start a run. |
+| `/api/runs/{id}/stop` | POST | Stop a run. |
+| `/api/runs/{id}/archive` | POST | Archive a run. |
+| `/api/runs/{id}/delete` | POST | Delete a run. |
+| `/api/runs/{id}/live` | GET | The run's `/api/status`. |
+| `/api/runs/{id}/launcher/{player}` | GET | The player's launcher. |
+| `/api/runs/{id}/player-pack/{player}` | GET | The player's setup ZIP (`tools/make_release.py` package with the run's launcher). |
+| `/api/runs/{id}/cartridges` | POST | `{rom_a, rom_b, companion?, randomize?, jar?, spec? or categories? or settings?}`: make each player's cartridge. |
+| `/api/runs/{id}/randomize` | POST | Older form of `cartridges` with randomizing implied. |
+| `/api/runs/{id}/rom/{player}` | GET | Download a player's cartridge. |
+| `/api/runs/{id}/settings.rnqs` | GET | The `.rnqs` the pair was built with. |
+| `/api/randomizer/status` | GET | `?jar=&rom_a=&rom_b=`: jar trusted, Java present, each ROM a clean dump. |
+| `/api/randomizer/settings/export` | POST | `{spec, name?}` to a `.rnqs` file. |
+| `/api/randomizer/settings/import` | POST | Multipart `.rnqs` to `{spec, summary}`, or a refusal naming what it changes. |
+| `/api/presets` | GET, POST | Saved randomizer presets (`data/runs/presets.json`); POST `{name, spec}`. |
+| `/api/presets/delete` | POST | `{name}`. |
+| `/api/roms` | GET | Every ROM the Manager can see, with the scanner's verdict and family. |
+| `/api/roms` | POST | Multipart upload into `roms/` (a trusted jar becomes `PokeRandoZX.jar`); 64 MiB cap. |
+| `/api/settings/public-host` | POST | `{host}`: the address launchers connect to; `""` means automatic. |
+| `/api/stream/pin` | GET, POST | Which run the overlays show. |
+| `/api/status`, `/api/attempts` | GET, POST | Proxied to the pinned run. |
+| `/api/bot/{tail:.*}`, `/api/obs/{tail:.*}` | GET, POST | Relayed to the pinned run for the Broadcast panels. |
 
-A run the Manager started (`--manager-port` + `--run-id`) redirects its own HTML pages (`/`, `/memorial`, `/debug`, `/twitch`, `/obs`, `/calc/*.html`, `/patcher`, `/stream`) to the Manager's equivalents; its overlays (`/stream/{slug}`), API and calc files are unchanged, and `/memorial?_smoke=1` still renders the macro harness.
+`/broadcast/{tab:twitch|obs}` (GET) shows the pinned run's Twitch or OBS panel in the Manager.
 
-### JSON API
+A run started by the Manager redirects its own HTML pages (`/`, `/timeline`, `/debug`, `/twitch`, `/obs`, calculator pages, `/patcher`, `/stream`) to the Manager's equivalents. Its overlays, API and calculator files are served as usual.
 
----
+## Development
 
-**`GET /api/status`** — Returns the full current state as JSON.
-
-```bash
-curl http://localhost:8080/api/status
-```
-
-Example response (abbreviated):
-```json
-{
-  "players": {
-    "a": { "connected": true, "area": "route_3", "ball_count": 12, "party": [...],
-           "encounter_table": {"Day": [{"species_id": 16, "name": "Pidgey", "rate": 45, "min_level": 3, "max_level": 5}]} },
-    "b": { "connected": true, "area": "mt_moon", "ball_count": 8,  "party": [...],
-           "encounter_table": null }
-  },
-  "links": [
-    {
-      "area_id": "route_1",
-      "a": { "key": "12345678:87654321", "nickname": "PIDGEY",  "species": 16, "level": 12 },
-      "b": { "key": "11111111:22222222", "nickname": "RATTATA", "species": 19, "level": 12 },
-      "status": "alive"
-    }
-  ],
-  "area_states": { "route_1": "linked", "route_3": "pending_b" },
-  "pokeballs_obtained": { "a": true, "b": true }
-}
-```
-
-> When `--rival-team-swap` is active, each occupied party slot also carries a `blob_hex` field (the raw 100-byte mon struct as hex) — used to ship a player's party to the partner for the rival-team-swap write.
-
----
-
-**`GET /api/events`** — SSE stream. Pushes `event: ping` on every state change and `event: status` with the full JSON payload. The dashboard and stream overlays no longer subscribe (they HTMX-poll the page fragments directly), but the SLink calc bridge still uses it and any external consumer is welcome to.
+### Tests
 
 ```bash
-curl -N http://localhost:8080/api/events
-# event: ping
-# data:
-#
-# event: status
-# data: {"players": {...}, "links": [...], ...}
+pip install -r requirements-dev.txt
+pytest tests/unit/ -q                     # no emulator needed
+pytest tests/integration/ -q              # starts a real server on a free port
+ruff check .
+python tools/lua_syntax_check.py          # Lua 5.5 syntax via lupa; the system luac 5.1 rejects valid files
 ```
 
----
-
-**`GET /api/calc/mons`** — Returns live party and enemy data formatted for the calc bridge panel. Includes Showdown pastes, sprites, HP percentages, and matched trainer moves.
+Live gates and two-emulator runs need EmuHawk and your ROMs, and skip cleanly when either is absent:
 
 ```bash
-curl http://localhost:8080/api/calc/mons
+SLINK_LIVE=1 pytest tests/live/test_lua_gates.py -q         # Gen 3
+SLINK_LIVE=1 pytest tests/live/test_gen1_new_gates.py -q    # Gen 1
+SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py -q    # Gen 2 (more gates in tests/live/test_gen2_*.py)
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py -q            # two emulators and a server; also test_duo_gen1_new.py,
+                                                            # test_duo_gen1_pure.py, test_duo_gen2_new.py
+python tools/e2e_duo.py --game gen3_rr --scenario all       # the duo runner directly
+python tools/verify_gen1_release.py --list                  # release checks (also verify_gen2_release.py, verify_gen3_release.py)
 ```
 
-```json
-{
-  "a": {
-    "party": [
-      {
-        "key": "12345678:87654321",
-        "species_name": "Charizard",
-        "nickname": "CHAR",
-        "level": 50,
-        "ability_name": "Blaze",
-        "item_name": "Charcoal",
-        "hp_pct": 85,
-        "showdown_paste": "Charizard @ Charcoal\nAbility: Blaze\nLevel: 50\n...",
-        "sprite_html": "<img ...>",
-        "moves": ["Flamethrower", "Air Slash", "Dragon Pulse", "Roost"]
-      }
-    ],
-    "enemy": [...],
-    "matched_set": "Leader Blaine"
-  },
-  "b": { "..." : "..." }
-}
-```
+Gen 1 and Gen 2 fixtures are committed battery saves (`tests/fixtures/gen1/`, `tests/fixtures/gen2/`), not version-locked savestates. [tests/TESTING.md](../tests/TESTING.md) has the manual walkthrough, the per-suite table and the rule that absent input skips while present-but-wrong input fails.
 
----
+`python tools/inject_full_mocks.py` fills a running server with mock pairs, a dead zone, a boxed pair, a memorial and a battle for UI work.
 
-**`POST /api/reset`** — Deletes `data/links.json` and resets all in-memory state. Irreversible unless a backup exists.
+### Generated data
 
-```bash
-curl -X POST http://localhost:8080/api/reset
-# {"ok": true}
-```
+Game facts under `data/games/<pack>/` (profiles, engine signals, write checkpoints, area maps, species, trainers, encounters) are generated from pinned decompilation sources by `tools/gen_*.py`. Change the generator, not the output. The Gen 1 symbol tables come from `python tools/build_pret_syms.py` (add `--rom-syms` for ROM labels).
 
----
+### Key files
 
-**`POST /api/inject_link`** — Manually create a linked pair. Resolves mon info from current party, box, and pending captures.
-
-```bash
-curl -X POST http://localhost:8080/api/inject_link \
-  -H "Content-Type: application/json" \
-  -d '{"a_key": "12345678:87654321", "b_key": "11111111:22222222", "area_id": "route_1"}'
-```
-
-If a mon already has a pending capture on a different area, the server returns `requires_force: true`. Add `"force": true` to override:
-
-```bash
-curl -X POST http://localhost:8080/api/inject_link \
-  -H "Content-Type: application/json" \
-  -d '{"a_key": "12345678:87654321", "b_key": "11111111:22222222", "area_id": "route_1", "force": true}'
-# {"ok": true}
-```
-
----
-
-**`POST /api/inject_link_by_slot`** — Create a linked pair using party slot indices instead of mon keys. The keys are resolved server-side from the current party snapshot. Slots are 0-indexed.
-
-```bash
-# Link Player A's slot 0 to Player B's slot 0 on Route 1
-curl -X POST http://localhost:8080/api/inject_link_by_slot \
-  -H "Content-Type: application/json" \
-  -d '{"a_slot": 0, "b_slot": 0, "area_id": "route_1"}'
-# {"ok": true, "a_key": "12345678:87654321", "b_key": "11111111:22222222"}
-```
-
----
-
-**`POST /api/attempts`** — Set the run attempts counter shown on the `/stream/attempts` overlay. The value persists in `links.json`.
-
-```bash
-curl -X POST http://localhost:8080/api/attempts \
-  -H "Content-Type: application/json" \
-  -d '{"count": 7}'
-# {"ok": true, "count": 7}
-```
-
-### Debug API
-
-> All debug endpoints are also accessible through the `/debug` page UI. Prefer the UI for one-off corrections; use these endpoints for scripted or automated workflows.
-
----
-
-**`GET /api/debug/raw_state`** — Returns the raw `links.json` contents plus any live-only fields not written to disk.
-
-```bash
-curl http://localhost:8080/api/debug/raw_state
-```
-
----
-
-**`GET /api/debug/manual_link_data`** — Returns all known mon keys (from party, box, and pending captures) and all area IDs. Used to populate the manual link form on the debug page.
-
-```bash
-curl http://localhost:8080/api/debug/manual_link_data
-# {"a_mons": [{"key": "...", "display": "PIDGEY Lv12"}], "b_mons": [...], "areas": ["route_1", ...]}
-```
-
----
-
-**`GET /api/debug/backups`** — Lists rolling backup slots with timestamps and link/death counts. Up to 6 slots, oldest overwritten first.
-
-```bash
-curl http://localhost:8080/api/debug/backups
-# {"backups": [{"slot": 1, "ts": "2025-05-01T12:00:00", "links": 14, "deaths": 2}, ...]}
-```
-
----
-
-**`POST /api/debug/inject_event`** — Send any synthetic event through the state machine exactly as if a Lua client had sent it. Returns any commands that were generated.
-
-```bash
-# Simulate Player A capturing a Pidgey on Route 1
-curl -X POST http://localhost:8080/api/debug/inject_event \
-  -H "Content-Type: application/json" \
-  -d '{"player": "a", "event": "capture", "key": "12345678:87654321", "area_id": "route_1", "level": 12}'
-
-# Simulate a faint
-curl -X POST http://localhost:8080/api/debug/inject_event \
-  -H "Content-Type: application/json" \
-  -d '{"player": "a", "event": "faint", "key": "12345678:87654321"}'
-# {"ok": true, "commands": [{"cmd": "force_faint", "key": "11111111:22222222"}]}
-```
-
----
-
-**`POST /api/debug/queue_command`** — Manually queue a command to be delivered to a player on their next TCP tick.
-
-```bash
-# Queue a force_faint for Player B
-curl -X POST http://localhost:8080/api/debug/queue_command \
-  -H "Content-Type: application/json" \
-  -d '{"player": "b", "cmd": "force_faint", "key": "11111111:22222222"}'
-
-# Queue a HUD message for Player A
-curl -X POST http://localhost:8080/api/debug/queue_command \
-  -H "Content-Type: application/json" \
-  -d '{"player": "a", "cmd": "hud_show", "message": "Route 3 is dead zone!", "color": "255,80,80", "duration": 180}'
-```
-
----
-
-**`POST /api/debug/set_pokeballs`** — Set `pokeballs_obtained` for a player. Use to manually activate the nuzlocke gate without waiting for the game to detect a ball in the bag.
-
-```bash
-# Activate nuzlocke gate for Player A
-curl -X POST http://localhost:8080/api/debug/set_pokeballs \
-  -H "Content-Type: application/json" \
-  -d '{"player": "a", "value": true}'
-
-# Deactivate (reset gate)
-curl -X POST http://localhost:8080/api/debug/set_pokeballs \
-  -H "Content-Type: application/json" \
-  -d '{"player": "a", "value": false}'
-```
-
----
-
-**`POST /api/debug/set_area_state`** — Manually override an area's state. Valid states: `unseen`, `pending_a`, `pending_b`, `pending_both`, `linked`, `dead_zone`.
-
-```bash
-curl -X POST http://localhost:8080/api/debug/set_area_state \
-  -H "Content-Type: application/json" \
-  -d '{"area_id": "route_3", "state": "dead_zone"}'
-# {"ok": true, "area_id": "route_3", "state": "dead_zone"}
-```
-
----
-
-**`POST /api/debug/clear_pending`** — Remove pending captures. Omit `area_id` to clear all; include it to clear only that area.
-
-```bash
-# Clear all pending captures
-curl -X POST http://localhost:8080/api/debug/clear_pending \
-  -H "Content-Type: application/json" \
-  -d '{}'
-
-# Clear a specific area
-curl -X POST http://localhost:8080/api/debug/clear_pending \
-  -H "Content-Type: application/json" \
-  -d '{"area_id": "route_3"}'
-```
-
----
-
-**`POST /api/debug/unlink`** — Remove a link entry and reset the area state to `unseen`. Use `index` (0-based) as a tiebreaker if multiple links share the same area.
-
-```bash
-curl -X POST http://localhost:8080/api/debug/unlink \
-  -H "Content-Type: application/json" \
-  -d '{"area_id": "route_1"}'
-# {"ok": true}
-```
-
----
-
-**`POST /api/debug/revive`** — Revive a dead or memorial pair back to alive status. Clears death metadata, removes from `pending_memorials`, and re-adds keys to `party_keys`. **You must manually restore the mons in-game** — the server only updates its own records.
-
-```bash
-curl -X POST http://localhost:8080/api/debug/revive \
-  -H "Content-Type: application/json" \
-  -d '{"area_id": "route_1"}'
-# {"ok": true, "area_id": "route_1", "message": "Link revived to alive"}
-```
-
----
-
-**`POST /api/debug/resolve_trade`** — Settle a native trade the server cannot settle on its own (the board's "Trade conflict" / stuck "Trade uncertain" banner, which shows the token). Check both players' parties first. `commit` swaps the link, using each side's reported new key or else the other side's old key. `rollback` leaves the link as it is. Either action clears the trade, replays any held faint/box events and journals the outcome with `problem: "resolved by admin: <action>"`.
-
-```bash
-curl -X POST http://localhost:8080/api/debug/resolve_trade \
-  -H "Content-Type: application/json" \
-  -d '{"token": "t7", "action": "rollback"}'
-# {"ok": true}
-```
-
----
-
-**`POST /api/debug/rollback`** — Restore `links.json` and `events.json` from a rolling backup slot (1–6). The current state is saved as `links.pre_rollback.json` and `events.pre_rollback.json` before restoring.
-
-```bash
-# List available backups first
-curl http://localhost:8080/api/debug/backups
-
-# Roll back to slot 2
-curl -X POST http://localhost:8080/api/debug/rollback \
-  -H "Content-Type: application/json" \
-  -d '{"slot": 2}'
-# {"ok": true, "slot": 2, "message": "Rolled back to backup 2"}
-```
-
----
-
-## Soul Link Rules Enforced
-
-| Rule | Description |
+| Path | Purpose |
 |---|---|
-| Encounter linking | First capture in an area by Player A links to the first capture in the same area by Player B |
-| Dead zone | If either player fails to catch (runs, KOs, no encounter), neither player may use their catch from that area; the wild Pokémon's species and level are recorded for display |
-| Illegal capture | A capture in an already-linked or dead-zone area is force-fainted and immediately queued for the memorial box — it cannot be used; the original missed-catch display is preserved |
-| Faint propagation | When a linked mon faints, its partner immediately receives a `force_faint` command |
-| Unlinked encounter quarantine | A capture in a pending area (partner hasn't caught yet) is auto-deposited to the PC — the mon cannot be used until linked |
-| Party/box sync | If A's linked mon is in the party, B's partner must also be in the party — automatic deposit/retrieval. Paired sync enforcement: retrieval requires both players to have party room; otherwise both stay boxed |
-| Memorial box | Both mons from a dead pair are moved to Box 13 ("Box 14" in-game) after the battle ends |
-| Nuzlocke gate | Dead zone and faint propagation are inactive until the player obtains Pokéballs |
-| Gift capture detection | Captures classified as gifts when (a) the area is a configured gift area (`is_gift_area()`) or (b) the captured mon is an egg in a non-daycare encounter area (NPC egg-gifts like Route 5 Togepi). The Lua client reads `is_egg` from `OFF_FLAGS` bit 2 and forwards it; `_is_gift_capture(area_id, is_egg)` in `server/state.py` combines this with `is_daycare_area()` so daycare-bred eggs (Route 5/Four Island day cares in Gen 3) remain normal captures. Gifts/eggs link under a dedicated **`gift_<area>`** namespace (adapter `gift_link_area()`): they form standalone gift pairs that bypass the dead-zone / linked-wild-slot guards, skip the unlinked-capture quarantine, and never satisfy the Pokéball gate — a gift received in a real encounter area no longer locks that area. The Lua client tags these captures with `gift=true`. |
-| Whiteout | All of A's party mons faint → all of B's linked party mons are force-fainted |
-| Species clause (opt-in) | `--species-clause` — rejects links where both mons share the same evolution family (e.g. Charmander ↔ Charmeleon). Also rejects captures where **either player** already has an alive linked mon of the same evo family (dupes prevention). Dead/memorial pairs don't block. The violating capture is force-fainted; the area stays pending for retry |
-| Gender clause (opt-in) | `--gender-clause` — rejects links where both mons are the same gender (♂+♂ or ♀+♀). Genderless mons are exempt. The violating capture is force-fainted; the area stays pending for retry |
-| Type clause (opt-in) | `--type-clause` — rejects links where both mons share any type (e.g. Charizard Fire/Flying ↔ Pidgey Normal/Flying — shared Flying). Uses RR type data when available; falls back to vanilla Gen I–III types. The violating capture is force-fainted; the area stays pending for retry |
-| NPC-trade mutation clauses (all generations) | Owner ruling 35: after an NPC exchange, accept the new key/species, then check the enabled species/family, type and gender clauses while excluding the current pair from its own duplicate lookup. A violation retires **the changed pair only**, cause `npc_trade_clause` ("NPC trade clause violation"); both received/current halves are force-fainted and memorialized. Other pairs and the resolved encounter area remain unchanged: no capture-time reroll and no identity-loss penalty. Disabled clauses and existing genderless/unknown-gender exemptions remain off/exempt. |
-| Explode mode (opt-in) | `--explode-mode` — **Radical Red and Gen 1 R/B/Y.** Gen 1 needs no ROM patch for it: Explosion is move 153 and the engine reads the player's choice from `wPlayerSelectedMove`, so coercing it is a plain RAM write. When a linked mon dies mid-battle, its partner receives a `force_explode` command instead of the deferred `force_faint`, coercing the partner's active Pokémon into using Explosion. Bench mons and vanilla/AP/Emerald fall back to `force_faint`. Gated on `adapter.supports_explode_mode()`, not on a game id. Persisted in `links.json` under `rules.explode_mode`. |
-| Rival team swap (opt-in) | `--rival-team-swap` — **Radical Red and Gen 1 R/B/Y.** On a `trainer_battle_start` against a configured rival ID (`adapter.rival_trainer_ids()`), the server sends `replace_rival_team` carrying the *partner's* live party blobs; the client byte-copies them into `gEnemyParty` (EWRAM-only) via the companion patch's native `OP_SET_ENEMY_PARTY` and acks with `rival_team_replaced`. On Gen 3 this **requires the RR companion patch** ([patch/README.md](../patch/README.md)) — no unpatched fallback; unpatched clients ack `error="patch_required"` and skip. Gen 1 needs no patch: `wEnemyMons` is ordinary WRAM, so the client writes the blobs directly (validated in full before any byte is written). Supplied per-launch from the Manager run registry. |
-| Shiny Clause (always on) | When a player catches a shiny, their partner's **next encounter** becomes the shiny's Soul Link partner (a bonus pair). The bonus pair goes through all normal Soul Link rules — lock clauses apply, faint propagation is enforced, party sync is required. The area that triggered the shiny is not consumed. If multiple shinies are caught before bonuses are claimed, bonuses queue up (FIFO). Gen 1 is naturally excluded (`is_shiny()` always returns `False`). The catching player receives a shiny sound effect and GUI prompt; the partner is notified that a bonus encounter is pending. |
-
----
-
-## Feature Status
-
-| Feature | Status |
-|---|---|
-| TCP transport (LuaSocket) | ✅ Working |
-| ROM validation (FireRed/LeafGreen US 1.0) | ✅ Working |
-| Archipelago (AP) patched ROM support | ❌ Not supported — AP FireRed/LeafGreen ran only on the old, now-archived Gen 3 client; `lua/slink.lua` refuses them by name until they are ported to `lua/gen3/` |
-| Radical Red 4.1 (CFRU) support | ✅ Working |
-| Emerald (pinned US dump, `gen3_emerald` pack, E<->E pairing only) | 🟡 Release candidate — EG4 owner sign-off pending (`docs/gen3_emerald/`) |
-| Area mapping (all FRLG routes/dungeons/locations) | ✅ Working |
-| Encounter linking | ✅ Working |
-| Nuzlocke gate (Pokéball check) | ✅ Working |
-| Dead zone | ✅ Working |
-| Dead zone encounter logging (species + level of fled/KO'd wild mon) | ✅ Working |
-| Illegal capture → immediate force_faint + memorialize | ✅ Working |
-| Faint propagation (`force_faint`) | ✅ Working |
-| Gift/static Pokémon detection | ✅ Working |
-| PC box capture (full party) with stats caching | ✅ Working |
-| Whiteout detection + propagation | ✅ Working |
-| Battle HP frame ordering (CFRU same-frame gBattleOutcome) | ✅ Working |
-| Double-buffer party diff (independent entry pools) | ✅ Working |
-| Memorial box (Box 13 write + `memorial.json`) | ✅ Working |
-| Memorial box auto-named "THE DEAD" | ✅ Working |
-| Party/box sync (`box_mon` / `party_mon`) | ✅ Working |
-| Party sync — confirmation-based (`sync_retrieve_done` / `sync_retrieve_failed`) | ✅ Working |
-| Party event debounce (3-frame, glitch-resistant) | ✅ Working |
-| Status page — trainer names, Pokémon nicknames/species | ✅ Working |
-| Status page — Pokémon gender symbols (♂/♀) | ✅ Working |
-| Status page — linked pairs with human-readable names | ✅ Working |
-| Status page — dead zone encounters shown (species + level) | ✅ Working |
-| Status page — live PC box summary | ✅ Working |
-| Status page — location names for all in-game locations | ✅ Working |
-| Status page — live party HP bars (green/yellow/red) | ✅ Working |
-| Status page — Pokémon type badges (party and PC box) | ✅ Working |
-| Status page — battle display above party (in battle, Wild vs Trainer label, enemy types) | ✅ Working |
-| Status page — live updates via HTMX 2 s polling + idiomorph morph swap | ✅ Working |
-| Status page — flicker-free morph swap (sprites/HP bars preserved across refresh) | ✅ Working |
-| Status page — human-friendly location names | ✅ Working |
-| In-game sound effects (link formed, dead zone, force faint, whiteout) | ✅ Working |
-| In-game HUD overlay (deaths, party swap events) | ✅ Working |
-| In-game HUD — new encounter notification | ✅ Working |
-| Link management (debug page — link/unlink/override) | ✅ Working |
-| Species clause (opt-in `--species-clause`) | ✅ Working |
-| Gender clause (opt-in `--gender-clause`) | ✅ Working |
-| Type clause (opt-in `--type-clause`) | ✅ Working |
-| Shiny Clause (always on — bonus pairs) | ✅ Working |
-| Explode mode (opt-in `--explode-mode`, RR-only `force_explode`) | ✅ Working |
-| Rival team swap (opt-in `--rival-team-swap`, RR-only `replace_rival_team`; requires companion patch) | ✅ Working |
-| Gift/egg `gift_<area>` namespace (standalone pairs, gate + quarantine bypass) | ✅ Working |
-| Status page — Upcoming Key Trainers panel (RR priority-trainer pipeline) | ✅ Working |
-| The pair board (`server/board.py` + `templates/_board.html`) on both the run server and the Manager | ✅ Working |
-| Run Manager — one origin: every run's board at `/runs/{id}`, New-run form with game families and greyed options, Broadcast, Tools, Gen 1 randomizer page | ✅ Working |
-| Stream overlays — interlocked-chain SVG separator + boxed-links marquee + focus gradient rows | ✅ Working |
-| State persistence (`links.json`) | ✅ Working |
-| Reconnect resilience (seq dedup + re-queue) | ✅ Working |
-| Status page — pending captures with trainer names/sprites | ✅ Working |
-| Status page — auto-refresh pause (on error) | ✅ Working |
-| Safari Zone safe-state race condition fix | ✅ Fixed |
-| Intro garbage data suppression (pre-save guard) | ✅ Working |
-| Status page — gym badge bitmask display (8 badges per player) | ✅ Working |
-| Status page — consolidated Encounters table (linked + pending + dead zones) | ✅ Working |
-| Dynamic gift area IDs (`gift_<mapGroup>_<mapNum>`) | ✅ Working |
-| Resolved areas on reconnect (`resolved_areas` command) | ✅ Working |
-| Species clause — same-save duplicate prevention | ✅ Working |
-| Gift area `no_catch` protection | ✅ Working |
-| Unlinked encounter quarantine (pending → box until linked) | ✅ Working |
-| Paired party sync — retrieval requires both players have room | ✅ Working |
-| Lua client performance optimization (localized functions, display cache, frame-cached state) | ✅ Working |
-| Status page — Pokémon sprites (PokeAPI + RR custom forms) | ✅ Working |
-| Stream overlay — area encounter (Soul Link status for current area, 2 s HTMX poll) | ✅ Working |
-| Stream overlay — wild encounter table per player (Radical Red; autoscroll; speed control) | ✅ Working |
-| Stream overlay — correct CFRU species sprites (server-side NatDex conversion) | ✅ Working |
-| Status page — Pokémon ability names (party, PC box, enemy) | ✅ Working |
-| Status page — enemy held item display (inline with name, Gen 3 + Gen 4) | ✅ Working |
-| Status page — ability description tooltips (hover for details, RR + vanilla) | ✅ Working |
-| Duplicate capture in pending area → force_faint + memorialize | ✅ Working |
-| Battle HP cache (CFRU writeback) | ✅ Working |
-| Player identity lock (OT ID per slot — prevents wrong-save connections) | ✅ Working |
-| Non-blocking TCP connector (zero stutter on reconnect) | ✅ Working |
-| Run Manager (multi-run orchestration on port 8090) | ✅ Working |
-| Borrowed-party battle protection (CFRU Poké Dude / mock battles) | ✅ Working |
-| Persistent run metadata (rom_type, trainer_names — set-once) | ✅ Working |
-| Nature change detection (RR Nature Changer NPC — monKey migration) | ✅ Working |
-| Dynamic page titles (Pokémon Soul Link Tracker — variant — run name) | ✅ Working |
-| PC box level resolution (multi-source fallback chain) | ✅ Working |
-| RR item name display (profile-aware, 746 items from ROM scan) | ✅ Working |
-| Memorial wall page (`/memorial` — HTMX morph-swap refresh, tombstone cards, CFRU→NatDex sprite fix) | ✅ Working |
-| Dynamic URLs (external/LAN access — no hardcoded localhost) | ✅ Working |
-| Launcher script download (HTTP-served, auto-configured host/port/player) | ✅ Working |
-| Debug page (`/debug` — HTMX-polled, link/unlink/override, mon key & area autofill, backup rollback) | ✅ Working |
-| RR item ROM scanner (`lua/test_item_discovery.lua`) | ✅ Working |
-| Manager back-link on status page (`--manager-port`) | ✅ Working |
-| TCP port display on status page | ✅ Working |
-| Character encoding — extended charset (/, ♂, ♀, «, », etc.) + nickname backfill | ✅ Working |
-| Dupes clause — partner pending capture cross-check | ✅ Working |
-| Doubles battle detection (Gen 3) — DOUBLES chip + side-by-side overlays | ✅ Working |
-| Enemy moves and live PP detection in battle (Gen 3) | ✅ Working |
-| Egg-gift classification (NPC eggs like Route 5 Togepi treated as gifts) | ✅ Working |
-| Combined Enemy Focus + party-style Enemy Trainer overlays | ✅ Working |
-| Auto-generated per-species ability name overrides (RR, from funnotbun) | ✅ Working |
-| Damage calc form-name normalization (Lycanroc-Dusk, Necrozma fusions, etc.) | ✅ Working |
-| Party compaction guard (PC deposit/withdrawal no longer triggers freeze) | ✅ Working |
-| Rolling backups (5-min auto-save, 6 slots, restores `links.json` + `events.json`, rollback via debug page) | ✅ Working |
-| Battle faint cascade prevention (monKey-indexed HP cache + force_fainted_keys guard) | ✅ Working |
-| Item integrity protection (snapshot/verify during party sync — prevents CFRU item swaps) | ✅ Working |
-| Debug page — revive dead/memorial links | ✅ Working |
-| Debug page — live state panel (lock rules, identity, party keys, bonus keys, pending bonus queue) | ✅ Working |
-| PP preservation on box sync (cache on deposit, restore on retrieve) | ✅ Working |
-| RR town encounter areas (all towns mapped for Radical Red) | ✅ Working |
-| **Damage Calculator Integration** | |
-| Damage calculator — RR fork of Smogon calc embedded at `/calc/` | ✅ Working |
-| SLink bridge panel — live party/linked/enemy data from server injected into calc | ✅ Working |
-| Trainer set matching — enemy party auto-matched against Normal/Hardcore Radical Red sets | ✅ Working |
-| One-click load — clicking any party row loads that mon into the calc attacker/defender slot | ✅ Working |
-| Party panel — HP bars, status, active mon highlight, auto-scroll on battle start | ✅ Working |
-| EV display suppressed in calc result — always assumed max, not shown in output string | ✅ Working |
-| Calc search — full substring matching (Pokémon name, trainer/set name, moves) | ✅ Working |
-| Calc search — match highlighting in dropdown results (accent-colour mark around matched terms) | ✅ Working |
-| Twitch chat bot (twitchio 3.x EventSub WebSocket) | ✅ Working |
-| OBS scene trigger integration (simpleobsws v5 async) | ✅ Working |
-| OBS priority-based trigger resolution (draggable rules list) | ✅ Working |
-| **Radical Red Companion Patch** (optional native layer — [patch/README.md](../patch/README.md)) | |
-| Companion patch build + distribution (`patch/tools/build.py`, UPS at `/companion/`, in-browser patcher) | ✅ Working |
-| Build reproducibility gate (`build.py --check` asserts the committed UPS rebuilds byte-identically) | ✅ Working |
-| Mailbox ABI v1 (`0x0203F800`) — opcode dispatch + seq/ack protocol | ✅ Working |
-| Peer ghost (Overworld Presence) — partner rendered as a real engine NPC | ❌ Deferred post-RC on the rewritten Gen 3 client (owner ruling 2026-09-22) — the patch's NPC opcodes are built, but `lua/gen3/client.lua`'s `ghost_pos` handler is a no-op |
-| Talk to partner → native action menu (Trade / Say hey) | ✅ Working |
-| Native trade — real in-game trade animation + trade-evolution, linked halves only | ✅ Working |
-| Native PC box ⇄ party storage (`DEPOSIT_MON` / `WITHDRAW_MON`) | ✅ Working |
-| Native memorialize (`MEMORIALIZE`) — dead pairs to the memorial box in one frame-hook pass | ✅ Working |
-| Native message box (overworld) + native in-battle message | ✅ Working (per-run `native_messages`, default off) |
-| Native sound (`PlaySE`) | ✅ Working (per-run `native_sounds`, default off) |
-| Native sound on Gen 1 Red/Blue (companion patch `SlinkSfxService`, main-thread, per-bank ids) | ✅ Working (same `native_sounds` toggle; pureRGB overlay pending) |
-| Bundled Battle Calc damage display + per-run kill switch | ✅ Working (`battle_calc`, default on) |
-| Pokémon-Center trade NPC (presence-off mode) | ⚠️ Spawn tile unverified in-game — see `PCNPC_TILE_X/Y` in `handlers.c` |
-| Rival team swap via native `SET_ENEMY_PARTY` | ✅ Working |
-| Event-push ring (`EvRing`) — faint-settled, battle outcome, party-add, evolution | ✅ Producing; Lua consumers still use the proven polling (patch/ROADMAP.md §3-§4) |
-| Native explode/faint controller swap (`FORCE_FAINT` / `FORCE_MOVE_SLOT`) | ❌ Not used — softlocked in real play; the Lua Variant-3 RAM path is the single production mechanism (ROADMAP §2). Opcodes remain in the ROM, headless-gated. |
-
-Gen 1's HUD/sound is not purely a server-pushed overlay: `lua/gen1/client.lua` also raises its own
-local moments, mirroring the old Gen 3 client's client-only cues (`archive/gen3-old-client:lua/clients/gen3_frlge_client.lua`) rather than
-waiting on a command. A Nuzlocke-start banner fires once, on the first Poke Ball landing in the bag
-*during play* (the `bag_received` hook or a `send_tick` ball-count edge) — never at a hello that
-already finds one there, which only logs; the latch (`self.nuzlocke_announced`) is a client-session
-concept, not a save-file one, so it survives a WRAM-clearing soft reset and a CONTINUE reload rather
-than resetting with the other identity latches. A `** NEW ENCOUNTER **` banner fires on
-`area_enter`/`wild_begin` once the run has seeded `resolved_areas`, the area is unresolved, and the
-encounter is the player's own: a scripted/static encounter, a demonstration battle (Y-0) and a Tower
-ghost battle fought without the Silph Scope are excluded on `wild_begin` (the demo and ghost
-predicates are `battle_end`'s own; the static exclusion is the banner's alone — an uncaught static
-still resolves its own `static_<map>_<dex>` slot through `no_catch`). On plain map entry the "no gift area" half of that gate
-cannot be `area_id`-based — the server's gift-area list (`server/adapters/gen1_rby.py`'s
-`_GIFT_AREAS`) is not on the wire, and a gift area like Oak's Lab is a real, non-`gift_map_*`-prefixed
-`area_id` — so it instead requires the entered map to appear in `self.wild_maps`, the cartridge's own
-wild-data table read at hello (`rom.rom_content()`), and requires being outside battle (a map
-transition mid-trainer-battle must not banner). That table holds grass/surf records only: a
-fishing-only map (Pallet Town, Cerulean Gym, Vermilion Dock — both rates zero) gets no entry banner
-and is announced when the rod battle actually starts; the entry banner is a hint, not an oracle. A KO'd banner is always text-only, but not for one
-uniform reason: the server's `play_sound 26` rides alongside a terminal/linked-battle-faint
-`force_faint` (`server/state.py:2884`), so a local cue there would double it, while the
-whiteout-driven retire loop (`:2073`) and the dead-key requeue after a buried `key_change` (`:2708`)
-carry no sound of their own either — the whiteout case gets its own local cue from the client's own
-whiteout detection instead. `game_over` requests that same local cue, because neither of the server
-paths that queue it (`:2103`, `:3202`) pairs it with a `play_sound`; `request_sfx_local` keeps a per-frame
-set of the semantic codes already posted, so an identical code requested again in the same frame
-(that terminal-faint `play_sound 26` landing beside `game_over`'s own local 26, or a 26/25/26
-interleave) posts once while distinct codes stay distinct; the same code one frame later is a new
-cue. The deposit/withdraw/memorialize banners (boxed/unboxed/
-buried, and the box/memorial failure variants) land where the deferred queue observes the result —
-`lua/gen1/boxes.lua`'s return value — not where the command was received; the one exception is a
-retired-alias command the checkpoint itself refuses (a lost/ambiguous record), which answers the
-server with `..._failed` but shows no HUD banner, matching how that refusal already differs from an
-ordinary box-module failure. Every local cue shares the same native-SFX gate as a server `play_sound`
-command (`self:request_sfx_local`, `lua/gen1/panel.lua`'s `sfx_code_for`/`sfx_present`/
-`config.native_sounds`); an id with no Gen 1 mapping returns early rather than tripping the
-one-time "unavailable" log, and on an unpatched cartridge the banners still render while the sound is
-silently absent.
-
----
-
-## Running Tests
-
-### Unit tests (no emulator required)
-
-```bash
-pytest tests/unit/ -v          # ~14,200 tests collected; no emulator needed
-pytest tests/unit/test_state.py -v             # 319 state machine tests (incl. tick reconciliation)
-pytest tests/unit/test_gen3_adapter.py -v      # 218 Gen 3 adapter tests
-pytest tests/unit/test_gen4_adapter.py -v      # 101 Gen 4 adapter tests
-pytest tests/unit/test_gen1_adapter_contract.py -v  # 10 Gen 1 adapter-contract tests (the rewrite's Gen 1 coverage is spread across tests/unit/test_gen1_*.py, ~40 files)
-pytest tests/unit/test_gen2_adapter.py -v      # 59 Gen2GSCAdapter tests
-pytest tests/unit/test_gen5_adapter.py -v      # 140 Gen 5 adapter tests
-pytest tests/unit/test_stat_stages.py -v       # 48 stat stage tests
-pytest tests/unit/test_obs_priority.py -v      # 7 OBS priority + area-group tests
-pytest tests/unit/test_manager_launcher.py -v  # 4 launcher Lua-syntax regression tests
-pytest tests/integration/test_phase1_comms.py -v  # 6 protocol tests (moved from tests/unit/: spawns a real server)
-# Rival Team Swap + Explode Mode + Upcoming Key Trainers (0.2.6):
-pytest tests/unit/test_trainer_panel.py -v             # 14 Upcoming Key Trainers panel tests
-pytest tests/unit/test_state_rival_battle_start.py -v  # 34 rival-team-swap trigger tests
-pytest tests/unit/test_state_party_blob_cache.py -v    # 10 party blob_hex cache tests
-pytest tests/unit/test_gen3_adapter_rival_ids.py -v    # 8 rival trainer-ID tests
-pytest tests/integration/test_cli_rival_team_swap.py -v  # 4 --rival-team-swap CLI tests (tests/integration/: spawns a real server)
-# Companion patch + per-run toggles:
-pytest tests/integration/test_cli_native_toggles.py -v   # 9 native-toggle CLI tests
-pytest tests/integration/test_cli_overworld_presence.py -v  # 4 --overworld-presence CLI tests
-pytest tests/unit/test_patcher_routes.py -v            # 19 /patcher + /companion route tests
-```
-
-319 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), dupes clause partner pending capture check, and **tick reconciliation** (server-side diff of Lua party snapshots against `party_keys[player_id]` to repair ghost-boxed and ghost-party drift, gated against in-flight box/party/memorialize commands and active whiteout rebuilds), and **Explode Mode** (default-off, save/load round-trip, off → `force_faint` vs on → `force_explode`). Rival Team Swap state coverage lives in `test_state_rival_battle_start.py` (auto-trigger matrix, `queue_rival_team_swap`, `rival_team_replaced` ack) and `test_state_party_blob_cache.py` (`blob_hex` ingest, length/hex validation, per-player isolation).
-
-7 OBS priority tests covering: highest-priority rule wins when multiple events fire simultaneously, lower-priority fallback when high-priority event didn't fire, independent per-player resolution, exact `area_id` filter matching, and **area-group** filter matching (`group:routes`, etc.) against the active adapter's classified area map.
-
-4 manager-launcher Lua-syntax tests covering: generated launcher parses cleanly under Lua 5.4 (lupa) for both player slots, path-match pattern extracts the trailing directory on both Windows (`C:\Users\foo\Downloads\`) and Unix paths, and connect params (host, port, player) are embedded as expected. Regression test for the `\/` invalid-escape bug that broke loading in BizHawk.
-
-### Integration tests (server required)
-
-```bash
-# Terminal 1
-python -m server.server --host 127.0.0.1 --port 54321
-
-# Terminal 2
-pytest tests/integration/test_phase1_comms.py -v
-```
-
-### BizHawk live tests
-
-**Gen 3** is a manual procedure: see `tests/TESTING.md` for the full 9-step end-to-end test. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order. Its automated pieces are `SLINK_LIVE=1 pytest tests/live/test_lua_gates.py` (savestate-driven; rebuild states with `tools/mkstates.py` after a BizHawk upgrade) and `SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py` (the `lua/gen3/` client on vanilla FRLG/LGFR, Radical Red and Emerald). The savestate-driven Gen 3 wrapper that the old client had was deleted with that client (`archive/gen3-old-client`); `tools/e2e_duo.py` is still the runner behind every Gen 3 duo scenario.
-
-**Gen 1 and Gen 2** have no manual procedure — all of it is automated and skips cleanly when EmuHawk, a cartridge dump or a fixture is missing:
-
-```bash
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q       # 5: patched + menu row + randomized panel
-SLINK_LIVE=1 pytest tests/live/test_gen1_new_gates.py -q   # the rewritten client's own inspect/scripted gates, all 3 cartridges
-SLINK_LIVE=1 pytest tests/live/test_gen1_trade_gates.py -q # SLINK TRADE receptionist gates on the patched Red/Blue build
-SLINK_E2E=1  pytest tests/e2e/test_duo_gen1_new.py -q      # 18 scenarios, Red/Blue (gen1_new)
-python tools/e2e_duo.py --game gen1_new --scenario all     # the same duo run, directly
-
-SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py tests/live/test_gen2_frame_align.py tests/live/test_gen2_write_windows.py -q   # inspect, frame-align, write windows
-SLINK_E2E=1  pytest tests/e2e/test_duo_gen2_new.py -q  # two-instance link scenarios, Crystal/Gold/Silver pairings
-```
-
-> `--scenario all` is **`gen1_new` / Gen 3 only** (the old `gen1`/`gen1_yellow` game ids were
-> retired with their scenario drivers in the harness deletion sweep, `2395145`/`832d499`; the
-> legacy client itself was deleted separately, `21ff0d7`). It expands to every entry
-> in the runner's `SCENARIOS` dict that names the given game via `scenarios_for()` — `--game
-> gen2_new --scenario all` would otherwise launch Gen 3/Gen 1-only scenarios and fail for reasons
-> unrelated to Gen 2. Use the pytest wrapper, or name them: `--game gen2_new --scenario link`
-> (likewise `gen2_faint`).
-
-`tests/live/test_gen1_gates.py` is now the companion-patch half only: `test_gen1_patch_gate.lua` and `test_gen1_menu_row_gate.lua` on the two patched builds, plus the same panel gate on a randomized+injected cartridge. The pre-rewrite cartridge gates and the Archipelago gate were retired with their Lua and the other legacy Gen 1 probes/console diagnostics in commit `9aa7989`; the rewrite's own lanes (`test_gen1_new_gates.py`, `test_gen1_trade_gates.py`) carry those rows and run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong. The `gen1_new` duo harness (`tools/e2e_duo.py`) pairs **Red as player A against Blue as player B only** — there is no Yellow pairing — and boots the companion-patched builds (`patch/build/gen1_red.gb` / `gen1_blue.gb`) by default for every `gen1_new` scenario; `trade_new` and `trade_decline_new` additionally override to the dedicated trade-carrying build (`patch/gen1/build/slink_red.gb` / `slink_blue.gb`) for the SLINK TRADE receptionist.
-
-The Gen 2 gates (`gen2_inspect_gate.lua`, `gen2_frame_align.lua`, `gen2_write_windows.lua`, and on the overlay `gen2_{panel,sfx,phone,w6,sp_lowwater}_gate.lua`) run per title; engine sites on all three, write windows on Crystal and Gold (Silver shares Gold's, O-23) — see the Supported Games caveat above. Its duo link scenarios run **two instances of the same cartridge dump** for the same-title pairings. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
-
-Gen 2's duo scenarios go through their own dedicated driver, `lua/tests/duo/duo_gen2_main.lua`, which resolves each name as `scenario_gen2_<name>.lua` (`link`, `gen2_faint`, ... 28 scenarios; `python tools/gen2_final_sweep.py --list`). It replaces the legacy `duo_gb_main.lua` / `scenario_gb_{faint,boxsync,memorialize}.lua` / `gatelib.lua` chain, retired with the legacy Gen 2 client (P3b.8b). **The rewritten Gen 1 client goes through a separate driver too**, `lua/tests/duo/duo_gen1_main.lua`, whose `scenarios.<name>()` functions (e.g. `scenarios.link_new`, `scenarios.ball_gate_new`) are implemented directly rather than looked up by prefix. The old `scenario_gen1_*.lua` prefix files and the `gen1`/`gen1_yellow` duo titles they drove were removed in the harness deletion sweep (`2395145`/`832d499`), separately from the legacy client's own deletion (`21ff0d7`).
-
-Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{crystal,gold,silver}_{town,battle}.SaveRAM` and are committed. They are battery saves, not savestates, so they are not BizHawk-version-locked and never go stale. Gen 1 fixtures rebuild from a cold boot with `python tools/gen1_playthrough.py --rom red --target town` (`town` = encounter-free ground for the overworld gates, `battle` = tall grass for the battle gates). Gen 2 has an **indoor `town` target only per title** — New Bark Town's west exit is script-locked until Elm hands over a starter, so there is no Gen 2 grass fixture and therefore no `playthrough`, `deadzone` or `dupes` on Gen 2.
-
----
-
-## Key Files
-
-| File | Purpose |
-|---|---|
-| `lua/slink.lua` | **Universal entry point** — auto-detects game and loads correct client |
-| `lua/slink_gen3.lua` | **Gen 3 launcher** — configure host/port/player, load in BizHawk |
-| `lua/slink_gen4.lua` | **Gen 4 launcher** — configure host/port/player, load in BizHawk |
-| `lua/slink_gen5.lua` | **Gen 5 launcher** — configure host/port/player, load in BizHawk |
-| `lua/gen1/run.lua` | **Gen 1 production client entry point** — both launchers (`lua/slink.lua`'s GB/GBC route, `lua/slink_gen1.lua`) `dofile` this. BizHawk bootstrap: title detection via `entry.lua`'s `Entry.detect_title`, connector/HUD setup, guarded frame callback and shutdown (commit `ca17a26`). |
-| `lua/gen1/entry.lua` | Composition root over injected io/net/HUD — wires reads/writes/signals/boxes/rom/trade_overlay/panel; the same construction path serves production and the model test harness. |
-| `lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` | The rewritten Gen 1 modules `entry.lua` composes: engine-signal dispatch, guarded write windows, party/box/PC decoding, cartridge dex/base-stat tables, the native trade overlay and the native info panel — Red, Blue and Yellow via profile, not per-title branches. |
-| `lua/gen3/run.lua`, `lua/gen3/entry.lua` | **Gen 3 production client** (FireRed/LeafGreen/Radical Red/Emerald) — `lua/slink.lua`'s GBA route admits the cartridge (`Entry.admit`, hash then anchors) and dofiles `run.lua`; `entry.lua` wires `lua/gen3/{client,reads,signals,writes,safety,boxes,native}.lua` over `lua/core/`; Emerald is its own `gen3_emerald` pack, pairing only with itself |
-| `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
-| `lua/clients/gen5_bw_client.lua` | Gen 5 production client — Black, White, Black 2, White 2. PID:OTID keys, 220-byte PKM structs, shared NDS helpers. |
-| `lua/memory_nds.lua` | Gen 4/5 NDS RAM helpers — LCRNG encryption/decryption, 2-level pointer chain, HP debounce, party/box/battle reads |
-| `data/games/gen3_frlge/gen3_frlge_areas.lua` | Gen 3 area lookup — `mapGroup*256+mapNum → area_id` (184 entries; `python tools/gen_area_map.py` to regenerate) |
-| `data/games/gen4_hgsspt/gen4_hgsspt_areas.lua` | Gen 4 area lookup — `zoneId → area_id` (195 entries, auto-generated) |
-| `lua/connector.lua` | Shared TCP connector — fully non-blocking connect, exponential backoff (2s → 30s cap) |
-| `lua/game_detect.lua` | Shared game detection framework — scans ROM header to identify game family |
-| `lua/games/gen3_frlge.lua` | Gen 3 game module — ROM detection, profiles, gift areas, area resolution |
-| `lua/games/gen4_hgsspt.lua` | Gen 4 game module — NDS ROM detection, HGSS profiles, gift areas, area resolution |
-| `lua/games/gen5_bw.lua` | Gen 5 game module — Black/White/BW2 detection, per-variant NDS profiles, gift areas, area resolution |
-| `server/state.py` | `SoulLinkState` FSM — all Soul Link rule enforcement, adapter-driven |
-| `server/server.py` | aiohttp coordinator + status page (flicker-free DOM morphing, battle display) |
-| `server/adapters/gen1_rby.py` | Gen 1 adapter — DVs:OTID:species keys, RBY gift areas, Gen 1 sprites |
-| `server/adapters/gen3_frlge.py` | Gen 3 adapter — GBA key format, FRLG+Emerald gift areas, Gen 1-3 species |
-| `server/adapters/gen4_hgsspt.py` | Gen 4 adapter — PID:OTID keys, HGSS gift areas, Gen 1-4 species |
-| `server/adapters/gen5_bw.py` | Gen 5 adapter — PID:OTID keys, BW/BW2 gift areas, Gen 1-5 species |
-| `server/adapters/base.py` | Adapter ABC — GameRulesAdapter + GamePresentationAdapter interfaces |
-| `data/games/gen1_rby/` | Gen 1 game data — generated JSON tables the rewritten client's `entry.lua` opens directly (`profile.json`, `engine_signals.json`, `area_map.json`, `write_checkpoint.json`, `wild_encounter_sites.json`, plus `evolutions.json`, `trainers.json`, `species_index.json`, `static_encounters.json`, `continue_sites.json`, `moves.json`, `floor_labels.json`); the old `gen1_rby_areas.lua`/`gen1_rby_locations.lua` mapping files were deleted with the legacy client (`21ff0d7`) |
-| `data/games/gen3_frlge/` | Gen 3 game data — area maps, RR items/sprites/types/species/trainers |
-| `data/games/gen3_frlge/rr_priority_trainers.json` | Generated RR priority/key-trainer roster (areas → trainers, parties, level caps) feeding the Upcoming Key Trainers panel + calc Prep tab |
-| `data/games/gen3_emerald/` | Emerald game data — its own profile, engine signals, checkpoint, area map, statics and gift areas; pairs only with itself |
-| `data/games/gen4_hgsspt/` | Gen 4 game data — HGSS area map |
-| `data/games/gen5_bw/` | Gen 5 game data — BW/BW2 area maps and location tables |
-| `data/links.json` | Persisted link table — written after every state change |
-| `data/memorial.json` | Persisted memorial log |
-| `server/manager.py` | Run Manager — the UI on port 8090: run pages, New-run form (`GAMES`, `OPTIONS`, `OPTION_SUPPORT`, `RUN_FLAGS`), Broadcast, Tools, the Gen 1 randomizer page |
-| `server/board.py` | The pair board: pure functions joining the status payload into pair rows and zones (`build_board`, `board_context`) |
-| `server/ui_capabilities.py` | `players.{pid}.capabilities` — what a cartridge can do, read from its adapter; also what `tools/gen_ui_capabilities.py` writes |
-| `server/status_payload.py` | The empty status payload the Manager serves with no run; pinned to `_build_status_dict` by test |
-| `server/templates/_board.html` | The board fragment (`#content`), included by `dashboard.html` (run server) and `manager.html` (Manager) |
-| `server/templates/_rail.html`, `panel_page.html` | The one rail (Manager mode and `standalone` run-server mode) and the one-panel page shell; the debug, Twitch, OBS, calc and patcher bodies are `_*_panel.html` partials rendered by both apps |
-| `server/calc_files.py` | The damage calculator's files — `calc/src/` over `calc/dist/` — for the run server's `/calc/*` and the Manager's `/runs/{id}/calc/*` |
-| `server/static/board.css` | The one shell (rail, header, forms, the rem type scale on `body.mgr`) and the board, on top of `slink.css` tokens; `--font-num` for figures lives in `slink.css` |
-| `server/patcher.py` | Companion-ROM patcher routes — `/patcher` page + `/companion/SLink-RR.ups` download, mounted on both the per-run server (8080) and the Manager (8090) |
-| `patch/` | RR companion ROM patch — C sources (`src/handlers.c` mailbox opcodes), build pipeline (`tools/build.py`), built UPS in `dist/`; see `patch/README.md` |
-| `server/obs_controller.py` | OBS Controller — per-player `simpleobsws` connections, coalescing queue workers, priority-based `submit_fired()` resolver, config I/O at `data/obs_config.json` |
-| `server/twitch_bot.py` | Twitch chat bot — twitchio 3.x EventSub, command handling, activity log |
-| `lua/tests/` | BizHawk test scripts (memory, force-faint, server comms, ability diag, etc.) |
-| `tools/` | Generator scripts — ability descriptions, ability names, form data, species data, RR data, sprites, types |
-| `tools/gen_rr_priority_trainers.py` | Generator for `rr_priority_trainers.json` + the calc `slink_priority.js` setdex (RR priority/key trainers) |
-| `tools/lua_syntax_check.py` | Syntax-checks `lua/**/*.lua` with lupa (Lua 5.5) — catches `goto`/bitwise errors the system luac 5.1 rejects |
-| `tools/inject_full_mocks.py` | Injects full mock state (6 linked pairs, dead-zone, boxed pair, memorial, enemy battle w/ held items) into a running server for UI testing |
-| `tools/e2e_duo.py` | Two-instance headless E2E harness — throwaway server + two EmuHawk instances running scripted scenarios (faint, boxsync, trade, explode, rival swap; peer ghost's `ghost` scenario was dropped when Overworld Presence was deferred post-RC); per-generation pytest wrappers in `tests/e2e/` (all gated behind `SLINK_E2E=1`): `test_duo_gen3.py` (Gen 3), `test_duo_gen1_new.py` / `test_duo_gen1_pure.py` (Gen 1), `test_duo_gen2_new.py` (Gen 2) |
-| `ruff.toml` / `requirements-dev.txt` | Ruff lint config + pinned dev dependency (`pip install -r requirements-dev.txt`; `ruff check .`) |
-| `tests/TESTING.md` | Live BizHawk test guide |
-| **Damage Calculator** | |
-| `calc/src/normal.template.html` | Normal-difficulty calc page template (compiled → `dist/normal.html`) |
-| `calc/src/hardcore.template.html` | Hardcore-difficulty calc page template (compiled → `dist/hardcore.html`) |
-| `calc/src/js/slink_bridge.js` | SLink bridge panel — injects floating party panel into calc, SSE-driven live updates, one-click mon import |
-| `calc/src/js/moveset_import.js` | Showdown paste importer — parses mon showdown paste and populates all calc fields |
-| `calc/src/js/shared_controls.js` | Core calc UI logic — set/move dropdowns, search (substring matching + match highlighting), trainer set matching |
-| `calc/src/js/index_randoms_controls.js` | Mode switching (Normal/Hardcore), trainer set matching bridge |
-| `calc/src/js/data/sets/normal.js` | Normal-mode trainer sets data (SETDEX_SV for all RR trainers) |
-| `calc/src/js/data/sets/slink_priority.js` | Generated SLink priority-trainer setdex (RR key trainers) — target of the dashboard "Open in Calc" handoff |
-| `calc/src/js/data/sets/hardcore.js` | Hardcore-mode trainer sets data |
-| `calc/calc/src/desc.ts` | Result description string builder — EV display suppressed (always assumed max, not shown) |
-| `calc/build` | Build script — compiles TypeScript, copies assets, hashes HTML; runs `node build` (full) or `node build view` (HTML-only) |
-
----
-
-## Player Identity Lock
-
-SLink prevents accidental wrong-save connections from corrupting a run. On the first `hello` event with a non-empty party, the server records the **OT ID** (from the first party mon's `personality:otId` key) and **trainer name** per player slot. All subsequent connections to that slot must present the same OT ID.
-
-**How it works:**
-- On first hello with party: OT ID and trainer name are locked for that slot (persisted in `links.json` under `"player_identity"`)
-- On subsequent hellos: if the OT ID doesn't match, the connection is **rejected** — a red HUD message appears in BizHawk ("⚠ Wrong save! Expected [name] (OT: ...)" for 10 minutes) and all further events from that connection return `noop`
-- The status page shows a **red error banner** in the player card when an identity mismatch is active
-- Empty-party hellos (pre-game, title screen) are not checked and don't lock
-- Each player slot (`a` and `b`) is locked independently
-- The error clears automatically when a correct hello is received (e.g., the player reloads the right save)
-
-**Why OT ID:** All mons from the same trainer share the same `otId` field — it's a stable identifier that survives party changes, evolutions, and reconnects. Unlike trainer name (which could theoretically collide), OT ID is a 32-bit value unique to each save file.
-
----
-
-## Pokémon Ability Display
-
-> **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
-
-The status page displays ability names for party mons, PC box mons, and enemy/wild mons during battle. Abilities are resolved from `gBaseStats` in the ROM using the mon's species ID and ability bit (from the encrypted substruct data).
-
-**How abilities are read:**
-1. **Primary method:** `memory_gba.lua` decrypts the species ID and ability bit from the party/box mon's substruct, then looks up `gBaseStats[species].ability1` or `ability2` based on the bit
-2. **Fallback (gBattleMons cache):** During battle, ability IDs are read directly from `gBattleMons[battler].ability` (offset `+0x20`). These are cached in `_ability_cache` keyed by monKey and used as a fallback when substruct decryption fails or returns 0
-3. **Server-side:** `pokemon_data.py` provides `ability_name(ability_id, is_rr)` and `ability_description(ability_id, is_rr)`. For RR/CFRU (`is_rr=True`), uses a 255-entry table with RR-specific ability names and descriptions (sourced from funnotbun's RR Dex). For vanilla/Gen 4 (`is_rr=False`), uses a complete 165-entry vanilla table (Gen III–V, IDs 1-165) with correct standard ability names and descriptions. Hovering ability names on the status page shows a tooltip with the description.
-
-**Per-species ability name overrides (RR/CFRU).** Some abilities have species-specific renames in Radical Red (e.g. Mightyena's "Intimidate" displays as "Strong Jaws"). `pokemon_data.CFRU_ABILITY_NAME_OVERRIDES` is a merge of two layers:
-
-- `CFRU_ABILITY_NAME_OVERRIDES_GENERATED` — auto-built from funnotbun's `data/abilities/duplicate_abilities.h` by `tools/gen_ability_name_overrides_rr.py`. Output is written to `server/rr_ability_overrides.py` (regenerate by running the script; ~87 entries covering Shell Armor on Slowbro-Mega, Vital Spirit on Mankey/Primeape, Air Lock on Rayquaza, etc.).
-- `CFRU_ABILITY_NAME_OVERRIDES_MANUAL` — hand-curated entries for species not yet in funnotbun's upstream file. Shadows GENERATED on key conflict, so locally-observed renames always win.
-
-Override keys are `(ability_id, natdex_base_form)`. Form collisions (e.g. Kyurem-Black "Teravolt" and Kyurem-White "Turboblaze" both mapping to NatDex 646 with `ABILITY_MOLDBREAKER`) are detected by the generator and emit a warning; both entries are dropped so neither shadows the wrong form.
-
-**Profile-specific gBaseStats addresses:**
-| Profile | gBaseStats address | Source |
-|---|---|---|
-| Vanilla | `0x08254784` | Hardcoded from pret/pokefirered |
-| AP | `0x0825634C` | Shifted from vanilla (AP recompiles from source) |
-| RR/CFRU | Pointer at `0x080001BC` → actual address | Dynamic via CFRU function pointer |
-
----
-
-## Archipelago (AP) Support
-
-> **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite. Archipelago FireRed/LeafGreen is not supported until then.
-
-SLink auto-detects AP-patched ROMs and adjusts all memory addresses automatically. No manual configuration needed.
-
-**How it works:**
-- AP recompiles the FRLG binary, shifting all EWRAM globals (+0x14) and IWRAM pointers (−0xB0)
-- `memory_gba.lua` reads a signature string at ROM offset 0x108 to detect AP ROMs ("pokemon red version" / "pokemon green version")
-- All profile-dependent addresses are stored in a `PROFILES` table and applied at startup via `M.initProfile()`
-- The status page shows "FireRed (AP)" or "LeafGreen (AP)" for AP clients
-
-**AP address profile (complete):**
-
-| Symbol | Vanilla | AP | Shift |
-|---|---|---|---|
-| `gMain` | `0x030030F0` | `0x03003040` | −0xB0 (IWRAM) |
-| `gSaveBlock1Ptr` | `0x03005008` | `0x03004F58` | −0xB0 |
-| `gSaveBlock2Ptr` | `0x0300500C` | `0x03004F5C` | −0xB0 |
-| `gPokemonStoragePtr` | `0x03005010` | `0x03004F60` | −0xB0 |
-| `gPlayerParty` | `0x02024284` | `0x02024298` | +0x14 (EWRAM) |
-| `gBattleTypeFlags` | `0x02022B4C` | `0x02022B60` | +0x14 |
-| `gBattleOutcome` | `0x02023E8A` | `0x02023E9E` | +0x14 |
-| SB1 Pokéball pocket | `+0x0430` | `+0x0680` | +0x250 (struct) |
-| SB2 `encryptionKey` | `+0x0F20` | `+0x0F2C` | +0x0C (struct) |
-| `gBaseStats` | `0x08254784` | `0x0825634C` | +0xEBC8 (ROM) |
-
-**AP-specific behavior:**
-
-- **Overworld detection**: AP uses a custom `gMain+0x038` field (1 = overworld, anything else = not overworld) instead of the vanilla `gMain+0x439` inBattle bit
-- **Battle detection**: Three-condition check prevents false triggers from menus: `gMain+0x038 != 1` AND `gBattleTypeFlags != 0` AND `gBattleOutcome == 0`. The `gBattleOutcome` check is necessary because `gBattleTypeFlags` stays stale (non-zero) after battles end in AP.
-- **Item tracking**: AP expands bag pocket structs by 592 bytes (0x250). Item IDs are not encrypted; quantities are XOR'd with `encryptionKey & 0xFFFF` from `SB2+0x0F2C`. The AP encryption key is at a +0x0C shift from vanilla. `M.hasPokeballs()` and `M.countPokeballs()` use profile-dependent offsets automatically.
-- **Battle redirect**: `forceImmediateWhiteout()` cannot redirect to `ReturnFromBattleToOverworld` in AP mode (ROM function address unknown); it zeros party HP only
-- **Sound effects**: In-game SE playback works on AP ROMs. Song header addresses are discovered per-ROM via `lua/test_sound_discovery.lua` and stored in the AP profile's `SE_SONG_HEADERS` table.
-- **Starter/gift linking**: AP supports randomized starting locations. If a gift/static Pokémon appears before `nuzlocke_active` is set, the client uses `"intro"` as the area_id so both players' starters link regardless of randomized start location. Post-nuzlocke gifts (Eevee, Lapras, fossils) use their real area_id. The server treats `"intro"` and `"gift"` as gift areas (no `pokeballs_obtained` activation, pre-nuzlocke faint immunity).
-- **Menu/script state protection**: AP's `isInOverworld()` returns false during menus (bag, PC, Repel use). The `party_diff_ok` gate freezes all party change detection during non-overworld/non-battle states, preventing false `box_to_party`/`party_to_box` events from memory read glitches during BizHawk window resize or in-game menus.
-- **Coexistence**: SLink runs alongside the AP BizHawk client — both use different memory write targets (AP writes item flags; SLink writes HP/party data)
-- **Gym badge bitmask**: Badges are read from `SaveBlock1.flags[0x104]` as a raw bitmask (each bit = one badge). AP can grant badges out of order, so the status page renders each badge independently via `badge_mask & (1 << i)` — no assumption of sequential acquisition
-
----
-
-## Radical Red (CFRU) Support
-
-> **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
-
-SLink fully supports **Pokémon Radical Red 4.1** and other [CFRU-based](https://github.com/Skeli789/Complete-Fire-Red-Upgrade) ROM hacks via the `radical_red` profile in `memory_gba.lua`. All core features — encounter linking, faint propagation, party/box sync, memorial box, species/gender/type clause — work identically to vanilla and AP.
-
-**Auto-detection:** The ROM is identified by scanning for CFRU signature bytes in the ROM binary. `memory_gba.lua` calls `M._detectCFRU()` during `initProfile()`, which checks for known CFRU function signatures. If detected, the `radical_red` profile is applied automatically — no manual configuration needed. The status page shows "FireRed (Radical Red)" for RR clients.
-
-### Key architectural differences from vanilla/AP
-
-| Feature | Vanilla / AP | Radical Red (CFRU) |
-|---|---|---|
-| **Substruct encryption** | XOR-encrypted with `personality ^ otId`; permuted order based on `personality % 24` | **Unencrypted**; fixed order: Growth / Attacks / EVs / Misc |
-| **PC box storage** | 80-byte `BoxPokemon` × 30 slots × 14 boxes (contiguous after `PokemonStorage+0x01`) | **58-byte `CompressedPokemon`** × 30 slots × **25 boxes** in **4 non-contiguous EWRAM regions** |
-| **Party struct in battle** | Live — HP/level updated in real-time in `gPlayerParty` | **Stale during battle** — live HP/level only in `gBattleMons`; battle HP cache handles writeback to party struct on battle end |
-| **Bag location** | Inside `SaveBlock1` (SB1 pointer + offset); AP encrypts quantities | **EWRAM at fixed address** (`0x0203C354` for ball pocket); not inside SB1; **not encrypted** |
-| **Battle outcome (caught)** | `B_OUTCOME_CAUGHT = 6` | `B_OUTCOME_CAUGHT = 7` (`B_OUTCOME_MON_FLED = 6` inserted before it) |
-| **Battle detection** | Vanilla: `gMain+0x439` inBattle bit. AP: `gMain+0x038` overworld + three-condition check | **`gBattleOutcome`-based** ("battle_outcome" detection mode) — `gMain` is unreliable in CFRU |
-| **Species IDs** | National Pokédex (1–386) | Extended to ~1293 (Gen 1–8 + forms); IDs diverge from NatDex after Gen 2 |
-| **Ball pocket slots** | 13 (vanilla) / 16 (AP) | **50 slots**; 27 ball item types (IDs up to 631) |
-
-### Confirmed Radical Red addresses
-
-| Symbol | Address | Notes |
-|---|---|---|
-| `gPlayerParty` | `0x02024284` | Same as vanilla EWRAM — **live** copy (stale during battle) |
-| `gPlayerPartyCount` | `0x02024029` | EWRAM global |
-| `SB1_PTR_ADDR` | `0x03003840` | IWRAM |
-| `SB2_PTR_ADDR` | `0x03003838` | IWRAM |
-| `PokemonStorage` base | `0x02029314` | EWRAM — first of 4 non-contiguous box regions |
-| `gBattleMons` | `0x02023BE4` | EWRAM — live HP/level/status during battle |
-| `gBattleOutcome` | `0x02023E8A` | EWRAM — same address as vanilla |
-| Ball pocket | `0x0203C354` | EWRAM, 50 slots × 4 bytes, not encrypted |
-
-### Battle HP cache (CFRU writeback)
-
-In CFRU, `gPlayerParty` is **not updated during battle** — the game engine copies party data to `gBattleMons` at battle start and only writes back on battle end. This means faint detection during battle must read from `gBattleMons`, not `gPlayerParty`. The Lua client maintains a **battle HP cache** keyed by **monKey** (not slot index) that:
-
-1. Reads HP from `gBattleMons` every frame during battle (mapping battler personality → monKey)
-2. Detects faints (HP 0) in real-time from the battle struct — guards against re-reporting server-initiated force_faints via `force_fainted_keys` set
-3. Writes back final HP values to `gPlayerParty` when battle ends — scans party by monKey to find the correct slot, ensuring writeback targets survive mon switches mid-battle
-
-**Frame execution order (critical for CFRU):** CFRU can set `gBattleOutcome` on the **same frame** as the last mon's HP→0. The Lua client executes in this strict order each frame:
-
-1. Battle start detection (clears cache)
-2. Battle HP cache update from `gBattleMons` — gated on `in_battle OR battle_just_ended` to capture the final frame
-3. Battle end writeback (writes cache to party struct, then clears cache)
-4. `index_party()` — reads party struct with cache overlay if in battle
-5. Party diff (faint/whiteout detection)
-
-**Double-buffer party diff:** `index_party()` uses two independent entry pools (one per buffer frame) to compare previous and current party state. Each buffer owns its own pre-allocated entry tables so that writing current-frame HP never overwrites previous-frame data — this is essential for detecting HP transitions (alive → fainted).
-
-### Doubles battle detection (Gen 3)
-
-`is_doubles` is set on the battle state when `gBattlersCount >= 4` (`M.isDoubleBattle()` in `lua/memory_gba.lua`, `BATTLE_TYPE_DOUBLE_MASK` constant; works on all profiles including RR). Active battlers are read from `gBattlerPartyIndexes`: players are battlers 0+2, enemies are battlers 1+3. The status page renders a DOUBLES chip in the battle panel header; the `enemy-focus` overlay renders both active foes side-by-side via `.focus-mons.doubles`; the player `focus` overlay does the same when two party mons are active.
-
-Singles also use `gBattlerPartyIndexes[0]`/`[1]` as the primary active-detection path, with species+level match against `gBattleMons` as a fallback when the index read is stale (`idx >= 6`, e.g. CFRU address drift). Gen 4/5 clients emit `evt.is_doubles=false` stubs for now.
-
-### Enemy moves and live PP (Gen 3)
-
-Each foe row in the status battle panel has a collapsible "Moves (N)" table. For active enemy battlers, moves and PP come from `gBattleMons[1]` (and `gBattleMons[3]` in doubles) at the following offsets:
-
-- `+0x0C` — moves (4 × `uint16`)
-- `+0x24` — current PP (4 × `uint8`)
-- `+0x3A` — PP-Up bonuses (packed in one `uint8`)
-
-The Lua client overlays these onto the matching enemy party entry so post-use PP shows immediately. CFRU's `battle_seen_enemies` accumulator and the player party snapshot also forward `pp_bonuses`. For full party slots (not just active battlers), `M.decryptMoves` and `M.decryptPpBonuses` in `memory_gba.lua` decode moves/PP/ppBonuses from substructs (CFRU unencrypted layout and vanilla/AP encrypted substruct both supported).
-
-Server enrichment (`_enrich_party` / `_enrich_battle_state` in `server/server.py`) resolves raw move IDs via `adapter.move_data()`, attaches `current_pp` from `raw_pp[]`, and applies the PP-Up multiplier:
-
-```
-max_pp = base_pp + (base_pp * pp_ups) // 5
-```
-
-Without this multiplier, RR trainer mons with PP-Ups would show e.g. `56/35` instead of `56/56`. The formula is guarded by `if base_pp:` so unknown moves (base_pp = 0) don't divide-by-zero. The status page row uses a `data-key` so idiomorph's `beforeAttributeUpdated` hook preserves the user-toggled `<details open>` state across HTMX morph swaps.
-
----
-
-## ROM Profiles
-
-> **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
-
-SLink supports three ROM profiles, auto-detected at startup by `memory_gba.lua`. All profile-dependent addresses are stored in the `PROFILES` table and applied via `M.initProfile()`.
-
-| Profile | ROM type | Detection method | Battle detection | Box format | Substructs |
-|---|---|---|---|---|---|
-| **`vanilla`** | Standard FRLG US 1.0 + data-only randomizers (UPR, etc.) | Default — no AP or CFRU signature found | `gMain+0x439` inBattle bit (bit 1, mask `0x02`) | 80-byte `BoxPokemon` × 30 × 14 boxes | Encrypted (XOR `personality ^ otId`); permuted order (`personality % 24`) |
-| **`ap`** | Archipelago-patched FRLG | ASCII string at ROM offset `0x108` ("pokemon red/green version") | `gMain+0x038` overworld check + three-condition battle check (`gMain+0x038 != 1` AND `gBattleTypeFlags != 0` AND `gBattleOutcome == 0`) | 80-byte `BoxPokemon` × 30 × 14 boxes | Encrypted (same scheme as vanilla) |
-| **`radical_red`** | Radical Red 4.1 / CFRU-based hacks | CFRU signature bytes in ROM binary | `gBattleOutcome`-based ("battle_outcome" mode) — `gMain` unreliable in CFRU | 58-byte `CompressedPokemon` × 30 × 25 boxes (4 EWRAM regions) | **Unencrypted**; fixed order: Growth / Attacks / EVs / Misc |
-
-For full address tables, see the [AP Support](#archipelago-ap-support) and [RR Support](#radical-red-cfru-support) sections above. All vanilla addresses in the FRLG Memory Map section below apply only to the `vanilla` profile — AP and RR use different addresses as documented in their respective profiles in `lua/memory_gba.lua`.
-
----
-
-## Sync Timing Architecture
-
-Sync commands (`box_mon`, `party_mon`, `memorialize`) are **deferred to safe state** to avoid corrupting party/box data during battle or transition animations.
-
-**Safe state requirements (all must be true):**
-1. **Overworld** — player is in the overworld (not in battle, menu, script, or animation)
-2. **Sync cooldown expired** — a per-command cooldown prevents rapid-fire writes
-3. **Not `battle_just_ended`** — the battle-end transition must fully complete
-4. **`post_battle_frames == 0`** — a 30-frame cooldown after battle ends, plus a 90-frame post-battle grace period (~2 seconds total at 60fps)
-
-**Execution model:**
-- Commands execute **one per frame** to avoid party corruption from concurrent slot compaction (e.g., two `memorialize` commands zeroing adjacent slots simultaneously would corrupt the shift-down logic)
-- The ~2-second post-battle buffer ensures the game engine has fully written back battle results to the party struct before SLink modifies it
-- During the grace period, the Lua client suppresses party diff detection to avoid false `box_to_party` / `party_to_box` events from engine writeback
-
-**PP preservation (CFRU):** The 58-byte compressed box format does not store PP. On deposit, the client caches PP values (read from party struct `+0x34..+0x37`) in `mon_stats_cache`. On retrieval via `retrieveBoxMon`, PP is restored from the cache (or defaults to 35 for non-zero moves as a fallback for legacy entries).
-
-**Item integrity protection (CFRU):** CFRU's game engine may react to party modifications between frames and inadvertently swap held items. The client implements a defensive snapshot/verify system:
-1. Before any sync operation (`box_mon`, `party_mon`, `memorialize`), `snapshot_party_items()` records every party mon's held item keyed by monKey
-2. Immediately after the operation completes, `verify_party_items()` checks each mon's item against the snapshot and writes back any that changed unexpectedly
-3. Verification continues for 5 frames after sync to catch between-frame engine interference
-4. The snapshot stays current during normal gameplay (updated each `build_party_snapshot` call) so legitimate item changes (e.g., player equipping items) are never falsely reverted
-
----
-
-## Configuration
-
-Edit the top of your launcher (`lua/slink_gen3.lua` or `lua/slink_gen4.lua`) before loading:
-
-```lua
-local SLINK_HOST  = "192.168.1.100"  -- IP running server/server.py
-local SLINK_PORT  = 54321
-local SLINK_PLAYER = "a"             -- "a" for one game, "b" for the other
-```
-
-Server flags:
-
-```bash
-python -m server.server --help
-# --host HOST         bind host (default: 0.0.0.0)
-# --port PORT         TCP port (default: 54321)
-# --http-port PORT    HTTP status port (default: 8080)
-# --data-dir DIR      data directory for links/memorial JSON (default: data/)
-# --run-id ID         optional run label (used in log output)
-# --run-name NAME     display name for this run (shown in page titles)
-# --manager-port PORT manager HTTP port (enables 'Run Manager' link on status page)
-# --reset             delete links.json and memorial.json on startup
-# --species-clause      reject links where both mons share the same evolution family
-# --gender-clause       reject links where both mons share the same gender
-# --type-clause         reject links where both mons share any type
-# --explode-mode        (RR only) on partner death, force the linked mon to auto-Explode (force_explode instead of force_faint)
-# --rival-team-swap     (RR only) on rival battles, replace the rival's team with the partner's current party (replace_rival_team)
-# --overworld-presence  peer ghost (RR + companion patch): deferred post-RC on the rewritten Gen 3 client -- the flag is accepted but the client does not yet render the NPC
-# --native-messages     show SLink notifications via the patch's native message box / in-battle text instead of the Lua HUD (RR + patch; default off)
-# --native-sounds       play SLink notification sounds via the patch's native PlaySE (RR + patch; default off)
-# --no-battle-calc      hide the bundled Battle Calc damage display (RR + patch; shown by default)
-# --no-pc-trade-npc     disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off; Gen 1 trades at the Cable Club receptionist, which has no switch)
-# --verbose             enable DEBUG-level logging to file and console (default: INFO only)
-```
-
----
-
-## Twitch Bot
-
-The built-in Twitch chat bot lets viewers query Soul Link run state in real time.
-
-> **Requires twitchio 3.x** — the old IRC-based integration is discontinued by Twitch. This uses EventSub WebSocket.
-
-### Bot Account Options
-
-You have two setups to choose from:
-
-**Option A — Broadcaster account as bot** (simpler)
-The bot posts messages as your own channel account. Easiest to start with.
-
-**Option B — Separate bot account** (recommended for stream)
-Create a second Twitch account (e.g. "MySLinkBot"). The bot posts as that account so viewers see a distinct bot name. Both options use the exact same code — the only difference is which account you authorize when generating tokens.
-
-### One-Time App Registration
-
-Register a Twitch Developer app (on your own account) at [dev.twitch.tv/console](https://dev.twitch.tv/console):
-- **Register Your Application** → Name: anything, Category: Chat Bot, Client Type: Confidential
-- **OAuth Redirect URL: `https://twitchtokengenerator.com/`** ← required so twitchtokengenerator can complete the OAuth flow with your Client ID
-- Copy your **Client ID**. Click **New Secret** and copy the **Client Secret**.
-
-### Token Setup
-
-**Required OAuth scopes** (twitchio 3.x EventSub — completely different from old IRC scopes):
-- `user:read:chat` — receive messages from chat
-- `user:write:chat` — send messages to chat
-- `user:bot` — identify this account as a bot
-- `channel:bot` — allow the bot in the broadcaster's channel
-
-**Get tokens for the BOT account:** Visit [twitchtokengenerator.com](https://twitchtokengenerator.com):
-1. **Option A:** stay logged in as your normal account.
-   **Option B:** open an incognito window and log in as the bot account first.
-2. Select **Custom Scope Token**
-3. Paste your **Client ID** (from dev.twitch.tv — same for both options)
-4. Enable the four scopes listed above
-5. Click Generate Token, authorize **as the bot account**, and copy the **Access Token** and **Refresh Token**
-
-Set environment variables **before** starting the server or manager:
-
-```cmd
-:: Windows cmd.exe — no spaces around =, no quotes
-set TWITCH_ACCESS_TOKEN=bot_access_token        ← from twitchtokengenerator (bot account)
-set TWITCH_REFRESH_TOKEN=bot_refresh_token      ← from twitchtokengenerator (bot account)
-set TWITCH_CLIENT_SECRET=your_client_secret     ← from dev.twitch.tv/console → your app → New Secret
-python -m server.manager
-```
-
-```powershell
-# PowerShell
-$env:TWITCH_ACCESS_TOKEN = "bot_access_token"   # from twitchtokengenerator (bot account)
-$env:TWITCH_REFRESH_TOKEN = "bot_refresh_token" # from twitchtokengenerator (bot account)
-$env:TWITCH_CLIENT_SECRET = "your_client_secret" # from dev.twitch.tv/console → your app → New Secret
-python -m server.manager
-```
-
-Tokens are never written to disk or logged.
-
-> **Note:** twitchio may create a `.tio.tokens.json` file in the project root as a local token cache. This file is safe to delete and is already listed in `.gitignore`.
-
-The `/twitch` page shows **✓ Access Token set** and **✓ Client ID set** badges when detected. Connection errors appear in a red error box.
-
-### Configuration
-
-Non-sensitive settings live in `data/twitch_bot.json` (created from `data/twitch_bot.example.json`):
-
-```json
-{
-  "channel": "your_broadcaster_channel",
-  "nick": "your_bot_account_name",
-  "client_id": "your_client_id_from_dev_twitch_tv",
-  "prefix": "!",
-  "command_cooldown_sec": 5,
-  "enabled": true
-}
-```
-
-- **`channel`**: your broadcaster channel name where viewers type commands (not the bot account name)
-- **`nick`**: the bot account's username (for display only)
-- **`client_id`**: not sensitive — safe to store here
-
-These can also be edited live from the `/twitch` page without restarting the server.
-
-### Commands
-
-| Command | Argument | Description |
-|---------|----------|-------------|
-| `!soullink` | — | Plain-English Soul Link rules for new viewers |
-| `!clauses` | — | Active clause rules (species / gender / type) |
-| `!rip` | — | Most recent death with killer detail |
-| `!runstats` | — | Attempt #, alive/dead counts, shinies, oldest pair |
-| `!alltime` | — | Cross-run aggregate: attempts, deaths, shinies, best run |
-| `!lastrun` | — | How the previous run ended |
-| `!attempts` | — | Current attempt number |
-| `!partner` | `<name>` | Look up a mon's Soul Link partner by nickname |
-| `!area` | `<name>` | Look up an area's link status |
-
----
-
-## OBS Scene Trigger Integration
-
-SLink can automatically switch OBS scenes in response to game events, with independent control of each player's OBS instance.
-
-### Setup
-
-1. Enable **OBS WebSocket** in OBS Studio (`Tools → WebSocket Server Settings`) — default port 4455.
-2. Navigate to `http://localhost:8080/obs`.
-3. Enter the host, port, and password for each player's OBS instance and click **Save Config**.
-4. Click **Connect** for each player. Status badges show `connected` when the WebSocket handshake succeeds.
-
-Config is persisted at `data/obs_config.json` (global, not per-run). Passwords are write-only — they are never returned in GET responses.
-
-### Trigger Rules
-
-Create rules on the `/obs` page. Each rule maps a game event to a scene name:
-
-| Field | Values | Description |
-|---|---|---|
-| Event | See table below | The game event that fires the rule |
-| Player Filter | `any`, `a`, `b` | Only fire when this player triggers the event |
-| Target OBS | `own`, `a`, `b`, `both` | Which OBS instance receives the scene change |
-| Scene Name | any string | The scene to switch to (datalist populated from connected OBS) |
-| Area Filter | `area_id` string, or `group:<id>` | *(area_enter family)* restrict to a specific area, or to a group (`group:routes`, `group:caves`, `group:cities`, `group:forests`, `group:towers`, `group:buildings`, `group:water`, `group:gift`). Groups are derived from the active adapter's `area_map*.json` by suffix/prefix heuristics with hand-picked overrides (`victory_road` → cave, `dreamyard` → building, …). |
-
-### Supported Events
-
-| Event | Fires when |
-|---|---|
-| `battle_start` | Any battle begins |
-| `wild_battle_start` | A wild Pokémon battle begins |
-| `trainer_battle_start` | A trainer battle begins |
-| `battle_end` | A battle ends |
-| `battle_start_new` | Battle starts in an area that still has an open encounter slot |
-| `area_enter` | Player enters any area (with optional area_id filter) |
-| `area_enter_new` | Player enters an area with an open encounter slot |
-| `faint` | A player's own mon faints |
-| `link_death` | A partner mon receives a `force_faint` command (linked death) |
-| `whiteout` | A player blacks out |
-| `capture` | A mon is caught |
-| `shiny` | A shiny mon is caught (bonus pair trigger) |
-| `linked` | An encounter area transitions to `linked` state |
-| `dead_zone` | An encounter area transitions to `dead_zone` state |
-| `party_to_box` | A mon is deposited from party to PC |
-| `box_to_party` | A mon is retrieved from PC to party |
-| `memorialize_done` | A dead pair is moved to the memorial box |
-| `run_over` | The Soul Link run ends |
-
-### Priority Resolution
-
-Multiple events can fire in the same dispatch cycle (e.g., entering battle in a new encounter area fires `battle_start`, `wild_battle_start`, and `battle_start_new` simultaneously). Rules are evaluated **top-to-bottom** — for each OBS instance (player A or B), only the **first** matching rule wins.
-
-Reorder rules by dragging the ⠿ handle. The new order saves automatically on drop (`autoSaveTriggers()` → `POST /api/obs/triggers`).
-
-### Implementation Details
-
-- **Library:** `simpleobsws>=1.4` (fully async, obs-websocket v5). URL must be `ws://HOST:4455` — default v4 port (4444) is wrong.
-- **Per-player coalescing queue:** each OBS player has an `asyncio.Queue(maxsize=1)` + dedicated worker task. If OBS is slow, only the latest desired scene is sent.
-- **Reconnect loop:** exponential backoff 5 s → 60 s cap. OBS failures are fully isolated — they never affect game server operation.
-- **`submit_fired(fired_list)`** — priority resolver called once per dispatch cycle with all `(event_name, src_player, metadata)` tuples; iterates rules in list order, sets winners dict (first match per target player wins).
-- **`_emit_obs_triggers()`** in `server.py` collects all fired events for a dispatch cycle into a list and calls `obs.submit_fired(fired)` once at the end.
-- **Area-group resolution** — `area_id_filter` values starting with `group:` resolve against `_area_group_for(area_id)` (in `server/server.py`), which classifies the active adapter's areas into the 8 buckets above. The picker on `/obs` pulls the labeled buckets from `GET /api/obs/areas` and renders `<optgroup>` blocks so users don't have to remember slug names.
-
----
-
-## Damage Calculator Integration
-
-SLink embeds a fork of the [RadicalRedShowdown damage calculator](https://github.com/RadicalRedShowdown/damage-calc) directly into the HTTP server. It is accessible at `/calc/` (served as `normal.html` or `hardcore.html`) and includes a live **SLink Bridge Panel** that injects party data from the server into the calc UI.
-
-### Pages
-
-Only two pages are active in this fork:
-
-| Page | URL | Description |
-|---|---|---|
-| Normal | `/calc/normal.html` | Normal-difficulty Radical Red trainer sets |
-| Hardcore | `/calc/hardcore.html` | Hardcore-difficulty Radical Red trainer sets |
-
-All other upstream calc pages (`randoms`, `index`, `honkalculate`, `oms`) have been removed — they are unreachable from the server and were unused.
-
-### SLink Bridge Panel
-
-A floating, draggable panel injected by `calc/src/js/slink_bridge.js` connects to the SLink server over SSE and displays:
-
-- **Player A / Player B tabs** — each showing the active party, enemy battle mons, and linked mons
-- **Prep tab** — searchable trainer index built from SETDEX data; select any trainer to view their full party with one-click import into the defender (`p2`) slot for pre-battle planning. Supports Normal and Hardcore modes with a toggle, multi-encounter trainers (Set 1 / Set 2 / Base sub-toggle sorted by average level), and multi-word search with token highlighting
-- **Party rows** — sprite (32×32), nickname/species, level, nature, ability, held item, HP bar
-- **Enemy rows** — matched trainer set moves with Normal/Hardcore difficulty badge
-- **Active mon highlight** — orange left border + faint orange background on the currently active battler
-- **One-click import** — clicking any row loads that mon's full Showdown paste into the calc attacker (`p1`) or defender (`p2`) slot automatically
-
-The panel saves its position, collapsed state, and Prep tab selections (mode, trainer, encounter) in `localStorage`. It reconnects automatically via SSE on disconnect (3-second retry). Pings arriving while the user is interacting with the panel are deferred until `mouseup` to prevent DOM rebuilds mid-interaction.
-
-**Dashboard → Calc handoff (RR).** The status page's Upcoming Key Trainers panel has an "Open in Calc" button that writes the chosen trainer to `localStorage`; `slink_bridge.js` listens for the `storage` event and loads the Prep tab onto that trainer. The generated set source is `calc/src/js/data/sets/slink_priority.js` (the SLink priority setdex, built by `tools/gen_rr_priority_trainers.py`).
-
-**Server endpoint:** `GET /api/calc/mons` — returns per-player party, linked pairs, and enemy battle data in calc-friendly JSON format including `showdown_paste`, `sprite_html`, `hp_pct`, `ability_name`, `item_name`, and matched `moves`. See [JSON API](#json-api) for the full response shape.
-
-**Species form normalization for calc.** The server emits species form names as `"Species (Form)"` or `"Species Form"` (e.g. `"Lycanroc (Dusk)"`, `"Necrozma (Dusk Mane)"`, `"Deoxys Attack"`), but Smogon's calc pokedex is keyed on hyphenated names (`"Lycanroc-Dusk"`, `"Necrozma-Dusk-Mane"`, `"Deoxys-Attack"`). `_normalizeSpeciesForCalc()` in `calc/src/js/slink_bridge.js` tries the name as-is, then `"Species (Form)"` → `"Species-Form"` (internal spaces in the form word also hyphenated), then plain space → hyphen. An override map exists for cases the rules can't catch. This covers Wormadam, Rotom, Burmy, Arceus, Silvally, Mega forms, Necrozma fusion forms, Pumpkaboo/Gourgeist sizes, Deoxys, and Lycanroc Dusk in one shot. Lookups that still miss surface a toast with the original (user-friendly) name.
-
-### Trainer Set Matching
-
-The bridge automatically detects which trainer set matches the current enemy party. It compares enemy mon species and levels against `SETDEX_HC` (hardcore) and `SETDEX_SV` (normal) simultaneously:
-
-- Matching is fuzzy: species + level ± 2 must match ≥ 2 mons
-- Hardcore is preferred if both match
-- A difficulty badge (`HC ✓ 4/6` or `Normal`) appears on the player tab
-- Matched trainer moves populate the enemy mon rows for quick calc import
-
-### Search
-
-The set/move/Pokémon dropdowns use full **substring search** — not starts-with. Any search term matches anywhere within the Pokémon name or trainer/set name:
-
-- `"zard"` → finds Charizard
-- `"Blue"` → finds all sets belonging to trainer Rival Blue
-- `"bolt"` → finds Thunderbolt in move search
-
-Results show the full `"Pokémon (Trainer Set Name)"` string so it is always clear what each result is. Matching characters are highlighted in the calc's accent colour (`#e94560`) using `<mark>` elements.
-
-### Result Display
-
-The calc result description line (e.g., `"Lvl 50 Charizard Flamethrower vs. Lvl 50 Blastoise: 45-53%"`) suppresses EV investment amounts. Since all mons in our runs are assumed to have maximum EVs, the original `"252 SpA"` / `"0 HP / 0 SpD"` text was always `0` (uninformative) and has been removed from `desc.ts`.
-
-### Building the Calc
-
-```bash
-# Full build (TypeScript compile + bundle + HTML hash) — required after any .ts changes
-cd calc && npm run build
-
-# HTML/JS-only rebuild (faster — use after changes to src/ files only, no .ts)
-cd calc && node build view
-```
-
-The build output goes to `calc/dist/`. Only `normal.html` and `hardcore.html` are generated. The build script no longer references the removed pages.
-
----
-
-## Regenerate Area Map
-
-If you add new map entries or fix area IDs:
-
-```bash
-python tools/gen_area_map.py
-# Writes: data/games/gen3_frlge/gen3_frlge_areas.lua  (Lua lookup table)
-```
-
----
-
-## Development Guidelines
-
-### Adapter Isolation (Preventing Cross-Gen Breakage)
-
-The adapter pattern (`server/adapters/`) isolates game-specific logic. **All display and rule logic must flow through `self.adapter.<method>()`**, never through standalone functions with `is_rr` parameters.
-
-**Key rules:**
-1. Never add game-specific data or `is_rr` checks to `server.py` — use the adapter
-2. Never import from `server.server` inside an adapter (circular dependency)
-3. Use `gen4_hgsspt.py` as the template for new adapters (cleanest: zero deps, all data embedded)
-4. Test ALL active games after changing `server.py`, `state.py`, or `adapters/base.py`
-
-See `.github/copilot-instructions.md` → "Adapter Isolation Rules" for the full interface contract.
-
-### Adapter methods added in 0.2.6
-
-Each is gated to the games that support it; the base `GameRulesAdapter` / `GamePresentationAdapter` ships inert defaults so every other gen inherits the no-op — never branch on `game_id` in shared code. `rival_trainer_ids()` and `supports_explode_mode()` are overridden by **both** Gen 3 Radical Red and Gen 1; `native_trade_ui()` is overridden by **Gen 1 only**; the rest are Gen 3 RR only.
-
-| Method | Returns / does | Base default |
-|---|---|---|
-| `rival_trainer_ids()` | Trainer IDs treated as the rival for `--rival-team-swap`. Gen 3 RR: 27 "Terry" IDs in classes 81/89/90, built at import from `rr_trainers.json`. Gen 1: `{225, 242, 243}` — RIVAL1/2/3 classes `$19`/`$2A`/`$2B` plus `OPP_ID_OFFSET(200)`. | `set()` |
-| `party_blob_size()` | Expected byte length of one party-mon blob, used by `_ingest_party_blobs` to reject malformed payloads. Gen 3 returns `100` (its boxmon struct); **Gen 1 returns `66`** — 44-byte struct + 11-byte OT name + 11-byte nickname, because Gen 1 keeps names in parallel arrays rather than inside the struct. `0` disables blob ingestion. | `0` |
-| `supports_info_panel()` | Whether this client can render the native in-game SOULLINK screen; gates the `link_panel` command so no other client is sent something it would only log. Gen 3 opts in for Radical Red; Gen 1 opts in for Red/Blue only (`self._variant != "yellow"`) — Yellow has no free WRAM for the mailbox. | `False` |
-| `native_trade_ui()` | Whether the cartridge itself drives the trade menus (native receptionist offer, eligible-slot mask, native slot offer, confirm payload) instead of the shared server-driven trade FSM. Gen 1 opts in for Red/Blue only (the companion patch's receptionist hooks); Yellow and every other game take the default. Replaced six `game_id == "gen1_rby"` branches in the shared trade FSM (commit `eef6a1c`). | `False` |
-| `supports_abilities()` | Whether the game has abilities at all — drives the party table's Ability column. Overridden `False` by Gen 1 and Gen 2. | `True` |
-| `status_token(status_cond)` | Three-letter status (`PSN`/`PAR`/`SLP`/`BRN`/`FRZ`/`TOX`) from the raw per-generation bitfield. | `""` |
-| `gift_link_area(area_id)` | Maps a gift/egg capture into the `gift_<area>` namespace for standalone gift pairs. | `gift_<area>` remap |
-| `trainers_for_area(area_id)` | Key/priority trainer IDs appearing in an area (Upcoming Key Trainers panel). | `[]` |
-| `trainer_party(trainer_id)` | A trainer's curated party for the panel + calc handoff. | `[]` |
-| `trainer_brief(trainer_id)` | Short trainer descriptor (name/class/party/area) for the panel. | synthesized from `trainer_info` |
-| `milestone_cap_for_fight_label(label)` | Level cap for a key-fight label. **Gen 3 RR only** — `server.py` calls it via a `hasattr` guard; it is *not* defined on the base class. | — |
-
-### Adding a New Game
-
-1. **Lua game module** → `lua/games/<gen>_<game>.lua` (address profiles, game detection)
-2. **Lua memory module** → `lua/memory_<platform>.lua` (if new hardware platform)
-3. **Lua client** → `lua/clients/<gen>_<game>_client.lua` (event detection, command dispatch)
-4. **Python adapter** → `server/adapters/<gen>_<game>.py` (implement `GameAdapter` ABC)
-5. **Game data** → `data/games/<gen>_<game>/` (area maps, species data, items)
-6. **Register** in `server/adapters/__init__.py`
-7. **Tests** → `tests/unit/test_<gen>_adapter.py`
-
----
-
-## Reference
-
-- [pret/pokered](https://github.com/pret/pokered) — Gen 1 Red/Blue decomp; WRAM addresses and data structures
-- [pret/pokeyellow](https://github.com/pret/pokeyellow) — Gen 1 Yellow decomp (shifted addresses)
-- [pret/pokefirered](https://github.com/pret/pokefirered) — FRLG decomp; source for all RAM addresses and struct layouts
-- [Skeli789/Complete-Fire-Red-Upgrade](https://github.com/Skeli789/Complete-Fire-Red-Upgrade) — CFRU source (Radical Red's engine base); defines CompressedPokemon, EWRAM bag, extended species IDs
-- [BizHawk Lua Functions](https://tasvideos.org/BizHawk/LuaFunctions)
-- [Archipelago connector_bizhawk_generic.lua](https://github.com/ArchipelagoMW/Archipelago/blob/main/data/lua/connector_bizhawk_generic.lua) — LuaSocket TCP technique
-- [Gen III Pokémon data structure](https://bulbapedia.bulbagarden.net/wiki/Pok%C3%A9mon_data_structure_(Generation_III))
-- [Gen I Save Data Structure](https://bulbapedia.bulbagarden.net/wiki/Save_data_structure_(Generation_I)) — Gen 1 save layout, party/box addresses
-- [Data Crystal RBY RAM Map](https://datacrystal.tcrf.net/wiki/Pok%C3%A9mon_Red_and_Blue/RAM_map) — verified Gen 1 WRAM addresses
-- [funnotbun RR Pokédex](https://funnotbun.github.io/) — Radical Red species data source for types, sprite filenames, and ability descriptions
+| `lua/slink.lua` | Universal entry point: routes Game Boy titles to `lua/gen1/` or `lua/gen2/`, GBA to `lua/gen3/` after admission, NDS through `lua/game_detect.lua` to the Gen 4/5 clients. |
+| `lua/gen1/`, `lua/gen2/`, `lua/gen3/` | Clients: `run.lua` (BizHawk bootstrap), `entry.lua` (composition root), `client.lua` and modules. |
+| `lua/core/`, `lua/*.lua` | Shared Lua: session, deferred queue, identity, connector, HUD (`hud.lua`), admission, write permits, hook registry, JSON codec. |
+| `lua/clients/`, `lua/games/`, `lua/memory_nds.lua` | Gen 4 and Gen 5 clients. |
+| `server/server.py` | aiohttp app, TCP handling, status payload, HTTP routes. |
+| `server/state.py` | `SoulLinkState`: rules, persistence, trade state machine. |
+| `server/adapters/` | Per-game adapters and codecs. |
+| `server/manager.py` | Run Manager: `GAMES`, `OPTIONS`, `OPTION_SUPPORT`, `RUN_FLAGS`, run lifecycle, routes. |
+| `server/cartridges.py`, `server/upr_pipeline.py`, `server/upr_settings.py` | Cartridge preparation and the randomizer. |
+| `server/board.py`, `server/templates/`, `server/static/` | Board and timeline logic, templates (`_rail.html` is the shared sidebar), CSS, JS and themes. |
+| `server/overlay_catalog.py` | Overlay slugs, sizes, layouts and controls. |
+| `server/patcher.py` | `/patcher` and `/companion/{name}`. |
+| `server/obs_controller.py`, `server/twitch_bot.py` | OBS scene switching and the Twitch bot. |
+| `server/calc_files.py`, `calc/` | Damage calculator serving and source. |
+| `patch/` | Companion patches: sources, build tools, built UPS files in `patch/dist/`. |
+| `data/games/` | Per-game data packs ([data/games/README.md](../data/games/README.md)). |
+| `tools/` | Generators, build tools, the duo runner, release checks. |
+
+### Adding a game
+
+1. A Lua client under `lua/<gen>/` as a composition root, following `lua/gen1/` or `lua/gen3/`.
+2. A data pack under `data/games/<gen>_<game>/`, generated by a `tools/gen_*.py` script.
+3. An adapter in `server/adapters/<gen>_<game>.py`, registered with its `rom_type` values in `server/adapters/__init__.py`. Override only the base-class methods the game supports.
+4. A family in `GAMES` and its rows in `OPTION_SUPPORT` (`server/manager.py`) once the Manager should offer it.
+5. Unit tests, then a committed battery-save fixture, headless live gates and a duo run. Passing unit tests and the Lua syntax check is necessary but not sufficient: defects in deferred commands, debounces and struct reads have passed both.
+
+After changing shared code, test Gen 3 first, then the other generations.
+
+## External references
+
+- [pret](https://github.com/pret) decompilations ([pokered](https://github.com/pret/pokered), [pokeyellow](https://github.com/pret/pokeyellow), [pokecrystal](https://github.com/pret/pokecrystal), [pokegold](https://github.com/pret/pokegold), [pokefirered](https://github.com/pret/pokefirered), [pokeemerald](https://github.com/pret/pokeemerald)): addresses and struct layouts.
+- [pokeemerald-expansion](https://github.com/rh-hideout/pokeemerald-expansion): the Emerald Expansion source.
+- [Complete-Fire-Red-Upgrade](https://github.com/Skeli789/Complete-Fire-Red-Upgrade): the engine Radical Red is built on.
+- [pureRGB](https://github.com/Vortyne/pureRGB).
+- [Universal Pokémon Randomizer ZX](https://github.com/Ajarmar/universal-pokemon-randomizer-zx).
+- [BizHawk Lua functions](https://tasvideos.org/BizHawk/LuaFunctions).
+- [Bulbapedia: Pokémon data structure (Generation III)](https://bulbapedia.bulbagarden.net/wiki/Pok%C3%A9mon_data_structure_(Generation_III)).

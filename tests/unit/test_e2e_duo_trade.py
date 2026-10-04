@@ -107,7 +107,7 @@ def _real_stages(run):
         stage = ups_apply(base, (ROOT / out["ups"]["file"]).read_bytes())
         fixture = Path(run.data_dir) / f"{side}.SaveRAM"
         fixture.write_bytes(side.encode() * 32790)
-        run._gen2_inputs[side] = {"title": title, "rom_sha1": out["base_sha1"], "fixture": fixture,
+        run._gen2_inputs[side] = {"title": title, "rom_sha1": out["sha1"], "source_rom_sha1": out["base_sha1"], "fixture": fixture,
                                    "sha256": hashlib.sha256(fixture.read_bytes()).hexdigest()}
         run._gen2_plans[side] = {"stage": stage, "launch_sha1": out["sha1"],
             "rom": Path(duo.BUILD) / f"gen2_{title}_overlay.gbc", "directory": Path(run._saveram_dir(side)),
@@ -123,6 +123,9 @@ def test_manifest_staging_is_hash_bound_and_seed_directories_are_isolated(monkey
     assert path.parent == Path(run.data_dir)
     assert hashlib.sha256(path.read_bytes()).hexdigest() == run._gen2_trade_manifest_sha256
     assert validate_manifest(path) == run._gen2_trade_manifest
+    # gen2_trade_lane refuses any other --run-id: every trade cell died "server run_id differs from manifest"
+    cmd = run.server_cmd()
+    assert cmd[cmd.index("--run-id") + 1] == run._gen2_trade_manifest["run_id"]
     saves = {side: Path(run._seed_instance_save(side)) for side in ("a", "b")}
     assert saves["a"].parent != saves["b"].parent and saves["a"].read_bytes() != saves["b"].read_bytes()
     for side, plan in run._gen2_plans.items():
@@ -142,7 +145,7 @@ def test_manifest_staging_refuses_bad_inputs_and_clobber(monkeypatch, tmp_path, 
     if fault == "stage":
         run._gen2_plans["a"]["stage"] = b"bad overlay"
     elif fault == "base":
-        run._gen2_inputs["a"]["rom_sha1"] = "0" * 40
+        run._gen2_inputs["a"]["source_rom_sha1"] = "0" * 40
     elif fault == "escape":
         run._gen2_plans["a"]["rom"] = tmp_path / "outside-build.gbc"
     else:
@@ -279,7 +282,7 @@ def test_trade_oracle_wrapper_passes_frozen_inputs_and_requires_scope(monkeypatc
     def checked(res, **kwargs):
         assert res is results
         seen.append(kwargs)
-        facts = {"scenario": run.scenario, "admission_scope": "PRODUCTION" if bad_scope else "HARNESS_ONLY_OVERLAY",
+        facts = {"scenario": run.scenario, "admission_scope": "PRODUCTION" if bad_scope else "PHYSICAL_RECEIPTED",
                  "area_id": "route_29", "status": "committed",
                  "players": {side: {"title": "crystal", "key": side + "-key"} for side in ("a", "b")}}
         kwargs["on_verified"](facts)
@@ -287,7 +290,7 @@ def test_trade_oracle_wrapper_passes_frozen_inputs_and_requires_scope(monkeypatc
 
     monkeypatch.setitem(sys.modules, "gen2_trade_oracles", SimpleNamespace(_one=oracle._one, trade_oracle=checked))
     if bad_scope:
-        with pytest.raises(RuntimeError, match="harness scope"):
+        with pytest.raises(RuntimeError, match="production scope"):
             run.assert_gen2_trade_saved(results)
         return
     assert run.assert_gen2_trade_saved(results) == "verified"
@@ -310,7 +313,7 @@ def test_trade_oracle_wrapper_passes_frozen_inputs_and_requires_scope(monkeypatc
         assert Path(refs["events"]["path"]).read_bytes() == events
     else:
         assert "reconciliation" not in tx
-    assert run._gen2_verified_facts["admission_scope"] == "HARNESS_ONLY_OVERLAY"
+    assert run._gen2_verified_facts["admission_scope"] == "PHYSICAL_RECEIPTED"
 
 
 def test_trade_witness_wrapper_receives_actual_case_and_overlay_pins(monkeypatch, tmp_path):
@@ -381,10 +384,10 @@ def test_trade_route_facts_come_from_the_errand_spec(monkeypatch, tmp_path):
     monkeypatch.setitem(run_gb_gate.GENS["gen2"], "plan", lambda *a: {"env": {}})
     run._prepare_gen2_trade_manifest = lambda: (setattr(run, "_gen2_trade_manifest_path", tmp_path / "m.json"),
                                                 setattr(run, "_gen2_trade_manifest_sha256", "0" * 64))
-    monkeypatch.setattr(gen2_source_data, "load_context", lambda *a, **k: None)
+    monkeypatch.setattr(gen2_fixtures, "exec_context", lambda *a, **k: None)
     monkeypatch.setattr(gen2_fixtures, "route_facts", lambda *a, **k: pytest.fail("title route facts for an errand"))
     seen = []
-    monkeypatch.setattr(gen2_fixtures, "spec_route_facts", lambda spec, root=None: seen.append(spec.name) or {})
+    monkeypatch.setattr(gen2_fixtures, "spec_route_facts", lambda spec, root=None, **kwargs: seen.append(spec.name) or {})
     monkeypatch.setattr(gates, "inspect_env", lambda *a, **k: {"SLINK_GEN2_FIXTURE_CASE": "{}"})
     monkeypatch.setattr(align, "u1_facts", lambda *a: {})
     monkeypatch.setattr(gen2_trade_facts, "trade_facts", lambda title, root=None: {"title": title})

@@ -1,0 +1,153 @@
+{
+  "schema": "fixture-qualification-v1",
+  "scope": "full",
+  "required_stages": [
+    "qualify",
+    "boot",
+    "resave",
+    "post_oracle"
+  ],
+  "attempt_id": "r2q8",
+  "fixtures": [
+    {
+      "name": "crystal_battle_errand",
+      "passed": true,
+      "artifacts": {
+        "fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\tests\\fixtures\\gen2\\crystal_battle_errand.SaveRAM",
+          "size": 32790,
+          "sha256": "f6a2bd95e1a3f4de2b981ed2f728e9846eb26330d8a70f1e81416e054ee8f7c3"
+        },
+        "profile": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\data\\games\\gen2_crystal\\profile.json",
+          "size": 81562,
+          "sha256": "8dbb170b3162566606df833a6edd85d3d39501fd71d9fd77d4da47344d7e6e47"
+        },
+        "rom": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\crystal_overlay.gbc",
+          "size": 2097152,
+          "sha256": "e8967d0a3d9d3a095d19c2f0f8ac31cb3321c9d32788be72467c9cd06448c7e0"
+        },
+        "route_facts": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\crystal_route_facts.json",
+          "size": 22777,
+          "sha256": "d6fa5225e959d58fe85236828d579b686573db7c8dff7c25d0dcd49220b95fb1"
+        },
+        "played_receipt": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\crystal_battle_errand.clean_qualification_ref.json",
+          "size": 412,
+          "sha256": "f783bbfc6b4f41a601f731d857c4e36d7c3e48c1d6b157f9777b100dbb6099c6"
+        },
+        "boot:game_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\boot-0bc18aa9e95aba52\\crystal_battle_errand.boot.witness.json",
+          "size": 1956,
+          "sha256": "3a7add2cecc279abee6a954a8986b5fb99a165dd3e14675aa974ea28dba8101c"
+        },
+        "resave:fixture": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\resave-6410574f74ddef73\\crystal_battle_errand.resaved.SaveRAM",
+          "size": 32790,
+          "sha256": "f43fe361c4f5fdd56d5ff5ffa2447fa6189a1e39747a89e79555d629c9c77ae3"
+        },
+        "resave:save_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\resave-6410574f74ddef73\\crystal_battle_errand.resave.witness.json",
+          "size": 2080,
+          "sha256": "5425f14ac6f5c32d1a73e27dd089e6f16414b7302579363ea26dfbd237dc80f9"
+        },
+        "resave:reload_witness": {
+          "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\reload-6410574f74ddef73\\crystal_battle_errand.reload.witness.json",
+          "size": 1958,
+          "sha256": "86bab61d645dd00adb4f7a8f7c3697f5e869a4949f738534e0694c17e830ed9b"
+        }
+      },
+      "provenance": {
+        "title": "crystal",
+        "rom_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00",
+        "scope": "candidate fixture",
+        "route_facts_sha256": "1b88045c521ac91fd2893926926e67009ca5e45f2fa5c60019c33ad93cdd60d9"
+      },
+      "stages": [
+        {
+          "stage": "qualify",
+          "fingerprint": "364f7dcbf5209f00714876f37a136a083e3253fff97e386ad567402092ca27cd",
+          "status": "PASS",
+          "problems": [],
+          "notes": [
+            "Static bytes do not prove played origin, RTC or GAME qualification."
+          ],
+          "evidence": {
+            "oracle": "independent Gen2 PYDEC",
+            "player_id": "46401",
+            "ball_origin": "O-10 harness injection",
+            "natural_ball_acquisition": "false"
+          }
+        },
+        {
+          "stage": "boot",
+          "fingerprint": "0bc18aa9e95aba526f1bc07a8d7544055e232420cc1f68a2c593a9b954bfa6c8",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME CONTINUE",
+            "location": "[24, 3]",
+            "position": "[53, 12]",
+            "cartram_sha256": "475164616b507792f91e19d3bc219f54fa89d01fa576d5afe1babc9161ac73c4"
+          },
+          "outputs": {
+            "boot:game_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\boot-0bc18aa9e95aba52\\crystal_battle_errand.boot.witness.json",
+              "size": 1956,
+              "sha256": "3a7add2cecc279abee6a954a8986b5fb99a165dd3e14675aa974ea28dba8101c"
+            }
+          }
+        },
+        {
+          "stage": "resave",
+          "fingerprint": "6410574f74ddef730ab6b1965c4eac5bfd37834f47afbeb3f547fbabef5402cc",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "observer": "independent_GAME re-save + reload",
+            "resave_cartram_sha256": "848a240cc2b6611347d251ded9728d208655b81e37c7b6f8d1b04c67ec1fa085"
+          },
+          "outputs": {
+            "resave:fixture": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\resave-6410574f74ddef73\\crystal_battle_errand.resaved.SaveRAM",
+              "size": 32790,
+              "sha256": "f43fe361c4f5fdd56d5ff5ffa2447fa6189a1e39747a89e79555d629c9c77ae3"
+            },
+            "resave:save_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\resave-6410574f74ddef73\\crystal_battle_errand.resave.witness.json",
+              "size": 2080,
+              "sha256": "5425f14ac6f5c32d1a73e27dd089e6f16414b7302579363ea26dfbd237dc80f9"
+            },
+            "resave:reload_witness": {
+              "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\mandatory-rom-patch-3fcfda\\.cache\\gen2-fixtures\\r2q8\\crystal_battle_errand\\qualify-overlay\\reload-6410574f74ddef73\\crystal_battle_errand.reload.witness.json",
+              "size": 1958,
+              "sha256": "86bab61d645dd00adb4f7a8f7c3697f5e869a4949f738534e0694c17e830ed9b"
+            }
+          }
+        },
+        {
+          "stage": "post_oracle",
+          "fingerprint": "68e57087aaa2de5a6e5815ea9dc3cde607c81c8c936433bbbe9ca6a9ccd90f3b",
+          "status": "PASS",
+          "problems": [],
+          "notes": [],
+          "evidence": {
+            "oracle": "independent re-save PYDEC + GAME raw-party witness"
+          }
+        }
+      ],
+      "problems": []
+    }
+  ],
+  "errors": [],
+  "passed": true,
+  "physical_qualification": false,
+  "open_obligations": [
+    "coordinator GAME/RTC/played-origin review",
+    "recorded source/physical gate sign-off"
+  ]
+}

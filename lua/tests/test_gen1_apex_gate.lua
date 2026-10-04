@@ -72,12 +72,27 @@ local function move_to(row)
     end
     return menu_cur() == row
 end
-local START_MAX = F.MENU.START.save_index_without_pokedex + F.MENU.START.max_minus_save  -- 5 on pureRGB
+-- Reuse the scripted host's title-specific symbols and the shared event-bit decoder.
+local play = dofile(t.ROOT .. "/lua/tests/gen1_scripted_play.lua").new(t.ROOT, t.title, t.client.player)
+local fields = dofile(t.ROOT .. "/lua/tests/gen1_rb_point_fields.lua")
+local read_bus = dofile(t.ROOT .. "/lua/gen1/entry.lua").harness_bus_u8()
+local function start_shape()
+    local dex = fields.event_bit(read_bus, assert(play.symbols.wEventFlags), F.EVENT.GOT_POKEDEX)
+    local companion = t.client.trade_enabled == true
+    local menu = F.MENU.START
+    local save = dex and menu.save_index_with_pokedex or menu.save_index_without_pokedex
+    -- Pokédex prepends a row; SLINK appends one without moving ITEM.
+    return save + menu.max_minus_save + (companion and 1 or 0), dex and 2 or 1, dex, companion
+end
 local function use_chip_on_slot1(tag)
     local bag0 = bag_count()
+    local start_max, item_row, dex, companion = start_shape()
     tap("Start", 30)
-    t.check(tag .. ": START menu open", wait_menu(START_MAX, 120), menu_state())
-    move_to(1); tap("A", 30)                              -- ITEM
+    local opened = wait_menu(start_max, 120)
+    t.log(fmt("START_SHAPE %s pokedex=%s companion=%s expected_max=%d observed_max=%d item_row=%d",
+              tag, tostring(dex), tostring(companion), start_max, menu_max(), item_row))
+    t.check(tag .. ": START menu open", opened, menu_state())
+    move_to(item_row); tap("A", 30)                       -- ITEM
     t.check(tag .. ": item list open", wait_menu(1, 120), menu_state())  -- APEX CHIP + CANCEL
     move_to(0); tap("A", 30)                              -- select the chip -> USE/TOSS
     t.check(tag .. ": USE/TOSS submenu", wait_menu(1, 120) and menu_cur() == 0, menu_state())

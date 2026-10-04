@@ -1,0 +1,70 @@
+# gen3_final_cut row=frlgc_center_controls_gen3_lg_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_lgfr --scenario center_controls_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T04:04:16 cpu=50% emuhawk=2 python=8
+start_utc=2026-10-03T08:04:15Z tracked_clean_before=True
+
+========== scenario: center_controls_gen3 ==========
+[duo] center_controls_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae b=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=58143 http=58144 data=F:\slink-work\tmp\duo_u_97fie6
+[duo] timing server 1.1s
+[duo] cleared 6 stale artifact(s) for center_controls_gen3: e2e_center_controls_gen3_a_1_witness.bin, e2e_center_controls_gen3_a_attempt1_result.txt, e2e_center_controls_gen3_a_result.txt, e2e_center_controls_gen3_b_attempt1_result.txt, e2e_center_controls_gen3_b_result.txt, e2e_center_controls_gen3_pydec_attempt1_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_u_97fie6 path=F:\slink-work\tmp\duo_u_97fie6\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_u_97fie6 path=F:\slink-work\tmp\duo_u_97fie6\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=BC73F9B0:1C600D89 b=2D356A90:99DE0D8A
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F6B6A64D:1C600D89 <-> 263620B6:99DE0D8A
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'box_mon', 'key': 'F6B6A64D:1C600D89'}
+[duo] queued for a: {'cmd': 'party_mon', 'key': 'F6B6A64D:1C600D89', 'stats': {'attack': 8, 'defense': 6, 'level': 3, 'maxHP': 15, 'pp1': 35, 'pp2': 30, 'pp3': 0, 'pp4': 0, 'spAtk': 6, 'spDef': 7, 'speed': 9}}
+[duo] timing orchestrate 49.9s
+[duo] timing results 4.0s
+[duo] RESULT_LINE a: RESULT: PASS (the cable menu, the Cable Club save prompt, the cable link wait and the Union Room attendant each held a keyed probe; each landed once released)
+[duo] RESULT_LINE b: RESULT: PASS (idle (center_controls drives only A))
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_frlg/leafgreen (companion by hash) player a -> 127.0.0.1:58143 (rom 55fb6e9b)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_frlg/firered (companion by hash) player b -> 127.0.0.1:58143 (rom 96df1dd0)
+[duo] SAVE_WITNESS_SHA256 inst=a site=378f5af2eb2a5abd14afd4e0ca82394d31ec448ed9b2534aa7755500206b9953 file=378f5af2eb2a5abd14afd4e0ca82394d31ec448ed9b2534aa7755500206b9953 match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] center_controls: F6B6A64D:1C600D89 held at the Cable Club menu, the cable link wait and the Union Room attendant; landed once released
+[duo] MARKER a: WITNESS cable_welcome_message script=CableClub_EventScript_WelcomeToCableClub at=scriptPtr var_result=0 adapter_connected=false(observed: IsWirelessAdapterConnected's VAR_RESULT)
+[duo] MARKER a: CONTROL_LIVE cable_welcome_message F6B6A64D:1C600D89 map=5.5 at=(10,4) frame=9686 tasks=[08079DE1,0806E811,0806E83D,08069371] storage_state=-1 script_status=0 result=0 menu_cursor=0 cpu=[R15=0x080008B2,CPSR=0x4000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202937C,gSaveBlock1Ptr=0x02025594,gSaveBlock2Ptr=0x020245F0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x0!,soft_reset_disabled=0x0]
+[duo] MARKER a: RX box_mon key=F6B6A64D:1C600D89
+[duo] MARKER a: CONTROL_REFUSED cable_welcome_message box_mon F6B6A64D:1C600D89 clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=5.5 at=(10,4) frame=10353 tasks=[08079DE1,0806E811,0806E83D,08069371] storage_state=-1 script_status=0 result=0 menu_cursor=0 cpu=[R15=0x080008B0,CPSR=0x0000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202937C,gSaveBlock1Ptr=0x02025594,gSaveBlock2Ptr=0x020245F0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x0!,soft_reset_disabled=0x0]
+[duo] MARKER a: CONTROL_LIVE cable_save F6B6A64D:1C600D89 map=5.5 at=(10,4) frame=10578 tasks=[08079DE1,0806E811,0806E83D,0806F6D5] storage_state=-1 script_status=1 result=1 menu_cursor=0 cpu=[R15=0x08005C46,CPSR=0x6000003F,R14=0x08005BF5!] ptrs=[gPokemonStoragePtr=0x0202937C,gSaveBlock1Ptr=0x02025594,gSaveBlock2Ptr=0x020245F0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x1!,soft_reset_disabled=0x0]
+[duo] MARKER a: CONTROL_REFUSED cable_save box_mon F6B6A64D:1C600D89 clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=5.5 at=(10,4) frame=11178 tasks=[08079DE1,0806E811,0806E83D,0806F6D5] storage_state=-1 script_status=1 result=1 menu_cursor=0 cpu=[R15=0x080008B0,CPSR=0x0000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202937C,gSaveBlock1Ptr=0x02025594,gSaveBlock2Ptr=0x020245F0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x1!,soft_reset_disabled=0x0]
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_center_controls_gen3_a_1_witness.bin bytes=131072 saves=1 frame=11841 counter=5
+[duo] MARKER a: CONTROL_LIVE cable_link F6B6A64D:1C600D89 map=5.5 at=(10,4) frame=12162 tasks=[08079DE1,0806E811,0806E83D,08080A21] storage_state=-1 script_status=1 result=1 menu_cursor=0 cpu=[R15=0x080008AE,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202937C,gSaveBlock1Ptr=0x02025594,gSaveBlock2Ptr=0x020245F0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x1!,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x1!,soft_reset_disabled=0x0]
+[duo] MARKER a: CONTROL_REFUSED cable_link box_mon F6B6A64D:1C600D89 clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=5.5 at=(10,4) frame=12762 tasks=[08079DE1,0806E811,0806E83D,08080A21] storage_state=-1 script_status=1 result=1 menu_cursor=0 cpu=[R15=0x0000001C,CPSR=0x60000092,R14=0x080008AE!] ptrs=[gPokemonStoragePtr=0x0202937C,gSaveBlock1Ptr=0x02025594,gSaveBlock2Ptr=0x020245F0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x1!,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x1!,soft_reset_disabled=0x0]
+[duo] MARKER a: CABLE_CALLBACK_NULL limit=no-cable-partner held_frames=601 open_frames=601 null_frames=0 callback=0x0800A721:LinkCB_RequestPlayerDataExchange
+[duo] MARKER a: CONTROL_RELEASED cable_link box_mon F6B6A64D:1C600D89
+[duo] MARKER a: TX stats_cache F6B6A64D:1C600D89 {"event":"stats_cache","key":"F6B6A64D:1C600D89","player":"a","seq":409,"stats":{"attack":8,"defense":6,"level":3,"maxHP":15,"pp1":35,"pp2":30,"pp3":0,"pp4":0,"spAtk":6,"spDef":7,"speed":9}}
+[duo] MARKER a: BOXED_OBSERVED F6B6A64D:1C600D89 box=0:0
+[duo] MARKER a: CONTROL_SETTLED cable_link box_mon F6B6A64D:1C600D89
+[duo] MARKER a: WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected at=stack[1] var_result=0 adapter_connected=false(observed: IsWirelessAdapterConnected's VAR_RESULT)
+[duo] MARKER a: CONTROL_LIVE union_room_attendant F6B6A64D:1C600D89 map=5.5 at=(6,4) frame=13159 tasks=[08079DE1,0806E811,0806E83D,08069371] storage_state=-1 script_status=0 result=0 menu_cursor=0 cpu=[R15=0x080008B2,CPSR=0x4000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x0202937C,gSaveBlock1Ptr=0x02025594,gSaveBlock2Ptr=0x020245F0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x0!,soft_reset_disabled=0x0]
+[duo] MARKER a: RX party_mon key=F6B6A64D:1C600D89
+[duo] MARKER a: CONTROL_REFUSED union_room_attendant party_mon F6B6A64D:1C600D89 clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=5.5 at=(6,4) frame=13802 tasks=[08079DE1,0806E811,0806E83D,08069371] storage_state=-1 script_status=0 result=0 menu_cursor=0 cpu=[R15=0x0000001C,CPSR=0x60000092,R14=0x080008AE!] ptrs=[gPokemonStoragePtr=0x0202937C,gSaveBlock1Ptr=0x02025594,gSaveBlock2Ptr=0x020245F0] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x0!,soft_reset_disabled=0x0]
+[duo] MARKER a: CONTROL_RELEASED union_room_attendant party_mon F6B6A64D:1C600D89
+[duo] MARKER a: TX sync_retrieve_done F6B6A64D:1C600D89 {"event":"sync_retrieve_done","key":"F6B6A64D:1C600D89","player":"a","seq":454}
+[duo] MARKER a: RETURNED_OBSERVED F6B6A64D:1C600D89 slot=1
+[duo] MARKER a: CONTROL_SETTLED union_room_attendant party_mon F6B6A64D:1C600D89
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] center_controls_gen3: a=PASS b=PASS
+
+========== summary ==========
+  center_controls_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-10-03T08:05:13Z tracked_clean_after=True classification=pass

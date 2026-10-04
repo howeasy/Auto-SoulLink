@@ -9,12 +9,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _capture_model(catch_on=0, stock=20):
     source = (ROOT / "lua/tests/duo/duo_gen3_main.lua").read_text(encoding="utf-8")
-    body = source[source.index("function ctx.catch("):source.index("--- Keep choosing a no-damage move")]
+    # from the exemption list (ctx.caught_key and its window constant sit just above ctx.catch) through ctx.catch
+    body = source[source.index("ctx.catch_without_capture_event = {}"):source.index("--- Keep choosing a no-damage move")]
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     lua.execute('''
         title="firered"; cp={}; S={gBattleOutcome=0,gActionSelectionCursor=1}; ACTION_BAG=1; B_OUTCOME_CAUGHT=7
         fmt=string.format; ctrl0=function() return 0x12345679 end
-        spent=0; in_battle=true; settled_in_battle=false; boot_keys={}; logs={}
+        spent=0; in_battle=true; settled_in_battle=false; boot_keys={}; logs={}; D={scenario="model"}
         log=function(s) logs[#logs+1]=s end
         ctx={hunt=function() return true end, balls=function() return stock-spent end,
              choose_action=function() return true end, bag_input_ready=function() return true end,
@@ -24,6 +25,7 @@ def _capture_model(catch_on=0, stock=20):
                  return "action"
              end,
              last_sent=function() return {key="caught"} end, party=function() return {} end,
+             sent=function() return spent>0 and 1 or 0 end, frames=function() end,
              battler_slot=function() return 0 end,
              run_away=function() in_battle=false; return true end}
         SP={verify_fight_cursor=function() return in_battle and "action" or nil end,
@@ -73,6 +75,24 @@ def test_capture_of_an_observed_encounter_does_not_hunt_again():
     lua = _capture_model(catch_on=1)
     lua.globals().ctx.hunt = lua.eval('function() error("a second hunt discarded the observed foe") end')
     assert lua.globals().ctx.catch("already at the native battle menu", True) == "caught"
+
+
+@pytest.mark.parametrize("expected_ball", (None, 4))
+def test_emerald_capture_forwards_the_optional_expected_ball(expected_ball):
+    lua = _capture_model(catch_on=1)
+    lua.globals().requested_ball = expected_ball
+    lua.execute('''
+        EMERALD_ENGINE=true; helper_calls=0
+        ctx.hunt=function() error("already observed encounter must not hunt again") end
+        SP.EMH={throw_ball=function(cp,label,expected_ball)
+            assert(expected_ball==requested_ball, "ctx.catch lost its requested ball")
+            helper_calls=helper_calls+1; spent=spent+1; return true
+        end}
+    ''')
+    catch = lua.globals().ctx.catch
+    result = catch("explicit ball", True) if expected_ball is None else catch("explicit ball", True, expected_ball)
+    assert result == "caught"
+    assert lua.globals().helper_calls == lua.globals().spent == 1
 
 
 def test_lead_faint_answers_use_next_yes_switches_and_keeps_throwing():

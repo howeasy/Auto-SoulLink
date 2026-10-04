@@ -1,0 +1,64 @@
+phase start frame=1 title=emerald_expansion_28877d73
+phase resume frame=1 from=emerald_enter_pc
+phase shadow frame=613 observer started admitted_by=hash
+phase leg-start frame=613 emerald_enter_pc
+phase emerald_enter_pc-start frame=613 at (6,17)
+phase in-pc frame=733 map=514 at=(7,8)
+phase leg-state-saved frame=733 emerald_enter_pc -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private\states/slink_em_emerald_enter_pc.State
+phase leg-done frame=733 emerald_enter_pc
+phase leg-start frame=733 emerald_pc_deposit
+phase pc-exit frame=1537 step=1 tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=1643 step=2 tasks=[081CFD65] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=1749 step=3 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,081CE6ED] storage_state=-1 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=1855 step=4 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,08140325] storage_state=-1 script_status=0 result=0 menu_cursor=1
+phase pc-exit frame=1887 owner list closed cancel_seen=true tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase deposited frame=1887 party 2 -> 1, 504F4F4D:20250925 now box 0 slot 2
+phase leg-state-saved frame=1887 emerald_pc_deposit -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private\states/slink_em_emerald_pc_deposit.State
+phase leg-done frame=1887 emerald_pc_deposit
+phase leg-start frame=1887 emerald_pc_withdraw
+phase pc-exit frame=2533 step=1 tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=2639 step=2 tasks=[081CFD65] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=2745 step=3 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,081CE6ED] storage_state=-1 script_status=1 result=0 menu_cursor=2
+phase pc-exit frame=2851 step=4 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,08140325] storage_state=-1 script_status=0 result=0 menu_cursor=2
+phase pc-exit frame=2883 owner list closed cancel_seen=true tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase withdrawn frame=2883 party 1 -> 2, 5A49476A:20250925 left box 0 slot 0
+phase leg-state-saved frame=2883 emerald_pc_withdraw -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private\states/slink_em_emerald_pc_withdraw.State
+phase leg-done frame=2883 emerald_pc_withdraw
+phase leg-start frame=2883 emerald_pc_box_place
+phase pc-exit frame=3489 step=1 tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=3595 step=2 tasks=[081CFD65] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=3701 step=3 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,081CE6ED] storage_state=-1 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=3807 step=4 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,08140325] storage_state=-1 script_status=0 result=0 menu_cursor=0
+phase pc-exit frame=3839 owner list closed cancel_seen=true tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase placed frame=3839 57555251:20250925 box 0 slot 1 -> slot 0, bytes identical
+phase leg-state-saved frame=3839 emerald_pc_box_place -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private\states/slink_em_emerald_pc_box_place.State
+phase leg-done frame=3839 emerald_pc_box_place
+phase leg-start frame=3839 emerald_pc_release
+phase pc-exit frame=4651 step=1 tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=4757 step=2 tasks=[081CFD65] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=4863 step=3 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,081CE6ED] storage_state=-1 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=4969 step=4 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,08140325] storage_state=-1 script_status=0 result=0 menu_cursor=1
+phase pc-exit frame=5001 owner list closed cancel_seen=true tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase released frame=5001 party 2 -> 1, 5A49476A:20250925 gone from party and all 14 boxes
+phase leg-state-saved frame=5001 emerald_pc_release -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private\states/slink_em_emerald_pc_release.State
+phase leg-done frame=5001 emerald_pc_release
+phase leg-start frame=5001 emerald_save_town
+phase emerald_save_town-start frame=5001 at (10,2)
+phase save-menu frame=5001 counter=2
+phase save-dialog frame=5061 row=3/6
+phase saved frame=5461 counter=2->3
+phase flushed frame=5813 map=514 at=(10,2)
+phase leg-state-saved frame=5813 emerald_save_town -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private\states/slink_em_emerald_save_town.State
+phase leg-done frame=5813 emerald_save_town
+phase leg-start frame=5813 emerald_pc_move_release_bypass
+phase pc-exit frame=6641 step=1 tasks=[081D188D] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=6747 step=2 tasks=[081CFD65] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=6853 step=3 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,081CE6ED] storage_state=-1 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=6959 step=4 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED,08140325] storage_state=-1 script_status=0 result=0 menu_cursor=0
+phase pc-exit frame=6991 owner list closed cancel_seen=true tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase bypassed frame=6991 ReleaseMon took the moved-mon flag-clear branch: 57555251:20250925 (grabbed from box 0 slot 0) is gone from every box, party unchanged at 1
+phase note frame=6991 the observer must show pc_release_begin ABSENT and pc_release PRESENT UNPAIRED across this window (tests/unit/test_gen3_exp_pc_negative_legs.py asserts it with a liveness sibling); the client's 'nothing reported' half needs a DUO leg
+phase leg-state-saved frame=6991 emerald_pc_move_release_bypass -> C:\slink-wt\exp-xg3\patch\build\exp_pc_observer_private\states/slink_em_emerald_pc_move_release_bypass.State
+phase leg-done frame=6991 emerald_pc_move_release_bypass
+phase leg-start frame=6991 emerald_pc_release_cancel
+RESULT: FAIL emerald_pc_release_cancel: precondition: box 0 slot 0 occupied (in-chain after emerald_save_town; a cold boot has the fixture's own box)

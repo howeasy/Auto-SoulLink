@@ -1,0 +1,83 @@
+DEV SOURCE=73fa445f50cdd5a105779c6b0e957c7e17a799c8; acquisition PHYSICAL + independent PYDEC; no final-cut claim
+
+========== scenario: gift_gen3 ==========
+[duo] gift_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=785ea537dc3437f19790c3e2647e8c39e9cd5ff1eb9e09c48b93b587fe495142 b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=489c6a1a341fd8cd813f75ba573f3605f1861951167f1cccc6708cdef26cbc92 write_checkpoint.json=b809371beb3c4ff326bb16e03beda29cfa4434f074e807cc87218dbafb455e4b profile.json=2f95498ecf65d3a70d8ac2b1bec1873d280b663e9568044be844c2975b77f353 source=73fa445f50cdd5a105779c6b0e957c7e17a799c8+dirty dirty=[docs/gen3_emerald/probes/exp_acq_gift_gen3_73fa445f_dev_console.txt]
+[duo] server up: tcp=62559 http=62560 data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_z1wyeyhq
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 14:57:23,351 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 14:57:23,351 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_z1wyeyhq path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_z1wyeyhq\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.5s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_z1wyeyhq path=C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_z1wyeyhq\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.5s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 65.6s
+[duo] RESULT_LINE a: RESULT: FAIL (native acquisition TX missing or duplicated)
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before a: native acquisition ready
+[duo] gift_gen3: a client finished before 'a: native acquisition ready' (a: RESULT: FAIL (native acquisition TX missing or duplicated); b: no RESULT)
+--- gift_gen3 a result (last 25 lines) ---
+SYMS_ABSENT emerald_expansion_28877d73 Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder,gActiveBattler,gStatuses3
+TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)
+[client] [SLink] TCP connecting to 127.0.0.1:62559 (non-blocking)…
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+[client] [SLink-gen3] gen3_exp/emerald_expansion_28877d73 (clean by hash) player a -> 127.0.0.1:62559 (rom 28877d73)
+client built by lua/gen3/run.lua: title=emerald_expansion_28877d73 player=a -> 127.0.0.1:62559
+[client] [SLink] TCP connected to 127.0.0.1:62559
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"mossdeep_city_stevens_house","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_exp","has_pokeballs":true,"in_battle":false,"loc_na
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=610 map=(14,7)
+MYKEY 0 4D55444B:20250925
+PARTY slot=0 key=4D55444B:20250925 species=258 level=5 hp=20/20
+MYKEY 1 504F4F4D:20250925
+PARTY slot=1 key=504F4F4D:20250925 species=261 level=3 hp=15/15
+booted frame=610 map=map=3591 at=(3,3) balls=5
+JITTER requested=0 applied=0 attempt=1
+ACQUISITION_BEFORE {"balls":5,"captures":0,"count":2,"egg":0}
+TIMEOUT waiting for production acquisition TX [tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D] storage_state=-1 script_status=2 result=0 menu_cursor=0]
+WRITES 0
+RESULT: FAIL (native acquisition TX missing or duplicated)
+--- gift_gen3 b result (last 25 lines) ---
+duo instance b scenario=gift_gen3 phase=initial title=emerald_expansion_28877d73 attempt=1
+speedmode requested=300 call=ok
+SYMS_ABSENT emerald_expansion_28877d73 Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder,gActiveBattler,gStatuses3
+TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)
+[client] [SLink] TCP connecting to 127.0.0.1:62559 (non-blocking)…
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+TEST-ONLY admission of gen3_exp/emerald_expansion_28877d73 (pre-XG; production refuses)
+[client] [SLink-gen3] gen3_exp/emerald_expansion_28877d73 (clean by hash) player b -> 127.0.0.1:62559 (rom 28877d73)
+client built by lua/gen3/run.lua: title=emerald_expansion_28877d73 player=b -> 127.0.0.1:62559
+[client] [SLink] TCP connected to 127.0.0.1:62559
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"mossdeep_city_stevens_house","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_exp","has_pokeballs":true,"in_battle":false,"loc_na
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=610 map=(14,7)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=258 level=5 hp=20/20
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=261 level=3 hp=15/15
+booted frame=610 map=map=3591 at=(3,3) balls=5
+JITTER requested=0 applied=0 attempt=1
+ACQUISITION_BEFORE {"balls":5,"captures":0,"count":2,"egg":0}
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_gift_gen3_z1wyeyhq
+
+========== summary ==========
+  gift_gen3: FAIL (attempt 1 of 1)
+
+exit=1

@@ -281,7 +281,7 @@ def _gen3_client_over(rt, net):
     repo_posix = _REPO.replace("\\", "/")               # embedded in Lua string literals below
 
     profile = pack_json("gen3_frlg", "profile.json")["titles"]["firered"]
-    sites = pack_json("gen3_frlg", "engine_signals.json")["titles"]["firered"]["artifacts"]["clean"]["sites"]
+    sites = pack_json("gen3_frlg", "engine_signals.json")["titles"]["firered"]["artifacts"]["companion"]["sites"]
     wc = pack_json("gen3_frlg", "write_checkpoint.json")["firered"]
 
     rom: dict[int, int] = {}
@@ -289,7 +289,7 @@ def _gen3_client_over(rt, net):
         for i, b in enumerate(bytes.fromhex(site["expected_hex"])):
             rom[site["rom_offset"] + i] = b
     for anchor in wc["anchors"].values():
-        for i, b in enumerate(bytes.fromhex(anchor["expected_hex"]["clean"])):
+        for i, b in enumerate(bytes.fromhex(anchor["expected_hex"]["companion"])):
             rom[anchor["rom_offset"] + i] = b
 
     bus: dict[int, int] = {}
@@ -327,7 +327,7 @@ def _gen3_client_over(rt, net):
     Entry = rt.eval(f'dofile("{repo_posix}/lua/gen3/entry.lua")')
     client, _parts = Entry.build(L.table(
         root=repo_posix, mode="production", io=io_, ev=ev, net=net, hud=hud,
-        pack="gen3_frlg", title="firered", kind="clean", player="a",
+        pack="gen3_frlg", title="firered", kind="companion", player="a",
         rom_sha1="ab" * 20, log=lambda t: None,
     ))
 

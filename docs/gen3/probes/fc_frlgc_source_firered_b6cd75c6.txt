@@ -1,0 +1,12 @@
+# gen3_final_cut row=frlgc_source_firered item=FRLGC-SOURCE cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/gen3_final_cut.py companion-check --lane F:/slink-work/lanes/gen3/gen3-lane-clean --title firered   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T03:46:18 cpu=13% emuhawk=1 python=7
+start_utc=2026-10-03T07:46:17Z tracked_clean_before=True
+firered: SLink-FireRed.ups on the clean dump (41cb23d8dccc) == patch/build/slink_FireRed.gba sha1 96df1dd019b7ec5515b65ab26c82a251f47eb06d md5 680f3b607ca7926ac747b43f6333ed42
+RESULT: PASS firered staged companion is the pinned composition
+exit=0 end_utc=2026-10-03T07:46:20Z tracked_clean_after=True classification=pass

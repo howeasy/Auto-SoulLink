@@ -87,6 +87,10 @@ function Client.new(p)
     local c = profile.constants
     local arr = json.array -- tag lists so an empty one encodes as [] not {}
 
+    -- D5: the kind is the admission decision's (lua/gen2/entry.lua); anything else would run a trade or a hello as a
+    -- kind the server never admitted.
+    assert(p.artifact_kind == nil or p.artifact_kind == "clean" or p.artifact_kind == "overlay",
+           "artifact_kind must be clean or overlay")
     local self = {
         player = p.player, rom_type = p.rom_type, rom_sha1 = p.rom_sha1,
         -- Gen 2: one pairing foundation for all three packs (O-16; gen2_gsc.py game_id)
@@ -510,7 +514,11 @@ function Client.new(p)
         local c_ = cmd.cmd
         if c_ == "noop" then return end
         -- P4.5c: an optional "phone" tag rides force_faint/msgbox; phone.lua drops it off a phone build
-        if phone and cmd.phone ~= nil then phone:request(cmd.phone, cmd.phone_data) end -- + PHONE-NAMES
+        -- Phone calls are their own run switch, default ON (owner 2026-10-02), not native_messages:
+        -- only an explicit phone_calls=false silences the ring; the HUD prompt below always shows.
+        if phone and cmd.phone ~= nil and not (self.config and self.config.phone_calls == false) then
+            phone:request(cmd.phone, cmd.phone_data) -- + PHONE-NAMES
+        end
         self.arrivals = self.arrivals + 1 -- Gen 1 parity: every command's arrival order (defer_held)
         if c_ == "force_faint" or c_ == "force_explode" then
             -- W-3: force_explode rides the same queue; only the active battler at the battle hold explodes
@@ -1030,6 +1038,24 @@ function Client.new(p)
         local _, mon = find_party_slot(cmd.key, cmd.cmd == "memorialize" and cmd.cmd or nil)
         if mon and cmd.cmd == "memorialize" then phys = mon_key(mon) end
         local name = nick_label(cmd.key, cmd.nickname or (mon and mon.nickname))
+        -- INVARIANT (gen2-box-durability, BOX-MEMORIAL-2): a settle already waiting for a key owns it until the next
+        -- native save. The server re-sends a command until it is acked, and a duplicate that reached the box executor
+        -- would act on the half-done state: a memorial would report done (memorial copy made, volatile active source
+        -- gone) and ack before the save made it durable; a withdraw would delete its DURABLE backing copy before the
+        -- save persisted the party (a reset then loses the mon). Matched by the resolved physical key AND, for a
+        -- memorial, by the server's own key (the alias that resolved `phys` can be reset while the settle waits).
+        local function waiting(memorial)
+            for _, s in ipairs(self.settle) do
+                if memorial and s.memorial and (s.key == phys or s.memorial.key == cmd.key) then return s end
+                if not memorial and not s.memorial and s.key == phys then return s end
+            end
+        end
+        local function note_duplicate(s)
+            if not s.duplicate_logged then
+                s.duplicate_logged = true
+                log("[SLink-gen2] " .. cmd.cmd .. " " .. cmd.key .. ": a settle for this key is already waiting for the save")
+            end
+        end
         if cmd.cmd == "box_mon" then
             if mon then send("stats_cache", { key = cmd.key, stats = { level = mon.level, maxHP = mon.max_hp } }) end
             local done, why = boxes.deposit(phys)
@@ -1045,6 +1071,12 @@ function Client.new(p)
                 hud.show("X Box fail: " .. name, 255, 80, 80, 240)
             end
         elseif cmd.cmd == "party_mon" then
+            local pending = waiting(false)
+            if pending then
+                note_duplicate(pending)
+                send("sync_retrieve_done", { key = cmd.key })   -- re-acked (the mon IS in the party); nothing re-run
+                return
+            end
             local done, why = boxes.withdraw(phys, { defer_backing = true })
             if done and why then
                 -- F1: the backing copy stays until a native SAVE persists the party (never a loss)
@@ -1068,13 +1100,17 @@ function Client.new(p)
                 send("sync_retrieve_failed", { key = cmd.key, reason = tostring(why) })
             end
         else
+            -- a repeated memorialize must NOT reach the box executor while its burial waits: with the memorial copy made
+            -- and the volatile active-box source already removed it reports a plain done, and the client would ack
+            -- memorialize_done before the native save made the removal durable (sweep ffd54b44, gen2_pc_ops)
+            local pending = waiting(true)
+            if pending then return note_duplicate(pending) end
             local done, why = boxes.memorialize(phys)
             if done and why then
-                -- BOX-MEMORIAL-2: a boxed memorial that touched the volatile active sBox is not durable until
+                -- a boxed memorial that touched the volatile active sBox is not durable until
                 -- a native save; memorialize_done waits for the settle after the save witness
                 self.pending_rescan = true
                 log("[SLink-gen2] memorialize " .. cmd.key .. ": " .. why)
-                for _, s in ipairs(self.settle) do if s.memorial and s.key == phys then return end end
                 self.settle[#self.settle + 1] = { key = phys, armed = false,
                                                   memorial = { key = cmd.key, nickname = cmd.nickname } }
                 show_burial()
@@ -1288,6 +1324,9 @@ function Client.new(p)
             -- P4.1f panel / P4.2b sound: per CARTRIDGE, only a live SLink build with the cap bit.
             panel = panel and panel:present() or false, panel_abi = panel and panel:abi() or 0,
             sfx = panel and panel:sfx_present() or false,
+            -- companion evidence for the server (GameRulesAdapter.companion_refusal): the live service's own
+            -- ABI byte, absent on a cartridge with no live SLNK service
+            companion_abi = panel and panel:companion_abi() or nil,
             -- MAJOR-1 (review e9d5e136): this client answers apply_prepare before any APPLY
             trade_prepare = self:trade_live(),
         }

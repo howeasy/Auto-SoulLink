@@ -18,6 +18,11 @@ Optionally (RR players) it also bundles, under companion/:
   - the patch guide
   - a pre-patched ROM                                              [--rom <path>]
 
+Every companion shows "SoulLink <version>" on its game's main menu, so a release must carry its own version:
+run `python tools/stamp_release.py --version vX.Y.Z` first (it rebuilds and re-pins every companion; commit the result, then
+tag). Bundling companions that patch/dist/companion_version.json does not vouch for under this --version is refused
+(--allow-unstamped-companions overrides).
+
 Usage:
     python tools/make_release.py
     python tools/make_release.py --version 1.2.3
@@ -33,6 +38,8 @@ status page instead.
 """
 
 import argparse
+import hashlib
+import json
 import re
 import subprocess
 import sys
@@ -141,6 +148,7 @@ _LUA_CORE = [
 # lua/gen2/ — the Gen 2 client (Crystal, Gold and Silver; U5 cutover). run.lua is what lua/slink.lua
 # dofiles; boxes.lua is NOT part of this graph (no box executor is composed, B-10).
 _LUA_GEN2 = [
+    "artifact.lua",
     "run.lua",
     "entry.lua",
     "client.lua",
@@ -198,6 +206,14 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "write_checkpoint_overlay.json",
     ],
     "gen2_crystal": [
+        "overlay/binding.json",
+        "receipts/overlay/crystal.engine_sites.json",
+        "receipts/overlay/crystal.write_window.json",
+        "receipts/overlay/crystal_battle.qualification.json",
+        "receipts/overlay/crystal_town.qualification.json",
+        "receipts/overlay/crystal_synth_grass.synth.json",
+        "receipts/overlay/crystal_synth_kyle.synth.json",
+        "receipts/overlay/crystal_synth_bill.synth.json",
         # lua/gen2/entry.lua Entry.PACK_FILES.gen2_crystal (Entry.build reads these at load,
         # for every title -- the admission catalog walks Crystal/Gold/Silver together).
         "profile.json",
@@ -226,6 +242,15 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "receipts/crystal_synth_bill.synth.json",
     ],
     "gen2_gold": [
+        "overlay/binding.json",
+        "receipts/overlay/gold.engine_sites.json",
+        "receipts/overlay/gold.write_window.json",
+        "receipts/overlay/gold_battle.qualification.json",
+        "receipts/overlay/gold_town.qualification.json",
+        "receipts/overlay/gold_battle_errand.qualification.json",
+        "receipts/overlay/gold_synth_grass.synth.json",
+        "receipts/overlay/gold_synth_kyle.synth.json",
+        "receipts/overlay/gold_synth_bill.synth.json",
         # Entry.PACK_FILES.gen2_gold -- Entry.build's admission catalog loads these for
         # every title, whether or not that title is currently ADMITTED.
         "profile.json",
@@ -255,6 +280,14 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "receipts/gold_synth_bill.synth.json",
     ],
     "gen2_silver": [
+        "overlay/binding.json",
+        "receipts/overlay/silver.engine_sites.json",
+        "receipts/overlay/silver.write_window.json",
+        "receipts/overlay/silver_battle.qualification.json",
+        "receipts/overlay/silver_town.qualification.json",
+        "receipts/overlay/silver_synth_grass.synth.json",
+        "receipts/overlay/silver_synth_kyle.synth.json",
+        "receipts/overlay/silver_synth_bill.synth.json",
         # Entry.PACK_FILES.gen2_silver -- same as Gold.
         "profile.json",
         "admission.json",
@@ -357,14 +390,46 @@ _LICENSE_FILES = ["LICENSE", "NOTICE.md"]
 # playgroup that already owns the base ROM.
 _COMPANION_UPS = "patch/dist/SLink-RR.ups"
 _COMPANION_README = "patch/README.md"
-# The Game Boy companion UPS files bundled with --with-patch: vanilla Red/Blue (patch/gen1) and
-# the pureRGB overlay per pure title (patch/gen1/purergb, PLAN M3). No Yellow (no free WRAM).
-# Gen 2: the companion overlay per title (tools/build_gen2_companion.py, data/gen2/overlay_provenance.json).
+# The Game Boy companion UPS files bundled with --with-patch.
+# Gen 1 vanilla Red/Blue (patch/gen1) and the pureRGB overlay per pure title (patch/gen1/purergb, PLAN M3)
+# are always shipped: their launchers admit the companion. No Yellow (no free WRAM).
 _GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
-                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
-                     "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups")
+                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups")
+# Gen 2: the companion overlay per title (tools/build_gen2_companion.py, data/gen2/overlay_provenance.json).
+# NOT unconditional: lua/gen2/entry.lua admits ONLY an activated overlay row (a clean cartridge is refused,
+# owner 2026-10-02), so until the overlay row is promoted a release that shipped these UPS would hand the
+# user a patch that bricks their cartridge while (see data_game_files) withholding the binding sidecar and
+# proofs that explain why. Gated by overlay_state.
+_GEN2_OVERLAY_UPS = {"crystal": "SLink-Crystal.ups", "gold": "SLink-Gold.ups", "silver": "SLink-Silver.ups"}
+
+
+def overlay_state(pack: str, root: Path | None = None) -> str:
+    """`ADMITTED` or `BUILT` for one Gen 2 pack's overlay row -- the ONE source of truth for whether that
+    title's execution binding, proofs AND companion UPS ship.
+
+    Read once per call from the pack's own catalog; a missing or malformed catalog is an error, never an
+    inactive artifact. Deliberately not memoised: the catalogs are rewritten by --promote-overlays inside
+    the same process that later builds a release.
+    """
+    root = REPO_ROOT if root is None else root
+    catalog = json.loads((Path(root) / f"data/games/{pack}/admission.json").read_text(encoding="utf-8"))
+    rows = [row for row in catalog["artifacts"] if row.get("kind") == "overlay"]
+    if len(rows) != 1 or rows[0].get("status") not in ("BUILT", "ADMITTED"):
+        raise ValueError(f"{pack}: overlay catalog missing or malformed")
+    return rows[0]["status"]
+
+
+def gb_companion_ups(root: Path | None = None) -> tuple[str, ...]:
+    """The Game Boy companion UPS set this release would ship: always Gen 1/pureRGB, plus each Gen 2
+    title's overlay UPS only once that overlay row is ADMITTED (overlay_state)."""
+    root = REPO_ROOT if root is None else root
+    return _GB_COMPANION_UPS + tuple(
+        name for title, name in _GEN2_OVERLAY_UPS.items()
+        if overlay_state(f"gen2_{title}", root) == "ADMITTED")
+
 _COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
-_GEN3_COMPANION_FILES = ("SLink-FireRed.ups", "SLink-LeafGreen.ups", "SLink-Emerald.ups", "gen3_companions.json")
+_GEN3_COMPANION_FILES = ("SLink-FireRed.ups", "SLink-LeafGreen.ups", "SLink-Emerald.ups", "gen3_companions.json",
+                         "companion_version.json")   # the stamp record companion_stamp_errors() vouches with
 
 # Launcher scripts (relative to lua/) whose SLINK_* lines get patched
 _LAUNCHER_SCRIPTS: set[str] = {
@@ -390,10 +455,10 @@ def bizhawk_requirement() -> str:
 
 
 _GUIDE_HEAD = """\
-# SLink — Player Setup Guide
+# SLink player setup
 
 This package contains everything you need to play a Soul Link Nuzlocke with
-SLink in BizHawk. You do **not** need Python — the host handles the server.
+SLink in BizHawk. You don't need Python: the host runs the server.
 
 ---
 
@@ -403,7 +468,7 @@ SLink in BizHawk. You do **not** need Python — the host handles the server.
 |---|---|
 | BizHawk | BIZHAWK_REQ (older versions refuse to start). https://github.com/TASEmulators/BizHawk/releases |
 | A writable folder | Unzip somewhere you can write (not Program Files): Gen 3 keeps a small session file next to `lua/`. |
-| Your ROM | Gen 1 (Red/Blue/Yellow), Gen 2 (Crystal), Gen 3 (FireRed/LeafGreen/Radical Red/Emerald — Emerald pairs only with Emerald) |
+| Your cartridge | The one your host prepared in the SLink Manager (download it from the run's page). Red/Blue, pureRGB, Gold/Silver/Crystal, FireRed/LeafGreen/Emerald and Radical Red must carry the SLink patch; the Manager adds it. Yellow is played clean. |
 | LuaSocket DLL | Already in `lua/x64/`. If missing, see the note below. |
 """
 
@@ -413,7 +478,7 @@ _GUIDE_STEP1_PACKED = """\
 
 ---
 
-## Step 1 — Your launcher is already here
+## Step 1: your launcher is already here
 
 `LAUNCHER` sits next to `lua/` and `data/` in this folder. It connects to
 `CONNECT` as Player PLAYER. Keep it in this folder: it finds the rest of
@@ -428,7 +493,7 @@ _GUIDE_STEP1_DOWNLOAD = """\
 
 ---
 
-## Step 1 — Download your launcher from the host
+## Step 1: download your launcher from the host
 
 Your host will share their **SLink Manager** page, which looks like:
 
@@ -441,11 +506,11 @@ player slot (Player A or Player B). It is pre-configured with the address,
 game TCP port and slot the run expects. The **setup .zip** in the same menu
 is this whole package with the launcher already inside.
 
-**Save that file into this folder** — the same folder that contains `lua/`
+**Save that file into this folder**, the same folder that contains `lua/`
 and `data/`. For example:
 
 ```
-SLink-player-v1.0.0/
+SLink-player-<version>/
 ├── slink_MyRun_a.lua   ← place the downloaded launcher here
 ├── lua/
 └── data/
@@ -456,7 +521,7 @@ SLink-player-v1.0.0/
 """
 
 _GUIDE_REST = """\
-## Step 2 — Load in BizHawk
+## Step 2: load in BizHawk
 
 1. Open BizHawk and load your save file.
 2. Open **Tools → Lua Console**.
@@ -468,7 +533,7 @@ _GUIDE_REST = """\
    ```
 
    If it prints `TCP connecting… (non-blocking)` briefly first, that is
-   normal — it connects within a second or two.
+   normal. It connects within a second or two.
 
 > **Important:** Load your save file *before* opening the Lua script.
 > The script validates save data at startup. If the save isn't loaded yet,
@@ -478,13 +543,8 @@ _GUIDE_REST = """\
 
 ## If the LuaSocket DLL is missing
 
-The file `lua/x64/socket-windows-5-4.dll` is required. If it is absent,
-copy it from your [Archipelago](https://github.com/ArchipelagoMW/Archipelago/releases)
-installation:
-
-```
-<Archipelago folder>\\data\\lua\\x64\\socket-windows-5-4.dll
-```
+The file `lua/x64/socket-windows-5-4.dll` is required and ships in this
+package. If it is absent, download the setup ZIP from your host again.
 
 ---
 
@@ -497,6 +557,7 @@ installation:
 | `TCP connect failed` / retrying | Server is not running, or IP/port is wrong. Ask host to verify. |
 | Connected but nothing happens | Check with host that your player slot (A or B) is not already taken. |
 | Writes disabled / validation failed | Load your save file **before** the Lua script. |
+| `… needs the SLink companion patch` | This cartridge isn't patched, or was patched by an earlier SLink. Use the cartridge your host prepared, or patch it at `/patcher` on the host's Manager. |
 | `Wrong save!` on screen | You loaded a different save file than the one registered for your slot. |
 | Folder picker appears | Put the launcher `.lua` file inside the extracted `SLink-player-*` folder, next to `lua/`. |
 
@@ -504,13 +565,13 @@ installation:
 
 ## What SLink does automatically
 
-- **Links encounters by area** — your first catch on a route is permanently
+- Your first catch on a route is permanently
   paired with your partner's first catch on the same route.
-- **Propagates faints** — when your linked partner faints, so does yours.
-- **Dead zones** — if either player fails to catch on a route, both lose
-  that slot. Neither linked mon can be used.
-- **Memorial box** — dead pairs are moved to a dedicated box after the
-  battle ends.
+- When your linked partner faints, so does yours.
+- If either player fails to catch on a route, the route is closed
+  for both of you.
+- Fallen pairs are moved to a memorial box once both games are
+  somewhere safe.
 
 You play normally. SLink enforces the rules for you.
 """
@@ -558,6 +619,60 @@ def patch_launcher(content: str, host: str | None, port: int | None, player: str
     return content
 
 
+def data_game_files(root: Path | None = None) -> dict[str, list[str]]:
+    """Only activated Gen 2 overlays require their execution binding and own proofs.
+
+    The declared manifest is a superset. FUTURE/BUILT overlays need no optional
+    files; ADMITTED overlays require every named file in the usual preflight.
+    A missing or malformed catalog is an error, never an inactive artifact. The ADMITTED test is
+    overlay_state -- the same one gb_companion_ups uses for the companion UPS, so the two halves of a
+    release can never disagree about which titles are activated.
+    """
+    root = REPO_ROOT if root is None else root
+    manifest = {game: list(names) for game, names in _DATA_GAME_LUA.items()}
+    for title in ("crystal", "gold", "silver"):
+        pack = f"gen2_{title}"
+        if pack not in manifest:
+            continue
+        if overlay_state(pack, root) != "ADMITTED":
+            manifest[pack] = [name for name in manifest[pack]
+                              if name != "overlay/binding.json" and not name.startswith("receipts/overlay/")]
+    return manifest
+
+
+def companion_stamp_errors(version: str, dist: Path | None = None) -> list[str]:
+    """Problems that make the bundled companions the wrong build for release `version` (owner ruling 2026-10-02: a release
+    carries its own version on the game menus). tools/stamp_release.py rebuilds every companion with the version and records
+    it, with the sha256 of each shipped file, in patch/dist/companion_version.json; this refuses to package anything that
+    record does not vouch for."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import stamp_release
+
+    dist = dist or REPO_ROOT / "patch" / "dist"
+    record = dist / "companion_version.json"
+    hint = f"run: python tools/stamp_release.py --version {version if version == 'dev' else 'v' + version.lstrip('v')}"
+    if not record.is_file():
+        return [f"{record} is missing ({hint})"]
+    doc = json.loads(record.read_text(encoding="utf-8"))
+    want = "dev" if version == "dev" else "v" + version.lstrip("v")
+    errors = []
+    if doc.get("schema") != stamp_release.SCHEMA:
+        errors.append(f"{record.name}: unknown schema {doc.get('schema')!r}")
+    if doc.get("version") != want:
+        errors.append(f"companions are stamped {doc.get('version')!r} (per family {doc.get('families')}), the release is {want!r} ({hint})")
+    files = doc.get("files") or {}
+    for name in stamp_release.SHIPPED:
+        path = dist / name
+        if not path.is_file():
+            errors.append(f"{name} is missing from {dist} (a release ships every companion the record vouches for)")
+            continue
+        if name not in files:
+            errors.append(f"{name} is not covered by {record.name}")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != files[name]:
+            errors.append(f"{name} changed after it was stamped ({hint})")
+    return errors
+
+
 def build_release(
     version: str,
     out_dir: Path,
@@ -570,6 +685,7 @@ def build_release(
     launcher: tuple[str, str] | None = None,
     guide: str | None = None,
     quiet: bool = False,
+    allow_unstamped: bool = False,
 ) -> Path:
     """`launcher` is (filename, source) for a launcher placed at the package root, beside
     lua/ -- the Manager's player pack. `guide` replaces the generic PLAYER_SETUP.md.
@@ -585,6 +701,7 @@ def build_release(
         run_generators()
 
     # ── Pre-flight: verify all required files exist ───────────────────────────
+    game_data = data_game_files(REPO_ROOT)
     required: list[Path] = (
         [REPO_ROOT / "lua" / f for f in _LUA_ROOT]
         + [REPO_ROOT / "lua" / "gen1" / f for f in _LUA_GEN1]
@@ -595,7 +712,7 @@ def build_release(
         + [REPO_ROOT / "lua" / "games" / f for f in _LUA_GAMES]
         + [
             REPO_ROOT / "data" / "games" / gen / f
-            for gen, files in _DATA_GAME_LUA.items()
+            for gen, files in game_data.items()
             for f in files
         ]
     )
@@ -609,6 +726,14 @@ def build_release(
     # ── Companion patch (optional) pre-flight ─────────────────────────────────
     # A --rom implies bundling the patch too (the ROM only makes sense with it).
     include_companion = with_patch or rom is not None
+    if include_companion and not allow_unstamped:
+        stamp_errors = companion_stamp_errors(version)
+        if stamp_errors:
+            print("ERROR — the companions are not stamped for this release:", file=sys.stderr)
+            for e in stamp_errors:
+                print(f"  {e}", file=sys.stderr)
+            print("  (--allow-unstamped-companions ships them as built; the game menus then show their own version)", file=sys.stderr)
+            sys.exit(1)
     if include_companion:
         ups = REPO_ROOT / _COMPANION_UPS
         if not ups.exists():
@@ -628,7 +753,7 @@ def build_release(
             dll_files.append(p)
         else:
             dll_warnings.append(
-                f"  lua/x64/{fname} — not found; player must obtain it from Archipelago"
+                f"  lua/x64/{fname} — not found; the player package will lack it"
             )
 
     # ── Build zip ─────────────────────────────────────────────────────────────
@@ -682,7 +807,7 @@ def build_release(
             zf.write(p, prefix + f"lua/x64/{p.name}")
             say(f"  [added]   {prefix}lua/x64/{p.name}")
 
-        for gen, files in _DATA_GAME_LUA.items():
+        for gen, files in game_data.items():
             for fname in files:
                 zf.write(
                     REPO_ROOT / "data" / "games" / gen / fname,
@@ -700,7 +825,9 @@ def build_release(
             # exists, and shipping one would advertise a capability that cannot be there.
             # pureRGB (PLAN M3): the companion source overlay over each pinned pure build,
             # one UPS per title (PureGreen included -- it is a full pure build of its own).
-            for gb_ups in _GB_COMPANION_UPS + _GEN3_COMPANION_FILES:
+            # Gen 2's per-title UPS comes from gb_companion_ups ONLY for an ADMITTED overlay, so the ZIP
+            # never offers a Gen 2 patch the launcher would refuse (its sidecar/proofs are gated the same way).
+            for gb_ups in gb_companion_ups(REPO_ROOT) + _GEN3_COMPANION_FILES:
                 src = REPO_ROOT / "patch" / "dist" / gb_ups
                 if src.exists():
                     zf.write(src, prefix + f"companion/{gb_ups}")
@@ -746,6 +873,8 @@ def main() -> None:
     parser.add_argument("--rom", metavar="PATH",
                         help="Bundle a pre-patched ROM under companion/ (implies --with-patch); "
                              "e.g. patch/build/slink_RR.gba")
+    parser.add_argument("--allow-unstamped-companions", action="store_true",
+                        help="Bundle companions even when patch/dist/companion_version.json does not match --version")
     args = parser.parse_args()
 
     build_release(
@@ -757,6 +886,7 @@ def main() -> None:
         skip_generators=args.skip_generators,
         with_patch=args.with_patch,
         rom=Path(args.rom) if args.rom else None,
+        allow_unstamped=args.allow_unstamped_companions,
     )
 
 

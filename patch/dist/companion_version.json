@@ -1,0 +1,27 @@
+{
+  "schema": "slink-companion-version-v1",
+  "version": "mixed",
+  "families": {
+    "rb": "v0.3.0",
+    "pure": "v0.3.0",
+    "gen2": "dev",
+    "gen3": "v0.3.0"
+  },
+  "stamped": "2026-10-03",
+  "files": {
+    "SLink-RR.ups": "d0378bdf71e2bbcdf75e819095a0c0f29b4532378411979417a5a0dad949d55e",
+    "SLink-RB-Red.ups": "7ca4a277f782b424fa24a611c6463d5fd43f5267a4eb8282dc6136aff9a7b316",
+    "SLink-RB-Blue.ups": "28aaa2c12768da9247e709d501df45353397817b30c3cdbfc49685c1c0e3659e",
+    "SLink-PureRed.ups": "ef5200aa75760e80e98068f6996d8e28f4b197099b00f17c12276ac2f466b25e",
+    "SLink-PureBlue.ups": "75a0568c91894507083460c4e5500482af37aa944873e3d4b0b6e656ab5704d6",
+    "SLink-PureGreen.ups": "1f132a282d85e9508f7b9201023f28c91e5892e37129f0e48d17b0a2b0602407",
+    "SLink-Crystal.ups": "473cf2ba869442c52a472ac2c6d620d5cab2f8270c9a5bff72e79355dc5cb6ca",
+    "SLink-Gold.ups": "7f56020d196fe03ab715c311274b3136968fdf3470b03e15bdad6ef68e3891ee",
+    "SLink-Silver.ups": "408f8a576c252ba7366056f750812db4d1b738c2ff38bb0b911de58936ad5025",
+    "SLink-FireRed.ups": "4e129da28f8b3b0471bfd419cba4a6776a6ddd8c9633987e8bcd9500c8516bd0",
+    "SLink-LeafGreen.ups": "ac2ce48423a38f6f0f2ab9c9f038dfa2a6c697bf227e10691f6fefc43b28f7dc",
+    "SLink-Emerald.ups": "5009e87ca064a556b70bb0ca4b865bdd83ee28f13df7e7c0303dfc8ed9b08d99",
+    "gen3_companions.json": "5ffdf8cd2f7344fa35ed3fe064a7768e6751a88b1cb3a8d508cbeca4e7ba0f06",
+    "companion_pins.json": "84fff3591d60a39cf29ad045966167ae63fe550efff05be4fb1839c7431656a0"
+  }
+}

@@ -69,28 +69,16 @@ def test_all_current_generated_pack_files_are_literal_entry_dependencies():
         assert paths == {f"data/games/gen2_{title}/{name}" for name in PACK_FILES}
 
 
-@pytest.mark.parametrize("title", ["gold", "silver"])
-def test_gold_and_silver_admit_behind_their_own_receipts(title):
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_a_clean_cartridge_is_never_admitted_the_companion_is_required(title):
+    """Patch-first (owner 2026-10-02). Every clean row is SELECTED/BUILT under an ADMITTED G1 with shipped
+    PHYSICAL receipts, and the launcher still refuses it: only an activated overlay row (G4) is admitted.
+    This replaces the O-22 tests that pinned Crystal/Gold/Silver admitting behind their clean receipts."""
     world = World(title)
-    decision = world.entry.admit(world.args())
-    assert not isinstance(decision, tuple), decision
-    assert (decision.title, decision.pack, decision.rom_sha1) == (title, f"gen2_{title}", world.profile["rom_sha1"])
-    assert world.writes == []
-
-
-def test_crystal_is_admitted_only_behind_its_shipped_receipts():
-    world = World()
-    decision = world.entry.admit(world.args())
-    assert not isinstance(decision, tuple), decision
-    assert (decision.title, decision.pack, decision.kind, decision.rom_sha1) == (
-        "crystal", "gen2_crystal", "clean", "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133")
-    world.lua.execute("""local original = io.open
-        io.open=function(path,mode)
-            if path:match('/receipts/crystal%.write_window%.json$') then return nil, 'missing receipt' end
-            return original(path,mode)
-        end""")
     decision, reason = world.entry.admit(world.args())
-    assert decision is None and "write_window" in reason
+    assert decision is None and world.writes == []
+    assert "needs the SLink companion patch" in reason and "Manager or /patcher" in reason
+    assert title in reason
     assert set(dict(world.entry.RECEIPT_FILES.items())) == {"gen2_crystal", "gen2_gold", "gen2_silver"}
 
 
@@ -141,7 +129,7 @@ def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lu
 
     paths = []
     for pack in world.entry.RECEIPT_FILES.values():
-        files = dict(pack.items())
+        files = dict(pack.clean.items())   # D4: the clean proofs; the overlay namespace is tests/unit/test_gen2_overlay_admission.py
         paths += [files["engine_sites"], files["write_window"], *dict(files["qualifications"].items()).values()]
     # + gold_battle_errand.qualification.json (the Gold U1 fixture's report); card U1G: + silver_town and the nine
     # synthetic-fixture disclosures, which are committed beside their SaveRAM (tests/fixtures/gen2/<name>.synth.json)
@@ -161,6 +149,33 @@ def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lu
             assert shipped.read_bytes() == (source / shipped.name).read_bytes(), rel
         text = shipped.read_text(encoding="utf-8")
         assert normal(python(to_python(json_codec, text))) == normal(json.loads(text)), rel
+
+
+def _without_digest(path):
+    return {k: v for k, v in json.loads(path.read_text(encoding="utf-8")).items() if k != "code_digest"}
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_shipped_overlay_receipts_equal_the_captured_ones(title):
+    """D6 step 3, the analogue of the clean check above: qualifications and O-33 disclosures are byte-equal,
+    engine_sites / write_window equal modulo the top-level code_digest (the shipped copy is digest-free)."""
+    # the overlay rows are ADMITTED: absent receipts mean the launcher refuses the title (wrong, not absent input)
+    assert (ROOT / f"data/games/gen2_{title}/receipts/overlay").is_dir(),         f"gen2_{title} overlay receipts not shipped (tools/gen2_ship_overlay_receipts.py --write)"
+    entry = LuaRuntime(unpack_returned_tuples=True).eval("dofile")((ROOT / "lua/gen2/entry.lua").as_posix())
+    overlay = entry.RECEIPT_FILES[f"gen2_{title}"].overlay
+    paths = [overlay.engine_sites, overlay.write_window, *dict(overlay.qualifications.items()).values()]
+    assert len(paths) in (7, 8)
+    for rel in paths:
+        shipped = ROOT / rel
+        name = shipped.name
+        captured = ROOT / "tests/fixtures/gen2" / ("" if name.endswith(".synth.json") else "receipts/overlay") / name
+        assert shipped.is_file(), f"{rel}: overlay namespace present but this receipt is not shipped"
+        assert captured.is_file(), f"{rel}: captured source {captured.relative_to(ROOT).as_posix()} missing"
+        if name.endswith((".engine_sites.json", ".write_window.json")):
+            assert "code_digest" not in json.loads(shipped.read_text(encoding="utf-8")), rel
+            assert _without_digest(shipped) == _without_digest(captured), rel
+        else:
+            assert shipped.read_bytes() == captured.read_bytes(), rel
 
 
 def test_crystal_revision11_remains_build_only():

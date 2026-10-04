@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 
@@ -69,21 +71,44 @@ def test_memorial_source_must_be_one_successful_write_between_rx_and_ack(text, v
 
 
 NATURAL = (f"LOSE {KEY} status_move_slot=1\n"
-           f"FORCED_HP0 {KEY} frame=24495 in_battle=1 battler=1\n"
-           f"LINKED_FAINTED {KEY}\n"
-           f"TX faint {KEY} {{\"event\":\"faint\"}}\n")
+           "[client] [SLink-gen3] write sound 0x03005438 +4 frame 13060\n"
+           f"FORCED_HP0 {KEY} frame=18019 in_battle=1 battler=1\n"
+           "ENGINE_FAINT_SITE frame=18028 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1\n"
+           f"TX faint {KEY} {{\"event\":\"faint\"}}\n"
+           "[client] [SLink-gen3] write sound 0x03005438 +4 frame 18031\n"
+           f"LINKED_FAINTED {KEY} frame=18031\n")
 
 
 @pytest.mark.parametrize("text,why", [
     (NATURAL, None),
     (NATURAL.replace("in_battle=1", "in_battle=0"), "missing raw in-battle HP0"),
     (NATURAL.replace("battler=1", "battler=0"), "missing raw in-battle HP0"),
-    (NATURAL.replace(f"LINKED_FAINTED {KEY}\n", ""), "missing natural faint completion"),
+    (NATURAL.replace(f"LINKED_FAINTED {KEY} frame=18031\n", ""), "missing natural faint completion"),
+    (NATURAL.replace(f"LINKED_FAINTED {KEY} frame=18031\n",
+                     f"LINKED_FAINTED {KEY}\n"), "missing natural faint completion"),
+    (NATURAL.replace("ENGINE_FAINT_SITE frame=18028 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1\n", ""),
+     "missing engine faint site"),
     (NATURAL.replace(f"LOSE {KEY} status_move_slot=1\n", ""), "missing normal battle choice"),
     (NATURAL.replace(f"TX faint {KEY}", f"RX force_faint key={KEY}\nTX faint {KEY}"), "force command"),
-    (NATURAL.replace(f"TX faint {KEY}", "[client] [SLink-gen3] write battle_faint 0x02031BBA +2 frame 24495\n"
+    (NATURAL.replace(f"TX faint {KEY}", "[client] [SLink-gen3] write party_hp 0x02031BBA +2 frame 18028\n"
                      f"TX faint {KEY}"), "SLink write"),
-    ("[client] [SLink-gen3] write battle_faint 0x02031BBA +2 frame 1\n" + NATURAL, "SLink write"),
+    (NATURAL.replace(f"LINKED_FAINTED {KEY}",
+                     f"[client] [SLink-gen3] write party_hp 0x02031BBA +2 frame 18031\nLINKED_FAINTED {KEY}"),
+     "SLink write"),
+    (NATURAL.replace(f"TX faint {KEY} ", f"LINKED_FAINTED {KEY} frame=18031\nTX faint {KEY} "),
+     "out of order"),
+    (NATURAL.replace("frame=18028 active=0", "frame=18018 active=0"), "out of order"),
+    (NATURAL.replace("frame=18028 active=0", "frame=18019 active=0"), "out of order"),
+    (NATURAL.replace(f"LINKED_FAINTED {KEY} frame=18031\n",
+                     f"LINKED_FAINTED {KEY} frame=18027\n"), "out of order"),
+    (NATURAL.replace(f"TX faint {KEY} ",
+                     f"TX faint {KEY} {{}}\nTX faint {KEY} "), "duplicate faint event"),
+    (NATURAL.replace("ENGINE_FAINT_SITE frame=18028",
+                     "ENGINE_FAINT_SITE frame=18028 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1\n"
+                     "ENGINE_FAINT_SITE frame=18028"), "duplicate engine faint site"),
+    (NATURAL.replace("counter=1\n", "counter=0\n"), "missing engine faint site"),
+    (NATURAL.replace("write sound 0x03005438 +4 frame 18031",
+                     "write sound 0x02031BBA +2 frame 18031"), "SLink write"),
 ])
 def test_natural_faint_requires_raw_hp0_without_force_or_client_write(text, why):
     found = oracle.natural_faint_receipt_problems(text, KEY)
@@ -91,3 +116,20 @@ def test_natural_faint_requires_raw_hp0_without_force_or_client_write(text, why)
         assert found == []
     else:
         assert any(why in problem for problem in found)
+
+
+def test_exp_completion_producer_format_is_consumed_by_oracle():
+    from lupa import LuaRuntime
+
+    scenario = (Path(__file__).resolve().parents[2] /
+                "lua/tests/duo/scenario_gen3_linked_faint_active.lua").read_text(encoding="utf-8")
+    stamp = re.search(r'ctx\.log\(fmt\("LINKED_FAINTED %s frame=%d", key, emu\.framecount\(\)\)\)',
+                      scenario)
+    assert stamp is not None
+    lua = LuaRuntime()
+    rendered = lua.execute('local key, fmt = "' + KEY + '", string.format\n'
+                           'local emu = {framecount=function() return 18031 end}\n'
+                           'local line; local ctx = {log=function(s) line=s end}\n'
+                           + stamp.group(0) + '\nreturn line')
+    assert oracle.natural_faint_receipt_problems(
+        NATURAL.replace(f"LINKED_FAINTED {KEY} frame=18031", rendered), KEY) == []

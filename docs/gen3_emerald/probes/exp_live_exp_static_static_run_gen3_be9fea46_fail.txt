@@ -1,0 +1,36 @@
+DEV SOURCE=be9fea46ed30fb2af4eba59954a49259e24b8ecc; native expansion row,test-only; no finalcutclaim
+
+========== scenario: exp_static_static_run_gen3 ==========
+[duo] exp_static_static_run_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=562f028cb75ad3e2dd0ef8f8603a328c1a1d4aa050586d74b20b62fb55fb169c b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=4d1f12dfdbd7136a3066381b0a892d8be99b5c782710981d2663722bc518996b write_checkpoint.json=12c086d5c3d2489b1d4c807dc9e274b25ae077abe548d124689e04a0cb8615c4 profile.json=8c12aec66ffcb1838728c9a8266dd3afc9516f93e501299ebbc376bac2c3efa9 source=be9fea46ed30fb2af4eba59954a49259e24b8ecc
+[duo] server up: tcp=55754 http=55755 data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_run_gen3_svmdnl_d
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 18:10:54,556 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] TEST_ONLY_ROUTE game=gen3_exp argv=--test-only-route emerald_expansion_28877d73 production:false server=2026-10-01 18:10:54,556 [WARNING] TEST-ONLY route of emerald_expansion_28877d73 -> gen3_exp enabled (production refuses it by name; production:false)
+[duo] timing server 0.6s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_run_gen3_svmdnl_d path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_run_gen3_svmdnl_d\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 2.8s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_run_gen3_svmdnl_d path=C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_run_gen3_svmdnl_d\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 2.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 8.0s
+[duo] timing results 1.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=d4d2ce346d1e69421973719480d80ee802506a273ced1c558c8678660240c6c5 file=d4d2ce346d1e69421973719480d80ee802506a273ced1c558c8678660240c6c5 match=true saves=1 counter=3->4 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=b00d7d65c6da01be9bad10b784f506c94de006a3ba39caca579cb8ef1df52668 file=b00d7d65c6da01be9bad10b784f506c94de006a3ba39caca579cb8ef1df52668 match=true saves=1 counter=4->5 rtc=normalized
+[duo] timing oracle 0.4s
+[duo] PYDEC: FAIL RUN unexpectedly formed a link
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_exp_static_static_run_gen3_svmdnl_d
+[duo] exp_static_static_run_gen3: attempt 1 aborted — RuntimeError: RUN unexpectedly formed a link
+
+========== summary ==========
+  exp_static_static_run_gen3: FAIL (attempt 1 of 1) — RuntimeError: RUN unexpectedly formed a link
+
+EXIT 1

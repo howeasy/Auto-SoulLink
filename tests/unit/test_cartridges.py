@@ -93,7 +93,7 @@ def _gen2():
     return {"a": str(gold), "b": str(silver)}
 
 
-@pytest.mark.parametrize("companion", [False, True])
+@pytest.mark.parametrize("companion", [True])   # companion=False is refused now: test_a_companion_title_cannot_be_prepared_clean
 @pytest.mark.parametrize("randomize", [False, True])
 def test_vanilla_modes(tmp_path, monkeypatch, companion, randomize):
     from patch.tools.make_ups import ups_apply
@@ -134,17 +134,17 @@ def test_a_cartridge_keeps_its_own_extension(tmp_path):
     extension -- Red/Blue dumps .gb, pureRGB (and Yellow) .gbc."""
     from server import cartridges
     result = cartridges.provision(str(tmp_path / "pure"), {"a": _pure("red"), "b": _pure("blue")},
-                                  companion=False, randomize=None)
+                                  companion=True, randomize=None)
     assert [Path(p["output"]).name for p in result["players"].values()] == ["a.gbc", "b.gbc"]
     red = REPO / "patch" / "build" / "gen1_red.gb"
     if red.is_file():
         result = cartridges.provision(str(tmp_path / "vanilla"), {"a": str(red), "b": str(red)},
-                                      companion=False, randomize=None)
+                                      companion=True, randomize=None)
         assert [Path(p["output"]).name for p in result["players"].values()] == ["a.gb", "b.gb"]
 
 
 @pytest.mark.parametrize("title", ["red", "blue", "green"])
-@pytest.mark.parametrize("companion", [False, True])
+@pytest.mark.parametrize("companion", [True])   # companion=False is refused now (patch-first, owner 2026-10-02)
 @pytest.mark.parametrize("randomize", [False, True])
 def test_pure_modes_and_overlay_before_randomizer(tmp_path, monkeypatch, title, companion, randomize):
     from server import cartridges
@@ -183,7 +183,7 @@ def test_pure_modes_and_overlay_before_randomizer(tmp_path, monkeypatch, title, 
             assert contract["players"][pid]["rom_sha1"] == player["rom_sha1"]
 
 
-@pytest.mark.parametrize("companion", [False, True])
+@pytest.mark.parametrize("companion", [True])
 @pytest.mark.parametrize("randomize", [False, True])
 def test_picked_overlay_is_reused_without_repatching(tmp_path, monkeypatch, companion, randomize):
     from server import cartridges
@@ -232,24 +232,53 @@ def test_refuses_mixed_families_before_spending(tmp_path, monkeypatch):
     assert not (tmp_path / "run").exists()
 
 
-def test_gen2_companion_applies_the_admitted_overlay(tmp_path):
-    """companion=True on a clean Gold/Silver pair must apply each title's own SLink-<Title>.ups
-    and produce exactly the sha1 admitted in data/games/gen2_<title>/admission.json's overlay
-    row -- the same proof test_pure_modes_and_overlay_before_randomizer runs for pureRGB."""
+def _overlay_sha1(dirname):
+    with open(REPO / "data" / "games" / f"gen2_{dirname}" / "admission.json", encoding="utf-8") as fh:
+        return next(a for a in json.load(fh)["artifacts"] if a["kind"] == "overlay")["sha1"]
+
+
+def test_gen2_companion_follows_admission(tmp_path):
+    """Patch-first: with its overlay row activated, every Gen 2 title gets its own SLink-<Title>.ups,
+    producing exactly the admitted overlay sha1 (Crystal checked explicitly, OVERLAY_ADMISSION_NEXT)."""
     from server import cartridges
 
-    sources = _gen2()
-    result = cartridges.provision(str(tmp_path), sources, companion=True, randomize=None)
-    assert result["family"] == cartridges.upr_pipeline.FAMILY_GEN2
-    admission = {}
-    for title, dirname in (("a", "gold"), ("b", "silver")):
-        with open(REPO / "data" / "games" / f"gen2_{dirname}" / "admission.json", encoding="utf-8") as fh:
-            admission[title] = next(a for a in json.load(fh)["artifacts"] if a["kind"] == "overlay")
-    for pid in ("a", "b"):
-        player = result["players"][pid]
-        assert player["kind"] == "companion"
-        assert player["rom_sha1"] == admission[pid]["sha1"]
-        assert Path(player["output"]).suffix == ".gbc"
+    crystal = REPO / ".cache" / "gen2-build" / "pokecrystal" / "pokecrystal.gbc"
+    if not crystal.is_file():
+        pytest.skip(f"pinned Gen 2 build absent: {crystal}")
+    for sources, names in ((_gen2(), ("gold", "silver")), ({"a": str(crystal), "b": str(crystal)}, ("crystal", "crystal"))):
+        result = cartridges.provision(str(tmp_path / names[0]), sources, companion=True, randomize=None)
+        assert result["family"] == cartridges.upr_pipeline.FAMILY_GEN2
+        for pid, dirname in zip(("a", "b"), names):
+            player = result["players"][pid]
+            assert Path(player["output"]).suffix == ".gbc"
+            assert player["kind"] == "companion" and player["rom_sha1"] == _overlay_sha1(dirname)
+
+
+def test_gen2_rolled_back_row_refuses_the_provision(tmp_path, monkeypatch):
+    """Fail closed (review cx-f18ac278 F1, patch-first owner 2026-10-02): COMPANION_TITLES alone never
+    composes a Gen 2 overlay the launcher refuses, and the launcher refuses every clean Gen 2 cartridge
+    too, so an overlay row that is not activated means NO cartridge is prepared (it used to hand out
+    the clean one as picked)."""
+    from server import cartridges
+
+    monkeypatch.setattr(cartridges.patcher, "gen2_overlay_admitted", lambda title: False)
+    with pytest.raises(cartridges.CartridgeError, match="Gen 2 companion is not admitted yet"):
+        cartridges.provision(str(tmp_path), _gen2(), companion=True, randomize=None)
+    assert not (tmp_path / "roms").exists(), "a refused provision must not write any cartridge"
+
+
+def test_gen2_overlay_admitted_reads_the_activated_row(monkeypatch):
+    from server import patcher
+
+    row = {"kind": "overlay", "selection": "SELECTED", "status": "ADMITTED", "binding_sha256": "a" * 64,
+           "runtime_gate": {"id": "G4", "state": "ADMITTED", "grant_fingerprint": "b" * 64}}
+    monkeypatch.setattr(patcher, "_gen2_overlay_row", lambda title: row)
+    assert patcher.gen2_overlay_admitted("gold")
+    half_written = {**row["runtime_gate"], "grant_fingerprint": "b" * 63}
+    for key, value in (("selection", "FUTURE"), ("status", "BUILT"), ("runtime_gate", None),
+                       ("binding_sha256", None), ("runtime_gate", half_written)):
+        monkeypatch.setattr(patcher, "_gen2_overlay_row", lambda title, k=key, v=value: {**row, k: v})
+        assert not patcher.gen2_overlay_admitted("gold"), key
 
 
 def test_gen2_randomize_is_refused(tmp_path, monkeypatch):
@@ -258,26 +287,41 @@ def test_gen2_randomize_is_refused(tmp_path, monkeypatch):
     from server import cartridges, upr_pipeline
 
     sources = _gen2()
+    # a Gen 2 pick is refused outright without its companion (patch-first), so activate the overlay row
+    monkeypatch.setattr(cartridges.patcher, "gen2_overlay_admitted", lambda title: True)
     monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on Gen 2 randomize"))
     with pytest.raises(cartridges.CartridgeError, match="Gen 2 has no randomizer support"):
-        cartridges.provision(str(tmp_path), sources, companion=False,
+        cartridges.provision(str(tmp_path), sources, companion=True,
                              randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
 
 
-def test_yellow_companion_refuses_before_spending(tmp_path, monkeypatch):
-    from server.cartridges import CartridgeError, provision
+def test_yellow_goes_clean_and_its_red_partner_keeps_the_companion(tmp_path, monkeypatch):
+    """Per player (review cx-7847d499 A1): Yellow has no companion, so it is handed out as picked,
+    but its Red partner is an admitted title and must still get its companion."""
+    from server.cartridges import provision
 
     yellow = REPO / "Pokemon - Yellow Version (USA, Europe).gbc"
     if not yellow.is_file():
         pytest.skip("clean Yellow dump absent")
     sources = _vanilla()
     sources["b"] = str(yellow)
-    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *args: pytest.fail("spent on Yellow"))
-    with pytest.raises(CartridgeError, match="Yellow has zero free WRAM"):
-        provision(str(tmp_path / "run"), sources, companion=True,
-                  randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
-    result = provision(str(tmp_path / "run"), sources, companion=False, randomize=None)
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *args: pytest.fail("no randomizer asked for"))
+    result = provision(str(tmp_path / "run"), sources, companion=True, randomize=None)
+    assert result["players"]["a"]["kind"] == "companion"
+    assert Path(result["players"]["a"]["output"]).read_bytes() != Path(sources["a"]).read_bytes()
+    assert result["players"]["b"]["kind"] == "clean"
     assert Path(result["players"]["b"]["output"]).read_bytes() == yellow.read_bytes()
+    assert result["companion"] is True
+
+
+def test_the_companion_decision_is_server_side_per_player():
+    """No browser input can grant a title the companion: only COMPANION_TITLES (and, for Gen 2, its
+    activated catalog row) can."""
+    from server.cartridges import COMPANION_TITLES, companion_admitted
+
+    assert companion_admitted({"variant": "Red"}) and "Red" in COMPANION_TITLES
+    for variant in ("Yellow", "", None):
+        assert not companion_admitted({"variant": variant}), variant
 
 
 def test_pure_stock_jar_refuses_before_patching_or_randomizing(tmp_path, monkeypatch):
@@ -316,7 +360,7 @@ def test_nonrandomized_reprovision_drops_previous_contract(tmp_path):
     from server.cartridges import provision
 
     (tmp_path / "rom_contract.json").write_text("old randomization contract")
-    provision(str(tmp_path), _vanilla(), companion=False, randomize=None)
+    provision(str(tmp_path), _vanilla(), companion=True, randomize=None)
     assert not (tmp_path / "rom_contract.json").exists()
 
 
@@ -339,9 +383,9 @@ def test_missing_jar_and_malformed_settings_refuse(tmp_path, monkeypatch):
     sources = _vanilla()
     monkeypatch.setattr(upr_pipeline, "find_upr_jar", lambda: None)
     with pytest.raises(CartridgeError, match="jar not found"):
-        provision(str(tmp_path), sources, companion=False, randomize={"settings_path": "s.rnqs"})
+        provision(str(tmp_path), sources, companion=True, randomize={"settings_path": "s.rnqs"})
     with pytest.raises(CartridgeError, match="settings_path"):
-        provision(str(tmp_path), sources, companion=False, randomize={})
+        provision(str(tmp_path), sources, companion=True, randomize={})
 
 
 def test_finds_default_jar(tmp_path, monkeypatch):
@@ -355,7 +399,7 @@ def test_finds_default_jar(tmp_path, monkeypatch):
         assert jar == "discovered.jar"
         return fake(jar, *args)
     monkeypatch.setattr(upr_pipeline, "prepare_pair", check)
-    provision(str(tmp_path), sources, companion=False, randomize={"settings_path": "s.rnqs"})
+    provision(str(tmp_path), sources, companion=True, randomize={"settings_path": "s.rnqs"})
 
 
 def test_requires_both_players(tmp_path):
@@ -398,9 +442,66 @@ def test_refuses_overwriting_another_players_source_with_intermediate(tmp_path, 
     sources["b"] = str(picked)
     _fake_pair(monkeypatch)
     with pytest.raises(CartridgeError, match="source is a run output"):
-        provision(str(tmp_path), sources, companion=False,
+        provision(str(tmp_path), sources, companion=True,
                   randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
     assert picked.read_bytes() == original
+
+
+def test_companion_titles_are_exactly_the_patchers_companion_targets_minus_yellow():
+    """Patch-first (owner 2026-10-02): the list the Manager and the launcher refuse clean cartridges for
+    is the list of titles the patcher can patch. A new patch target must be decided here, in the open;
+    Yellow (zero free WRAM) has no target and is never in the list."""
+    from server import cartridges, patcher
+    title_of = {"rr": "Radical Red", "rb-red": "Red", "rb-blue": "Blue", "pure-red": "PureRed",
+                "pure-blue": "PureBlue", "pure-green": "PureGreen", "gen2-crystal": "Crystal",
+                "gen2-gold": "Gold", "gen2-silver": "Silver", "firered": "FireRed",
+                "leafgreen": "LeafGreen", "emerald": "Emerald"}
+    assert set(patcher.TARGETS) <= set(title_of), "a new patcher target needs a COMPANION_TITLES decision"
+    assert set(cartridges.COMPANION_TITLES) == {title_of[slug] for slug in patcher.TARGETS}
+    assert "Yellow" not in cartridges.COMPANION_TITLES and len(set(cartridges.COMPANION_TITLES)) == len(
+        cartridges.COMPANION_TITLES)
+
+
+@pytest.mark.parametrize("randomize", [False, True])
+def test_a_companion_title_cannot_be_prepared_clean(tmp_path, monkeypatch, randomize):
+    """companion=False (or a randomized-clean request) is refused for Red/Blue, before the randomizer
+    is spent and before anything is written: the launcher would refuse the cartridge anyway."""
+    from server.cartridges import CartridgeError, provision
+
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on a refused pick"))
+    with pytest.raises(CartridgeError, match="Red needs the SLink companion patch"):
+        provision(str(tmp_path / "run"), _vanilla(), companion=False,
+                  randomize={"settings_path": "s.rnqs"} if randomize else None, jar="fake.jar")
+    assert not (tmp_path / "run").exists()
+
+
+@pytest.mark.parametrize("randomize", [False, True])
+def test_a_pure_pick_cannot_be_prepared_clean_and_the_randomized_overlay_still_can(tmp_path, monkeypatch, randomize):
+    from server.cartridges import CartridgeError, provision
+
+    source = _pure()
+    monkeypatch.setattr(upr_pipeline, "jar_is_fork", lambda jar: True)
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on a refused pick"))
+    with pytest.raises(CartridgeError, match="needs the SLink companion patch"):
+        provision(str(tmp_path / "run"), {"a": source, "b": source}, companion=False,
+                  randomize={"settings_path": "s.rnqs"} if randomize else None, jar="fork.jar")
+    assert not (tmp_path / "run").exists()
+
+
+def test_randomize_then_patch_every_companion_cartridge_carries_the_companion(tmp_path, monkeypatch):
+    """Randomized companion titles are randomized and THEN carry the companion: Red/Blue are injected into
+    the randomized bytes; pureRGB randomizes the overlay itself. A randomized-clean pair is not offered."""
+    from server import cartridges
+
+    sources = _vanilla()
+    _fake_pair(monkeypatch)
+    result = cartridges.provision(str(tmp_path), sources, companion=True,
+                                  randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
+    assert {row["kind"] for row in result["players"].values()} == {"rand_companion"}
+    for pid, row in result["players"].items():
+        final = Path(row["output"]).read_bytes()
+        assert inject.describe(final)["already"] is not None, "the randomized cartridge must carry the payload"
+        assert final == inject.inject(Path(sources[pid]).read_bytes())
 
 
 def test_injection_refusal_is_reported_before_final_outputs(tmp_path, monkeypatch):

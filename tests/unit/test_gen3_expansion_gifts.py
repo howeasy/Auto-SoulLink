@@ -3,13 +3,21 @@
 import json
 from pathlib import Path
 
+import pytest
 
 from tools import gen_gen3_profile as profile
-
 
 ROOT = profile.REPO
 SOURCE = ROOT / ".cache/expansion-src"
 OUTPUT = ROOT / "data/games/gen3_exp/28877d73/expansion_gifts.json"
+
+
+def _source() -> Path:
+    """The pinned expansion checkout is an ignored cache: absent skips (tests/TESTING.md);
+    a present-but-wrong tree still fails the parity and source-line checks."""
+    if not SOURCE.is_dir():
+        pytest.skip(f"pinned expansion source absent: {SOURCE}")
+    return SOURCE
 
 
 def test_expansion_gift_census_preserves_active_and_excluded_sources():
@@ -37,8 +45,6 @@ def test_expansion_gift_census_preserves_active_and_excluded_sources():
                and r["species"] == "starterMon" and r["status"] == "active" for r in rows)
     for r in rows:
         assert r["source"] and r["line"] > 0 and r["species"]
-        source_line = (SOURCE / r["source"]).read_text(encoding="utf-8").splitlines()[r["line"] - 1]
-        assert r["opcode"] in source_line and r["species"] in source_line
         if r["status"] == "active" and r["source"].startswith("data/maps/"):
             assert r["map_group_num"] is not None
             assert r["area_id"] or r["unresolved_area"]
@@ -47,13 +53,16 @@ def test_expansion_gift_census_preserves_active_and_excluded_sources():
     debug = next(r for r in rows if r["source"] == "src/debug.c" and r["line"] == 3198)
     assert debug["arguments"] == ["DebugSelection_GetData(taskId, 0)",
                                   "DebugSelection_GetData(taskId, 1)", "ITEM_NONE"]
+    source = _source()
+    for r in rows:
+        source_line = (source / r["source"]).read_text(encoding="utf-8").splitlines()[r["line"] - 1]
+        assert r["opcode"] in source_line and r["species"] in source_line
 
 
 def test_expansion_gift_generator_parity_and_source_pin():
     from tools import gen_gen3_exp_gifts as gifts
 
-    assert SOURCE.is_dir()
-    assert gifts.build(SOURCE) == json.loads(OUTPUT.read_text(encoding="utf-8"))
+    assert gifts.build(_source()) == json.loads(OUTPUT.read_text(encoding="utf-8"))
 
 
 def test_nested_native_arguments_and_createmon_target_classification():

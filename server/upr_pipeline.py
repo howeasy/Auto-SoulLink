@@ -39,6 +39,7 @@ separate capability check and says nothing about trust -- its INI marker is forg
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -250,6 +251,20 @@ def jar_entry_crcs(jar: str) -> dict[str, int | None]:
 FAMILY_GEN2 = "gen2_gsc"
 _GEN2_TITLES = ("crystal", "gold", "silver")
 
+# The Emerald Expansion (pokeemerald-expansion, gen3_exp pack) is a 32 MiB BUILD, not a dump: it
+# is recognised by the exact sha1 its pack pins, never by header, so the 16 MiB Gen 3 gates
+# below (and every other 32 MiB BPEE) stay refused. It has no randomizer and no companion.
+FAMILY_GEN3_EXP = "gen3_exp"
+EXPANSION_VARIANT = "Emerald Expansion"
+EXPANSION_REFUSAL = ("The Emerald Expansion has no randomizer and no companion patch (it is a prebuilt "
+                     "reference ROM); turn Randomize and Companion off")
+
+
+@functools.cache
+def _expansion_sha1() -> str:
+    with open(os.path.join(_REPO, "data", "games", "gen3_exp", "28877d73", "profile.json"), encoding="utf-8") as fh:
+        return json.load(fh)["source"]["rom_sha1"].lower()
+
 
 def _gen2_clean_sha1s() -> dict[str, str]:
     """sha1 -> title, for every SELECTED clean row across the three Gen 2 admission tables
@@ -305,6 +320,9 @@ def family_of(sources: dict[str, str]) -> str:
     for pid, path in sources.items():
         with open(path, "rb") as f:
             rom = f.read()
+        if hashlib.sha1(rom).hexdigest() == _expansion_sha1():
+            families[pid] = FAMILY_GEN3_EXP
+            continue
         if title := gen3_title(rom):
             families[pid] = FAMILY_EMERALD if title == "emerald" else FAMILY_FRLG
             continue
@@ -316,7 +334,7 @@ def family_of(sources: dict[str, str]) -> str:
     if len(set(families.values())) != 1:
         raise UprPipelineError(
             f"the two ROMs are different families ({families}); a cartridge only pairs with "
-            f"another of its own family (vanilla Gen 1, pureRGB, Gen 2, FireRed / LeafGreen, Emerald)")
+            f"another of its own family (vanilla Gen 1, pureRGB, Gen 2, FireRed / LeafGreen, Emerald, Emerald Expansion)")
     return next(iter(families.values()))
 
 
@@ -543,6 +561,10 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
             rom = f.read()
         # the Manager's ROM scan dedups on this, so it reads each file once, not twice
         info["sha1"] = hashlib.sha1(rom).hexdigest()
+        if info["sha1"] == _expansion_sha1():
+            info.update(family=FAMILY_GEN3_EXP, kind="clean", clean=True, variant=EXPANSION_VARIANT,
+                        title=f"{EXPANSION_VARIANT} · {KIND_WORDS['clean']}")
+            return info
         if rom[0xAC:0xB0] == b"BPEE" and gen3_title(rom) is None:
             info.update(clean=False, title="Emerald header is not a supported 16 MiB revision-0 cartridge")
             return info

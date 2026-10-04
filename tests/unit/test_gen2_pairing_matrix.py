@@ -5,6 +5,13 @@ spelling, so every Gen 2 pairing is admitted by the generic derived-foundation c
 (no title relation in shared code). A Gen 2 half beside a Gen 1 or Gen 3 half is refused
 and the refusal changes nothing.
 
+Patch-first (owner 2026-10-02): the SLink companion overlay is REQUIRED for Crystal, Gold and
+Silver, so every Gen 2 half that reaches this matrix as an ADMITTED cartridge is an overlay
+(`Gen2GSCAdapter.companion_refusal`; the rule itself is tests/unit/test_companion_required_gen2.py).
+`_cart` therefore sends the overlay, and the artifact-kind matrix at the bottom keeps only the
+overlay column: the clean column no longer admits a run, it is refused, and the tests that used
+to pair clean with overlay now assert that refusal.
+
 The runtime adapter was NOT part of this card: `_ROM_TYPE_TO_GAME_ID` kept every Gen 2
 spelling on the legacy `gen2_crystal` adapter until U5, which re-pointed Crystal, Gold and
 Silver to `gen2_gsc`. Archipelago Crystal (`crystal_ap` / "Crystal (AP)") is REFUSED by
@@ -30,6 +37,7 @@ from server.adapters import (
 )
 from server.server import SLinkServer
 from server.state import LinkEntry, LinkStatus, MonInfo
+from tests.unit.companion_evidence import companion
 from tests.unit.test_mixed_foundations import _hello, _refused, _session, _snapshot
 
 REPO = Path(__file__).resolve().parents[2]
@@ -37,13 +45,22 @@ GEN2 = ("Crystal", "crystal", "Gold", "gold", "Silver", "silver")
 AP = ("Crystal (AP)", "crystal_ap")
 OTHER_GENS = ("red", "Red", "PureRed", "firered", "firered_rr", "emerald")
 KEY_A, KEY_B = "AABB:30B8:10", "CCDD:7B0B:13"
+REASON = "needs the SLink companion patch"
 
 
 def _cart(rom_type: str, declare: bool = False) -> dict:
-    cart = {"rom_type": rom_type, "artifact_kind": "clean"}
+    """A cartridge that MAY connect, carrying its own companion evidence: the required overlay
+    for Gen 2, and for every other family what tests/unit/companion_evidence.companion says a
+    patched cartridge sends (`{}` for the unrouted spellings, refused before any of this)."""
+    cart = {"rom_type": rom_type, **companion(rom_type)}
     if declare:  # the new client (lua/gen2/client.lua) declares it; the legacy one omits it
         cart["foundation"] = "gen2_gsc"
     return cart
+
+
+def _needs_companion(reply) -> bool:
+    return any(c.get("cmd") == "hud_show" and "COMPANION" in c.get("text", "")
+               for c in reply["commands"])
 
 
 def _seed(srv) -> None:
@@ -213,7 +230,7 @@ async def test_crystal_ap_is_refused_on_its_own_by_name(tmp_path, ap, declare):
         before = _snapshot(srv)
         assert _unsupported(await send(_hello("a", _cart(ap, declare=declare))))
         err = srv.state.identity_error["a"]
-        assert "Archipelago Crystal is not supported (O-25)" in err, err
+        assert "this Crystal build is not supported" in err, err
         assert "a" in srv._rom_type_rejected
         assert _snapshot(srv) == before and not srv.state.rom_type
     finally:
@@ -230,7 +247,7 @@ async def test_crystal_ap_is_refused_beside_every_gen2_gsc_half(tmp_path, ap, gs
         assert not _refused(await send(_hello("a", _cart(gsc))))
         before = _gate_snapshot(srv)
         assert _unsupported(await send(_hello("b", _cart(ap))))
-        assert "O-25" in srv.state.identity_error["b"]
+        assert "this Crystal build is not supported" in srv.state.identity_error["b"]
         assert _deep(srv) == before
     finally:
         await close()
@@ -241,7 +258,7 @@ def test_the_mixed_games_check_refuses_crystal_ap_as_unsupported_too(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
     for ap in AP:
         err = srv._mixed_games_error("b", ap, "clean")
-        assert "Archipelago Crystal is not supported (O-25)" in err, err
+        assert "this Crystal build is not supported" in err, err
 
 
 # ── unknown and contradictory hellos ─────────────────────────────────────────────────────
@@ -321,12 +338,16 @@ async def test_a_restart_re_derives_gen2_gsc_from_every_persisted_spelling(tmp_p
         await close()
     restarted = SLinkServer(data_dir=str(tmp_path))
     assert restarted.state.rom_type == persisted
+    # The persisted run is an OVERLAY run (patch-first: only the overlay half connects), so a
+    # Gen 2 probe carries that kind -- and a clean Gen 2 half is refused on the run-wide
+    # artifact-kind lock whatever its spelling.
     for rom_type in GEN2:
-        assert restarted._mixed_games_error("b", rom_type, "clean") == "", rom_type
-    for rom_type in OTHER_GENS:
+        assert restarted._mixed_games_error("b", rom_type, "overlay") == "", rom_type
+        assert "Mixed artifact kinds" in restarted._mixed_games_error("b", rom_type, "clean"), rom_type
+    for rom_type in OTHER_GENS:  # the foundation gate fires before the kind lock, so "clean" is inert here
         assert "Mixed games" in restarted._mixed_games_error("b", rom_type, "clean"), rom_type
     for rom_type in AP:
-        assert "O-25" in restarted._mixed_games_error("b", rom_type, "clean"), rom_type
+        assert "this Crystal build is not supported" in restarted._mixed_games_error("b", rom_type, "clean"), rom_type
     send, close = await _session(restarted)
     try:
         assert not _refused(await send(_hello("b", _cart("Silver", declare=True))))
@@ -350,12 +371,19 @@ def test_the_u5_cutover_moved_every_admitted_gen2_title_and_ap_routes_nowhere():
     assert "gen2_crystal" not in set(_ROM_TYPE_TO_GAME_ID.values())
 
 
-# ── artifact-kind pairing (P4.3d, ruling O-27 D4): patched<->patched, clean<->clean only ──
+# ── artifact-kind pairing (P4.3d, ruling O-27 D4) ─────────────────────────────────────────
 # Before this card: `Gen2GSCAdapter.set_artifact_kind` required exactly "clean", so a hello
 # declaring "overlay" raised ValueError out of `_dispatch` instead of being admitted or
 # cleanly refused (an unhandled exception, not a graceful "Mixed artifact kinds" reply).
 # `pairing_kind` already returned its argument unchanged, so it needed no change here --
 # the fix is adapter DATA only (`set_artifact_kind`, `supports_info_panel`, `native_trade_ui`).
+#
+# Patch-first (owner 2026-10-02) then retired the "clean" COLUMN of that matrix: the companion
+# overlay is required, so a clean Gen 2 hello is refused at its own hello (never reaching
+# `_dispatch`, so it commits no run kind and installs no Gen 2 adapter). The mixed-kind lock
+# itself is untouched and still fires when a run IS committed -- an overlay run with a clean
+# half behind it, or a run persisted under the earlier ruling. Both orders are still refused;
+# each order now asserts the refusal that is actually reachable for it.
 
 def _cart_kind(rom_type: str, kind: str, declare: bool = False) -> dict:
     cart = _cart(rom_type, declare)
@@ -381,7 +409,7 @@ def test_gen2_gsc_adapter_flips_native_capabilities_on_overlay_only():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["clean", "overlay"])
+@pytest.mark.parametrize("kind", ["overlay"])
 async def test_matching_artifact_kinds_pair_and_commit_the_run_wide_capability(tmp_path, kind):
     """Falsifier: overlay<->overlay refused (or raising out of the hello) -> red."""
     srv = SLinkServer(data_dir=str(tmp_path))
@@ -398,13 +426,55 @@ async def test_matching_artifact_kinds_pair_and_commit_the_run_wide_capability(t
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("first_kind,second_kind", [("clean", "overlay"), ("overlay", "clean")])
-async def test_mixed_artifact_kinds_are_refused_not_admitted(tmp_path, first_kind, second_kind):
-    """The card's own falsifier: clean<->overlay admitted -> red."""
+@pytest.mark.parametrize("declare", [False, True], ids=["omitted", "declared"])
+async def test_a_clean_gen2_half_is_refused_and_commits_no_run_wide_capability(tmp_path,
+                                                                               declare):
+    """The "clean" column of the matrix above, as it survives the ruling: the clean pret build
+    is refused for lacking the companion, and the run's kind -- the run-wide native
+    capabilities that follow it -- stays uncommitted.
+
+    Falsifier: the clean half admitted, or its refusal committing `artifact_kind` / installing
+    the Gen 2 adapter -> red. (The adapter's own clean-vs-overlay capability flip, with no
+    session, is `test_gen2_gsc_adapter_flips_native_capabilities_on_overlay_only` above.)
+    """
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
-        assert not _refused(await send(_hello("a", _cart_kind("Crystal", first_kind))))
+        reply = await send(_hello("a", _cart_kind("Crystal", "clean", declare)))
+        assert _needs_companion(reply), reply
+        assert REASON in srv.state.identity_error["a"]
+        assert srv.state.artifact_kind == "" and not srv.state.rom_type
+        assert srv.adapter.game_id != "gen2_gsc", "a refused hello installed the Gen 2 adapter"
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first_kind,second_kind", [("clean", "overlay"), ("overlay", "clean")])
+async def test_mixed_artifact_kinds_are_refused_not_admitted(tmp_path, first_kind, second_kind):
+    """The card's own falsifier: clean<->overlay admitted -> red.
+
+    Both orders are refused, each on the gate that is reachable for it: a clean FIRST half never
+    commits a run (the companion gate), so the overlay half that follows starts an overlay run
+    of its own; a clean SECOND half is refused on the run-wide kind lock, which is the whole
+    point of this card.
+    """
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        first = await send(_hello("a", _cart_kind("Crystal", first_kind)))
+        if first_kind == "clean":
+            assert _needs_companion(first), first
+            assert REASON in srv.state.identity_error["a"]
+            assert srv.state.rom_type == "" and srv.state.artifact_kind == ""
+            _gate_snapshot(srv)  # a run already carrying real data: the overlay half still joins
+            assert not _refused(await send(_hello("b", _cart_kind("Gold", second_kind,
+                                                                  declare=True)))), \
+                "the clean first half committed a run the overlay half could not join"
+            assert srv.state.artifact_kind == "overlay" and srv.state.rom_type == "Gold"
+            assert not srv.state.identity_error.get("b")
+            return
+        assert not _refused(first)
         before = _gate_snapshot(srv)
         reply = await send(_hello("b", _cart_kind("Gold", second_kind, declare=True)))
         assert _refused(reply), reply

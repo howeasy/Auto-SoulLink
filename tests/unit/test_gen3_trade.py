@@ -609,7 +609,6 @@ def test_legacy_companion_without_save_witness_refuses_trade(monkeypatch, scenar
                                         ("gen3_emerald", "emerald"), ("gen3_rr", "radical_red")])
 def test_clean_rom_never_advertises_companion_trade_prepare(pack, title, monkeypatch):
     monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "0000BEEF")
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", ROOT / "data/games/gen3_emerald")
     world = World(pack, title, "clean")
     world.set_party(party(A, B))
     world.step_to(60)

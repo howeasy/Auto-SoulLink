@@ -311,7 +311,7 @@ function U.run(F, ctx, SG, g)
                    gifts=g.read_json("data/games/gen2_" .. title .. "/gifts.json")}
     -- The production binder resolves point symbols pack-wide, also from unregistered sites (signals.lua build);
     -- the model keeps only its sites, so they carry the pack-wide union (live run 1: wBattleScriptFlags).
-    local model_pack = g.read_json("data/games/gen2_" .. title .. "/engine_signals.json")
+    local model_pack = F.exec_pack(ctx, g.read_json("data/games/gen2_" .. title .. "/engine_signals.json"))
     local union = {}
     for _, site in pairs(model_pack.titles[title].sites) do
         for symbol, point in pairs(site.point_symbols) do union[symbol] = point end
@@ -396,7 +396,8 @@ function U.run(F, ctx, SG, g)
     local counts = {}
     for _, e in ipairs(model.events) do local k = U.event_key(e) counts[k] = (counts[k] or 0) + 1 end
     local run = {schema=g.Signals.RECEIPT_SCHEMA, title=title, evidence_level=g.evidence, result="PASS",
-        rom_sha1=g.pack.source.rom_sha1, pack_commit=g.pack.source.commit, pack_specs_sha256=g.pack.specs_sha256,
+        rom_sha1=ctx.env.exec_sha1, artifact_kind=ctx.ident.artifact_kind, binding_sha256=ctx.ident.binding_sha256,
+        base_sha1=ctx.ident.base_sha1, pack_commit=g.pack.source.commit, pack_specs_sha256=g.pack.specs_sha256,
         fixture=case.synth, attempt_id=case.attempt_id, core_mode="CGB", input_mode="normal_buttons",
         fixture_sha256=ctx.qualify.stage_fingerprint, qualification_attempt_id=ctx.u1.qualification_attempt_id,
         harness_write_scopes=json.array({}), bank_check="live", arrival_frame=arrival,
@@ -407,7 +408,13 @@ function U.run(F, ctx, SG, g)
         sites=sites, proven=json.array(claimed), synth=g.read_json(facts.disclosure), effects=json.array(run_effects),
         model_events=counts, u1g_kind=kind}
     -- production: the title's committed receipt plus this run, as one v2 receipt, registers the union
-    local committed = g.read_json("tests/fixtures/gen2/receipts/" .. title .. ".engine_sites.json")
+    -- The union is per artifact (D4): an overlay run joins the OVERLAY receipt only, a clean run the clean one.
+    local committed = g.read_json("tests/fixtures/gen2/receipts/" .. (ctx.artifact.kind == "overlay" and "overlay/" or "")
+                                  .. title .. ".engine_sites.json")
+    for _, r in ipairs(committed.runs or {committed}) do
+        assert(r.rom_sha1 == ctx.env.exec_sha1 and (r.artifact_kind or "clean") == ctx.artifact.kind,
+               "the committed receipt holds a run of another artifact; a U1 union never mixes kinds or ROMs")
+    end
     local runs = {}
     for _, r in ipairs(committed.runs or {committed}) do if r.fixture ~= run.fixture then runs[#runs + 1] = r end end
     runs[#runs + 1] = run
@@ -418,7 +425,10 @@ function U.run(F, ctx, SG, g)
             stack_valid=function() return false end},
         authority={kind="PHYSICAL_RUNTIME", capture=function() return {generation=1, operation="u1g"} end,
                    valid=function() return false end},
-        runtime_qualification={schema=g.Signals.RECEIPT_SCHEMA_V2, title=title, runs=runs}}
+        -- an overlay union carries its identity at the top level too (signals.lua kind_mismatch checks both)
+        runtime_qualification={schema=g.Signals.RECEIPT_SCHEMA_V2, title=title, runs=runs,
+                               artifact_kind=ctx.ident.artifact_kind, binding_sha256=ctx.ident.binding_sha256}}
+    if ctx.artifact.kind == "overlay" then options.view = ctx.artifact end   -- the production binder validates the overlay's sites
     local service, why = g.Signals.new(options)
     local registered = service and service:status().registered_sites or {}
     if service then service:close() end

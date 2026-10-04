@@ -339,3 +339,17 @@ def test_identify_refuses_a_pure_rom_whose_engine_site_changed(pure_rom):
     broken[site["rom_offset"]] ^= 0xFF
     with pytest.raises(RomScanError, match="modified engine site"):
         identify(bytes(broken))
+
+
+def test_an_earlier_stamp_of_the_overlay_identifies_as_the_overlay():
+    """identify() keys pureRGB by sha1; the overlay rows' equivalent_sha1s (builds a release stamp replaced, same canonical
+    identity) resolve to the same row, so a cartridge patched before the stamp is still the pinned overlay."""
+    from server.adapters.gen1_rom_scan import _load_purergb_admission
+    table = _load_purergb_admission()
+    rows = json.loads((DATA / "admission_overlay.json").read_text(encoding="utf-8"))
+    checked = 0
+    for sha1, row in rows.items():
+        for old in row.get("equivalent_sha1s") or []:
+            assert table.get(old) == row, old
+            checked += 1
+    assert checked >= 3

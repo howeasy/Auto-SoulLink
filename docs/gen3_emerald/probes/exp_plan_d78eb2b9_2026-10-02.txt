@@ -1,0 +1,102 @@
+# G4 final cut d78eb2b9b6a21ebeaeec1cf2dafe2bd52c3fe8fe  lane=C:/slink-wt/exp-xg3-final-source  master=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-master  rows=30  carry=False
+# provision: git worktree add --detach C:/slink-wt/exp-xg3-final-source d78eb2b9b6a21ebeaeec1cf2dafe2bd52c3fe8fe   (only if C:/slink-wt/exp-xg3-final-source does not exist)
+# provision: git -C C:/slink-wt/exp-xg3-final-source update-index -q --really-refresh && git -C C:/slink-wt/exp-xg3-final-source status --porcelain --untracked-files=no   (must be empty, else abort)
+# provision: git -C C:/slink-wt/exp-xg3-final-source checkout --detach d78eb2b9b6a21ebeaeec1cf2dafe2bd52c3fe8fe   (if HEAD differs)
+# provision: git -C C:/slink-wt/exp-xg3-final-source update-ref --no-deref HEAD d78eb2b9b6a21ebeaeec1cf2dafe2bd52c3fe8fe   (fallback: the broken shared ref)
+# provision: git -C C:/slink-wt/exp-xg3-final-source read-tree d78eb2b9b6a21ebeaeec1cf2dafe2bd52c3fe8fe && git -C C:/slink-wt/exp-xg3-final-source checkout-index -a -f   (fallback)
+# provision: pinned inputs (sha1 vs the tree's own pins; lane, then this worktree, then the main checkout; no match aborts): patch/build/gen3_pokeemerald.gba, .cache/expansion-output/reference/pokeemerald.gba
+# provision: unpinned inputs, copied only when missing: .cache/expansion-output/, .cache/pret/pokeemerald/
+# provision: link the locked, clean expansion source; copy the offline probe.o (SLINK_EXPANSION_PROBE_OBJECT) plus compile.json when present; verify object hash vs facts
+# TEST-ONLY expansion qualification; production routing remains refused
+[01] profile_generated_check_exp  RUN  (XG3 SOURCE, no history, budget 5m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/gen_gen3_profile.py --expansion 28877d73 --check
+     no --carry
+[02] write_checkpoint_generated_check_exp  RUN  (XG3 SOURCE, no history, budget 5m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/gen_gen3_write_checkpoint.py --expansion 28877d73 --check
+     no --carry
+[03] engine_signals_generated_check_exp  RUN  (XG3 SOURCE, no history, budget 5m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/gen_gen3_engine_signals.py --expansion 28877d73 --check
+     no --carry
+[04] area_map_generated_check_exp  RUN  (XG3 SOURCE, no history, budget 5m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/gen_area_map.py --game emerald --expansion 28877d73 --check --source 'C:/slink-wt/exp-xg3-final-source\.cache\expansion-src'
+     no --carry
+[05] gift_census_check_exp  RUN  (XG3 SOURCE, no history, budget 5m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/gen_gen3_exp_gifts.py --check --src 'C:/slink-wt/exp-xg3-final-source\.cache\expansion-src'
+     no --carry
+[06] wild_rom_check_exp  RUN  (XG3 SOURCE, no history, budget 5m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/verify_gen3_exp_wild.py --check
+     no --carry
+[07] shadow_negatives_exp  RUN  (XG3 SOURCE, no history, budget 2m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/gen3_shadow_negatives.py docs/gen3_exp/negatives_manifest.json
+     no --carry
+[08] unit_exp  RUN  (XG3 MODEL, no history, budget 30m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python -m pytest tests/unit/test_build_expansion.py tests/unit/test_e2e_duo_gen3_exp.py tests/unit/test_extract_expansion_config.py tests/unit/test_extract_expansion_data.py tests/unit/test_gen3_codec_expansion.py tests/unit/test_gen3_exp_acquisition_rows.py tests/unit/test_gen3_exp_entry.py tests/unit/test_gen3_exp_faint_pin.py tests/unit/test_gen3_exp_hello_diagnostics.py tests/unit/test_gen3_exp_mon_given.py tests/unit/test_gen3_exp_pack.py tests/unit/test_gen3_exp_pc_chain_fixture.py tests/unit/test_gen3_exp_pc_negative_legs.py tests/unit/test_gen3_exp_pc_receipt.py tests/unit/test_gen3_exp_player_gender.py tests/unit/test_gen3_exp_reads.py tests/unit/test_gen3_exp_release_row.py tests/unit/test_gen3_exp_safety.py tests/unit/test_gen3_exp_script_mirror_scope.py tests/unit/test_gen3_exp_signal_mirror.py tests/unit/test_gen3_exp_sites.py tests/unit/test_gen3_exp_static_wild_rows.py tests/unit/test_gen3_expansion_adapter.py tests/unit/test_gen3_expansion_calc_names.py tests/unit/test_gen3_expansion_faint_oracle.py tests/unit/test_gen3_expansion_gift_policy.py tests/unit/test_gen3_expansion_gifts.py tests/unit/test_gen3_expansion_masks.py tests/unit/test_gen3_expansion_refusal.py tests/unit/test_gen3_expansion_towns.py tests/unit/test_gen3_expansion_trainer_panel.py tests/unit/test_gen3_expansion_trainer_sets.py tests/unit/test_gen3_expansion_wild.py tests/unit/test_gen3_expansion_wild_rom.py tests/unit/test_gen3_final_cut.py tests/unit/test_gen3_final_cut_exp.py tests/unit/test_gen3_fixture_exp.py tests/unit/test_gen3_title_syms_exp.py tests/unit/test_gen_expansion_facts.py -q -p no:randomly -rs
+     no --carry
+[09] exp_static_static_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario exp_static_static_gen3
+     no --carry
+[10] exp_static_static_run_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario exp_static_static_run_gen3
+     no --carry
+[11] exp_static_grass_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario exp_static_grass_gen3
+     no --carry
+[12] exp_static_surf_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario exp_static_surf_gen3
+     no --carry
+[13] exp_static_rock_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario exp_static_rock_gen3
+     no --carry
+[14] exp_static_fish_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario exp_static_fish_gen3
+     no --carry
+[15] exp_static_altering0_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario exp_static_altering0_gen3
+     no --carry
+[16] exp_static_altering1_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario exp_static_altering1_gen3
+     no --carry
+[17] gift_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario gift_gen3
+     no --carry
+[18] egg_hatch_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 45m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario egg_hatch_gen3
+     no --carry
+[19] egg_receive_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario egg_receive_gen3
+     no --carry
+[20] choice_gift_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario choice_gift_gen3
+     no --carry
+[21] gift_box_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 35m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario gift_box_gen3
+     no --carry
+[22] faint_cmd_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 30m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario faint_cmd_gen3
+     no --carry
+[23] linked_faint_active_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 45m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario linked_faint_active_gen3
+     no --carry
+[24] boxsync_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 45m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario boxsync_gen3
+     no --carry
+[25] whiteout_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 55m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario whiteout_gen3
+     no --carry
+[26] link_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 105m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario link_gen3
+     no --carry
+[27] release_gen3_exp_as_a  RUN  (XG3 TEST-ONLY duo, no history, budget 55m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/e2e_duo.py --game gen3_exp --scenario release_gen3
+     no --carry
+[28] exp_zip_build  RUN  (§9 item5 EXP, no history, budget 10m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/make_release.py --version g4-d78eb2b9 --out C:/slink-wt/exp-xg3-final-source/dist --skip-generators
+     no --carry
+[29] exp_zip_check  RUN  (§9 item5 EXP, no history, budget 5m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/check_release_zip.py C:/slink-wt/exp-xg3-final-source/dist/SLink-player-g4-d78eb2b9.zip --rev d78eb2b9b6a21ebeaeec1cf2dafe2bd52c3fe8fe
+     no --carry
+[30] zip_boot_exp  RUN  (§9 item5 EXP, no history, budget 10m, cwd=C:/slink-wt/exp-xg3-final-source)
+     $ SLINK_EXPANSION_SRC=C:/slink-wt/exp-xg3-final-source\.cache\expansion-src SLINK_EXPANSION_ARTIFACTS=C:/slink-wt/exp-xg3-final-source\.cache\expansion-output\reference SLINK_EXPANSION_PROBE_OBJECT=C:/slink-wt/exp-xg3-final-source\.cache\x1-probe\probe.o python tools/gen3_final_cut.py zip-boot --zip C:/slink-wt/exp-xg3-final-source/dist/SLink-player-g4-d78eb2b9.zip --lane C:/slink-wt/exp-xg3-final-source --title exp
+     no --carry
+# 30 rows: RUN 30 / CACHED 0 / CARRY 0 (this shard) -- lane time: 0m from 0 rows' receipts + 30 rows with no history (budget ceiling 887m)
+# receipts docs/gen3/probes/fc_<row>_d78eb2b9.txt, summary fc_SUMMARY_d78eb2b9_exp.txt

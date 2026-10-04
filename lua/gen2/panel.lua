@@ -120,12 +120,17 @@ function P.new(profile, charmap, io, writes, sanitize)
     end
     local last_counter, moved_at, fresh = nil, nil, false
 
+    --- The overlay's own mailbox signature: beacon + this build's ABI byte + the service's init cookie.
+    local function signature_ok()
+        return u8(MAILBOX) == G.BEACON[1] and u8(MAILBOX + 1) == G.BEACON[2]
+               and u8(MAILBOX + 2) == G.BEACON[3] and u8(MAILBOX + 3) == G.BEACON[4]
+               and u8(MAILBOX + G.OFF_ABI) == P.ABI_VERSION and u8(MAILBOX + P.OFF_COOKIE) == P.COOKIE
+    end
+
     --- One observation per frame: live = beacon + version 3 + cookie, with the counter moving.
     local function observe()
         local frame = io.framecount()
-        local ok = u8(MAILBOX) == G.BEACON[1] and u8(MAILBOX + 1) == G.BEACON[2]
-                   and u8(MAILBOX + 2) == G.BEACON[3] and u8(MAILBOX + 3) == G.BEACON[4]
-                   and u8(MAILBOX + G.OFF_ABI) == P.ABI_VERSION and u8(MAILBOX + P.OFF_COOKIE) == P.COOKIE
+        local ok = signature_ok()
         local lo, hi = u8(MAILBOX + P.OFF_COUNTER), u8(MAILBOX + P.OFF_COUNTER + 1)
         if not ok or lo == nil or hi == nil or type(frame) ~= "number" then
             last_counter, moved_at, fresh = nil, nil, false
@@ -141,6 +146,17 @@ function P.new(profile, charmap, io, writes, sanitize)
     end
 
     function self:fresh() return fresh end
+
+    --- The mailbox ABI for the server's companion evidence, or nil: read from the cartridge's own RAM right now,
+    --- exactly like Gen 3's companion_live (signature + ABI, no counter). A clean cartridge has no SLNK service, so
+    --- the beacon, the version byte and the init cookie do not all read right and the evidence is ABSENT.
+    --- Deliberately NOT tied to `fresh`: the hello is final (a refusal is never retried), and `fresh` needs two
+    --- observations of a moving counter, which a script loaded mid-game or a battle text prompt (no DelayFrame, so
+    --- no service tick) would not have yet. The counter guard stays on what PAINTS, not on what this cartridge IS.
+    function self:companion_abi()
+        if signature_ok() then return u8(MAILBOX + G.OFF_ABI) end
+        return nil
+    end
 
     local base_present, base_sfx_present, base_service = self.present, self.sfx_present, self.service
     local base_request, base_clear, base_clear_sfx, base_code_for =

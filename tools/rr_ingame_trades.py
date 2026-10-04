@@ -19,9 +19,14 @@ import argparse
 import struct
 from pathlib import Path
 
+try:
+    from tools import rr_companion
+except ImportError:                    # run as a script: tools/ is sys.path[0]
+    import rr_companion
+
 ROOT = Path(__file__).resolve().parents[1]
 ROM_BASE = 0x08000000
-RR_ROM_SHA1 = "da579690db7d6933a0952a1f490312842793f71a"  # patch/build/slink_RR.gba pin
+RR_ROM_SHA1 = rr_companion.rom_sha1()  # patch/build/slink_RR.gba: the exact companion in patch/dist/companion_pins.json
 DEFAULT_RR_ROM = ROOT / "patch" / "build" / "slink_RR.gba"
 DEFAULT_VANILLA_ROM = ROOT / "patch" / "build" / "gen3_Pokemon_-_FireRed_Version_(USA).gba"
 

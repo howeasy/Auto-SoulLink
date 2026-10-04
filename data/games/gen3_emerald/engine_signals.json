@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_emerald",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "7a5e252ef149c295095e86241fc94884ecaf43980c68376e758ad444dd71ffde",
+  "sha256": "2516b924686efe6f0f7cb5496b78f3159e7783273076f970c47fbc7f661e57d0",
   "titles": {
     "emerald": {
       "artifacts": {
@@ -641,9 +641,12 @@
           }
         },
         "companion": {
+          "equivalent_sha1s": [
+            "f1fbbd794c26be1b50a8c61ca0cc2f44b0a8433b"
+          ],
           "production": true,
-          "rom_md5": "bca9de3751315fb126cf348a74cfae88",
-          "rom_sha1": "2eef703ca448df5d782d16490cf2608803a7ef13",
+          "rom_md5": "d42abd51a4252ca80f53416630549944",
+          "rom_sha1": "9aff3d2a43790424e9a11b324d7a4259e64d8ee7",
           "sites": {
             "battle_begin": {
               "address": 134440800,
@@ -794,10 +797,10 @@
               "capture_contract": "Published native CallCallbacks entry, before the companion services and original callbacks; frame control, not a gameplay event.",
               "capture_offset": 0,
               "context": {
-                "expected_hex": "004B184755F6E30801D0E6F2D3FD6068",
+                "expected_hex": "004B1847A1F7E30801D0E6F2D3FD6068",
                 "rom_offset": 1308
               },
-              "expected_hex": "004B184755F6E30801D0E6F2D3FD6068",
+              "expected_hex": "004B1847A1F7E30801D0E6F2D3FD6068",
               "function": {
                 "address": 134219036,
                 "anchor_offset": 0,

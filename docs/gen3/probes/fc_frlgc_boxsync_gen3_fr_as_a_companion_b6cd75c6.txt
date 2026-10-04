@@ -1,0 +1,55 @@
+# gen3_final_cut row=frlgc_boxsync_gen3_fr_as_a_companion item=FRLGC-DUO cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario boxsync_gen3 --gen3-companion   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered_companion=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718 rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T03:49:04 cpu=53% emuhawk=1 python=8
+start_utc=2026-10-03T07:49:03Z tracked_clean_before=True
+
+========== scenario: boxsync_gen3 ==========
+[duo] boxsync_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=b6cd75c670eef0911e56c8f056649dcbd192d31a
+[duo] server up: tcp=52220 http=52221 data=F:\slink-work\tmp\duo_hquime3d
+[duo] timing server 1.1s
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=F:\slink-work\tmp\duo_hquime3d path=F:\slink-work\tmp\duo_hquime3d\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=F:\slink-work\tmp\duo_hquime3d path=F:\slink-work\tmp\duo_hquime3d\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 263620B6:99DE0D8A <-> F6B6A64D:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 23.6s
+[duo] timing results 3.7s
+[duo] RESULT_LINE a: RESULT: PASS (round trip of 263620B6:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (round trip of F6B6A64D:1C600D89)
+[duo] COMPANION_ADMISSION a: [client] [SLink-gen3] gen3_frlg/firered (companion by hash) player a -> 127.0.0.1:52220 (rom 96df1dd0)
+[duo] COMPANION_ADMISSION b: [client] [SLink-gen3] gen3_frlg/leafgreen (companion by hash) player b -> 127.0.0.1:52220 (rom 55fb6e9b)
+[duo] SAVE_WITNESS_SHA256 inst=a site=2f8ce0baa5719ab9758026971c7268cde0c854104b1b5ff1bdd8e85120fe7838 file=2f8ce0baa5719ab9758026971c7268cde0c854104b1b5ff1bdd8e85120fe7838 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=1b19ee4a008041993e0f4a224329af00e8317cb68bc1a67f425fe74e55a9147f file=1b19ee4a008041993e0f4a224329af00e8317cb68bc1a67f425fe74e55a9147f match=true saves=1 counter=3->4 rtc=normalized
+[duo] boxsync: 263620B6:99DE0D8A / F6B6A64D:1C600D89 deposited and withdrawn, saved once in party with the fixture record
+[duo] MARKER a: TX party_to_box 263620B6:99DE0D8A {"event":"party_to_box","key":"263620B6:99DE0D8A","player":"a","seq":147,"stats":{"attack":8,"defense":7,"level":4,"maxHP":17,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":8,"spDef":8,"speed":9}}
+[duo] MARKER a: BOXED_OBSERVED 263620B6:99DE0D8A box=0:0
+[duo] MARKER a: TX box_to_party 263620B6:99DE0D8A {"area_id":"","event":"box_to_party","key":"263620B6:99DE0D8A","player":"a","seq":179}
+[duo] MARKER a: RETURNED_OBSERVED 263620B6:99DE0D8A slot=1
+[duo] MARKER b: RX box_mon key=F6B6A64D:1C600D89
+[duo] MARKER b: TX stats_cache F6B6A64D:1C600D89 {"event":"stats_cache","key":"F6B6A64D:1C600D89","player":"b","seq":147,"stats":{"attack":8,"defense":6,"level":3,"maxHP":15,"pp1":35,"pp2":30,"pp3":0,"pp4":0,"spAtk":6,"spDef":7,"speed":9}}
+[duo] MARKER b: BOXED_OBSERVED F6B6A64D:1C600D89 box=0:0
+[duo] MARKER b: RX party_mon key=F6B6A64D:1C600D89
+[duo] MARKER b: TX sync_retrieve_done F6B6A64D:1C600D89 {"event":"sync_retrieve_done","key":"F6B6A64D:1C600D89","player":"b","seq":178}
+[duo] MARKER b: RETURNED_OBSERVED F6B6A64D:1C600D89 slot=1
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] boxsync_gen3: a=PASS b=PASS
+
+========== summary ==========
+  boxsync_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-10-03T07:49:34Z tracked_clean_after=True classification=pass

@@ -25,6 +25,7 @@ import pytest_asyncio
 from aiohttp.test_utils import TestClient, TestServer
 
 from server.server import SLinkServer, build_app
+from tests.unit.companion_evidence import patched
 
 _REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _INJECTOR = os.path.join(_REPO, "tools", "inject_full_mocks.py")
@@ -57,6 +58,8 @@ async def populate(srv: SLinkServer, game: str):
             held.append(r)
         w, r = held[0], held[1]
         for m in events:
+            if m.get("event") == "hello":
+                m = patched(m)
             w.write((json.dumps(m) + "\n").encode())
             await w.drain()
             with contextlib.suppress(TimeoutError):

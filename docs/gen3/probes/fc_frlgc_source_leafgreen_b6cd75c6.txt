@@ -1,0 +1,12 @@
+# gen3_final_cut row=frlgc_source_leafgreen item=FRLGC-SOURCE cut=b6cd75c670eef0911e56c8f056649dcbd192d31a
+# lane=F:/slink-work/lanes/gen3/gen3-lane-clean
+# command: python tools/gen3_final_cut.py companion-check --lane F:/slink-work/lanes/gen3/gen3-lane-clean --title leafgreen   (cwd=F:/slink-work/lanes/gen3/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:leafgreen_companion=0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569
+--- attempt 1 of 1 ---
+LOAD 2026-10-03T03:46:22 cpu=48% emuhawk=1 python=7
+start_utc=2026-10-03T07:46:20Z tracked_clean_before=True
+leafgreen: SLink-LeafGreen.ups on the clean dump (574fa542ffeb) == patch/build/slink_LeafGreen.gba sha1 55fb6e9bfa79d562d727b65077fa85064f342b60 md5 9170ba0b85fe5d054346c0d225e11218
+RESULT: PASS leafgreen staged companion is the pinned composition
+exit=0 end_utc=2026-10-03T07:46:24Z tracked_clean_after=True classification=pass

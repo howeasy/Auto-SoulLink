@@ -21,15 +21,34 @@ class CartridgeError(Exception):
     """The selected cartridges could not be provisioned; the message is the refusal."""
 
 
+# Patch-first (owner 2026-10-01, REQUIRED 2026-10-02): the titles whose SLink companion the
+# launcher and the server REQUIRE. Every cartridge of these titles gets its companion, decided
+# here per player, never by the browser, and a pick that cannot get it is refused, not handed out
+# clean. Yellow has no free WRAM for the mailbox, so it is handed out as picked. Radical Red is
+# patched through /patcher (describe_rom does not identify it, so the Manager never sees a pick
+# of it); it is listed so the list is exactly the patcher's targets, test_cartridges.py pins that.
+COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen",
+                    "Crystal", "Gold", "Silver", "FireRed", "LeafGreen", "Emerald", "Radical Red")
+_GEN2_TITLES = ("Crystal", "Gold", "Silver")   # the title the launcher and the adapter refuse clean for as well
+
+
+def companion_admitted(info: dict) -> bool:
+    """Does this pick's title get the companion? describe_rom's variant, e.g. 'Red'. A Gen 2 title
+    also needs its activated catalog row."""
+    variant = info.get("variant")
+    if variant in ("Crystal", "Gold", "Silver"):
+        return variant in COMPANION_TITLES and patcher.gen2_overlay_admitted(variant.lower())
+    return variant in COMPANION_TITLES
+
+
 def _vanilla_target(data: bytes) -> dict:
     md5 = hashlib.md5(data).hexdigest()
-    target = next((t for t in patcher.TARGETS.values() if t["base_md5"] == md5), None)
+    target = next((t for t in patcher.targets().values() if t["base_md5"] == md5), None)   # live: a stamp may have run
     if target is None:
         # patcher.TARGETS deliberately excludes Yellow: it has zero free WRAM.
         raise CartridgeError(
-            "no companion patch for this cartridge (Red, Blue and Gold/Silver/Crystal have one; "
-            "Yellow has zero free WRAM); "
-            "turn Companion off or choose a supported cartridge")
+            "this cartridge's companion is not in the patch registry; restore the published "
+            "companion patch")
     return target
 
 
@@ -86,9 +105,28 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
                                  f"{info['title'] or 'source ROM not found'}")
     family = upr_pipeline.family_of(sources)
     data = {pid: Path(path).read_bytes() for pid, path in sources.items()}
-    if companion and family == FAMILY_VANILLA:
-        for rom in data.values():
-            _vanilla_target(rom)  # Yellow must refuse before either randomizer starts.
+    if family == upr_pipeline.FAMILY_GEN3_EXP and randomize is not None:
+        raise CartridgeError(upr_pipeline.EXPANSION_REFUSAL)
+    # Per player: a pick whose title has no admitted companion (Yellow) is handed out as picked;
+    # its partner still gets its own companion.
+    want = {pid: bool(companion) and companion_admitted(infos[pid]) for pid in sources}
+    # Patch-first (owner 2026-10-02): the launcher and the server refuse a clean cartridge of a
+    # companion title, so one that cannot be given its companion is refused here, never handed out.
+    for pid, info in infos.items():
+        variant = info.get("variant")
+        if variant in COMPANION_TITLES and not want[pid]:
+            if variant in _GEN2_TITLES and companion:
+                # an unactivated overlay row: the Gen 2 launcher admits no clean cartridge either
+                raise CartridgeError(
+                    f"player {pid}: the Gen 2 companion is not admitted yet for {variant}; "
+                    "a clean cartridge is refused by the launcher, so none is prepared")
+            raise CartridgeError(
+                f"player {pid}: {variant} needs the SLink companion patch, so a clean cartridge "
+                "is not prepared (companion cannot be turned off)")
+    if family == FAMILY_VANILLA:
+        for pid, rom in data.items():
+            if want[pid]:
+                _vanilla_target(rom)  # refuse before either randomizer starts
     if randomize is not None and family == upr_pipeline.FAMILY_GEN2:
         raise CartridgeError(
             "Gen 2 has no randomizer support; turn Randomize off to prepare companion "
@@ -106,8 +144,9 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
         if family in GEN3_FAMILIES and not upr_pipeline.jar_is_fork(jar):
             raise CartridgeError(upr_pipeline.EMERALD_RANDOMIZER_REFUSAL if family == FAMILY_EMERALD
                                  else upr_pipeline.FRLG_RANDOMIZER_REFUSAL)
-    if companion and (family == FAMILY_PURE or randomize is None):
-        data = {pid: _companion(rom, family, infos[pid]) for pid, rom in data.items()}
+    if family == FAMILY_PURE or randomize is None:
+        data = {pid: _companion(rom, family, infos[pid]) if want[pid] else rom
+                for pid, rom in data.items()}
 
     directory = Path(run_dir).resolve()
     roms = directory / "roms"
@@ -117,8 +156,8 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     if randomize is not None:
         ext = ".gba" if family in GEN3_FAMILIES else ".gbc"
         destinations.extend(roms / f"{pid}_randomized{ext}" for pid in sources)
-        if companion and family == FAMILY_PURE:
-            destinations.extend(roms / f"{pid}_companion.gbc" for pid in sources)
+        if family == FAMILY_PURE:
+            destinations.extend(roms / f"{pid}_companion.gbc" for pid in sources if want[pid])
     for output in destinations:
         for source in sources.values():
             if output.resolve() == Path(source).resolve() or (
@@ -127,33 +166,33 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     roms.mkdir(parents=True, exist_ok=True)
     randomized = None
     if randomize is not None:
-        inputs = sources
-        if companion and family == FAMILY_PURE:
-            inputs = {}
+        inputs = dict(sources)
+        if family == FAMILY_PURE:
             for pid, rom in data.items():
-                staged = roms / f"{pid}_companion.gbc"
-                staged.write_bytes(rom)
-                inputs[pid] = str(staged)
+                if want[pid]:
+                    staged = roms / f"{pid}_companion.gbc"
+                    staged.write_bytes(rom)
+                    inputs[pid] = str(staged)
         randomized = upr_pipeline.prepare_pair(jar, randomize["settings_path"], inputs, str(roms))
         data = {pid: Path(row["output"]).read_bytes()
                 for pid, row in randomized["players"].items()}
-        if companion and family == FAMILY_VANILLA:
-            data = {pid: inject.inject(rom) for pid, rom in data.items()}
-        if companion and family in GEN3_FAMILIES:
+        if family == FAMILY_VANILLA:
+            data = {pid: inject.inject(rom) if want[pid] else rom for pid, rom in data.items()}
+        if family in GEN3_FAMILIES:
             from tools.gen3_companions import overlay_randomized
-            data = {pid: overlay_randomized(upr_pipeline.gen3_title(rom),Path(sources[pid]).read_bytes(),rom)
-                    for pid,rom in data.items()}
+            data = {pid: overlay_randomized(upr_pipeline.gen3_title(rom), Path(sources[pid]).read_bytes(), rom)
+                    if want[pid] else rom for pid, rom in data.items()}
 
     players = {}
     for pid, rom in data.items():
-        has_companion = companion or infos[pid].get("kind") == "overlay"
+        has_companion = want[pid] or infos[pid].get("kind") == "overlay"
         kind = "rand_companion" if has_companion else "rand"
         if randomize is None:
             kind = "companion" if has_companion else "clean"
         # fingerprint_any: Gen 3 cartridges use the Gen 3 fingerprint, Gen 1 the wild/fishing
-        # scanner; Gen 2 never randomizes, so there is no content_fingerprint to cross-check it
+        # scanner; Gen 2 and the Emerald Expansion never randomize, so there is no content_fingerprint to cross-check it
         # against at hello either.
-        fingerprint = "" if family == upr_pipeline.FAMILY_GEN2 else upr_pipeline.fingerprint_any(rom)
+        fingerprint = "" if family in (upr_pipeline.FAMILY_GEN2, upr_pipeline.FAMILY_GEN3_EXP) else upr_pipeline.fingerprint_any(rom)
         players[pid] = {"source": sources[pid], "source_title": infos[pid]["title"],
                         "output": str(outputs[pid]), "rom_sha1": hashlib.sha1(rom).hexdigest(),
                         "fingerprint": fingerprint, "kind": kind}
@@ -176,4 +215,4 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     else:
         # Re-provisioning without randomization must not retain an earlier admission pin.
         contract_path.unlink(missing_ok=True)
-    return {"family": family, "companion": companion, "randomizer": randomized, "players": players}
+    return {"family": family, "companion": any(want.values()), "randomizer": randomized, "players": players}

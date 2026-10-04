@@ -249,11 +249,8 @@ function W.main(root, getenv)
     -- hold the exit until the watch has been read.
     local real_exit = client.exit
     client.exit = function() end
-    local real_hash = gameinfo.getromhash
-    if cfg.clean_view then   -- the U1 gate binds the CLEAN facts; the overlay moves no RAM symbol and
-        -- every hooked site's bytes are re-validated against the running ROM (lua/gb_hook_binding.lua)
-        gameinfo.getromhash = function() return cfg.base_sha1 end
-    end
+    -- The inner gates run under the honest scripted context (lua/tests/test_gen2_scripted_gate.lua G.identity): the
+    -- running overlay hash is bound as the overlay, never aliased to the clean base, so no romhash wrapper here.
     local real_dofile = dofile
     if cfg.frozen then
         local served = {}
@@ -262,7 +259,6 @@ function W.main(root, getenv)
     end
     local ok, why = pcall(dofile, root .. "/" .. cfg.gate)
     dofile = real_dofile
-    gameinfo.getromhash = real_hash
     local inner_done = ok or tostring(why):find("slink-gate-finished", 1, true) ~= nil
     local frames = emu.framecount() - armed_at
 
@@ -286,7 +282,7 @@ function W.main(root, getenv)
     local pass = inner_done and inner:find("^RESULT: PASS") ~= nil and st.n_violations == 0 and st.n_allowed > 0
                  and native_ok and lua_caught
     log("INNER " .. (inner ~= "" and inner or ("no RESULT line; " .. tostring(why))))
-    log("W6 " .. json.encode({schema=W.SCHEMA, leg=cfg.leg, gate=cfg.gate, overlay_sha1=running,
+    log("W6 " .. json.encode({schema=W.SCHEMA, leg=cfg.leg, gate=cfg.gate, overlay_sha1=running, observed_rom_sha1=running,
         evidence_level="PHYSICAL", armed_frame=armed_at, corpus_frames=frames, inner_completed=inner_done,
         span=json.array({span.lo, span.hi}), writers=st.writers, allowed_writes=st.n_allowed,
         boot_clear=st.boot, boot_writes=st.n_boot, init_entries=json.array(st.inits),

@@ -29,8 +29,8 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
 # Unit tests — no emulator or server required
-# (14215 collected as of this writing and growing — the hand-maintained per-file sum that
-#  used to live here drifted constantly; run the suite for the real number)
+# (no hand-kept test counts: the per-file sums drifted constantly; for the live number run
+#  pytest tests/unit -q --collect-only | tail -1)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
@@ -328,7 +328,7 @@ SLink-RR/
 *Gen 4 Lua (NDS — HGSS / Platinum):*
 - **`lua/slink_gen4.lua`** — Gen 4 launcher script (configure host/port/player, loads gen4_hgsspt_client.lua).
 - **`lua/clients/gen4_hgsspt_client.lua`** — Gen 4 NDS client: HeartGold/SoulSilver. Ported from SLink-HGSS prototype. LCRNG-aware, HP debounce, zone-based area detection. Uses memory_nds.lua for NDS RAM access.
-- **`lua/memory_nds.lua`** — Shared Gen 4/5 NDS memory helpers (730 lines): 2-level pointer chain resolution, LCRNG encryption/decryption, party/box/battle reads, HP debounce (2-frame filter), Pokéball counting, trainer name reading. Game-specific addresses from variant profile.
+- **`lua/memory_nds.lua`** — Shared Gen 4/5 NDS memory helpers: 2-level pointer chain resolution, LCRNG encryption/decryption, party/box/battle reads, HP debounce (2-frame filter), Pokéball counting, trainer name reading. Game-specific addresses from variant profile.
 - **`lua/games/gen4_hgsspt.lua`** — Gen 4 game module: HGSS/Platinum detection via NDS ROM codes (IPKE/IPGE/CPUE), per-variant memory profiles, gift areas (new_bark_town, route_30, ruins_of_alph, dragons_den), area resolution via zone IDs.
 - **`data/games/gen4_hgsspt/gen4_hgsspt_areas.lua`** — Generated lookup: `zoneId → area_id` (195 entries). Source: data/games/gen4_hgsspt/area_map_hgss.json.
 
@@ -386,7 +386,7 @@ SLink-RR/
 - **`tests/integration/test_cli_rival_team_swap.py`** — 4 tests for the `--rival-team-swap` CLI flag (help, store_true, default false, explicit true).
 - **`tests/integration/test_cli_native_toggles.py`** — 9 tests for the companion-patch per-run toggles (`--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`).
 - **`tests/integration/test_cli_overworld_presence.py`** — 4 tests for the `--overworld-presence` CLI flag.
-- **`tests/unit/test_patcher_routes.py`** — the `/patcher` page + a `/companion/{name}` route per target. `server/patcher.py` holds a TARGETS registry (Radical Red, Pokemon Red, Pokemon Blue), because a UPS embeds the CRC32 of the exact dump it was diffed against and one shared file would refuse every user but one. Includes a real apply path: each shipped patch reproduces its recorded md5, the result carries the `SLNK` beacon, and applying Red's patch to a Blue dump raises. Asserts NO Yellow artifact is shipped — Yellow has no free WRAM for the mailbox, so no build exists.
+- **`tests/unit/test_patcher_routes.py`** — the `/patcher` page + a `/companion/{name}` route per target. `server/patcher.py` holds a TARGETS registry (nine literal targets: Radical Red, Red, Blue, the three pureRGB games and Crystal/Gold/Silver, plus FireRed/LeafGreen/Emerald read from `patch/dist/gen3_companions.json` when `production` is true), because a UPS embeds the CRC32 of the exact dump it was diffed against and one shared file would refuse every user but one. Includes a real apply path: each shipped patch reproduces its recorded md5, the result carries the `SLNK` beacon, and applying Red's patch to a Blue dump raises. Asserts NO Yellow artifact is shipped — Yellow has no free WRAM for the mailbox, so no build exists.
 
 ---
 
@@ -660,28 +660,28 @@ changed addresses — not an inherited copy with a couple of overrides.
 
 ### SFX needs the companion patch — Gen 1 has no RAM sound trigger
 
-`SFX_DISPATCH_ADDR` is `nil` on an unpatched cartridge, and that is permanent, not pending.
-It used to be `0xD35B` (`wMapMusicSoundID`, the stored map music id), so every capture and
-faint corrupted the map's BGM. **`wNewSoundID` (`0xC0EE`) is not the fix** — it looks like a
-mailbox and is not: `PlaySound` takes the id in register `a` and only uses that address as
-internal scratch (`home/audio.asm:140`), and nothing polls it. No address works; the id has
-to reach a `call`.
+There is no RAM address that plays a sound. The old `SFX_DISPATCH_ADDR` poke was `0xD35B`
+(`wMapMusicSoundID`, the stored map music id), so every capture and faint corrupted the map's
+BGM, and it is gone. **`wNewSoundID` (`0xC0EE`) is not the fix** — it looks like a mailbox and
+is not: `PlaySound` takes the id in register `a` and only uses that address as internal scratch
+(`home/audio.asm:140`), and nothing polls it. The id has to reach a `call`.
 
-The companion patch supplies one — a request byte at mailbox+7 consumed each VBlank, at a
-point where the game has already switched to `wAudioROMBank` and run `Audio1_UpdateMusic`
-(`home/vblank.asm:53-71`), so it is audio-bank context by construction. `PlaySound` parks the
-caller's bank in `hSavedROMBank` (`$FFB9`), which the hook saves and restores because the main
-thread may itself be mid-`PlaySound` when the interrupt fires.
+The companion patch supplies one. The client writes a **semantic code** at mailbox `+7`
+(1 success, 2 failure, 3 boo, 4 notify; `lua/gen1/panel.lua` `sfx_code_for` maps the Gen 3 SE ids
+the server sends) and the patch's `SlinkSfxService` (`patch/gen1/src/slink.asm`, capability
+`SLINK_CAP_SFX`) plays it on the **main thread**, not from VBlank: the bridge in DelayFrame and a
+`Joypad` stub both call it, so a menu waiting for input still gets its sound. It holds a request
+through music fades and busy channels instead of dropping it. Details and the reasons VBlank was
+abandoned: `patch/gen1/README.md` "How sound is played (and why not from VBlank)".
 
 **Sound ids are bank-relative.** The same number is a different sound depending on which audio
-bank is loaded (overworld = Audio1, battle = Audio2). 128 shared SFX are id-aligned across
-banks 1 and 2, but only 64 exist in all three — the profile defaults use only those, so an
-event fired mid-battle cannot play the wrong sound. Ids are derived, not guessed:
-`id = (SFX_X - SFX_Headers_N) / 3` over the header labels in `data/pret_rom_syms.json`.
+bank is loaded (overworld = Audio1, battle = Audio2), so the service resolves each code against
+`wAudioROMBank` at the moment it plays, not when the client asked.
 
-`M.detectCompanionPatch()` reads the `'SLNK'` beacon at runtime and only raises
-`SFX_DISPATCH_ADDR` at ABI ≥ 2, so unpatched ROMs, Yellow (no free WRAM to patch) and AP
-builds all stay a clean no-op.
+The client requests a sound only when the panel reports the SFX capability
+(`panel:sfx_present()`) and the run's `native_sounds` toggle is on (`request_sfx_local` in
+`lua/gen1/client.lua`). The companion is required for Red/Blue; Yellow (no free WRAM to patch)
+and Archipelago builds are exempt, have no patch, and stay silent.
 
 ### The memorial box must claim the SRAM banks first
 
@@ -939,9 +939,9 @@ When `--rival-team-swap` is active, the server sends `replace_rival_team` with t
 
 **Trigger pipeline (`server/state.py`):** `_handle_trainer_battle_start` queues the swap only when the trainer is in `adapter.rival_trainer_ids()`, the toggle is on, and the partner has valid cached blobs. The client acknowledges with `rival_team_replaced` and the native readback result.
 
-### Companion Patch (Radical Red only — code-injection ROM patch)
+### Companion Patch (Radical Red, FireRed, LeafGreen, Emerald — code-injection ROM patch)
 
-The `patch/` directory holds a UPS companion for Radical Red. The current Gen 3 release uses it for native trade, the info panel, sounds, and the rival-swap opcode. `boxes.lua` has an optional native-executor seam for deposit/withdraw/memorialize (`io.native_executor`), but production never wires it, so PC and memorial moves go through the armed Lua write sink (`writes.lua`, reason `overworld`) on every title, including Radical Red; the patch's `OP_MEMORIALIZE` opcode is reserved in the ABI but unused by this client. Native message text and the peer-ghost feature are not part of the current Gen 3 client release; do not infer them from the archived client.
+The `patch/` directory holds a UPS companion for Radical Red, FireRed, LeafGreen and Emerald (`patch/dist/SLink-{RR,FireRed,LeafGreen,Emerald}.ups`). The current Gen 3 release uses it for native trade, the info panel, sounds, and the rival-swap opcode. `boxes.lua` has an optional native-executor seam for deposit/withdraw/memorialize (`io.native_executor`), but production never wires it, so PC and memorial moves go through the armed Lua write sink (`writes.lua`, reason `overworld`) on every title, including Radical Red; the patch's `OP_MEMORIALIZE` opcode is reserved in the ABI but unused by this client. Native message text and the peer-ghost feature are not part of the current Gen 3 client release; do not infer them from the archived client.
 
 - **Mailbox protocol:** `lua/gen3/native.lua` is the client-side owner and `patch/src/handlers.c` is the in-ROM dispatcher. It stages args/blobs under an armed `native` write, publishes the opcode last, and polls the acknowledgement through injected I/O.
 - **ABI data:** the authoritative opcode/status definitions live in `patch/src/handlers.c` and `patch/src/ADDRESSES.md`; `native.lua` consumes the matching values from `profile.native` and does not duplicate a legacy opcode table.
@@ -1142,8 +1142,8 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/ -v   # 14215 tests collected
-pytest tests/unit/test_state.py -v          # 319 tests (incl. tick reconciliation + Explode Mode)
+pytest tests/unit/ -v   # live count: pytest tests/unit -q --collect-only | tail -1
+pytest tests/unit/test_state.py -v          # incl. tick reconciliation + Explode Mode
 pytest tests/unit/test_gen1_adapter_contract.py -v  # 10 tests (checked against pret source, not shipped JSON)
 pytest tests/unit/test_gen2_adapter.py -v   # 59 tests (Gen2GSCAdapter)
 pytest tests/unit/test_gen3_adapter.py -v   # 218 tests

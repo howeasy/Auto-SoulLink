@@ -23,7 +23,7 @@ let payload = cases[0];
 const div = {style: {}, innerHTML: '', getAttribute: k => (
   {'data-in-battle': payload.in_battle === false ? null : '1',
    'data-calc': JSON.stringify(payload)}[k] || null)};
-const ctx = {console}; ctx.window = ctx;
+const ctx = {console, location: {pathname: '/'}}; ctx.window = ctx;
 ctx.document = {
   querySelector: () => div,
   getElementById: id => id === 'calc-preview-a' ? div : null,

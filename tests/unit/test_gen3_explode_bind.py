@@ -20,11 +20,11 @@ TITLES = (
 )
 
 
+@pytest.mark.parametrize("kind", ("clean", "companion"))
 @pytest.mark.parametrize("pack,title,chosen,struct_ptr,controller,completed,standby", TITLES)
 def test_clean_title_commits_explosion_and_hands_off_without_zeroing_hp(
-        monkeypatch, pack, title, chosen, struct_ptr, controller, completed, standby):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", gw.REPO / "data/games/gen3_emerald")
-    world = live(pack, title)
+        monkeypatch, pack, title, chosen, struct_ptr, controller, completed, standby, kind):
+    world = live(pack, title, kind)
     world.battle_ok = True
     world.enter_battle([FOE], active=(0,))
     battle = world.ram["BATTLE_MONS_ADDR"]
@@ -47,7 +47,9 @@ def test_clean_title_commits_explosion_and_hands_off_without_zeroing_hp(
                            world.ram["PARTY_BASE"] + 86, world.ram["PARTY_BASE"] + 87)
                    for addr, _, _ in world.writes)
     assert set(write_reasons(world)) == {"battle_commit"}
-    assert world.parts.native is None  # no injected or production companion dependency
+    # The companion world arms the native ABI-2 part, but the explosion commit never uses it: the
+    # write reasons above are battle_commit only, so no mailbox op was posted. Clean has no part.
+    assert (world.parts.native is None) == (kind == "clean")
 
 
 @pytest.mark.parametrize("title", ("firered", "leafgreen", "emerald"))
@@ -138,7 +140,6 @@ def test_battle_struct_offsets_match_the_pinned_c_layout(tmp_path, title, env, p
 @pytest.mark.parametrize("unqualified", ("doubles", "missing_handoff"))
 def test_unqualified_explosion_never_writes_a_partial_commit(
         monkeypatch, pack, title, chosen, struct_ptr, controller, completed, standby, unqualified):
-    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", gw.REPO / "data/games/gen3_emerald")
     world = live(pack, title)
     world.battle_ok = True
     world.enter_battle([FOE], active=(0,), doubles=unqualified == "doubles")
