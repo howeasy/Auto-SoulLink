@@ -2417,6 +2417,11 @@ class SoulLinkState:
         key     = msg.get("key", "")
         if not area_id or not key:
             return
+        if self.entry_for(player_id, key) is not None:
+            # A replay (reconnect, re-emission): this mon is already a link's half. A fresh catch never
+            # carries a linked key, and treating it as one retired a live pair in the retire branches below.
+            log.debug(f"[{player_id}] capture {key[:8]}: already linked -- duplicate event ignored")
+            return
         is_egg  = bool(msg.get("is_egg", False))
         # `gift=true` is the Lua's authoritative signal for any new mon received
         # outside battle (gifts, starters, fossils, eggs) — independent of whether
@@ -2540,6 +2545,8 @@ class SoulLinkState:
                             "cmd": "unresolve_area",
                             "area_id": area_id,
                         })
+                        # as the other clause rejections: the reroll's own no_catch must not dead-zone it
+                        self.retry_areas[player_id].add(area_id)
                 self._save()
                 return
 

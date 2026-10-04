@@ -53,7 +53,7 @@ class _Request:
 
 def _manager():
     m = mgr.RunManager.__new__(mgr.RunManager)
-    m.bind_host, m.manager_port = "127.0.0.1", 0
+    m.bind_host, m.manager_port, m._run_locks = "127.0.0.1", 0, {}
     m._run_locks = {}
     return m
 
