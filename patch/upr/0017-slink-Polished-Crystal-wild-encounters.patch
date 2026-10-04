@@ -1,0 +1,375 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: howeasy <howardabudd@gmail.com>
+Date: Sun, 4 Oct 2026 10:20:35 -0400
+Subject: [PATCH] slink: Polished Crystal wild encounters
+
+PolishedCrystalRomHandler reads and writes wild encounters: the eight
+grass/surf tables (morn/day/nite sets, or the day set for all three),
+swarms, the 15 fishing groups (one set per distinct rod list), the
+headbutt/rock-smash sets and the bug contest. Writes are same-size and in
+place: a changed Pokemon rewrites only the slot's two species bytes with
+NO_FORM, a level byte changes only under a level setting and never when it
+is a LEVEL_FROM_BADGES encoding, and formed slots and fishing's species-0
+time rows are never written. EGG, the unused $100, Unown and every variant
+form are banned from wild pools. Every other writer still throws.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ FORK_CHANGES.md                               |  11 +
+ .../pkrandom/config/polished_offsets.ini      |   3 +
+ .../pkrandom/constants/PolishedConstants.java |   9 +
+ .../PolishedCrystalRomHandler.java            | 263 +++++++++++++++++-
+ 4 files changed, 280 insertions(+), 6 deletions(-)
+
+diff --git a/FORK_CHANGES.md b/FORK_CHANGES.md
+index 8c8d2b5..429c84f 100644
+--- a/FORK_CHANGES.md
++++ b/FORK_CHANGES.md
+@@ -114,3 +114,14 @@ entries), so a vanilla `[Red (U)]`-style entry executes exactly the original cod
+ - `config/polished_offsets.ini` (new): the block spliced by SLink's `tools/gen_upr_polished_ini.py --fork`
+   plus a hand-kept supplement (Version, CRCInHeader, variant table) the generator does not emit yet.
+ - `cli/CliRandomizer.java`, `newgui/NewRandomizerGUI.java`: the factory joins both handler arrays.
++
++## Patch 17 — Polished Crystal wild encounters
++- `PolishedCrystalRomHandler`: `getEncounters`/`setEncounters` over the eight grass/surf tables (morn/day/nite
++  sets, or the day set written to all three), swarms, the 15 fishing groups (one set per distinct rod list),
++  the headbutt/rock-smash sets and the bug contest. Writes are same-size and in place: a changed Pokemon
++  rewrites only the slot's two species bytes (NO_FORM, as plain `wildmon` rows carry); a level byte changes
++  only when a level setting changed it and never when it is a LEVEL_FROM_BADGES encoding. Formed slots and
++  fishing's species-0 time rows are kept out of the model, so they are never written. EGG, the unused $100,
++  Unown and every variant form are banned from wild pools; `hasTimeBasedEncounters` is on. Every other
++  writer still throws.
++- `config/polished_offsets.ini` supplement: `FishGroupCount`, `TreeMonSetCount`, `ContestMonCount`.
+diff --git a/src/com/dabomstew/pkrandom/config/polished_offsets.ini b/src/com/dabomstew/pkrandom/config/polished_offsets.ini
+index 898f7b2..93baeb4 100644
+--- a/src/com/dabomstew/pkrandom/config/polished_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/polished_offsets.ini
+@@ -721,3 +721,6 @@ Version=50                     // ROM 0x14C = $32; the generated block says 0
+ CRCInHeader=0xA36C             // ROM 0x14E-0x14F read big-endian as UPR does; the generated block has it byte-swapped
+ VariantFormTableOffset=0x3E7C  // VariantSpeciesAndFormTable 00:3e7c (data/pokemon/variant_forms.asm), 2-byte dp per form
+ VariantFormCount=46            // NUM_VARIANT_FORMS = $2e: BaseData/EvosAttacksPointers records 292..337
++FishGroupCount=15              // NUM_FISHGROUPS (constants/map_data_constants.asm:68): FishGroups rows
++TreeMonSetCount=10             // NUM_TREEMON_SETS (constants/pokemon_data_constants.asm:381); the last (ROCK) has no rare list
++ContestMonCount=12             // (ContestMonsEnd 25:58f0 - ContestMons 25:58b4) / 5; ContestMons has no terminator
+diff --git a/src/com/dabomstew/pkrandom/constants/PolishedConstants.java b/src/com/dabomstew/pkrandom/constants/PolishedConstants.java
+index 829e126..960d607 100644
+--- a/src/com/dabomstew/pkrandom/constants/PolishedConstants.java
++++ b/src/com/dabomstew/pkrandom/constants/PolishedConstants.java
+@@ -64,4 +64,13 @@ public class PolishedConstants {
+     public static final int atkGtDef = 1, atkLtDef = 2, atkEqDef = 3;
+ 
+     public static final int egg = 0xFF, unusedSpecies = 0x100; // constants/pokemon_constants.asm:280-281
++    public static final int unown = 0xC9; // constants/pokemon_constants.asm:226 (letters are forms)
++
++    // wild data, data/wild/*.asm. A slot's species is the "dp" right after its level byte
++    // (wildmon, macros/asserts.asm:102-105) or after its chance byte (fishentry, tree_mon,
++    // contest_mon). Levels above 100 are LEVEL_FROM_BADGES (178) +/- 77 (pokemon_data_constants.asm:366).
++    public static final int grassRecordLength = 2 + 3 + 3 * 7 * 3, waterRecordLength = 2 + 1 + 3 * 3;
++    public static final int grassSlotsPerTime = 7, waterSlots = 3, maxPlainLevel = 100;
++    public static final int fishGroupLength = 8; // FISHGROUP_DATA_LENGTH: 2 chance bytes + 3 rod pointers
++    public static final int fishEntryLength = 4, treeEntryLength = 4, contestEntryLength = 5;
+ }
+diff --git a/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java b/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
+index e53a491..a0ea89d 100644
+--- a/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
++++ b/src/com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.java
+@@ -24,9 +24,11 @@ import com.dabomstew.pkrandom.pokemon.*;
+ /**
+  * Cut 1 loads the release ROM into UPR's model (detection, 291 species + 46 variant forms,
+  * base stats, the 8-byte moves, evolutions and learnsets) and saves it back field-scoped:
+- * with every setting off the output is byte-identical to the input. There are NO randomization
+- * writers yet: every setter throws, every feature query says "not supported", and names are
+- * placeholders because Polished's names are compressed text that is never written.
++ * with every setting off the output is byte-identical to the input. The only randomization writer
++ * is wild encounters (patch 17: grass/surf by time of day, swarms, fishing, headbutt/rock smash,
++ * the bug contest; species bytes in place, formed slots untouched). Every other setter throws,
++ * every other feature query says "not supported", and names are placeholders because Polished's
++ * names are compressed text that is never written.
+  *
+  * Pokemon model: getPokemonInclFormes() index = BaseData record (1..337). Records 1..291 are
+  * species ids (formeNumber 0); 292..337 are the variant forms of VariantSpeciesAndFormTable,
+@@ -540,11 +542,209 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+         return new ArrayList<>();
+     }
+ 
++    // ---- wild encounters (patch 17) ----
++
++    /** One UPR Encounter and the ROM slots it is written to (more than one only for the merged grass times). */
++    private static class Slot {
++        final Pokemon pokemon;
++        final int level, maxLevel;
++        final List<int[]> sites = new ArrayList<>(); // {species offset, level offset, max-level offset or -1}
++
++        Slot(Pokemon pokemon, int level, int maxLevel) {
++            this.pokemon = pokemon;
++            this.level = level;
++            this.maxLevel = maxLevel;
++        }
++    }
++
++    private static final String[] wildTables = { "JohtoGrass", "JohtoWater", "KantoGrass", "KantoWater",
++            "OrangeGrass", "OrangeWater", "SwarmGrass", "SwarmWater" };
++    private static final String[] todNames = { "Morning", "Day", "Night" };
++    private static final String[] rodNames = { "Old Rod", "Good Rod", "Super Rod" };
++
++    private List<List<Slot>> wildSlots; // parallel to the sets the last getEncounters() returned
++
++    /**
++     * A slot is randomizable only when its form byte is NO_FORM with no gender bit (a plain
++     * "wildmon level, SPECIES") and it names a real species. Formed slots (ALOLAN_FORM VULPIX,
++     * ARBOK_JOHTO_FORM EKANS, ...) and fishing's species-0 time-of-day rows stay out of the model,
++     * so nothing ever writes them.
++     */
++    private boolean plainSlot(int speciesOffset) {
++        int lo = rom[speciesOffset] & 0xFF, hi = rom[speciesOffset + 1] & 0xFF;
++        int species = PolishedConstants.species9(lo, hi);
++        return (hi & ~PolishedConstants.extSpeciesMask) == 0 && species >= 1 && species <= speciesCount;
++    }
++
++    private void addSlot(EncounterSet es, List<Slot> slots, int speciesOffset, int levelOffset, int maxLevelOffset) {
++        if (!plainSlot(speciesOffset)) {
++            return;
++        }
++        Encounter enc = new Encounter();
++        enc.pokemon = pokes[PolishedConstants.species9(rom[speciesOffset] & 0xFF, rom[speciesOffset + 1] & 0xFF)];
++        enc.level = rom[levelOffset] & 0xFF; // > 100 = LEVEL_FROM_BADGES-relative, kept raw and never written
++        enc.maxLevel = maxLevelOffset < 0 ? 0 : rom[maxLevelOffset] & 0xFF;
++        Slot slot = new Slot(enc.pokemon, enc.level, enc.maxLevel);
++        slot.sites.add(new int[] { speciesOffset, levelOffset, maxLevelOffset });
++        es.encounters.add(enc);
++        slots.add(slot);
++    }
++
++    private void addSet(List<EncounterSet> areas, EncounterSet es, List<Slot> slots) {
++        if (!es.encounters.isEmpty()) { // an all-formed set would give UPR nothing to place
++            areas.add(es);
++            wildSlots.add(slots);
++        }
++    }
++
++    private static EncounterSet newSet(String name, int rate) {
++        EncounterSet es = new EncounterSet();
++        es.displayName = name;
++        es.rate = rate;
++        return es;
++    }
++
++    /** Wild sub-table offset -> map constant, from the generated per-map labels. */
++    private Map<Integer, String> wildMapNames() {
++        Map<Integer, String> names = new HashMap<>();
++        for (Map.Entry<String, Long> e : romEntry.entries.entrySet()) {
++            String key = e.getKey();
++            if (key.startsWith("WildMonSite<") && key.endsWith(">")) {
++                String label = key.substring(key.indexOf("_wildmons_") + "_wildmons_".length(), key.length() - 1);
++                names.put((int) (long) e.getValue(), label);
++            }
++        }
++        return names;
++    }
++
+     @Override
+     public List<EncounterSet> getEncounters(boolean useTimeOfDay) {
+-        return new ArrayList<>();
++        List<EncounterSet> areas = new ArrayList<>();
++        wildSlots = new ArrayList<>();
++        Map<Integer, String> mapNames = wildMapNames();
++
++        // grass and surf: eight map-keyed tables, each ended by $FF (data/wild/*_grass.asm, *_water.asm)
++        for (String table : wildTables) {
++            boolean grass = table.endsWith("Grass");
++            String prefix = table.startsWith("Swarm") ? "Swarm " : "";
++            int p = romEntry.getValue(table + "WildMonsOffset");
++            while ((rom[p] & 0xFF) != 0xFF) {
++                String map = mapNames.get(p);
++                if (map == null) {
++                    throw new IllegalStateException(String.format("Polished Crystal: no wild map label at 0x%X (%s)", p, table));
++                }
++                if (grass) {
++                    int slot0 = p + 5; // map_id (2), three rates, then morn/day/nite x 7 x (level, dp)
++                    if (useTimeOfDay) {
++                        for (int tod = 0; tod < 3; tod++) {
++                            EncounterSet es = newSet(prefix + map + " Grass/Cave (" + todNames[tod] + ")", rom[p + 2 + tod] & 0xFF);
++                            List<Slot> slots = new ArrayList<>();
++                            for (int j = 0; j < PolishedConstants.grassSlotsPerTime; j++) {
++                                int lv = slot0 + (tod * PolishedConstants.grassSlotsPerTime + j) * 3;
++                                addSlot(es, slots, lv + 1, lv, -1);
++                            }
++                            addSet(areas, es, slots);
++                        }
++                    } else {
++                        // the day set stands for all three; its pick also goes to the plain morn/nite slot j
++                        EncounterSet es = newSet(prefix + map + " Grass/Cave", rom[p + 3] & 0xFF);
++                        List<Slot> slots = new ArrayList<>();
++                        for (int j = 0; j < PolishedConstants.grassSlotsPerTime; j++) {
++                            int before = slots.size();
++                            int lv = slot0 + (PolishedConstants.grassSlotsPerTime + j) * 3;
++                            addSlot(es, slots, lv + 1, lv, -1);
++                            if (slots.size() == before) {
++                                continue;
++                            }
++                            for (int tod = 0; tod < 3; tod += 2) {
++                                int other = slot0 + (tod * PolishedConstants.grassSlotsPerTime + j) * 3;
++                                if (plainSlot(other + 1)) {
++                                    slots.get(before).sites.add(new int[] { other + 1, other, -1 });
++                                }
++                            }
++                        }
++                        addSet(areas, es, slots);
++                    }
++                    p += PolishedConstants.grassRecordLength;
++                } else {
++                    EncounterSet es = newSet(prefix + map + " Surfing", rom[p + 2] & 0xFF);
++                    List<Slot> slots = new ArrayList<>();
++                    for (int j = 0; j < PolishedConstants.waterSlots; j++) {
++                        int lv = p + 3 + j * 3;
++                        addSlot(es, slots, lv + 1, lv, -1);
++                    }
++                    addSet(areas, es, slots);
++                    p += PolishedConstants.waterRecordLength;
++                }
++            }
++        }
++
++        // fishing: FishGroups rows point at per-rod lists (chance, dp, level) ending at chance $FF
++        // (100 percent); groups share lists (Lake/River/Well), so each list is one set (data/wild/fish.asm)
++        int fish = romEntry.getValue("FishingWildsOffset");
++        Set<Integer> seen = new HashSet<>();
++        for (int g = 0; g < romEntry.getValue("FishGroupCount"); g++) {
++            for (int rod = 0; rod < 3; rod++) {
++                int p = calculateOffset(bankOf(fish), readWord(fish + g * PolishedConstants.fishGroupLength + 2 + rod * 2));
++                if (!seen.add(p)) {
++                    continue;
++                }
++                EncounterSet es = newSet("Fishing Group " + (g + 1) + " " + rodNames[rod], 0);
++                List<Slot> slots = new ArrayList<>();
++                int chance;
++                do {
++                    chance = rom[p] & 0xFF;
++                    addSlot(es, slots, p + 1, p + 3, -1);
++                    p += PolishedConstants.fishEntryLength;
++                } while (chance != 0xFF);
++                addSet(areas, es, slots);
++            }
++        }
++
++        // headbutt / rock smash: TreeMons points at sets of (chance, dp, level) lists ended by $FF,
++        // a common then a rare list, except the last set (ROCK) which has one (data/wild/treemons.asm)
++        int trees = romEntry.getValue("TreemonWildsOffset");
++        int setCount = romEntry.getValue("TreeMonSetCount");
++        seen.clear();
++        for (int s = 0; s < setCount; s++) {
++            int p = calculateOffset(bankOf(trees), readWord(trees + s * 2));
++            if (!seen.add(p)) {
++                continue;
++            }
++            boolean rock = s == setCount - 1;
++            for (int list = 0; list < (rock ? 1 : 2); list++) {
++                EncounterSet es = newSet((rock ? "Rock Smash" : "Headbutt Trees Set " + (s + 1) + (list == 0 ? "" : " (Rare)")), 0);
++                List<Slot> slots = new ArrayList<>();
++                for (; (rom[p] & 0xFF) != 0xFF; p += PolishedConstants.treeEntryLength) {
++                    addSlot(es, slots, p + 1, p + 3, -1);
++                }
++                p++;
++                addSet(areas, es, slots);
++            }
++        }
++
++        // bug catching contest: (chance, dp, min, max) x ContestMonCount (data/wild/bug_contest_mons.asm)
++        int bcc = romEntry.getValue("BCCWildsOffset");
++        EncounterSet es = newSet("Bug Catching Contest", 0);
++        List<Slot> slots = new ArrayList<>();
++        for (int i = 0; i < romEntry.getValue("ContestMonCount"); i++) {
++            int p = bcc + i * PolishedConstants.contestEntryLength;
++            addSlot(es, slots, p + 1, p + 3, p + 4);
++        }
++        addSet(areas, es, slots);
++        return areas;
+     }
+ 
++    /** A level byte is rewritten only when it is a plain level; LEVEL_FROM_BADGES encodings stay. */
++    private void writeLevel(int offset, int level) {
++        if (offset >= 0 && (rom[offset] & 0xFF) <= PolishedConstants.maxPlainLevel && level >= 1
++                && level <= PolishedConstants.maxPlainLevel) {
++            rom[offset] = (byte) level;
++        }
++    }
++
++    // ---- not read yet: empty, so the all-off log and check value see nothing ----
++
+     @Override
+     public List<Trainer> getTrainers() {
+         return new ArrayList<>();
+@@ -817,7 +1017,7 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+         // the Randomizer always calls this; cut 1 changes nothing
+     }
+ 
+-    // ---- writers: none in cut 1 ----
++    // ---- writers: wild encounters only (patch 17) ----
+ 
+     @Override
+     public boolean setStarters(List<Pokemon> newStarters) {
+@@ -829,9 +1029,60 @@ public class PolishedCrystalRomHandler extends AbstractGBCRomHandler {
+         throw notInCut1("static Pokemon writing");
+     }
+ 
++    /**
++     * Same-size, in place: a changed Pokemon rewrites only the slot's two species bytes as
++     * (LOW(species), HIGH(species) << 5 | NO_FORM), the form a plain "wildmon" row carries; a level
++     * byte changes only when a level setting changed that Encounter's level (writeLevel).
++     */
+     @Override
+     public void setEncounters(boolean useTimeOfDay, List<EncounterSet> encounters) {
+-        throw notInCut1("wild encounter writing");
++        if (wildSlots == null || wildSlots.size() != encounters.size()) {
++            throw new IllegalStateException("Polished Crystal: encounters do not match the last getEncounters()");
++        }
++        Set<Pokemon> banned = new HashSet<>(bannedForWildEncounters());
++        for (int i = 0; i < encounters.size(); i++) {
++            List<Encounter> encs = encounters.get(i).encounters;
++            List<Slot> slots = wildSlots.get(i);
++            if (encs.size() != slots.size()) {
++                throw new IllegalStateException("Polished Crystal: encounter set " + encounters.get(i).displayName + " changed size");
++            }
++            for (int j = 0; j < encs.size(); j++) {
++                Encounter enc = encs.get(j);
++                Slot slot = slots.get(j);
++                int number = enc.pokemon.number;
++                if (enc.pokemon != slot.pokemon && (banned.contains(enc.pokemon) || enc.pokemon.baseForme != null
++                        || number < 1 || number > speciesCount)) {
++                    throw new IllegalStateException("Polished Crystal: " + enc.pokemon.fullName() + " cannot be a wild Pokemon");
++                }
++                for (int[] site : slot.sites) {
++                    if (enc.pokemon != slot.pokemon) {
++                        rom[site[0]] = (byte) (number & 0xFF);
++                        rom[site[0] + 1] = (byte) ((number >> 8) << 5 | PolishedConstants.noForm);
++                    }
++                    if (enc.level != slot.level) {
++                        writeLevel(site[1], enc.level);
++                    }
++                    if (site[2] >= 0 && enc.maxLevel != slot.maxLevel) {
++                        writeLevel(site[2], enc.maxLevel);
++                    }
++                }
++            }
++        }
++    }
++
++    @Override
++    public boolean hasTimeBasedEncounters() {
++        return true; // grass rows carry morn/day/nite slot sets
++    }
++
++    /** EGG, the unused $100, Unown (form-locked letters) and every variant form never become wild. */
++    @Override
++    public List<Pokemon> bannedForWildEncounters() {
++        List<Pokemon> banned = new ArrayList<>(altFormes);
++        banned.add(pokes[PolishedConstants.egg]);
++        banned.add(pokes[PolishedConstants.unusedSpecies]);
++        banned.add(pokes[PolishedConstants.unown]);
++        return banned;
+     }
+ 
+     @Override
+-- 
+2.54.0.windows.1
+
