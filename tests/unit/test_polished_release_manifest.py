@@ -20,12 +20,13 @@ sys.path.insert(0, str(_REPO / "tools"))
 
 import make_release  # noqa: E402
 
-BASELINE = "020073c6"
+BASELINE = "69ca9ed8"
 POLISHED = {
     "data/games/polished_crystal/profile.json",
     "data/games/polished_crystal/charmap.lua",
     "data/games/polished_crystal/evolutions.json",
     "data/games/polished_crystal/area_map.json",
+    "data/games/polished_crystal/engine_signals.json",
     "data/polished/overlay_provenance.json",
     "lua/gen2/polished.lua",
     "lua/gen2/polished_boxes.lua",
@@ -71,4 +72,6 @@ def test_red_control_without_the_polished_rows_the_files_are_missing(tmp_path, m
                         {k: v for k, v in make_release._DATA_GAME_LUA.items() if k != "polished_crystal"})
     monkeypatch.setattr(make_release, "_DATA_EXTRA", [])
     monkeypatch.setattr(make_release, "_LUA_GEN2", [f for f in make_release._LUA_GEN2 if not f.startswith("polished")])
+    # master builds from the ONE tree table, which holds its own reference to the gen2 list
+    monkeypatch.setitem(make_release._MANIFEST_TREES, "gen2", [f for f in make_release._LUA_GEN2 if not f.startswith("polished")])
     assert POLISHED.isdisjoint(_build(make_release, tmp_path))

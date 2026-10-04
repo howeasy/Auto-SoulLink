@@ -381,6 +381,7 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "charmap.lua",
         "evolutions.json",
         "area_map.json",
+        "engine_signals.json",  # Signals.new_polished (C-SITES) loads the site pack
     ],
     "gen3_frlge": [
         "gen3_frlge_areas.lua",
