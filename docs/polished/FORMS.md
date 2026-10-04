@@ -346,3 +346,19 @@ preservation (`byte1 & 0xC0`) are built and round-trip tested; `plainSlot` stays
 owner question: cosmetic forms (Unown letters etc.) stay OUT of the pool unless the owner says otherwise; the F4
 type-clause hole (form-0 variant pairs skipped in `species_types`) needs a `state.py` change (shared Gen 2 path),
 raised with the owner before any edit.
+
+
+---
+
+## Owner rulings 2026-10-04 (recorded by the coordinator)
+
+* **Cosmetic forms are ONE mon** (Unown letters, other cosmetic-only forms): the SLink identity key must NOT
+  distinguish them, so `polished_codec.key` has to normalise the cosmetic form bits to 0 (today it keeps form 0-4
+  as traits, `polished_codec.py:207-215`).
+* **Regional/variant forms are DIFFERENT mons** from the standard counterpart (Alolan Rattata is not Rattata):
+  type clause, evolution family and duplicate handling judge them separately.
+* The owner allows editing `server/state.py` if needed. Preferred design (adapter isolation): the Polished codec
+  exposes an **effective species id** per mon - a variant form maps to its BaseData record index (292..337,
+  from `forms_index.json`, FORMS-H2), plain and cosmetic forms keep the species id - so the shared `state.py`
+  and the species-keyed `species_types` / `evo_family` need no signature change, and the form-0-with-variants
+  skip in `gen2_polished.species_types` (`:411-417`) is removed.
