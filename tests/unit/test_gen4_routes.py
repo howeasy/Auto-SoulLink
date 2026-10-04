@@ -4,6 +4,7 @@ real ROM/pret/save cases skip by name when an input is absent and fail when pres
 
 import hashlib
 import json
+import os
 import re
 import struct
 from pathlib import Path
@@ -15,7 +16,20 @@ from tools import gen4_routes as gr
 
 pytestmark = pytest.mark.usefixtures("model_surface")
 
-ROM, PRET, SAVE = gr.DEFAULT_ROM, gr.DEFAULT_PRET, gr.DEFAULT_SAVE
+ROM, SAVE = gr.DEFAULT_ROM, gr.DEFAULT_SAVE
+PRET = Path(os.environ.get("SLINK_PRET_HGSS", str(gr.DEFAULT_PRET)))
+BIZHAWK_CONFIG = Path(os.environ.get("SLINK_BIZHAWK_CONFIG", str(gr.BIZHAWK_CONFIG)))
+
+
+def _input_file(path: Path, name: str) -> Path:
+    if not path.is_file():
+        pytest.skip(f"OPEN {name}: absent input {path}")
+    return path
+
+
+def _pret_files(*relative: str) -> None:
+    for name in relative:
+        _input_file(PRET / name, f"pokeheartgold {name}")
 
 
 def _world(rows, soft=(), blocked=(), water=frozenset(), warps=(), scripts=None, header=7):
@@ -1250,6 +1264,10 @@ _SYNTH = {
 def _fake_emuhawk(monkeypatch, tmp_path, pos, script):
     """Replace the EmuHawk process and the fixtures it needs: `script(leg, route)` returns the leg's
     log text. Returns the recorded (route, load_state) of every launched leg."""
+    # run_lane still reads the base config before the stubbed config writer,
+    # so this MODEL/FILE seam must resolve and guard it without changing tools.
+    config = _input_file(BIZHAWK_CONFIG, "BizHawk base config")
+    monkeypatch.setattr(gr, "BIZHAWK_CONFIG", config)
     calls = []
     witnesses = iter(({"bank": 0, "counter": 1, "keys": ["K"]}, {"bank": 1, "counter": 2, "keys": ["K"]}, {"bank": 1, "counter": 2, "keys": ["K"]}))
     monkeypatch.setattr(gr, "save_witness", lambda *a: next(witnesses))
@@ -1387,7 +1405,8 @@ def _battle_doc(**over):
 
 def _grass_lane(monkeypatch, tmp_path, log):
     """A grass run on the synthetic grid: the real ROM/pret are never read (load_world and the wild
-    table are stubbed), so this leg's receipt is proven without an emulator or an E: drive."""
+    table are stubbed). The base config is a guarded FILE input for route pacing;
+    absence skips by name, and no emulator is run."""
     pos = _start(1, 1)
     calls = _fake_emuhawk(monkeypatch, tmp_path, pos, lambda leg, route: log(leg))
     monkeypatch.setattr(gr, "load_world", lambda *a, **k: _world(ROWS))
@@ -2265,6 +2284,7 @@ def test_title_settle_policies_match_pinned_epoch_provenance():
 
 
 def test_real_menu_exec_grid_schedule_from_pinned_source(tmp_path, monkeypatch):
+    _pret_files("src/data/fieldmap/script_cmd_table.h", "src/scrcmd_c.c", "asm/overlay_27.s")
     # Opcode 752 (NOT opcode 67's legacy Create2dMenu): touchscreen ov27 grid.
     table = (PRET / "src/data/fieldmap/script_cmd_table.h").read_text()
     commands = table[table.index("gScriptCmdTable") :]
@@ -2572,7 +2592,7 @@ def test_the_keyboard_menu_ids_cursor_and_commit_state_come_from_the_pinned_sour
     lines = (PRET / "asm/overlay_14.s").read_text(encoding="utf-8").splitlines()
 
     def block(label, n):
-        i = next(k for k, l in enumerate(lines) if l.startswith(label))
+        i = next(k for k, line in enumerate(lines) if line.startswith(label))
         return "\n".join(lines[i : i + n])
 
     # the box mon's action menu: WITHDRAW FIRST, then SUMMARY, MARKING, RELEASE (msg_0024 69/65/67/68)
@@ -2717,6 +2737,8 @@ def assert_pc_item_order_and_cursor(scr, command_source):
 
 def test_pc_semantic_press_counts_and_default_cursor_from_pinned_source():
     import xml.etree.ElementTree as ET
+    _pret_files("files/fielddata/script/scr_seq/scr_seq_0003.s", "files/msgdata/msg/msg_0040.gmm",
+                "src/scrcmd_c.c", "src/render_text.c", "src/field/scrcmd_message.c")
     scr=(PRET/'files/fielddata/script/scr_seq/scr_seq_0003.s').read_text()
     root=ET.parse(PRET/'files/msgdata/msg/msg_0040.gmm').getroot()
     def message(index):
@@ -2742,6 +2764,7 @@ def test_pc_semantic_press_counts_and_default_cursor_from_pinned_source():
     ('MenuInitStdGmm 1, 1, 0, 1','MenuInitStdGmm 1, 1, 1, 1'),
 ])
 def test_pc_order_cursor_controls_red_revert(old,new):
+    _pret_files("files/fielddata/script/scr_seq/scr_seq_0003.s", "src/scrcmd_c.c")
     scr=(PRET/'files/fielddata/script/scr_seq/scr_seq_0003.s').read_text()
     code=(PRET/'src/scrcmd_c.c').read_text()
     assert_pc_item_order_and_cursor(scr,code)
@@ -2777,6 +2800,7 @@ def _grid_source_contract(c_source, asm):
 
 
 def test_051_entry_button_mode_source_red_revert():
+    _pret_files("src/unk_02019BA4.c", "asm/overlay_14.s")
     # Census every C translation unit, not just the known constructor file.
     c = "\n".join(
         path.read_text() for path in PRET.rglob("*.c")
