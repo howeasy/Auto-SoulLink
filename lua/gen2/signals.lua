@@ -597,7 +597,9 @@ function build(options, proven)
     -- instruction is not that store.
     local function roamer_species(index, row)
         if not randomized then return row.species end
-        local init = type(p.rom) == "table" and p.rom.InitRoamMons
+        -- the executed artifact's ROM coordinates (an overlay may relocate them), else the clean profile's
+        local coords = options.rom_coords or p.rom
+        local init = type(coords) == "table" and coords.InitRoamMons
         local store = p.ram["wRoamMon" .. index .. "Species"]
         if type(init) ~= "table" or not integer(init.flat,0,COUNT) or not integer(store,0,65535) then return nil end
         local base = init.flat + 5*(index-1)
