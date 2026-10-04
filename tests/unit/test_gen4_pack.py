@@ -1862,6 +1862,105 @@ def test_pc_deposit_case_keeps_unexercised_delete_withdraw_release_open(mode):
             )  # revert: the genuine ARM9 trampoline remains required
 
 
+@pytest.mark.parametrize("title", ("heartgold", "soulsilver"))
+def test_pc_deposit_observes_the_indexed_native_transfer(title):
+    # ad7a3afa overlay_14.s:7582-7596 FindFirstEmptySlot -> explicit destination;
+    # :2641-2649 work+E4/E8; :1404-1428 -> ov14_021E61BC; :1152 -> ByIndexPair.
+    # PHYSICAL rows69 HG phase-5 deposited/saved correctly while the old
+    # FirstEmptySlot oracle AND registry both counted zero.
+    t = _pack("hgss")["titles"][title]
+    case = next(c for c in t["phase_cases"] if c["name"] == "pc")
+    assert case["producer_site"] == "pc_place_by_index_pair"
+    assert case["sites"] == ["pc_place_by_index_pair"]
+    assert t["sites"][case["producer_site"]]["symbol"] == "PCStorage_PlaceMonInBoxByIndexPair"
+    rows = case["caller_matrix"]["sites"]
+    assert [row["site"] for row in rows] == ["pc_place_by_index_pair"]
+    covered = [c for c in rows[0]["callers"] if c["exercised_by_route"]]
+    assert len(covered) == 1 and "ov14_021E61BC" in covered[0]["caller"]
+    assert covered[0]["exercised_by"] == ["pc_deposit_first_party_mon"]
+    assert "pc_place_by_index_pair" not in t["phase_cases_excluded"]["pc"]
+    blocked = t["phase_cases_blocked"][0]
+    old_site = next(r for r in blocked["caller_matrix"]["sites"] if r["site"] == "pc_place_first_in_box")
+    assert all(not c["exercised_by_route"] for c in old_site["callers"])
+    assert all(c["why_open"] for c in old_site["callers"])
+
+
+@pytest.mark.parametrize("title", ("heartgold", "soulsilver"))
+def test_indexed_deposit_monitor_red_and_revert(title):
+    """Replay the zero-oracle PHYSICAL failure through the actual registry/monitor.
+
+    This is a SOURCE-shaped native event, not a claim about live callback timing.
+    overlay_14.s:7582-7596 resolves a slot <30 (bit0x80 clear); :1428,1152 uses
+    ByIndexPair. Selecting FirstEmptySlot must still FAIL the unchanged validator.
+    """
+    from lupa import LuaRuntime
+
+    rt = LuaRuntime(unpack_returned_tuples=True)
+    root = Path(__file__).resolve().parents[2]
+    rt.globals().SLINK_GEN4_PROBE_TEST = True
+    rt.globals().M = rt.execute((root / "lua/tests/probe_gen4_hooks.lua").read_text())
+    rt.globals().Registry = rt.execute((root / "lua/hook_registry.lua").read_text())
+
+    def lua(value):
+        if isinstance(value, dict):
+            return rt.table_from({key: lua(v) for key, v in value.items()})
+        if isinstance(value, list):
+            return rt.table_from([lua(v) for v in value])
+        return value
+
+    t = _pack("hgss")["titles"][title]
+    rt.globals().title = lua(t)
+    replay = rt.eval("""function(selected)
+      local callbacks, serial = {}, 0
+      local frame, active = 100, true
+      local producer = title.sites[selected]; producer.id = selected
+      local settle = {current={}, samples={}}
+      local oracle = {}
+      local function bytes(address)
+        for _,s in pairs(title.sites) do if s.address == address then return s.register_hex end end
+        error("unknown site")
+      end
+      local function register(s,cb)
+        serial=serial+1; local id="model-"..serial
+        callbacks[id]={address=s.address,cb=cb}; return id
+      end
+      local function remove(id) callbacks[id]=nil; return true end
+      register(producer,function(a,v)
+        if active and bytes(a)==producer.register_hex then
+          assert(a==producer.address and v==tonumber(producer.fire_hex,16))
+          oracle[#oracle+1]=frame
+        end
+      end)
+      local comp=M.composite(Registry,{
+        validate=function(s) M.validate_site(title,s,bytes,function() return true end); return s end,
+        register=register, unregister=remove,
+        capture=function(s,a,v,flags)
+          local e=M.capture(s,a,v,flags,a+4,function() return true end)
+          if e then e.frame=frame; e.step_id=1 end; return e
+        end})
+      local mon,state=M.phase_monitor(comp,"pc",{producer},selected,function() return active end,
+        function(want) return M.phase_sites_ready({producer},bytes,function() return true end,
+          frame,settle,{max_frames=16},{},want) end,function() return frame end)
+      mon.before()
+      local native=title.sites.pc_place_by_index_pair
+      for _,h in pairs(callbacks) do if h.address==native.address then
+        h.cb(native.address,tonumber(native.fire_hex,16),0)
+      end end
+      mon.after(); active=false; frame=frame+1; mon.after(); mon.before(); mon.finish()
+      local physical={phase="pc",first_expected=#oracle,last_expected=#oracle,
+        first_seen=#state.seen,last_seen=#state.seen,peak=comp.peak+1,
+        live_after_close=comp:live_handles(),second_drain=state.second_drain,
+        max_cost=0,baseline_fps=1,restored_fps=1,close_boundary_required=false}
+      local status,why=M.evaluate_n_case(physical)
+      return status,why,physical.first_expected,physical.first_seen
+    end""")
+    selection = next(c for c in t["phase_cases"] if c["name"] == "pc")["producer_site"]
+    assert replay(selection) == ("PASS", None, 1, 1)
+    status, why, expected, seen = replay("pc_place_first_in_box")
+    assert status == "FAIL" and "first/last producer lost" in why and expected == seen == 0
+    assert replay(selection) == ("PASS", None, 1, 1)  # revert restores the real selection
+
+
 def test_blocked_pc_delete_callers_are_each_explicitly_open():
     for mode in ("hgss", "hge"):
         for title in _pack(mode)["titles"].values():

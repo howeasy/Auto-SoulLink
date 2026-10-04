@@ -2449,8 +2449,8 @@
               {
                 "callers": [
                   {
-                    "caller": "ov14_021E62C8 (PC app; also calls the delete site)",
-                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1268",
+                    "caller": "ov14_021E61BC (native party-to-indexed-box deposit)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1130-1156; transfer dispatch :1404-1428",
                     "covered_by": [
                       "pc_deposit_first_party_mon"
                     ],
@@ -2461,55 +2461,33 @@
                     "kind": "direct"
                   },
                   {
-                    "caller": "ov14_021E6318 (PC app)",
-                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1319",
-                    "covered_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by_route": true,
-                    "kind": "direct"
-                  },
-                  {
-                    "caller": "BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate)",
-                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_command.c:7025",
+                    "caller": "ov14_021E611C (party/box swap with an occupied destination)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1057-1092",
                     "covered_by": [],
                     "exercised_by": [],
                     "exercised_by_route": false,
                     "kind": "direct",
-                    "why_open": "other phase predicate; needs a full-party catch"
+                    "why_open": "other PC action; occupied-target swap is not this deposit route"
                   },
                   {
-                    "caller": "PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate)",
-                    "cite": "pokeheartgold@ad7a3afa src/pokemon_storage_system.c:58",
+                    "caller": "OVY_112 Pokewalker transfer callers",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_112.s:12810,17763,18147,18251",
                     "covered_by": [],
                     "exercised_by": [],
                     "exercised_by_route": false,
                     "kind": "direct",
-                    "why_open": "other phase predicate (field task)"
-                  },
-                  {
-                    "caller": "ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844)",
-                    "cite": "pokeheartgold@ad7a3afa asm/overlay_70.s:18479,18601,20198",
-                    "covered_by": [],
-                    "exercised_by": [],
-                    "exercised_by_route": false,
-                    "kind": "direct",
-                    "why_open": "other overlay predicate (14 != 70)"
+                    "why_open": "other overlay predicate (14 != 112)"
                   }
                 ],
-                "site": "pc_place_first_in_box"
+                "site": "pc_place_by_index_pair"
               }
             ]
           },
           "fixture_role": "pc_case",
           "name": "pc",
           "open": [
-            "pc_place_first_in_box: BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate) - other phase predicate; needs a full-party catch",
-            "pc_place_first_in_box: PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate) - other phase predicate (field task)",
-            "pc_place_first_in_box: ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844) - other overlay predicate (14 != 70)"
+            "pc_place_by_index_pair: ov14_021E611C (party/box swap with an occupied destination) - other PC action; occupied-target swap is not this deposit route",
+            "pc_place_by_index_pair: OVY_112 Pokewalker transfer callers - other overlay predicate (14 != 112)"
           ],
           "phase": "pc",
           "precedes_first_event": [
@@ -2537,7 +2515,7 @@
             "ovy_id_off": 12,
             "symbol": "sOverlayTemplate_PCBox$10493"
           },
-          "producer_site": "pc_place_first_in_box",
+          "producer_site": "pc_place_by_index_pair",
           "route": [
             "gen4_pc:reach_pc_terminal",
             "pc_open_storage",
@@ -2551,10 +2529,10 @@
             "pc_open_storage": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)"
           },
           "site_rationale": {
-            "pc_place_first_in_box": "native deposit; ARM9 entry/trampoline is the static-PC oracle, no withdraw claim"
+            "pc_place_by_index_pair": "native indexed deposit: FindFirstEmptySlot resolves an explicit index, then ov14_021E61BC calls PCStorage_PlaceMonInBoxByIndexPair (overlay_14.s:7582-7596,2641-2649,1428,1152); static ARM9 oracle, no first-empty-placement or withdraw claim"
           },
           "sites": [
-            "pc_place_first_in_box"
+            "pc_place_by_index_pair"
           ],
           "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:406-408 (sOverlayTemplate_PCBox = {PCBox_Init, PCBox_Main, PCBox_Exit, OVY_14}), src/scrcmd_c.c:1987-1991 (the only PCBox_LaunchApp caller)",
           "status": "ROUTE_LEGS_PARTLY_NEW"
@@ -2601,26 +2579,20 @@
                   {
                     "caller": "ov14_021E62C8 (PC app; also calls the delete site)",
                     "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1268",
-                    "covered_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by_route": true,
-                    "kind": "direct"
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "alternative destination-bit0x80 placement branch; indexed deposit does not exercise it"
                   },
                   {
                     "caller": "ov14_021E6318 (PC app)",
                     "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1319",
-                    "covered_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by_route": true,
-                    "kind": "direct"
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "alternative destination-bit0x80 placement branch; indexed deposit does not exercise it"
                   },
                   {
                     "caller": "BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate)",
@@ -2701,6 +2673,8 @@
           },
           "name": "pc_withdraw_release",
           "open": [
+            "pc_place_first_in_box: ov14_021E62C8 (PC app; also calls the delete site) - alternative destination-bit0x80 placement branch; indexed deposit does not exercise it",
+            "pc_place_first_in_box: ov14_021E6318 (PC app) - alternative destination-bit0x80 placement branch; indexed deposit does not exercise it",
             "pc_place_first_in_box: BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate) - other phase predicate; needs a full-party catch",
             "pc_place_first_in_box: PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate) - other phase predicate (field task)",
             "pc_place_first_in_box: ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844) - other overlay predicate (14 != 70)",
@@ -2752,7 +2726,7 @@
           },
           "site_rationale": {
             "pc_delete_by_index_pair": "withdraw/release removes a box mon: the opposite PC write",
-            "pc_place_first_in_box": "deposit target (first free slot of the box) and the party-full acquisition store; static ARM9 on HG (the probe's static_pc), replaced into ov129 on hge"
+            "pc_place_first_in_box": "alternative destination-bit0x80 first-empty placement and party-full acquisition store; not exercised by the native indexed deposit (overlay_14.s:1346-1369)"
           },
           "sites": [
             "pc_place_first_in_box",
@@ -2770,7 +2744,6 @@
           "party_add_mon": "fires before the battle (enemy party build, pokeheartgold@ad7a3afa src/field/encounter_check.c:1355, OVY_2) and for catches/gifts/eggs/trades; a catch needs Poke Balls (bag not measured on the owner saves) and no battle-app predicate covers the pre-battle call"
         },
         "pc": {
-          "pc_place_by_index_pair": "UI wrappers ov14_021E611C/ov14_021E61BC; cap 2 (the deposit/withdraw pair covers the PC app)",
           "pc_place_first_any_box": "callers are script/bug-contest acquisitions (scrcmd_12.c:68, overlay_bug_contest.c:227), not the PC UI",
           "pc_swap_by_index_pair": "UI wrapper ov14_021E637C (box-to-box move); cap 2"
         }
@@ -8245,8 +8218,8 @@
               {
                 "callers": [
                   {
-                    "caller": "ov14_021E62C8 (PC app; also calls the delete site)",
-                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1268",
+                    "caller": "ov14_021E61BC (native party-to-indexed-box deposit)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1130-1156; transfer dispatch :1404-1428",
                     "covered_by": [
                       "pc_deposit_first_party_mon"
                     ],
@@ -8257,55 +8230,33 @@
                     "kind": "direct"
                   },
                   {
-                    "caller": "ov14_021E6318 (PC app)",
-                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1319",
-                    "covered_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by_route": true,
-                    "kind": "direct"
-                  },
-                  {
-                    "caller": "BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate)",
-                    "cite": "pokeheartgold@ad7a3afa src/battle/battle_command.c:7025",
+                    "caller": "ov14_021E611C (party/box swap with an occupied destination)",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1057-1092",
                     "covered_by": [],
                     "exercised_by": [],
                     "exercised_by_route": false,
                     "kind": "direct",
-                    "why_open": "other phase predicate; needs a full-party catch"
+                    "why_open": "other PC action; occupied-target swap is not this deposit route"
                   },
                   {
-                    "caller": "PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate)",
-                    "cite": "pokeheartgold@ad7a3afa src/pokemon_storage_system.c:58",
+                    "caller": "OVY_112 Pokewalker transfer callers",
+                    "cite": "pokeheartgold@ad7a3afa asm/overlay_112.s:12810,17763,18147,18251",
                     "covered_by": [],
                     "exercised_by": [],
                     "exercised_by_route": false,
                     "kind": "direct",
-                    "why_open": "other phase predicate (field task)"
-                  },
-                  {
-                    "caller": "ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844)",
-                    "cite": "pokeheartgold@ad7a3afa asm/overlay_70.s:18479,18601,20198",
-                    "covered_by": [],
-                    "exercised_by": [],
-                    "exercised_by_route": false,
-                    "kind": "direct",
-                    "why_open": "other overlay predicate (14 != 70)"
+                    "why_open": "other overlay predicate (14 != 112)"
                   }
                 ],
-                "site": "pc_place_first_in_box"
+                "site": "pc_place_by_index_pair"
               }
             ]
           },
           "fixture_role": "pc_case",
           "name": "pc",
           "open": [
-            "pc_place_first_in_box: BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate) - other phase predicate; needs a full-party catch",
-            "pc_place_first_in_box: PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate) - other phase predicate (field task)",
-            "pc_place_first_in_box: ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844) - other overlay predicate (14 != 70)"
+            "pc_place_by_index_pair: ov14_021E611C (party/box swap with an occupied destination) - other PC action; occupied-target swap is not this deposit route",
+            "pc_place_by_index_pair: OVY_112 Pokewalker transfer callers - other overlay predicate (14 != 112)"
           ],
           "phase": "pc",
           "precedes_first_event": [
@@ -8333,7 +8284,7 @@
             "ovy_id_off": 12,
             "symbol": "sOverlayTemplate_PCBox$10493"
           },
-          "producer_site": "pc_place_first_in_box",
+          "producer_site": "pc_place_by_index_pair",
           "route": [
             "gen4_pc:reach_pc_terminal",
             "pc_open_storage",
@@ -8347,10 +8298,10 @@
             "pc_open_storage": "OPEN: routed but the receipt is unsigned - tools/gen4_routes.py `pc` target (Cherrygrove PC stop: planned walk, pc_deposit() prologue in lua/tests/gen4_route_play.lua, native SAVE, cold reload; receipt kind route PC_DEPOSIT); fixture: the SYNTH party2 saves and the route_pc* lane batteries (C:/slink/g4/route_pc, route_pc_ss, route_pc_hge) hold a boxed mon (party=1 boxed=1); receipts are not signable until the bound landing re-run (cx-fbd330af)"
           },
           "site_rationale": {
-            "pc_place_first_in_box": "native deposit; ARM9 entry/trampoline is the static-PC oracle, no withdraw claim"
+            "pc_place_by_index_pair": "native indexed deposit: FindFirstEmptySlot resolves an explicit index, then ov14_021E61BC calls PCStorage_PlaceMonInBoxByIndexPair (overlay_14.s:7582-7596,2641-2649,1428,1152); static ARM9 oracle, no first-empty-placement or withdraw claim"
           },
           "sites": [
-            "pc_place_first_in_box"
+            "pc_place_by_index_pair"
           ],
           "source": "pokeheartgold@ad7a3afa src/field_system.c:127-133 (FieldSystem_LaunchApplication: fs->unk0->unk4 = OverlayManager_New), src/overlay_manager.c:5-18 (man->template = *template, so ovy_id lands at man+0xC), include/overlay_manager.h:11-25, include/field_system.h:79-82,113 (unk0 @fs+0; unk4 @sub0+4); src/launch_application.c:406-408 (sOverlayTemplate_PCBox = {PCBox_Init, PCBox_Main, PCBox_Exit, OVY_14}), src/scrcmd_c.c:1987-1991 (the only PCBox_LaunchApp caller)",
           "status": "ROUTE_LEGS_PARTLY_NEW"
@@ -8397,26 +8348,20 @@
                   {
                     "caller": "ov14_021E62C8 (PC app; also calls the delete site)",
                     "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1268",
-                    "covered_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by_route": true,
-                    "kind": "direct"
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "alternative destination-bit0x80 placement branch; indexed deposit does not exercise it"
                   },
                   {
                     "caller": "ov14_021E6318 (PC app)",
                     "cite": "pokeheartgold@ad7a3afa asm/overlay_14.s:1319",
-                    "covered_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by": [
-                      "pc_deposit_first_party_mon"
-                    ],
-                    "exercised_by_route": true,
-                    "kind": "direct"
+                    "covered_by": [],
+                    "exercised_by": [],
+                    "exercised_by_route": false,
+                    "kind": "direct",
+                    "why_open": "alternative destination-bit0x80 placement branch; indexed deposit does not exercise it"
                   },
                   {
                     "caller": "BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate)",
@@ -8497,6 +8442,8 @@
           },
           "name": "pc_withdraw_release",
           "open": [
+            "pc_place_first_in_box: ov14_021E62C8 (PC app; also calls the delete site) - alternative destination-bit0x80 placement branch; indexed deposit does not exercise it",
+            "pc_place_first_in_box: ov14_021E6318 (PC app) - alternative destination-bit0x80 placement branch; indexed deposit does not exercise it",
             "pc_place_first_in_box: BATTLE_STATE catch store, party full (runs under the OVY_12 manager, not the PC predicate) - other phase predicate; needs a full-party catch",
             "pc_place_first_in_box: PCStorage_PlaceMonInFirstEmptySlotInAnyBox (script gift scrcmd_12.c:68, bug contest overlay_bug_contest.c:227; field task, no app predicate) - other phase predicate (field task)",
             "pc_place_first_in_box: ov70_02240A7C / ov70_02240B9C / ov70_022418A4 (OVY_70 app launched by sub_0203F844) - other overlay predicate (14 != 70)",
@@ -8548,7 +8495,7 @@
           },
           "site_rationale": {
             "pc_delete_by_index_pair": "withdraw/release removes a box mon: the opposite PC write",
-            "pc_place_first_in_box": "deposit target (first free slot of the box) and the party-full acquisition store; static ARM9 on HG (the probe's static_pc), replaced into ov129 on hge"
+            "pc_place_first_in_box": "alternative destination-bit0x80 first-empty placement and party-full acquisition store; not exercised by the native indexed deposit (overlay_14.s:1346-1369)"
           },
           "sites": [
             "pc_place_first_in_box",
@@ -8566,7 +8513,6 @@
           "party_add_mon": "fires before the battle (enemy party build, pokeheartgold@ad7a3afa src/field/encounter_check.c:1355, OVY_2) and for catches/gifts/eggs/trades; a catch needs Poke Balls (bag not measured on the owner saves) and no battle-app predicate covers the pre-battle call"
         },
         "pc": {
-          "pc_place_by_index_pair": "UI wrappers ov14_021E611C/ov14_021E61BC; cap 2 (the deposit/withdraw pair covers the PC app)",
           "pc_place_first_any_box": "callers are script/bug-contest acquisitions (scrcmd_12.c:68, overlay_bug_contest.c:227), not the PC UI",
           "pc_swap_by_index_pair": "UI wrapper ov14_021E637C (box-to-box move); cap 2"
         }
