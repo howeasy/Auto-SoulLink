@@ -1,8 +1,9 @@
 # Shared NDS mailbox reader and Gen 4 title binder
 
-SOURCE/MODEL contract, 2026-10-04. Implementation is on
-`claude/gen4-nds-mailbox@1f339a29` (`mailbox.lua` introduced by `5edae113`).
-It is not yet in this c1046d07-based tree. The sibling
+SOURCE/MODEL contract, 2026-10-04. Implementation: `lua/nds/mailbox.lua` (introduced by
+`5edae113`) and `lua/gen4/companion.lua` (`4b776cd4`, corrected by the OMP review fix commit
+`b1060c78`), on `claude/gen4-integration2`. Line anchors below are given as symbols, not
+numbers, because they moved once already. The sibling
 `docs/shared-nds-witness.md` owns revision-protected transaction witness reads;
 this reader does not replace that protocol.
 
@@ -76,7 +77,7 @@ MODEL anchors: `tests/unit/test_nds_mailbox.py:248-291` (compiled layout and I/O
 
 ## Gen 4 title adapter
 
-`lua/gen4/companion.lua` at 1f339a29 supplies title decoding and liveness:
+`lua/gen4/companion.lua` supplies title decoding and liveness:
 
 ```lua
 local binder, why = Companion.new(io, {
@@ -90,25 +91,39 @@ previous = state
 ```
 
 - `Companion.layout()` copies static title layout; `binder:layout()` adds the
-  shared-derived title offset, masks and chosen thresholds (:128,268-275).
+  shared-derived title offset, masks and chosen thresholds.
 - `new()` validates config; title offset is derived from the shared reader's
-  `reserved_offset`, not a hard-coded address (:213-242).
+  `reserved_offset`, not a hard-coded address.
 - `poll(previous)` takes the shared snapshot, two full 0x40-byte title copies around
   a fresh header read, compares the copies, validates magic/version/size, and checks
-  title generation equals the Gen 4 interpretation of +0x4C (:277-338).
-- `step(previous,sample,opts)` is a pure liveness transition (:151-207): first sample
+  title generation equals the Gen 4 interpretation of +0x4C. NOTE: `state.generation` IS the
+  +0x4C word (Gen 4's session epoch, abi.h / beacon.h `generation`); `state.session_epoch`
+  is the +0x44 envelope word, copied out and never gated -- bind a transaction to the former.
+- `step(previous,sample,opts)` is a pure liveness transition: first sample
   WARMING; cookie/generation change or refused sample LOST; N unadvanced-delta polls
   LOST; LIVE requires stable pair and a delta advance on the current poll. K=1 still
-  requires an observed advance, not first-attach LIVE.
-- K/N are **per title**. Defaults 3/2 (:84) are MODEL fallbacks, not measured shipping
+  requires an observed advance, not first-attach LIVE. `stable` saturates at 0xFFFF. OPEN
+  DESIGN CALL (ABI/owner): a stall shorter than N is TOLERATED -- `stable` is kept and only
+  `stalled` moves, so a skipped service visit does not flap LIVE; the spec's "K consecutive
+  polls" does not define that case. `producer_phase` is reported, not gated (spec 6.2 item 5).
+- Refusal reasons returned by `poll` (state is LOST, `reason` set): `config`, `config:mailbox`,
+  `config:polls`, `title:magic`, `title:version`, `title:size`, `title:coherence` (copies
+  differ or generation mirror differs), the shared reader's `mailbox:*`/`abi:*`/`read:error`,
+  and `sample:absent` / `sample:fields` from `step`.
+- K/N are **per title**. Defaults 3/2 (`Companion.DEFAULTS`) are MODEL fallbacks, not measured shipping
   thresholds. Caller-supplied valid values win; neither value belongs in the shared
   mailbox reader. The module has no clock or internal transaction retention.
 - Capability bits and title headroom are reported but never gate step/poll liveness.
   The reserved[36] tail has no invented private cells.
 
-MODEL anchors: `tests/unit/test_gen4_companion.py:374-416` (offsets/reporting),
-`:439-537` (K/N, epoch/cookie/stalls, caps-never-gate), `:561-586` (torn reads),
-`:587-646` (pure step/config), `:717-767` (revert controls).
+MODEL anchors (by test name, `tests/unit/test_gen4_companion.py`):
+`test_layout_is_the_compiled_header_and_title_offset_is_derived`, `test_field_offsets_follow_beacon_h`,
+`test_poll_decodes_every_published_field`, `test_first_poll_is_warming_and_live_lands_after_exactly_k_polls`,
+`test_a_stalled_clock_for_n_polls_is_lost_and_resumes_from_warming`,
+`test_a_refused_poll_drops_liveness_and_the_next_good_poll_rewarms`, `test_refusals_are_named`,
+`test_a_torn_title_is_refused_rather_than_decoded`, `test_capabilities_never_gate_liveness`,
+`test_step_is_pure_and_usable_without_a_binder`, `test_stable_saturates_instead_of_wrapping_and_dropping_live`,
+and the publish-order / revert controls at the end of the file.
 
 ## ABI-owner rulings, 2026-10-04
 
