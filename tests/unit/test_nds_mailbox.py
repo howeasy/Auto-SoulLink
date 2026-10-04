@@ -23,6 +23,13 @@ import lupa
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# Host-gcc probe binaries must never raise a Windows WER/GPF dialog: it blocks an unattended
+# run forever. SetErrorMode is inherited by every child exe this module starts.
+if os.name == "nt":
+    import ctypes
+
+    ctypes.windll.kernel32.SetErrorMode(0x8003)
 COMMON = ROOT / "patch/src/nds/common"
 GEN4 = ROOT / "patch/src/nds/gen4"
 MODULE = ROOT / "lua/nds/mailbox.lua"
