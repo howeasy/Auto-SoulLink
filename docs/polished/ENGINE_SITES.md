@@ -66,7 +66,7 @@ record**, not when the script merely stages a species.
 
 | Vanilla site | Vanilla symbol (pokecrystal) | Polished equivalent | Verdict | What the hook must read | Note |
 |---|---|---|---|---|---|
-| `capture_party` | `PokeBallEffect.not_celebi`, `engine/items/item_effects.asm:546` | `PokeBallEffect`, `sym:3373`, `03:63a0` | `moved` | `wCurPartyMon` (`sym:65782`, `01:d10c`) + `wCurPartySpecies` (`sym:65781`, `01:d10b`) | Vanilla sat on a sub-label that no longer exists; `PokeBallEffect` itself survives. The exact breakpoint inside it is `UNVERIFIED`. |
+| `capture_party` | `PokeBallEffect.not_celebi`, `engine/items/item_effects.asm:546` | `PokeBallEffect`, `sym:3373`, `03:63a0` | `moved` | `wCurPartyMon` (`sym:65782`, `01:d10c`) + `wCurPartySpecies` (`sym:65781`, `01:d10b`) | Vanilla sat on a sub-label that no longer exists. Re-pinned (2026-10-04) from the routine head to `03:652B` (`PokeBallEffect`+0x18B, `D7084513FA09D1`: the `rst FarCall SetCaughtData` after the party/OT/nickname `rst CopyBytes`), located by byte sequence in `tools/gen_polished_engine_sites.py`; party catch only. |
 | `capture_box` | `PokeBallEffect.SendToPC`, `engine/items/item_effects.asm:609` | `PokeBallEffect.SendToPC`, `sym:3381`, `03:6590` | `same` | box slot + `wCurPartySpecies` | Sub-label and name preserved verbatim. |
 | `capture_party_finalized` | `PokeBallEffect.return_from_capture`, `engine/items/item_effects.asm:695` | `PokeBallEffect.return_from_capture`, `sym:3392`, `03:666d` | `same` | `wBattleType`, party count | Same site serves capture, contest **and** roamer in both games — the caller disambiguates. |
 | `capture_box_finalized` | same as above | same | `same` | as above | Deliberate alias in the vanilla list; kept. |

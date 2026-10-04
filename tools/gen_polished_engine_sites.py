@@ -99,14 +99,16 @@ def spans_overlap(a: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
 
 
 def S(site_id, signal, symbol, phase, semantics, *, bank=None, addr=None, symbol_offset=0,
-      anchor=None, status="RESOLVED", reason=None, notes=None):
+      anchor=None, status="RESOLVED", reason=None, notes=None, find_hex=None):
     """One site. `bank`/`addr` override the symbol lookup (for hand-placed boundaries,
-    where `anchor` names the .sym label the offset was derived from)."""
+    where `anchor` names the .sym label the offset was derived from). `find_hex` instead
+    pins the site by byte sequence: the generator locates it inside `symbol`'s extent and
+    requires exactly one match, so the offset is derived from the ROM, never hand-typed."""
     return {
         "signal": signal, "symbol": symbol, "symbol_offset": symbol_offset,
         "bank": bank, "addr": addr, "anchor": anchor, "phase": phase,
         "semantics": semantics, "status": status, "reason": reason, "notes": notes,
-        "id": site_id,
+        "id": site_id, "find_hex": find_hex,
     }
 
 
@@ -160,9 +162,14 @@ SITES: tuple[dict, ...] = (
     S("whiteout_before_heal", "whiteout", "Special", "before_heal_dispatch",
       "Special dispatch before the whiteout heal.", bank=0x03, addr=0x401B),
     # ---- capture / acquisition ----
-    S("capture_party", "capture_party", "PokeBallEffect", "post_insert_pre_nickname",
-      "Ball catch; the vanilla sub-label .not_celebi does not survive in Polished.",
-      bank=0x03, addr=0x63A0),
+    S("capture_party", "capture_party", "PokeBallEffect", "post_insert_post_nickname_copy",
+      "Party catch only: `rst FarCall SetCaughtData` (engine/items/item_effects.asm ~line 534), the "
+      "first instruction after the party-record, OT and nickname rst CopyBytes. Reached only when "
+      "the ball catches and the party has room (the box path jumps to .SendToPC first), so it "
+      "never fires on an escape. The routine head (03:63A0) fires on every ball use and is NOT "
+      "this site. Pinned by byte sequence, not offset: find_hex must match exactly once inside "
+      "PokeBallEffect.",
+      symbol_offset=None, find_hex="D7084513FA09D1"),
     S("capture_box", "capture_box", "PokeBallEffect.SendToPC", "post_insert_pre_nickname",
       "Catch routed to a box.", bank=0x03, addr=0x6590),
     S("capture_party_finalized", "capture_party", "PokeBallEffect.return_from_capture",
@@ -308,6 +315,23 @@ ORACLES = (
 )
 
 
+def find_in_extent(rom: bytes, sym: dict, symbol: str, seq: bytes) -> tuple[int, int, int]:
+    """(bank, addr, symbol_offset) of the single occurrence of `seq` inside `symbol`'s extent
+    (its address up to the next non-sub-label symbol in the same bank). Zero or several
+    matches abort generation."""
+    bank, start = sym[symbol]
+    ends = [a for n, (b, a) in sym.items()
+            if b == bank and a > start and not n.startswith(symbol + ".")]
+    end = min(ends)
+    base = flat(bank, start)
+    window = rom[base:base + (end - start)]
+    hits = [i for i in range(len(window) - len(seq) + 1) if window[i:i + len(seq)] == seq]
+    if len(hits) != 1:
+        raise SystemExit(f"{symbol}: byte sequence {seq.hex().upper()} matches {len(hits)} "
+                         f"times in {bank:02x}:{start:04x}..{end:04x}, need exactly 1")
+    return bank, start + hits[0], hits[0]
+
+
 def build_site(site: dict, rom: bytes, sym: dict, spans: list[tuple[int, int]]) -> dict:
     out = {
         "id": site["id"], "signal": site["signal"], "kind": "CPU_INSTRUCTION",
@@ -319,22 +343,28 @@ def build_site(site: dict, rom: bytes, sym: dict, spans: list[tuple[int, int]]) 
     if site["status"] == UNRESOLVED:
         out["reason"] = site["reason"]
         return out
-    bank, addr = site["bank"], site["addr"]
-    if bank is None or addr is None:
+    bank, addr, symoff = site["bank"], site["addr"], site["symbol_offset"]
+    n = HEX_LEN_OVERRIDE.get(site["id"], DEFAULT_HEX_LEN)
+    if site["find_hex"]:
+        seq = bytes.fromhex(site["find_hex"])
+        bank, addr, symoff = find_in_extent(rom, sym, site["symbol"], seq)
+        n = len(seq)
+    elif bank is None or addr is None:
         if site["symbol"] not in sym:
             raise SystemExit(f"{site['id']}: symbol {site['symbol']} absent from the .sym")
         bank, addr = sym[site["symbol"]]
     off = flat(bank, addr)
-    n = HEX_LEN_OVERRIDE.get(site["id"], DEFAULT_HEX_LEN)
     span = (off, off + n - 1)
     if spans_overlap(span, spans):
         raise SystemExit(f"{site['id']}: 0x{off:X}..0x{span[1]:X} overlaps a companion-overlay span")
     out.update({
-        "symbol": site["symbol"], "symbol_offset": site["symbol_offset"],
+        "symbol": site["symbol"], "symbol_offset": symoff,
         "bank": bank, "addr": addr, "rom_offset": off,
         "expected_hex": rom[off:off + n].hex().upper(),
         "hex_len": n,
     })
+    if site["find_hex"]:
+        out["find_hex"] = site["find_hex"]
     if site["anchor"]:
         out["sym_anchor"] = site["anchor"]
     if site["notes"]:

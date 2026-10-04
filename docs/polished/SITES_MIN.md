@@ -294,3 +294,13 @@ The OMP left the byte offset of `farcall SetCaughtData` unresolved. Re-derived f
   third (`MON_NAME_LENGTH` is also 11), so 0x652C is the nickname `rst CopyBytes` and 0x652D is the first
   instruction after all three. (Three `E7` precede it in the routine; the preceding `0B 00 E7` is the
   nickname copy.)
+
+
+---
+
+## Coordinator correction to the re-derivation above (2026-10-04)
+
+The PC above is off by two bytes: `rst FarCall` (`D7`) is at **03:652B** (flat 0xE52B, `symbol_offset`
++0x18B), not 03:652D; the `08 45` match I scanned for is the *address operand* (0x652C). Bytes:
+`652A=E7 (rst CopyBytes), 652B=D7, 652C=08, 652D=45, 652E=13, 652F=FA`. A hook at 0x652D would sit
+mid-instruction and never fire. The SITE-REPIN worker caught it; `engine_signals.json` pins 0x652B.

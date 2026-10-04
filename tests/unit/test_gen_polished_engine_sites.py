@@ -188,6 +188,38 @@ def test_packs_are_lf_only():
         assert b"\r\n" not in raw, path
         assert raw.endswith(b"\n"), path
 
+def test_capture_party_is_pinned_at_the_set_caught_data_farcall_not_the_routine_head(
+        sites: dict, signals: dict, rom: bytes):
+    site = sites["capture_party"]
+    # rst FarCall (D7) + dw SetCaughtData (13:4508) + db bank, then ld a,[wCurItem] -- the first
+    # instruction after the party-record / OT / nickname rst CopyBytes in PokeBallEffect.
+    assert (site["bank"], site["addr"], site["symbol_offset"]) == (3, 0x652B, 0x18B)
+    assert site["expected_hex"] == "D7084513FA09D1" == site["find_hex"]
+    assert rom[site["rom_offset"]:site["rom_offset"] + 7].hex().upper() == site["expected_hex"]
+    assert site["phase"] == "post_insert_post_nickname_copy"
+    sym = gen.read_sym(gen.SYMPATH)
+    head = sym["PokeBallEffect"]
+    assert head == (3, 0x63A0) and site["addr"] - head[1] == site["symbol_offset"]
+    assert sym["SetCaughtData"] == (0x13, 0x4508)
+    # the routine head fires on every ball use, including escapes: it is not a capture site
+    for s in sites.values():
+        if s["status"] == "RESOLVED" and s["signal"] == "capture_party":
+            assert (s["bank"], s["addr"]) != head, s["id"]
+    spans = [(x["start"], x["end"]) for x in signals["companion_overlay_spans"]]
+    assert not gen.spans_overlap((site["rom_offset"], site["rom_offset"] + 6), spans)
+
+
+@pytest.mark.parametrize("seq,matches", [("E7", "many"), ("DEADBEEF", "0")])
+def test_find_hex_must_match_exactly_once_in_the_routine(seq: str, matches: str):
+    row = next(s for s in gen.SITES if s["id"] == "capture_party")
+    rom = ROM.read_bytes()
+    sym = gen.read_sym(gen.SYMPATH)
+    # control: the committed anchor resolves
+    assert gen.build_site(row, rom, sym, [])["addr"] == 0x652B
+    with pytest.raises(SystemExit, match="need exactly 1"):
+        gen.build_site(dict(row, find_hex=seq), rom, sym, [])
+
+
 CLAIMS_DOC = """\
 ```json
 CLAIMS: [{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":36,"expect":"LOCK = REPO / \"data\" / \"polished_sources.lock.json\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":38,"expect":"UPS = REPO / \"patch\" / \"dist\" / \"SLink-Polished.ups\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":44,"expect":"SCHEMA_SIGNALS = \"polished-engine-signals-v1\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":45,"expect":"SCHEMA_CHECKPOINT = \"polished-write-checkpoint-v1\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":46,"expect":"GENERATOR = \"tools/gen_polished_engine_sites.py\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":54,"expect":"SYMPATH = DATA / \"polishedcrystal.sym\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":295,"expect":"DETERMINE_MOVE_ORDER_CALL = (0x0F, 0x416A)"},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":296,"expect":"DETERMINE_MOVE_ORDER_CALL_BYTES = \"cd3542\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":85,"expect":"from make_ups import ups_apply"},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":58,"expect":"def flat(bank: int, addr: int) -> int:"},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":122,"expect":"S(\"battle_faint\", \"player_faint\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":263,"expect":"S(\"rival_swap_commit\", \"rival_window\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":267,"expect":"S(\"rival_swap_gate\", \"rival_window\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":272,"expect":"S(\"rival_swap_last_consumption\", \"rival_window\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":283,"expect":"S(\"lost_battle\", \"run_over\", \"LostBattle\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":286,"expect":"S(\"has_player_fainted\", \"player_faint\", \"HasPlayerFainted\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":132,"expect":"S(\"battle_end\", \"battle_end_result\", \"ExitBattle\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":147,"expect":"S(\"soft_reset\", \"soft_reset\", \"SoftReset\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":151,"expect":"S(\"save_completed\", \"save_completed\", \"UNRESOLVED\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":252,"expect":"S(\"change_box_begin\", \"change_box\", \"UNRESOLVED\""},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":335,"expect":"\"expected_hex\": rom[off:off + n].hex().upper(),"},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":365,"expect":"raise SystemExit(f\"call DetermineMoveOrder not at 0x{off:X}: got {rom[off:off+3].hex()}\")"},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":437,"expect":"\"rom_sha1\": sha1_file(rom_path)"},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":436,"expect":"\"tag\": lock[\"source\"][\"tag\"]"},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":446,"expect":"def build_all("},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":311,"expect":"def build_site("},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":345,"expect":"def build_signals("},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":361,"expect":"def build_checkpoint("},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":426,"expect":"def dump("},{"path":"F:/slink-work/wt/polished/tools/gen_polished_engine_sites.py","line":480,"expect":"if __name__ == \"__main__\":"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":708,"expect":"ResolveFaints:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":729,"expect":"call UpdateBattleMonInParty"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":727,"expect":"ldh [hBattleTurn], a"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":190,"expect":"call DetermineMoveOrder"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":1144,"expect":"SendInUserPkmn:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":1237,"expect":"ld [hl], a"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":1244,"expect":"ld hl, wOTPartyMon1Species"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":1265,"expect":"rst CopyBytes ; copy Level, Status, Unused, HP, MaxHP, Stats"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":2589,"expect":"LostBattle:"},{"path":"F:/slink-work/cache/polished/src/engine/battle/core.asm","line":779,"expect":"call LostBattle"}]
