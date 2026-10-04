@@ -51,10 +51,21 @@ SVC_END = (0x7E, 0x4010)
 HEADER_BYTES = bytes((0xDE, 0xAD, 0xBE))
 SERVICE_BYTES = bytes(range(0x40, 0x50))     # 16 bytes, exactly the SVC..SVC_END span
 
-CLEAN_SYMS = {"DelayFrame": (0x00, DELAY), "wPlayerPartyCount": (0x10, 0x5D00)}
+# The Phone card hooks (pc.PHONE_HOOKS): each routine holds one `call native` that the overlay
+# retargets to a ROM0 bridge inside PHONE_LO..PHONE_HI (free $FF in the clean image).
+PHONE_LO, PHONE_HI = 0x3F34, 0x3F92
+PHONE_ROUTINES = {r: (0x24, 0x4100 + 0x80 * i) for i, r in enumerate(dict.fromkeys(h[0] for h in pc.PHONE_HOOKS))}
+PHONE_NATIVES = {n: ((0x00, 0x2500 + i) if n == "GetMapPhoneService" else (0x24, 0x5000 + 0x10 * i))
+                 for i, (_r, n, _b) in enumerate(pc.PHONE_HOOKS)}
+PHONE_BRIDGES = {b: (0x00, PHONE_LO + 8 * i) for i, (_r, _n, b) in enumerate(pc.PHONE_HOOKS)}
+PHONE_CALLS = [(pc._flat(*PHONE_ROUTINES[r]) + 4 + 8 * i, n, b) for i, (r, n, b) in enumerate(pc.PHONE_HOOKS)]
+
+CLEAN_SYMS = {"DelayFrame": (0x00, DELAY), "wPlayerPartyCount": (0x10, 0x5D00), **PHONE_ROUTINES, **PHONE_NATIVES}
 OVERLAY_SYMS = {
     "DelayFrame": (0x00, DELAY),
     "wPlayerPartyCount": (0x10, 0x5D00),     # every clean symbol survives, unmoved
+    **PHONE_ROUTINES, **PHONE_NATIVES, **PHONE_BRIDGES,
+    "SlinkPhoneBridgeEnd": (0x00, PHONE_HI),
     "SlinkDelayFrameBridge": (0x00, BRIDGE),
     "SlinkDelayFrameBridgeEnd": (0x00, BRIDGE_END),
     "SlinkService": SVC,
@@ -69,16 +80,22 @@ def clean_rom() -> bytes:
     rom = bytearray(ROM_SIZE)
     rom[EMPTY_BANK] = b"\xff" * 0x4000
     rom[DELAY:DELAY + 7] = pc.DELAY_NATIVE
+    rom[PHONE_LO:PHONE_HI] = b"\xff" * (PHONE_HI - PHONE_LO)
+    for at, native, _bridge in PHONE_CALLS:
+        rom[at:at + 3] = b"\xcd" + PHONE_NATIVES[native][1].to_bytes(2, "little")
     return bytes(rom)
 
 
 def overlay_rom(base: bytes | None = None) -> bytes:
-    """base with exactly the four intended edits: lead-in, bridge, service, header checksums."""
+    """base with exactly the intended edits: lead-in, bridge, service, header checksums, phone."""
     rom = bytearray(clean_rom() if base is None else base)
     rom[DELAY:DELAY + 7] = b"\xcd" + BRIDGE.to_bytes(2, "little") + bytes(4)
     rom[BRIDGE:BRIDGE + 7] = pc.DELAY_NATIVE
     rom[pc._flat(*SVC):pc._flat(*SVC_END)] = SERVICE_BYTES
     rom[pc.HEADER_CHECKSUMS.start:pc.HEADER_CHECKSUMS.stop] = HEADER_BYTES
+    rom[PHONE_LO:PHONE_HI] = b"\x11" * (PHONE_HI - PHONE_LO)
+    for at, _native, bridge in PHONE_CALLS:
+        rom[at + 1:at + 3] = PHONE_BRIDGES[bridge][1].to_bytes(2, "little")
     return bytes(rom)
 
 
@@ -128,7 +145,7 @@ def test_a_diff_entirely_inside_the_allowed_spans_is_accepted():
     `unexpected change at`.
     """
     report = pc.verify_overlay(clean_rom(), overlay_rom(), CLEAN_SYMS, OVERLAY_SYMS)
-    assert len(report) == 4, report
+    assert len(report) == 4 + 1 + len(pc.PHONE_HOOKS), report
     joined = "\n".join(report)
     assert "DelayFrame lead-in" in joined
     assert "ROM0 bridge" in joined

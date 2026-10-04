@@ -227,3 +227,40 @@ constant table grows: it is a `const` list used by `PhoneContacts` rows, `data/p
 (script pointer into the overlay bank) which needs the same `PhoneContacts` row (a data row in bank `$24`: ALSO full).
 These two bank-`$24` data needs (a label and a `PhoneContacts` row) mean I1 as written ("data only, zero ROM code change")
 is NOT achievable without freeing or bypassing space in bank `$24`; the ROM0-bridge route above is the likely shape.
+
+
+## Stage 1 implementation (2026-10-04, append-only)
+
+Built and live-checked on the overlay `34942315bb3e62189a56dabbcb9cef6dd3e9a9f5` (UPS 262 B). The final shape is
+neither I1 nor I2. The contact is **virtual**: there is no `wPhoneList` bit, no `PhoneContacts` row and nothing in the save.
+The Phone card's own list walk is told that contact id `NUM_PHONE_CONTACTS + 1` (= 38) exists. That id sorts after every
+native id, so the SLink row is always the last row. Five same-size `call` operand rewrites in bank `$24` route to ROM0
+bridges (`patch/polished/src/slink.asm`, fixed `ROM0[$3F34]`). Each bridge falls through to the native callee for every id
+except 38:
+
+| flat | routine | old bytes | new bytes | why |
+|---|---|---|---|---|
+| `0x90B5E` | `PokegearPhone_GetCellNumberFromE` | `cd 6f 4b` (`call PokegearPhone_CountSetBits`) | `cd 34 3f` (`SlinkPhone_CountSetBits`) | native count + 1, `wNumSetBits` too |
+| `0x90B66` | same walk | `cd 1f 40` (`call CheckCellNum`) | `cd 3c 3f` (`SlinkPhone_CheckCellNum`) | id 38 reads as present, so the walk stops on it |
+| `0x90B0E` | `PokegearPhone_UpdateDisplayList` | `cd ff 41` (`call GetCallerClassAndName`) | `cd 45 3f` (`SlinkPhone_CallerName`) | label `SLink:` / `   Soul Link` from ROM0 (the `.bill`/`.elm` string shape), never the out-of-table `PhoneContacts[38]` |
+| `0x90B7A` | `PokegearPhoneContactSubmenu` | `cd 9e 42` (`call CheckCanDeletePhoneNumber`) | `cd 52 3f` (`SlinkPhone_CanDelete`) | c = 0, so Call/Cancel only (Mom/Elm style), no Delete |
+| `0x90A1C` | `PokegearPhone_MakePhoneCall` | `cd da 25` (`call GetMapPhoneService`) | `cd 5b 3f` (`SlinkPhone_CallGate`) | "Call" on id 38 drops the return, prints `SLink is linked.` (prompt), then goes back to `POKEGEARSTATE_PHONEJOYPAD` + `PokegearText_WhomToCall`, the same exit as the native out-of-service path. It never rings. |
+
+The ROM0 strings are read with bank `$24` mapped (ROM0 is always visible), so no WRAM buffer is needed. Every other
+contact, every call path and the rest of bank `$24` are byte-identical. `verify_overlay` checks each hook's opcode and
+both operands (`phone_hook_spans`), and it checks that the ROM0 span was `$FF` in the clean ROM. The UPR patch-0020
+signature bytes (`$0070`, `$0DA8`, `$7E:4000`+16) are unchanged. ABI stays 3. No capability bit is added, because
+the host takes no part in Stage 1.
+
+**Save safety (why removing the overlay leaves a valid save):** no overlay byte writes `wPhoneList` (the
+`test_polished_phone_entry.py` source check), so the save only ever holds native contact bits. The native random-caller
+and `AddPhoneNumber`/`DelCellNum` paths never see id 38.
+
+**Native quirk seen live, not caused by the overlay:** `wNumSetBits` is a union with `wNamedObjectIndex`
+(`ram/wramx.asm:718-721`), and the trainer branch of `GetCallerClassAndName` writes the trainer class there. So when the
+last row drawn is a trainer, `wNumSetBits` holds that class (33 for Wade) until the next walk. The native scroll check
+(`phone.asm:178`) reads it. With the SLink row last, that row is usually the overlay's, which resets the count.
+
+UNPROVEN: the text `SLink is linked.` is fixed. The core mailbox publishes no host/link status, so the text does not
+reflect whether a host is attached (Stage 2 panel). A `wPhoneList` that is corrupt (bits 38-40 set) would make the walk
+overrun, exactly as it would natively.

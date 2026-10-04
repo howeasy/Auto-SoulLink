@@ -798,3 +798,19 @@ document. `NEWBOX.md` supplies the SRAM layout HOOKS.md defers to; where the two
 **One finding is recorded elsewhere, not here:** `RAM.md:72` documents `wTextboxFlags` as
 `01:CFF4` in both the vanilla and Polished columns, but `polishedcrystal.sym:65521` places it at
 `00:cff4`. RAM.md was not edited by this pass (out of scope); see `README.md` §Mismatch.
+
+
+## 10. Allocation note (2026-10-04, Phone card SLink contact, Stage 1 — append-only)
+
+`docs/polished/PHONE_SLOT.md` Stage 1 adds, in addition to the core overlay rows above:
+
+| space | span | owner | bytes |
+|---|---|---|---|
+| ROM0 | `$3F34`-`$3F91` (fixed `SECTION "SLink Phone Bridge", ROM0[$3F34]`) | `SlinkPhone_*` bridges + the two ROM0 strings | 94 of the 204-byte gap `$3F34`-`$3FFF` |
+| bank `$24` | five 2-byte `call` operands (flat `0x90A1D`, `0x90B0F`, `0x90B5F`, `0x90B67`, `0x90B7B`) | `PHONE_HOOKS` in `tools/build_polished_companion.py` | 10, same size, no symbol moves |
+
+Correction to the earlier "ROM0 has 351 free bytes at `$015f`": `$015f` is the **count** (351 = `$15F`, as
+`free_space.txt` prints `351 free ($015f)`), not an address. The clean map's ROM0 gaps are `$0057` (1 B),
+`$006E`-`$00FF` (146 B; the DelayFrame bridge now holds `$0070`-`$0088`, leaving `$0089`-`$00FF`, 119 B) and
+`$3F34`-`$3FFF` (204 B; the phone bridge holds `$3F34`-`$3F91`, leaving `$3F92`-`$3FFF`, 110 B). No ROMX
+free space outside bank `$7E` is used. `data/polished/free_space.txt` describes the CLEAN build and is unchanged.

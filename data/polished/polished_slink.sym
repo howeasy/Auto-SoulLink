@@ -1366,6 +1366,14 @@
 00:3f12 LegendaryMons
 00:3f1e UberMons
 00:3f29 SoundMoves
+00:3f34 SlinkPhone_CountSetBits
+00:3f3c SlinkPhone_CheckCellNum
+00:3f45 SlinkPhone_CallerName
+00:3f52 SlinkPhone_CanDelete
+00:3f5b SlinkPhone_CallGate
+00:3f75 SlinkPhoneCallerName
+00:3f85 SlinkPhoneEntryText
+00:3f92 SlinkPhoneBridgeEnd
 01:4000 SoldierGroup
 01:4000 WaiterGroup
 01:4000 WaitressGroup

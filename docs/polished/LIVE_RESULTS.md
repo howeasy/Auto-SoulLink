@@ -607,3 +607,41 @@ POL_KIND=rand POL_MGR_RUN=... POL_FIXTURE=<fixture> POL_RUNNAME=r2b POL_EXPECT_K
   POL_MAP=26,1 POL_HEADER=1,13,27 POL_WALK=9,12 POL_TARGET=53,2 python tools/polished_live/harness.py live
 # R3: POL_SWAP=1 (swapped pins) | POL_ROM=<flipped copy> POL_ROM_SHA1=<its sha1> (client refusal)
 ```
+
+## Phone card SLink contact, Stage 1 (2026-10-04, DEV evidence). PASS
+
+Overlay `34942315bb3e62189a56dabbcb9cef6dd3e9a9f5` (`docs/polished/PHONE_SLOT.md` "Stage 1 implementation"). The harness's
+`stage_rom` checks it against `overlay_provenance.json` before every launch. Lane `F:/slink-work/lanes/pol-phone`. The
+fixture is run 1's `polished_overlay_warp.SaveRAM` (sha256 `75c7a5dc...36b8`, on ROUTE_29, reached by the engine's own
+warp when it was built), booted with CONTINUE (native).
+
+**Phone run** (EmuHawk PID 49748, driver `lanes/pol-phone/drv/phone.lua` through the harness's own `launch`; 75 checks,
+0 failed). SYNTH, each logged in `phone/result.txt`: `wPokegearFlags` $00 -> $87, and `wPhoneList` set per scenario
+while in the overworld. Everything else is scripted native input: START -> POKEGEAR -> Right to the Phone card.
+
+| scenario | `wPhoneList` | rows read from `wTilemap` | SLink entry |
+|---|---|---|---|
+| s0, 0 native | `0000000000` | `SLink:` / `   Soul Link`, then the native `----------` filler | ok |
+| s1, Mom | `0100000000` | Mom, SLink | ok |
+| s4, Mom/Elm/Joey/Wade | `09c0000000` | 4 natives. The 5th Down scrolls natively (cursor 3, scroll 1): Elm, Joey, Wade, SLink | ok, cursor/scroll 3/1 kept |
+| s3, Mom/Elm/Joey | `0940000000` | Mom, Elm, Joey, SLink | ok, then delete + native call |
+
+Each entry check: A on the row opens `PokegearPhoneContactSubmenu` with **Call/Cancel only (no Delete)**. Call reaches
+`SlinkPhone_CallGate`, and the text box reads `SLink is linked.`. `MakePhoneCallFromPokegear` is **not** entered,
+`wCurCaller` is untouched, `wPokegearPhoneSelectedPerson` = 38 (the virtual id) and `wPhoneList` is unchanged. B returns
+to state $0A with the native "Whom do you want to call?", the cursor/scroll are unchanged and `▶` sits on the SLink row.
+s3 then deletes Joey natively: the submenu offers Delete, the YES/NO prompt appears, YES gives `wPhoneList`
+`0900000000`, and the list redraws as Mom, Elm, SLink, with exactly one SLink row and `wNumSetBits` 3. A real call to
+Mom still enters `MakePhoneCallFromPokegear` (`wCurCaller` 1) and hangs up back to the Phone card. Screenshots
+`phone/s*_*.png`; tilemaps and hits are in `phone/phone.json`.
+
+**Existing stages on the new overlay** (`harness.py live`, stages 1234, EmuHawk PID 52952, server PID 31112; 0 checks
+failed): admitted as `DEV_OVERLAY_SHA1`. The hello leaves at frame 343, after the first idle overworld frame (335) and the
+gate (336), never from the main menu. The capture site fired exactly once on the party catch (bank 3), the box catch
+reached the PC without firing it, the box census followed the battle end (-24 frames), and there were no Lua-originated
+memory writes. Output: `pol-phone/live_stageA/`, `pol-phone/live_stageA.out`.
+
+Not proven live: the entry text is fixed (no host/link status exists in the core mailbox); an incoming call ringing while
+the Pokegear is open was not exercised; only English text and the CGB palette were seen. The first phone run (same
+build) failed one driver expectation only. It expected an SLink row on s4's first screen, but the 5th row is below the
+fold until the scroll. The driver was corrected; the ROM was not changed.

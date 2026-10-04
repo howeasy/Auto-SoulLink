@@ -1,5 +1,5 @@
 SUMMARY:
-	ROM0: 16058 bytes used / 326 free
+	ROM0: 16152 bytes used / 232 free
 	ROMX: 2047397 bytes used / 16987 free in 126 banks
 	SRAM: 30936 bytes used / 1832 free in 4 banks
 	WRAM0: 3831 bytes used / 265 free
@@ -27,8 +27,9 @@ ROM0 bank #0:
 	EMPTY: $0089-$00ff ($0077 bytes)
 	SECTION: $0100-$014f ($0050 bytes) ["Header"]
 	SECTION: $0150-$3f33 ($3de4 bytes) ["Home"]
-	EMPTY: $3f34-$3fff ($00cc bytes)
-	TOTAL EMPTY: $0146 bytes
+	SECTION: $3f34-$3f91 ($005e bytes) ["SLink Phone Bridge"]
+	EMPTY: $3f92-$3fff ($006e bytes)
+	TOTAL EMPTY: $00e8 bytes
 
 ROMX bank #1:
 	SECTION: $4000 ($0000 bytes) ["SoldierGroup"]

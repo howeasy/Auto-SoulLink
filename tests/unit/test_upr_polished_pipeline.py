@@ -188,13 +188,14 @@ def test_content_check_refuses_an_unpinned_source_and_a_changed_header(roms, tmp
 
 
 # ── the write-domain audit ───────────────────────────────────────────────────────────────
-def test_the_overlay_owns_107_bytes_in_four_runs():
+def test_the_overlay_owns_208_bytes_in_twelve_runs():
     spans = W.ups_spans((REPO / "patch/dist/SLink-Polished.ups").read_bytes())
-    assert len(W.geometry()["ups"]) == sum(b - a for a, b in spans) == 107
-    assert spans[0][0] == 0x70 and (0x14E, 0x150) in spans and spans[-1][0] == 0x7E * 0x4000
+    assert len(W.geometry()["ups"]) == sum(b - a for a, b in spans) == 208
+    assert spans[0][0] == 0x70 and (0x14E, 0x14F) in spans and len(spans) == 12 and spans[-1][0] == 0x7E * 0x4000
 
 
 @pytest.mark.parametrize("offset, what", [(0x70, "companion overlay"), (0xDA8, "companion overlay"),
+                                          (0x3F40, "companion overlay"), (0x90A1D, "companion overlay"),
                                           (0x1F8000, "SLink bank"), (0x1FB000, "SLink bank"),
                                           (0x140, "cartridge header"), (0x14E, "cartridge header")])
 def test_write_domain_is_red_on_an_overlay_bank_7e_or_header_byte(roms, tmp_path, offset, what):
@@ -206,7 +207,7 @@ def test_write_domain_is_red_on_an_overlay_bank_7e_or_header_byte(roms, tmp_path
 def test_write_domain_lets_upr_own_its_tables_and_needs_the_overlay_as_source(roms, tmp_path):
     release, overlay = roms
     first_wild = S.offsets()["JohtoGrassWildMonsOffset"] + 6
-    assert W.check_output(*_files(tmp_path, overlay, first_wild, PIKACHU + 8)) == {"changed": 2, "ups_bytes": 107}
+    assert W.check_output(*_files(tmp_path, overlay, first_wild, PIKACHU + 8)) == {"changed": 2, "ups_bytes": 208}
     with pytest.raises(P.UprPipelineError, match="not the pinned Polished Crystal companion overlay"):
         W.check_output(*_files(tmp_path, release, first_wild))
 
@@ -305,7 +306,7 @@ def test_prepare_pair_routes_polished_to_its_own_checks(roms, tmp_path, monkeypa
     a, b = pair["players"]["a"], pair["players"]["b"]
     assert (a["seed"], b["seed"]) == (11, 22) and a["sha1"] != b["sha1"] and a["content_hash"] != b["content_hash"]
     for row in (a, b):
-        assert row["fingerprint"] == "" and len(row["content_hash"]) == 64 and row["write_domain"]["ups_bytes"] == 107
+        assert row["fingerprint"] == "" and len(row["content_hash"]) == 64 and row["write_domain"]["ups_bytes"] == 208
 
 
 def test_prepare_pair_refuses_a_polished_output_that_wrote_into_the_overlay(roms, tmp_path, monkeypatch):

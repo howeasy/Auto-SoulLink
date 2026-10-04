@@ -103,3 +103,81 @@ SlinkService::
 	ld [SLINK_LAST_SAMPLE], a
 	ret
 SlinkServiceEnd::
+
+; ---- Pokegear Phone card: one virtual SLink contact (docs/polished/PHONE_SLOT.md, Stage 1) ----
+; The contact is VIRTUAL: no wPhoneList bit, no PhoneContacts row, nothing in the save. The Phone
+; card's own list walk (PokegearPhone_GetCellNumberFromE) is told there is one more contact, id
+; NUM_PHONE_CONTACTS + 1, which sorts after every native id. Five same-size `call` operand rewrites
+; in bank $24 (tools/build_polished_companion.py PHONE_HOOKS) route here; every other id falls
+; through to the native routine. Bank $24 calls these with $24 mapped and they jump back into it,
+; so they live in ROM0 (the last free ROM0 gap, $3F34-$3FFF; the bridge gap above holds the service).
+DEF SLINK_PHONE_CONTACT EQU NUM_PHONE_CONTACTS + 1
+ASSERT SLINK_PHONE_CONTACT <= 40 ; a wPhoneList bit no native script can set (flag_array is 5 bytes)
+ASSERT BANK(PokegearPhone_GetCellNumberFromE) == BANK(CheckCellNum)
+ASSERT BANK(PokegearPhone_GetCellNumberFromE) == BANK(PokegearPhone_CountSetBits)
+ASSERT BANK(PokegearPhone_GetCellNumberFromE) == BANK(GetCallerClassAndName)
+ASSERT BANK(PokegearPhone_GetCellNumberFromE) == BANK(CheckCanDeletePhoneNumber)
+ASSERT BANK(PokegearPhone_GetCellNumberFromE) == BANK(PokegearText_WhomToCall)
+ASSERT BANK(PokegearPhone_GetCellNumberFromE) == BANK(PokegearPhone_MakePhoneCall)
+
+SECTION "SLink Phone Bridge", ROM0[$3F34]
+SlinkPhone_CountSetBits::
+; for `call PokegearPhone_CountSetBits` in PokegearPhone_GetCellNumberFromE: native count + 1
+	call PokegearPhone_CountSetBits
+	inc a
+	ld [wNumSetBits], a
+	ret
+
+SlinkPhone_CheckCellNum::
+; for `call CheckCellNum` in the same walk: the virtual contact reads as present (nz + carry)
+	ld a, c
+	cp SLINK_PHONE_CONTACT
+	jp nz, CheckCellNum
+	or a
+	scf
+	ret
+
+SlinkPhone_CallerName::
+; for `call GetCallerClassAndName` in PokegearPhone_UpdateDisplayList (b = contact, de = tile)
+	ld a, b
+	cp SLINK_PHONE_CONTACT
+	jp nz, GetCallerClassAndName
+	ld h, d
+	ld l, e
+	ld de, SlinkPhoneCallerName
+	rst PlaceString
+	ret
+
+SlinkPhone_CanDelete::
+; for `call CheckCanDeletePhoneNumber` in PokegearPhoneContactSubmenu: c = 0 -> Call/Cancel (Mom style)
+	ld a, c
+	cp SLINK_PHONE_CONTACT
+	jp nz, CheckCanDeletePhoneNumber
+	ld c, 0
+	ret
+
+SlinkPhone_CallGate::
+; for `call GetMapPhoneService` at the top of PokegearPhone_MakePhoneCall: "Call" on SLink opens
+; the SLink entry (Stage 1: one text box) and never rings, then returns to the list like the
+; native out-of-service path does.
+	ld a, [wPokegearPhoneSelectedPerson]
+	cp SLINK_PHONE_CONTACT
+	jp nz, GetMapPhoneService
+	pop af ; drop the return into PokegearPhone_MakePhoneCall: nothing of the call runs
+	ld hl, SlinkPhoneEntryText
+	call PrintText
+	ld a, POKEGEARSTATE_PHONEJOYPAD
+	ld [wJumptableIndex], a
+	ld hl, PokegearText_WhomToCall
+	jp PrintText
+
+SlinkPhoneCallerName:
+; same shape as data/phone/non_trainer_names.asm (.bill / .elm)
+	text  "SLink:"
+	next1 "   Soul Link"
+	done
+
+SlinkPhoneEntryText:
+	text "SLink is linked."
+	prompt
+SlinkPhoneBridgeEnd::

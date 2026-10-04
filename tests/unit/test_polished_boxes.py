@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from server.adapters import polished_codec as pc
+from tests.unit.test_polished_lua import load_variants
 
 lupa = pytest.importorskip("lupa")
 
@@ -51,7 +52,7 @@ class Env:
     def __init__(self, source=None):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.B = self.lua.execute(source if source is not None else MODULE.read_text(encoding="utf-8"))
-        self.polished = self.lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")')
+        self.polished = load_variants(self.lua, self.lua.eval(f'dofile("{ROOT}/lua/gen2/polished.lua")'))
         self.Permit = self.lua.eval(f'dofile("{ROOT}/lua/write_permit.lua")')
         # Python callables reach Lua as userdata; the module and the permit want Lua functions
         self.fn = self.lua.eval("function(f) return function(...) return f(...) end end")

@@ -177,7 +177,7 @@ def test_every_resolved_offset_decodes_back_to_its_source_species_and_level(docu
         # `dp` = db LOW(sp), HIGH(sp)<<5 | form  (macros/data.asm:89-91). The second byte carries
         # BOTH the species high bits and the form OR'd in whole -- FEMALE is %10000000 and the
         # variant forms are ext_const values like 157 -- so the form is not a 5-bit field.
-        species = rom[at + 1] | ((rom[at + 2] & 0xE0) << 3)
+        species = rom[at + 1] | ((rom[at + 2] & 0x20) << 3)   # only EXTSPECIES (bit 5) is species; bits 6-7 are egg/gender
         assert species == row["species"], row
         assert rom[at + 2] & 0xFF == row["form"] & 0xFF, row
         assert rom[at + 3] == row["level"], row

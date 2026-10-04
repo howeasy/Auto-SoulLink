@@ -15,7 +15,9 @@ Placement (docs/polished/HOOKS.md): layout.link pins named sections to banks; a 
 not name is placed by its own SECTION attributes. slink.asm's fixed ROM0[$0070] bridge sits in the
 free gap between "High Home" ($005b-$006f) and "Header" ($0100); its fixed BANK[$7E] service sits
 in a bank the clean ROM leaves wholly empty. The mailbox takes the first 40 bytes of Polished's own
-SECTION "Unused", WRAM0 without changing its size.
+SECTION "Unused", WRAM0 without changing its size. The Phone card's virtual SLink contact
+(docs/polished/PHONE_SLOT.md) is a fixed ROM0[$3F34] bridge (the last free ROM0 gap) plus five
+same-size `call` operand rewrites in bank $24 (PHONE_HOOKS, each verified opcode + both operands).
 
     python tools/build_polished_companion.py            # build + publish
     python tools/build_polished_companion.py --check    # build + verify, publish nothing
@@ -78,22 +80,42 @@ POLISHED_EDITS = (
      "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n",
      "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n\n"
      "; SLink companion overlay (tools/build_polished_companion.py)\nINCLUDE \"engine/slink/slink.asm\"\n"),
+) + tuple(
+    # docs/polished/PHONE_SLOT.md Stage 1: the Phone card's virtual SLink contact. Each is a same-size
+    # `call` operand rewrite in bank $24; verify_overlay checks the opcode and both operands (PHONE_HOOKS).
+    ("engine/pokegear/phone.asm", f"{anchor}\tcall {native}\n", f"{anchor}\tcall {bridge} ; SLink overlay\n")
+    for anchor, native, bridge in (
+        ("\tinc e\n", "PokegearPhone_CountSetBits", "SlinkPhone_CountSetBits"),
+        ("\tinc c\n", "CheckCellNum", "SlinkPhone_CheckCellNum"),
+        ("\tld e, l\n", "GetCallerClassAndName", "SlinkPhone_CallerName"),
+        ("\tcall PokegearPhone_GetCellNumber\n", "CheckCanDeletePhoneNumber", "SlinkPhone_CanDelete"),
+        ("PokegearPhone_MakePhoneCall:\n", "GetMapPhoneService", "SlinkPhone_CallGate"),
+    )
 )
+# (routine holding the call, native callee, ROM0 bridge) -- the only bank-$24 bytes the overlay changes
+PHONE_HOOKS = (
+    ("PokegearPhone_GetCellNumberFromE", "PokegearPhone_CountSetBits", "SlinkPhone_CountSetBits"),
+    ("PokegearPhone_GetCellNumberFromE", "CheckCellNum", "SlinkPhone_CheckCellNum"),
+    ("PokegearPhone_UpdateDisplayList", "GetCallerClassAndName", "SlinkPhone_CallerName"),
+    ("PokegearPhoneContactSubmenu", "CheckCanDeletePhoneNumber", "SlinkPhone_CanDelete"),
+    ("PokegearPhone_MakePhoneCall", "GetMapPhoneService", "SlinkPhone_CallGate"),
+)
+PHONE_HOOK_WINDOW = 0x40  # each hooked call lies within this many bytes of its routine's label
 DELAY_NATIVE = bytes.fromhex("f044e0d7afe08f")  # ldh a,[rLY] / ldh [hDelayFrameLY],a / xor a / ldh [hVBlankOccurred],a
 HEADER_CHECKSUMS = range(0x14D, 0x150)          # rgbfix header + global checksum
 
 
 def apply_overlay(tree: pathlib.Path) -> list[str]:
-    edits = []
-    for rel, old, new in POLISHED_EDITS:       # verify every anchor before any write
+    texts: dict[pathlib.Path, str] = {}
+    for rel, old, new in POLISHED_EDITS:       # verify every anchor before any write; edits to one file chain
         path = tree / rel
-        edits.append((path, _replace_once(path.read_text(encoding="utf-8"), old, new, rel)))
+        texts[path] = _replace_once(texts.get(path) or path.read_text(encoding="utf-8"), old, new, rel)
     dst = tree / "engine" / "slink"
     dst.mkdir(parents=True, exist_ok=True)
     files = sorted(SRC_DIR.glob("*.asm")) + [ABI]
     for src in files:
         (dst / src.name).write_bytes(src.read_bytes())
-    for path, text in edits:
+    for path, text in texts.items():
         path.write_text(text, encoding="utf-8", newline="\n")
     return [f.name for f in files]
 
@@ -138,6 +160,10 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
                (bridge, new["SlinkDelayFrameBridgeEnd"][1], "ROM0 bridge"),
                (_flat(svc_bank, svc), _flat(*new["SlinkServiceEnd"]), f"bank ${SERVICE_BANK:02X} service"),
                (HEADER_CHECKSUMS.start, HEADER_CHECKSUMS.stop, "header checksums")]
+    phone_lo, phone_hi = new["SlinkPhone_CountSetBits"][1], new["SlinkPhoneBridgeEnd"][1]
+    if new["SlinkPhone_CountSetBits"][0] != 0 or base[phone_lo:phone_hi] != b"\xff" * (phone_hi - phone_lo):
+        raise RuntimeError("the phone bridge must link into ROM0 bytes the clean ROM leaves free ($FF)")
+    allowed += [(phone_lo, phone_hi, "ROM0 phone bridge"), *phone_hook_spans(base, data, old, new)]
     report = []
     for start, end in diff_spans(base, data):
         owner = next((name for lo, hi, name in allowed if lo <= start and end <= hi), None)
@@ -145,6 +171,25 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
             raise RuntimeError(f"unexpected change at {start:#07x}-{end - 1:#07x}")
         report.append(f"bank ${start // 0x4000:02X} {start:#07x}-{end - 1:#07x} ({end - start:>3} B) {owner}")
     return report
+
+
+def phone_hook_spans(base: bytes, data: bytes, old: dict, new: dict) -> list[tuple[int, int, str]]:
+    """Each PHONE_HOOKS call is exactly one `call native` in the clean routine and now reads `call bridge`."""
+    spans = []
+    for routine, native, bridge in PHONE_HOOKS:
+        bank, addr = old[routine]
+        if old[native][0] not in (0, bank) or new[bridge][0] != 0:
+            raise RuntimeError(f"{native} must be reachable from bank ${bank:02X} and {bridge} must be ROM0")
+        start = _flat(bank, addr)
+        want = b"\xcd" + old[native][1].to_bytes(2, "little")
+        window = base[start:start + PHONE_HOOK_WINDOW]
+        if window.count(want) != 1:
+            raise RuntimeError(f"{routine}: expected exactly one `call {native}`, found {window.count(want)}")
+        at = start + window.index(want)
+        if data[at:at + 3] != b"\xcd" + new[bridge][1].to_bytes(2, "little"):
+            raise RuntimeError(f"{routine}: `call {native}` at {at:#07x} is not `call {bridge}`")
+        spans.append((at + 1, at + 3, f"{routine}: call {native} -> {bridge}"))
+    return spans
 
 
 def moved_symbols(old: dict, new: dict) -> list[str]:
@@ -213,7 +258,7 @@ def build(*, check: bool = False, rgbds_bin: pathlib.Path | None = None,
         "overlay": {
             "src_dir": SRC_DIR.relative_to(ROOT).as_posix(),
             "applied": applied,
-            "edits": [rel for rel, _old, _new in POLISHED_EDITS],
+            "edits": list(dict.fromkeys(rel for rel, _old, _new in POLISHED_EDITS)),
             "sources_sha256": {p.relative_to(ROOT).as_posix(): source_sha256(p)
                                for p in sorted(SRC_DIR.glob("*.asm")) + [ABI]},
             "mailbox": f"WRAM0 ${MAILBOX:04X} (40 bytes)",
