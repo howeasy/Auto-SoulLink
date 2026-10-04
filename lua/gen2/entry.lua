@@ -76,11 +76,12 @@ Entry.PACK_FILES = {
         checkpoint="data/games/gen2_silver/write_checkpoint.json",
     },
     -- dev pack: only what run.lua, Entry.admit_polished and compose_polished read (lua/gen2/polished.lua
-    -- P.PROFILE/P.CHARMAP + the force_faint evolution table)
+    -- P.PROFILE/P.CHARMAP + the force_faint evolution table + the client's area_map)
     polished_crystal={
         profile="data/games/polished_crystal/profile.json",
         charmap="data/games/polished_crystal/charmap.lua",
         evolutions="data/games/polished_crystal/evolutions.json",
+        area_map="data/games/polished_crystal/area_map.json",
     },
 }
 -- The O-22 proofs a production pack ships as release data: byte copies of the committed
@@ -608,7 +609,9 @@ end
 --           pointer, a Bad Egg or an all-zero image never reads as a (possibly empty) COMPLETE census. No box write.
 --   hello   p.hello_unheld: with no checkpoint PC to hold, the first hello waits only for a live game (party +
 --           player readable, not the title screen), not the OWPlayerInput checkpoint
---   areas   no area_map.json yet (C-AREA): area_id "" and loc_name map_G_N
+--   areas   data/games/polished_crystal/area_map.json (C-AREA, 605 maps): area_id/loc_name from (group, number); a pair
+--           with no row still falls back to area_id "" and map_G_N. It passes the SAME flat-row contract load_pack
+--           asserts for the vanilla area_map (source artifact + commit, group*256+number key), inline below
 local function compose_polished(deps, decision)
     local ok, result = pcall(function()
         assert(type(decision) == "table" and decision.title == "polished" and decision.kind == "overlay"
@@ -626,6 +629,17 @@ local function compose_polished(deps, decision)
         assert(evolutions.schema == "polished-evolutions-v1" and type(evolutions.source) == "table"
                and evolutions.source.lock_sha256 == wrapper.source.lock_sha256
                and evolutions.source.rom_sha1 == wrapper.source.rom_sha1, "pack source mismatch: evolutions")
+        local area_map = load_json(json, root .. "/" .. Entry.PACK_FILES.polished_crystal.area_map)
+        local maps = 0
+        for id, row in pairs(area_map) do
+            assert(type(row) == "table" and type(row.source) == "table"
+                   and row.source.artifact == Entry.PACKS.polished.artifact and row.source.commit == wrapper.source.commit
+                   and type(row.map_group) == "number" and type(row.map_number) == "number"
+                   and tonumber(id) == row.map_group * 256 + row.map_number,
+                   "area-map source/identity mismatch")
+            maps = maps + 1
+        end
+        assert(maps > 0, "area-map source rows missing")
         local size = io_.domain_size("ROM")
         assert(size == profile.derived.rom_size, "Polished ROM size mismatch")
         -- the executed bytes are the admitted overlay's, re-hashed through the live IO
@@ -643,8 +657,19 @@ local function compose_polished(deps, decision)
                                     read_storage_box=census.read_storage_box}, {__index=base})
         local hud = assert(deps.hud, "explicit hud required")
         local Panel = load("lua/gen2/panel.lua")
-        local panel = assert(Panel.new(profile, charmap, io_, Panel.writes(io_, load("lua/write_permit.lua")),
-                                       hud.sanitize or function(s) return s end))
+        -- (F-3) the panel's write path is structurally inert at milestone A (caps 0, no Polished write receipt): a
+        -- writes object that REFUSES every write, not Panel.writes over an always-valid permit whose only brake is the
+        -- ROM caps byte. A refusal raises (gb_panel's callers surface it: request_sfx errors, service() returns nil, why
+        -- which the client logs) and is recorded in .log; nothing reaches io.write_u8.
+        local panel_writes = {log={}}
+        function panel_writes.arm(_, reason) panel_writes.reason = reason end
+        function panel_writes.disarm() panel_writes.reason = nil end
+        function panel_writes.write_bytes(_, addr, bytes)
+            local why = "Polished panel write refused: no Polished write receipt (" .. tostring(panel_writes.reason) .. ")"
+            panel_writes.log[#panel_writes.log + 1] = {addr=addr, n=#bytes, why=why}
+            error(why, 0)
+        end
+        local panel = assert(Panel.new(profile, charmap, io_, panel_writes, hud.sanitize or function(s) return s end))
         local function signals()
             return {drain=function() return {} end, status=function() return {} end,
                     boundary=function() end, abandon=function() end, close=function() return true end}
@@ -653,14 +678,14 @@ local function compose_polished(deps, decision)
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
             safety={check=function(kind) return false, "no Polished write receipt for " .. tostring(kind) end},
             signals=signals, hello_unheld=true,
-            net=deps.net, json=json, hud=hud, io=io_, profile=profile, sites={}, area_map={},
+            net=deps.net, json=json, hud=hud, io=io_, profile=profile, sites={}, area_map=area_map,
             player=assert(deps.player, "explicit player required"), rom_type=P.ROM_TYPE,
             rom_sha1=decision.rom_sha1, log=deps.log, evolutions=evolutions.evolutions,
             hello_session=load("lua/hello_session.lua"), reply_dispatch=load("lua/reply_dispatch.lua"),
             owed_reports=load("lua/owed_reports.lua"),
         })
-        return {pack="polished_crystal", title="polished", profile=profile,
-                data={profile=wrapper, charmap=charmap, evolutions=evolutions}, reads=reads, client=client,
+        return {pack="polished_crystal", title="polished", profile=profile, panel=panel, panel_writes=panel_writes,
+                data={profile=wrapper, charmap=charmap, evolutions=evolutions, area_map=area_map}, reads=reads, client=client,
                 production_admitted=false, artifact_kind=decision.kind, runtime_rom_sha1=decision.rom_sha1,
                 runtime_started=false, qualification="DEV_OVERLAY_SHA1"}
     end)

@@ -1352,6 +1352,7 @@ function Client.new(p)
         return send("hello", payload)
     end
 
+    local HELLO_UNHELD_POLLS, hello_sig, hello_polls = 8, nil, 0 -- p.hello_unheld readiness (see ready)
     self.hello_session = HelloSession.new({
         connected = function() return net.connected() end,
         identity = hello_identity,
@@ -1361,7 +1362,20 @@ function Client.new(p)
             local battle = reads.read_battle()
             if not battle then return false, "battle state unavailable" end
             -- p.hello_unheld (Polished dev composition only): no checkpoint exists to hold, so a live game suffices.
-            if p.hello_unheld then return hello_identity() == identity, "identity changed while checking readiness" end
+            if p.hello_unheld then
+                -- (F-4) no checkpoint to hold, so wait for what a hold would have proved: out of battle AND the same
+                -- identity + party signature on HELLO_UNHELD_POLLS consecutive polls (one per frame; ready is asked
+                -- every frame until the hello is queued), so a mid-script/transition frame never sends the first hello.
+                local sig = {identity}
+                for _, m in ipairs(reads.read_party().mons) do sig[#sig + 1] = tostring(mon_key(m)) end
+                sig = table.concat(sig, ";")
+                if battle.mode ~= 0 or sig ~= hello_sig then hello_polls = 0 end
+                hello_sig = sig
+                if battle.mode ~= 0 then return false, "waiting for the battle to end" end
+                hello_polls = hello_polls + 1
+                if hello_polls < HELLO_UNHELD_POLLS then return false, "waiting for a stable party" end
+                return hello_identity() == identity, "identity changed while checking readiness"
+            end
             -- PLAN §5.4: the first hello waits for the OWPlayerInput checkpoint or a running battle
             if battle.mode == 0 and not (self.checkpoint_held or safety.check(PARTY_HP)) then
                 return false, "waiting for Gen 2 checkpoint or battle"

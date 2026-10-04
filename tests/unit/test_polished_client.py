@@ -136,7 +136,7 @@ def _hello(composed):
     lua, mons, parts, io, log = composed
     if not parts.client.hello_sent:
         parts.client.start(parts.client)
-        _run(io, parts.client, 3)
+        _run(io, parts.client, 20)  # hello_unheld waits for a stable party (8 consecutive polls)
     hellos = [json.loads(line) for line in log.sent.values() if json.loads(line)["event"] == "hello"]
     assert len(hellos) == 1, list(log.lines.values())
     return hellos[0]
@@ -159,8 +159,10 @@ def test_the_hello_carries_the_party_and_the_companion_evidence(composed):
     assert hello["rom_sha1"] == PROFILE["source"]["overlay_sha1"]
     assert hello["companion_abi"] == 3 and hello["panel"] is False and hello["sfx"] is False
     assert (hello["ot_id"], hello["trainer_name"], hello["ball_count"], hello["badges"]) == (OT_ID, "KRIS", 5, 3)
-    assert hello["pc_boxes"] == [] and "pc_boxes_generation" not in hello  # census deliberately not composed
-    assert (hello["area_id"], hello["loc_name"], hello["in_battle"]) == ("", "map_24_4", False)
+    # the C-BOX census is composed read-only, but this WRAM image has no real save (no sSaveVersion/sChecksum
+    # anchors), so it is not a COMPLETE census: pc_boxes stays [] with no generation
+    assert hello["pc_boxes"] == [] and "pc_boxes_generation" not in hello
+    assert (hello["area_id"], hello["loc_name"], hello["in_battle"]) == ("new_bark_town", "New Bark Town", False)
     party = hello["party"]
     assert [e["key"] for e in party] == [_key(m) for m in mons]
     assert [(e["species_id"], e["level"], e["slot"]) for e in party] == [(m["species_id"], m["level"], i)
