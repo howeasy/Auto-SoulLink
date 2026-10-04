@@ -1,0 +1,132 @@
+{
+  "schema": "polished-write-checkpoint-v1",
+  "generator": "tools/gen_polished_engine_sites.py",
+  "evidence_level": "SOURCE",
+  "runtime_authorized": false,
+  "maturity": "SOURCE_CANDIDATE",
+  "companion_overlay_spans": [
+    {
+      "start": 112,
+      "end": 136
+    },
+    {
+      "start": 334,
+      "end": 335
+    },
+    {
+      "start": 3496,
+      "end": 3502
+    },
+    {
+      "start": 2064384,
+      "end": 2064456
+    }
+  ],
+  "titles": {
+    "polished_crystal": {
+      "battle_hold": {
+        "id": "battle-turn-before-determine-move-order",
+        "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
+        "anchors": {
+          "battle_turn": {
+            "bank": 15,
+            "addr": 16649,
+            "rom_offset": 246025,
+            "evidence": "SYM"
+          },
+          "determine_move_order": {
+            "bank": 15,
+            "addr": 16746,
+            "rom_offset": 246122,
+            "expected_hex": "cd3542",
+            "evidence": "ROM"
+          }
+        },
+        "execution_before": {
+          "bank": 15,
+          "pc": 16746,
+          "rom_offset": 246122,
+          "instruction": "call DetermineMoveOrder",
+          "instruction_len": 6,
+          "expected_hex": "cd3542",
+          "source": {
+            "path": "engine/battle/core.asm",
+            "line_start": 190,
+            "line_end": 190
+          }
+        },
+        "caller_stack": {
+          "bank": 0,
+          "exclusive_stack_end": 49407,
+          "minimum_sp": 49152,
+          "must_fit_entire_read": true,
+          "read_domain": "System Bus",
+          "region": "WRAM0",
+          "required_read_bytes": 2,
+          "search_for_return_address": false,
+          "status": "UNVERIFIED",
+          "reason": "SP window copied from the vanilla pack; the Polished caller and its return address were not re-derived."
+        },
+        "oracles": {
+          "LostBattle": {
+            "address": 20470,
+            "bank": 15,
+            "evidence": "SYM",
+            "note": "player_lost_decision; replaces vanilla LostBattle address",
+            "rom_offset": 249846,
+            "expected_hex": "3E01EA81C5FA"
+          },
+          "HasPlayerFainted": {
+            "address": 13956,
+            "bank": 0,
+            "evidence": "SYM",
+            "note": "replaces vanilla HandlePlayerMonFaint, which has no Polished counterpart",
+            "rom_offset": 13956,
+            "expected_hex": "21B8C42AB6C9"
+          }
+        },
+        "ownership_requirements": {
+          "effective_wram_bank": null,
+          "status": "UNVERIFIED",
+          "reason": "HRAM script cursor (hScriptBank/hScriptPos) is not on the System Bus; the ownership rule must be re-derived for Polished. docs/polished/ENGINE_SITES.md section 6.1."
+        },
+        "state_predicates": [],
+        "rival_swap_gate": {
+          "pc": 18397,
+          "bank": 15,
+          "rom_offset": 247773,
+          "id": "send-in-user-pkmn-enemy-branch",
+          "note": "PC gate for the Rival Team Swap write window; see docs/polished/EXPLODE_RIVAL.md section 10."
+        }
+      },
+      "primary": {
+        "id": "ow-player-input-before-check-a-press",
+        "status": "UNRESOLVED",
+        "reason": "vanilla CheckAPressOW is not a Polished label. OverworldLoop (25:50d5) is the right neighbourhood but the execution_before instruction and its pc were not re-derived, so this checkpoint is not armed.",
+        "anchors": {
+          "overworld_loop": {
+            "bank": 37,
+            "addr": 20693,
+            "rom_offset": 610517,
+            "evidence": "SYM"
+          }
+        },
+        "acceptance": null,
+        "caller_stack": {
+          "bank": 0,
+          "exclusive_stack_end": 49407,
+          "minimum_sp": 49152,
+          "must_fit_entire_read": true,
+          "read_domain": "System Bus",
+          "region": "WRAM0",
+          "required_read_bytes": 2,
+          "search_for_return_address": false,
+          "status": "UNVERIFIED"
+        },
+        "execution_before": null,
+        "ownership_requirements": {},
+        "state_predicates": []
+      }
+    }
+  }
+}
