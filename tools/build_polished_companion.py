@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+"""Build the SLink companion overlay for Polished Crystal v3.2.3 (P5a, core only).
+
+    tools/build_polished_syms.py build_rom_syms(check=True)  -- the clean pinned build must reproduce
+        data/polished_sources.lock.json's sha1 (and the committed .sym/.map) or nothing is built
+      -> export the pinned commit again, apply POLISHED_EDITS (anchored verify-then-replace-once),
+         copy patch/polished/src/* + patch/gb/slink_abi.inc into engine/slink/
+      -> make (same pinned RGBDS v1.0.3 + w64devkit, CFLAGS=-O2, space-free build dir)
+      -> verify: no clean symbol moved, DelayFrame changed only its 7-byte lead-in, every changed
+         byte inside the intended spans; UPS round trip (and onto the release ROM if cached)
+      -> patch/dist/SLink-Polished.ups, data/polished/polished_slink.{sym,map} (LF),
+         data/polished/overlay_provenance.json
+
+Placement (docs/polished/HOOKS.md): layout.link pins named sections to banks; a section it does
+not name is placed by its own SECTION attributes. slink.asm's fixed ROM0[$0070] bridge sits in the
+free gap between "High Home" ($005b-$006f) and "Header" ($0100); its fixed BANK[$7E] service sits
+in a bank the clean ROM leaves wholly empty. The mailbox takes the first 40 bytes of Polished's own
+SECTION "Unused", WRAM0 without changing its size.
+
+    python tools/build_polished_companion.py            # build + publish
+    python tools/build_polished_companion.py --check    # build + verify, publish nothing
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import pathlib
+import subprocess
+import sys
+from datetime import UTC, datetime
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _build_tools_bootstrap import ensure_rgbds, ensure_w64devkit  # noqa: E402
+from build_gen2_companion import (  # noqa: E402
+    _replace_once,
+    _sha256,
+    _symbols,
+    rom_facts,
+    source_sha256,
+    ups_apply,
+    ups_create,
+    verify_symbol_scope,
+)
+from build_polished_syms import (  # noqa: E402
+    _binary_name,
+    _lf,
+    build_rom_syms,
+    export_source,
+    load_lock,
+)
+from slink_space import work_root  # noqa: E402
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SRC_DIR = ROOT / "patch" / "polished" / "src"
+ABI = ROOT / "patch" / "gb" / "slink_abi.inc"
+OUT_DIR = ROOT / "data" / "polished"
+UPS_PATH = ROOT / "patch" / "dist" / "SLink-Polished.ups"
+PROVENANCE_PATH = OUT_DIR / "overlay_provenance.json"
+PROVENANCE_SCHEMA = "polished-overlay-provenance-v1"
+ABI_VERSION = 3          # patch/gb/slink_abi.inc SLINK_ABI_VERSION (checked against the file below)
+MAILBOX = 0xC60B
+SERVICE_BANK = 0x7E
+
+# (file, anchor, replacement) -- each anchor must occur exactly once in the pinned source.
+POLISHED_EDITS = (
+    ("ram/wram0.asm",
+     "SECTION \"Unused\", WRAM0\n\n\tds 69 ; it's free real estate\n",
+     "SECTION \"Unused\", WRAM0\n\nINCLUDE \"engine/slink/slink_mailbox.asm\" ; SLink overlay: same 69 bytes\n"),
+    ("home/delay.asm",
+     "DelayFrame::\n; Wait for one frame\n\tldh a, [rLY]\n\tldh [hDelayFrameLY], a\n"
+     "\txor a ; ld a, FALSE\n\tldh [hVBlankOccurred], a\n",
+     "DelayFrame::\n; Wait for one frame\n"
+     "\tcall SlinkDelayFrameBridge ; SLink overlay: the 7-byte lead-in moved into the bridge\n"
+     "\tnop\n\tnop\n\tnop\n\tnop\n"),
+    ("main.asm",
+     "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n",
+     "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n\n"
+     "; SLink companion overlay (tools/build_polished_companion.py)\nINCLUDE \"engine/slink/slink.asm\"\n"),
+)
+DELAY_NATIVE = bytes.fromhex("f044e0d7afe08f")  # ldh a,[rLY] / ldh [hDelayFrameLY],a / xor a / ldh [hVBlankOccurred],a
+HEADER_CHECKSUMS = range(0x14D, 0x150)          # rgbfix header + global checksum
+
+
+def apply_overlay(tree: pathlib.Path) -> list[str]:
+    edits = []
+    for rel, old, new in POLISHED_EDITS:       # verify every anchor before any write
+        path = tree / rel
+        edits.append((path, _replace_once(path.read_text(encoding="utf-8"), old, new, rel)))
+    dst = tree / "engine" / "slink"
+    dst.mkdir(parents=True, exist_ok=True)
+    files = sorted(SRC_DIR.glob("*.asm")) + [ABI]
+    for src in files:
+        (dst / src.name).write_bytes(src.read_bytes())
+    for path, text in edits:
+        path.write_text(text, encoding="utf-8", newline="\n")
+    return [f.name for f in files]
+
+
+def _flat(bank: int, addr: int) -> int:
+    return addr if bank == 0 else bank * 0x4000 + addr - 0x4000
+
+
+def diff_spans(a: bytes, b: bytes) -> list[tuple[int, int]]:
+    spans, i = [], 0
+    while i < len(a):
+        if a[i] != b[i]:
+            j = i
+            while j < len(a) and a[j] != b[j]:
+                j += 1
+            spans.append((i, j))
+            i = j
+        else:
+            i += 1
+    return spans
+
+
+def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
+    """DelayFrame changes only its lead-in; every changed byte lies in an intended range."""
+    if len(base) != len(data):
+        raise RuntimeError("overlay ROM size differs from the clean ROM")
+    if new.get("wSlinkMailbox") != (0, MAILBOX):
+        raise RuntimeError(f"wSlinkMailbox at {new.get('wSlinkMailbox')}, want 00:{MAILBOX:04x}")
+    delay = _flat(*old["DelayFrame"])
+    bridge = new["SlinkDelayFrameBridge"][1]
+    if base[delay:delay + 7] != DELAY_NATIVE:
+        raise RuntimeError("clean DelayFrame lead-in differs from the pinned bytes")
+    if data[delay:delay + 7] != b"\xcd" + bridge.to_bytes(2, "little") + bytes(4):
+        raise RuntimeError("DelayFrame lead-in is not `call SlinkDelayFrameBridge` + 4 nop")
+    if data[bridge:bridge + 7] != DELAY_NATIVE:
+        raise RuntimeError("the bridge does not start with DelayFrame's native lead-in")
+    svc_bank, svc = new["SlinkService"]
+    empty = base[_flat(SERVICE_BANK, 0x4000):_flat(SERVICE_BANK, 0x8000)] == b"\xff" * 0x4000
+    if svc_bank != SERVICE_BANK or not empty:
+        raise RuntimeError(f"service must link in bank ${SERVICE_BANK:02X}, which must be empty in the clean ROM")
+    allowed = [(delay, delay + 7, "DelayFrame lead-in"),
+               (bridge, new["SlinkDelayFrameBridgeEnd"][1], "ROM0 bridge"),
+               (_flat(svc_bank, svc), _flat(*new["SlinkServiceEnd"]), f"bank ${SERVICE_BANK:02X} service"),
+               (HEADER_CHECKSUMS.start, HEADER_CHECKSUMS.stop, "header checksums")]
+    report = []
+    for start, end in diff_spans(base, data):
+        owner = next((name for lo, hi, name in allowed if lo <= start and end <= hi), None)
+        if owner is None:
+            raise RuntimeError(f"unexpected change at {start:#07x}-{end - 1:#07x}")
+        report.append(f"bank ${start // 0x4000:02X} {start:#07x}-{end - 1:#07x} ({end - start:>3} B) {owner}")
+    return report
+
+
+def moved_symbols(old: dict, new: dict) -> list[str]:
+    return [f"{n}: {old[n]} -> {new.get(n)}" for n in old if new.get(n) != old[n]]
+
+
+def build(*, check: bool = False, rgbds_bin: pathlib.Path | None = None,
+          w64devkit_bin: pathlib.Path | None = None, repo_dir: pathlib.Path | None = None) -> int:
+    lock = load_lock()
+    spec = lock["outputs"]["polishedcrystal"]
+    abi_line = f"DEF SLINK_ABI_VERSION EQU {ABI_VERSION}"
+    if abi_line not in ABI.read_text(encoding="utf-8").splitlines():
+        raise RuntimeError(f"{ABI.name} no longer declares `{abi_line}`")
+    rgbds_bin = rgbds_bin or ensure_rgbds(lock["rgbds_version"])
+    devkit_bin = w64devkit_bin or ensure_w64devkit()
+    cache = work_root("cache") / "polished"
+
+    # 1. the clean build must reproduce the lock first (raises on a sha1 mismatch)
+    clean_dir = cache / "companion-clean"
+    if build_rom_syms(repo_dir=repo_dir, build_dir=clean_dir, rgbds_bin=rgbds_bin,
+                      w64devkit_bin=devkit_bin, check=True) != 0:
+        raise RuntimeError("clean build does not reproduce the committed data/polished/ sym/map -- refusing")
+    stem = spec["filename"].removesuffix(".gbc")
+    base = (clean_dir / spec["filename"]).read_bytes()
+    if hashlib.sha1(base).hexdigest() != spec["sha1"]:
+        raise RuntimeError("clean ROM does not match the lock -- refusing")
+
+    # 2. overlay build on a fresh export of the same commit
+    tree = cache / "companion-overlay"
+    export_source(repo_dir or cache / "src", lock["source"]["commit"], tree)
+    applied = apply_overlay(tree)
+    env = os.environ.copy()
+    env["PATH"] = os.pathsep.join([str(rgbds_bin), str(devkit_bin), env.get("PATH", "")])
+    cmd = [str(devkit_bin / _binary_name("make")), "-j4", *lock["make_args"], *lock["make_targets"]]
+    print(f"[polished-companion] {' '.join(cmd)}  (cwd={tree})", file=sys.stderr)
+    result = subprocess.run(cmd, cwd=str(tree), env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        sys.stderr.write(result.stdout[-6000:] + result.stderr[-6000:])
+        raise RuntimeError(f"overlay make failed with exit code {result.returncode}")
+    data = (tree / spec["filename"]).read_bytes()
+
+    # 3. verify
+    old, new = _symbols(clean_dir / f"{stem}.sym"), _symbols(tree / f"{stem}.sym")
+    moved = moved_symbols(old, new)
+    verify_symbol_scope(clean_dir / f"{stem}.sym", tree / f"{stem}.sym", panel=False)
+    spans = verify_overlay(base, data, old, new)
+    ups = ups_create(base, data)
+    if ups_apply(base, ups) != data:
+        raise RuntimeError("UPS round trip failed")
+    release = cache / "release" / spec["filename"]
+    release_check = "release ROM not cached"
+    if release.exists():
+        if hashlib.sha1(ups_apply(release.read_bytes(), ups)).hexdigest() != hashlib.sha1(data).hexdigest():
+            raise RuntimeError("UPS applied to the release ROM does not yield the overlay")
+        release_check = "UPS applied to the release ROM yields the overlay sha1"
+
+    files = {UPS_PATH: ups,
+             OUT_DIR / "polished_slink.sym": _lf((tree / f"{stem}.sym").read_bytes()),
+             OUT_DIR / "polished_slink.map": _lf((tree / f"{stem}.map").read_bytes())}
+    provenance = {
+        "schema": PROVENANCE_SCHEMA,
+        "generated": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": lock["source"],
+        "base_sha1": spec["sha1"],
+        "abi_version": ABI_VERSION,
+        "overlay": {
+            "src_dir": SRC_DIR.relative_to(ROOT).as_posix(),
+            "applied": applied,
+            "edits": [rel for rel, _old, _new in POLISHED_EDITS],
+            "sources_sha256": {p.relative_to(ROOT).as_posix(): source_sha256(p)
+                               for p in sorted(SRC_DIR.glob("*.asm")) + [ABI]},
+            "mailbox": f"WRAM0 ${MAILBOX:04X} (40 bytes)",
+            "service_bank": f"${SERVICE_BANK:02X}",
+        },
+        "command": " ".join(["make", "-j4", *lock["make_args"], *lock["make_targets"]]),
+        "output": {**rom_facts(data), "identical_to_clean": data == base,
+                   "ups": {"file": UPS_PATH.relative_to(ROOT).as_posix(), "size": len(ups), "sha256": _sha256(ups)}},
+        "symbols": {p.name: _sha256(b) for p, b in files.items() if p.parent == OUT_DIR},
+    }
+
+    print(f"[polished-companion] clean sha1 {spec['sha1']} reproduced", file=sys.stderr)
+    print(f"[polished-companion] overlay sha1 {provenance['output']['sha1']}  ups {len(ups)} B  ({release_check})",
+          file=sys.stderr)
+    print(f"[polished-companion] wSlinkMailbox = {new['wSlinkMailbox'][0]:02x}:{new['wSlinkMailbox'][1]:04x}",
+          file=sys.stderr)
+    print("[polished-companion] changed spans:\n  " + "\n  ".join(spans), file=sys.stderr)
+    print(f"[polished-companion] moved clean symbols: {moved or 'none'}; "
+          f"new symbols: {sorted(set(new) - set(old))}", file=sys.stderr)
+
+    if check:
+        drift = [str(p.relative_to(ROOT)) for p, b in files.items() if not p.exists() or p.read_bytes() != b]
+        committed = json.loads(PROVENANCE_PATH.read_text(encoding="utf-8")) if PROVENANCE_PATH.exists() else {}
+        committed.pop("generated", None)
+        if committed != {k: v for k, v in provenance.items() if k != "generated"}:
+            drift.append(str(PROVENANCE_PATH.relative_to(ROOT)))
+        print(f"[polished-companion] --check: {'drift ' + str(drift) if drift else 'reproduces every artifact'}",
+              file=sys.stderr)
+        return 1 if drift else 0
+    for path, blob in files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(blob)
+    PROVENANCE_PATH.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8", newline="\n")
+    print(f"[polished-companion] published {len(files)} files + {PROVENANCE_PATH.relative_to(ROOT)}", file=sys.stderr)
+    return 0
+
+
+def _selfcheck() -> None:
+    assert diff_spans(b"abcdef", b"abXdYY") == [(2, 3), (4, 6)]
+    assert diff_spans(b"ab", b"ab") == []
+    assert moved_symbols({"A": (0, 1), "B": (1, 2)}, {"A": (0, 1), "B": (1, 3)}) == ["B: (1, 2) -> (1, 3)"]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--check", action="store_true", help="build and verify, publish nothing")
+    ap.add_argument("--repo-dir", type=pathlib.Path, default=None)
+    ap.add_argument("--rgbds-bin", type=pathlib.Path, default=None)
+    ap.add_argument("--w64devkit-bin", type=pathlib.Path, default=None)
+    ap.add_argument("--selfcheck", action="store_true", help="run the pure-function asserts only")
+    args = ap.parse_args()
+    if args.selfcheck:
+        _selfcheck()
+        print("selfcheck ok")
+        return 0
+    try:
+        return build(check=args.check, rgbds_bin=args.rgbds_bin, w64devkit_bin=args.w64devkit_bin,
+                     repo_dir=args.repo_dir)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

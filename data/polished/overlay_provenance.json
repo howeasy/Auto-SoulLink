@@ -1,0 +1,50 @@
+{
+  "schema": "polished-overlay-provenance-v1",
+  "generated": "2026-10-04T13:13:00Z",
+  "source": {
+    "url": "https://github.com/Rangi42/polishedcrystal",
+    "tag": "v3.2.3",
+    "commit": "3fa43192379df5c3e7b09a08e4d5d79af4f02f42"
+  },
+  "base_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
+  "abi_version": 3,
+  "overlay": {
+    "src_dir": "patch/polished/src",
+    "applied": [
+      "slink.asm",
+      "slink_mailbox.asm",
+      "slink_abi.inc"
+    ],
+    "edits": [
+      "ram/wram0.asm",
+      "home/delay.asm",
+      "main.asm"
+    ],
+    "sources_sha256": {
+      "patch/polished/src/slink.asm": "aa57677d00436d8ef1cf0edde06d128365241991c1b886c354dbc8be58558e1a",
+      "patch/polished/src/slink_mailbox.asm": "7e6d58ebfe51949044a95615d99871b503bfda7e5fee4b2963dbe10c20048456",
+      "patch/gb/slink_abi.inc": "be0ee30a84330c794a1b5f3a2cf4c1435bdfdf3bf63fa4f010deb02a0291181e"
+    },
+    "mailbox": "WRAM0 $C60B (40 bytes)",
+    "service_bank": "$7E"
+  },
+  "command": "make -j4 CFLAGS=-O2 polishedcrystal-3.2.3.gbc",
+  "output": {
+    "sha1": "29ea04c24a46d9210c899355fe752f32d2880de8",
+    "md5": "b733502f8e208d2eed5de72b1cb057ac",
+    "header_crc": "725C",
+    "crc32": "36A59795",
+    "title": "PKPCRYSTAL\u0000PKPC",
+    "size": 2097152,
+    "identical_to_clean": false,
+    "ups": {
+      "file": "patch/dist/SLink-Polished.ups",
+      "size": 141,
+      "sha256": "a11d03328d29a3ca34bb0326cb9fae0f213b7d5ce8d48454265cccb98a3a21c2"
+    }
+  },
+  "symbols": {
+    "polished_slink.sym": "19e7cd59562b15b5d38b4ab813d160d4e26dba519a6ae316635f7ca5a55f8253",
+    "polished_slink.map": "91e57643cbb7e135614c0ddfc0d47fbb8f3f38e25411b8b380700c4505cfb015"
+  }
+}
