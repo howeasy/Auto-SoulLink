@@ -38,6 +38,8 @@ data/gen2/*.json text eol=lf
 data/games/gen2_*/*.json text eol=lf
 data/games/gen2_*/overlay/*.json text eol=lf
 data/games/gen2_*/charmap.lua text eol=lf
+data/games/polished_*/*.json text eol=lf
+data/games/polished_*/charmap.lua text eol=lf
 
 # Gen 2 coverage-map lane hashes these raw working-tree bytes against pins in
 # docs/gen2/gen2_coverage_map.md (tools/coverage_map.py --requirements/--protocol/--map).
