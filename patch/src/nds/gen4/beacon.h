@@ -296,4 +296,11 @@ static inline void Slink_NDS_PublishCaps(const SlinkGen4State *st, volatile Slin
  */
 void Slink_NDS_Register(void);
 
+/* The dispatcher includes beacon.h, not each C5 recipe. Now the actual anonymous
+ * parent type is complete, expose C5's typed prototype when the module is compiled.
+ * trade.h's include guard makes its reciprocal type include safe. */
+#if defined(SLINK_GEN4_TRADE)
+#include "trade.h"
+#endif
+
 #endif /* SLINK_GEN4_BEACON_H */

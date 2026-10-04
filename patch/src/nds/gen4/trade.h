@@ -38,6 +38,8 @@ void Slink_NDS_Trade_Service(SlinkGen4State *st, volatile SlinkMailboxV2 *m);
 int Slink_NDS_Trade_Bind(SlinkGen4State *st, const SlinkGen4TradeSeam *seam,
                        volatile SlinkTradeWitnessV2 *witness,
                        const volatile SlinkRecordStageV1 *stage, uint32_t save_timeout_frames);
+int Slink_NDS_Trade_Init(SlinkGen4State *st, void *context, volatile SlinkTradeWitnessV2 *witness,
+                       const volatile SlinkRecordStageV1 *stage, uint32_t save_timeout_frames);
 int Slink_NDS_Trade_CommitEntered(SlinkGen4State *st, unsigned slot);
 int Slink_NDS_Trade_Commit(SlinkGen4State *st, unsigned slot);
 
