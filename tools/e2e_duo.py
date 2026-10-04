@@ -980,6 +980,8 @@ def scenario_attempt_limit(name, game):
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     if scenario_family(game) == "gen2_new" and name in GEN2_TRADE_SCENARIOS:
         return 2   # one retry, only when the route's own wild battle was lost (GEN2_ROUTE_BATTLE_LOST)
+    if name in GEN2_C5_REFUSED:
+        return 1   # refused at hello: nothing to retry, on any pairing (tools/c5_runner.py owns a cell's one retry)
     entry = SCENARIOS.get(name, {})
     if entry.get("rule_kind") == "family" and scenario_family(game) == "gen3_rr":
         return 16

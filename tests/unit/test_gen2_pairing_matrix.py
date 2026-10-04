@@ -115,12 +115,15 @@ def test_every_gen2_spelling_has_its_own_foundation_row_not_the_game_id_fallback
 
 
 def test_the_rom_types_the_new_client_sends_derive_the_foundation_it_declares():
-    """lua/gen2/entry.lua sends Crystal/Gold/Silver with foundation="gen2_gsc"."""
+    """lua/gen2/entry.lua sends Crystal/Gold/Silver with foundation="gen2_gsc"; its dev Polished title sends
+    polished_crystal, whose foundation lua/gen2/polished.lua declares (P.FOUNDATION = "gen2_polished")."""
     src = (REPO / "lua/gen2/entry.lua").read_text("utf-8")
     sent = set(re.findall(r'rom_type="([^"]+)"', src))
-    assert sent == {"Crystal", "Gold", "Silver"}, sent
+    assert sent == {"Crystal", "Gold", "Silver", "polished_crystal"}, sent
     assert 'foundation="gen2_gsc"' in src
-    assert {foundation_for_rom_type(rt) for rt in sent} == {"gen2_gsc"}
+    assert {foundation_for_rom_type(rt) for rt in sent - {"polished_crystal"}} == {"gen2_gsc"}
+    assert 'P.FOUNDATION = "gen2_polished"' in (REPO / "lua/gen2/polished.lua").read_text("utf-8")
+    assert foundation_for_rom_type("polished_crystal") == "gen2_polished"
 
 
 def test_crystal_ap_routes_to_no_game_and_no_foundation():
