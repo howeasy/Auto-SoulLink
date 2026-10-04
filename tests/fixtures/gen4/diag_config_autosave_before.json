@@ -1,0 +1,155 @@
+{
+ "AutoMinimizeSkipping": true,
+ "ClockThrottle": true,
+ "CoreSettings": {
+  "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS": {
+   "$type": "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS+NDSSettings, BizHawk.Emulation.Cores",
+   "AudioBitDepth": 0,
+   "AudioInterpolation": 0,
+   "ConsiderAltLag": false,
+   "ScreenGap": 0,
+   "ScreenInvert": false,
+   "ScreenLayout": 0,
+   "ScreenRotation": 0,
+   "TraceArm7Arm": false,
+   "TraceArm7Thumb": false,
+   "TraceArm9Arm": true,
+   "TraceArm9Thumb": true
+  }
+ },
+ "CoreSyncSettings": {
+  "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS": {
+   "$type": "BizHawk.Emulation.Cores.Consoles.Nintendo.NDS.NDS+NDSSyncSettings, BizHawk.Emulation.Cores",
+   "ClearNAND": true,
+   "DSiDSPHLE": true,
+   "EnableDLDI": false,
+   "EnableDSiSDCard": false,
+   "EnableJIT": false,
+   "FirmwareBirthdayDay": 3,
+   "FirmwareBirthdayMonth": 11,
+   "FirmwareFavouriteColour": 2,
+   "FirmwareLanguage": 1,
+   "FirmwareMessage": "Melons Taste Great!",
+   "FirmwareOverride": true,
+   "FirmwareStartUp": 0,
+   "FirmwareUsername": "melonDS",
+   "FullDSiBIOSBoot": false,
+   "GLBetterPolygons": false,
+   "GLHiResCoordinates": false,
+   "GLScaleFactor": 1,
+   "InitialTime": "2010-01-01T12:00:00",
+   "JITBranchOptimizations": true,
+   "JITLiteralOptimizations": true,
+   "JITMaxBranchSize": 32,
+   "SkipFirmware": true,
+   "ThreadedRendering": true,
+   "ThreeDeeRenderer": 0,
+   "UseDSi": false,
+   "UseRealBIOS": false,
+   "UseRealTime": false,
+   "UseTouchInterpolation": true
+  }
+ },
+ "FrameSkip": 4,
+ "MainWindowSize": "530, 529",
+ "PathEntries": {
+  "LastRomPath": "C:\\slink-wt\\title-publish\\patch\\build",
+  "Paths": [
+   {
+    "Path": "./Firmware",
+    "System": "Global_NULL",
+    "Type": "Firmware"
+   },
+   {
+    "Path": "./NDS",
+    "System": "NDS",
+    "Type": "Base"
+   },
+   {
+    "Path": ".",
+    "System": "NDS",
+    "Type": "ROM"
+   },
+   {
+    "Path": "F:/slink-work/lanes/g4/d3-hg-1003033806/State",
+    "System": "NDS",
+    "Type": "Savestates"
+   },
+   {
+    "Path": "F:/slink-work/lanes/g4/d3-hg-1003033806/SaveRAM",
+    "System": "NDS",
+    "Type": "Save RAM"
+   },
+   {
+    "Path": "F:/slink-work/lanes/g4/d3-hg-1003033806/Screenshots",
+    "System": "NDS",
+    "Type": "Screenshots"
+   },
+   {
+    "Path": "./Cheats",
+    "System": "NDS",
+    "Type": "Cheats"
+   }
+  ]
+ },
+ "RecentCores": [
+  "Gambatte",
+  "Gambatte",
+  "Gambatte",
+  "Gambatte",
+  "Gambatte"
+ ],
+ "RecentLua": {
+  "AutoLoad": false,
+  "Frozen": false,
+  "MAX_RECENT_FILES": 8,
+  "recentlist": [
+   "C:\\slink-wt\\title-publish\\patch\\build\\g2menu.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\menu_cont.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\menu_cap.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\anim_cap.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\anim_cap_dbg.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\gsc_dense.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\pure_dense.lua",
+   "C:\\slink-wt\\title-splash\\patch\\build\\gba_shot.lua"
+  ]
+ },
+ "RecentRoms": {
+  "AutoLoad": false,
+  "Frozen": false,
+  "MAX_RECENT_FILES": 10,
+  "recentlist": [
+   "*OpenRom*C:\\slink-wt\\title-publish\\patch\\build\\g2menu_silver.gbc",
+   "*OpenRom*C:\\slink-wt\\title-publish\\patch\\build\\g2menu_gold.gbc",
+   "*OpenRom*C:\\slink-wt\\title-publish\\patch\\build\\g2menu_crystal.gbc",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\smoke\\smoke_pure.gbc",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\smoke\\smoke_red.gb",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen3_menu\\out\\emerald.gba",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen3_menu\\out\\radical_red.gba",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen3_menu\\out\\leafgreen.gba",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen1_purered_overlay.gbc",
+   "*OpenRom*C:\\slink-wt\\title-splash\\patch\\build\\gen1_puregreen_overlay.gbc"
+  ]
+ },
+ "Rewind": {
+  "AllowOutOfOrderStates": true,
+  "AllowSlowStates": false,
+  "BackingStore": 0,
+  "BufferSize": 512,
+  "Enabled": false,
+  "TargetFrameLength": 600,
+  "TargetRewindInterval": 5,
+  "UseCompression": false,
+  "UseDelta": false,
+  "UseFixedRewindInterval": false
+ },
+ "SoundEnabled": false,
+ "SoundEnabledNormal": false,
+ "SoundEnabledRWFF": false,
+ "SoundVolume": 0,
+ "SpeedPercent": 800,
+ "SuperHawkThrottle": false,
+ "Unthrottled": true,
+ "UpdateLastCheckTimeUtc": "2026-10-02T19:16:54.3474188Z",
+ "VSyncThrottle": false
+}

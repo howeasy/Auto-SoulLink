@@ -1,0 +1,335 @@
+# Gen 4 G2 producer plan (oracle + physical receipt plan per producer group)
+
+Closes the last G2 clause of `docs/gen4/PLAN.md:243` ("Every required producer has an independent oracle and physical receipt plan"). Status date 2026-10-01, branch `claude/gen4-support-framework-dfd5e2` @ `2ee772b3`. Nothing here is a PASS; every row is SOURCE-only, planned or blocked.
+
+## 0. Inputs and conventions
+
+- **Inventory:** `data/games/gen4_hgss/acquisition.json` (script_sites 61, c_producers 25, npc_trade_records 13, runtime_branches 27, unresolved 11, out_of_scope_commands 5) and `data/games/gen4_hge/acquisition.json` (script sites byte-identical to HG per the NARC member proof, c_producers 18, replaced_non_producers 7, vanilla_c_producers 25 with a hge status, unresolved 12). A site id such as `scr_seq_0843_T20R0101:169` is the key into `script_sites[].id`.
+- **Detector:** the client polls, it does not hook (`docs/gen4/reviews/DECISIONS_2026-10-01.md`, performance ruling: zero steady-state hooks). `lua/gen4/poll_events.lua` runs set diffs only on a SETTLED snapshot (header `poll_events.lua:27-38`, `settled()` at `:267`). Admission is `lua/gen4/entry.lua:127` (`Entry.admit`), hash-first; it does not detect events.
+- **Independent oracle** = a reader that shares no code with the reducer or `lua/gen4/pk4.lua`. Default oracle O1: after a native SAVE, decode the battery with `server/adapters/gen4_codec.py` (`parse_save` `:509`; `Gen4Save.party/boxes/pc_meta` `:451-493`; `decode_plain` `:285` gives key, species, level, `is_egg`, `egg_location`, `met_location`, `met_level`, `ot_name`, `otid`, `ball`, `hp`). O2 = the pret script/NARC record named in `acquisition.json` (species/level/otId/OT name), which comes from the generator, not the client. O3 = an emulator-side read of RAM that the reducer does not consume (e.g. the probe's own foe PID read, `lua/tests/probe_gen4_*.lua`).
+- **Event vocabulary** (wire set `tests/unit/protocol_schema.py:29-70`): `capture` (`gift:true` = gift namespace, `in_box:true`), `no_catch`, `party_to_box`, `box_to_party`, `release`, `key_change{reason:"npc_trade"}` (`:61`, reasons `:107`), `faint`, `whiteout`.
+- **Tooling reused:** `tools/gen4_routes.py` (`plan`, `run --target grass|pc`, `--errand pokegear`, `:1048-1115`; pack `route_legs` in `data/games/gen4_hgss/profile.json`: boot_continue_to_overworld, open_start_menu, save_confirm_until_saved, pc_*, run_from_wild, fight_until_enemy_faints, exit_battle_to_overworld, soft_reset_in_fight_menu). `tools/gen4_synth_save.py party2` (clone party slot 1; SYNTH sidecar; docstring `:1-30`). Lanes: `C:/slink/g4/<lane>`, up to 2 concurrent functional lanes (DECISIONS "emulator lanes").
+- **SYNTH rule** (owner 2026-10-01 "Synth tests ARE allowed"): any row may use disclosed SYNTH setup; receipt carries `setup: SYNTH` + sidecar sha256; the behaviour under test (script, hatch, deposit, save, reload) stays native. New SYNTH kinds listed in section 4 do not exist yet.
+- **What already exists on HG/hge:** a wild battle is reachable from a starter-only save (C1-9 route; `C:/slink/g4/route/route_leg2_battle_settled.State`, hge `C:/slink/g4/faint2/p2hge_leg5_battle_settled.State`); the Cherrygrove PC route (`edf3d5f4`) is offline-built and its last live run FAILED at leg 4 (`C:/slink/g4/route_pc/route_pc_receipt.json`: `pc_not_launched taskman 0 m69 (11,13)`; `C:/slink/g4/route_pc_run1.txt`).
+- **Estimated lane time** is wall time per receipt at 300% route-development speed (PLAN §7), excluding tool authoring; "tool" lists new code first. All estimates are coordinator-grade guesses (no measured baseline except route leg 4 = 29.9 s wall, `route_pc_run1.txt`).
+
+## 1. Required vs limited scope (PLAN §5 limits `:302`, D10/D11/D14, `:260`)
+
+| Scope | Producers |
+|---|---|
+| **REQUIRED for the RC** | wild capture (party + PC-full), starter, GiveMon gifts, eggs + hatch (daycare egg O-15), loans (as gifts), executed NPC exchanges (`key_change`), static encounters (gift namespace, D10), PC deposit/withdraw/release (box sync), hge replaced producers (section 3) |
+| **Limited, D14** | Bug Contest result, Safari, roamers: SOURCE + MODEL (lupa) + zone mapping only; no live-play receipt |
+| **Out of scope / unobservable** | Mystery Gift (14 sites, `acquisition.json out_of_scope_commands.MysteryGift`), Pal Park (`scrcmd_12.c:68`), GTS/Wi-Fi/link trade, Pokewalker. Never a required receipt; see the polling flags in section 5 for what the reducer does if one occurs |
+| **Not producers** | `not_acquisition` rows: trainer parties (`trainer_data.c:347-427`), wild enemy generation (`encounter_check.c:1355`), tutorial (`battle_setup.c:128`), fossil var fill `GetFossilPokemon` (2 sites), `NPCTradeExec` (11 sites, 1:1 with LoadNPCTrade). Negative-control rows only |
+
+## 2. Vanilla HG / SS producers
+
+SS physical cells use the owner SS save (D4 met 2026-10-01: `C:/slink/g4/saves/ss_DDDD_25944.SaveRAM`, decoded `663c5f3d`); script data is shared pret source, with HG/SS differences kept in 3 `version_branch` WildBattle sites (`Ho-Oh/Lugia D17R0110:73, D40R0107:85`, `T03:396` Latios/Latias) and the 27 `runtime_branches`.
+
+| # | Producer (file:function, sites) | Event and `poll_events` path | Independent oracle | Physical receipt plan (route, tool, est.) | Status |
+|---|---|---|---|---|---|
+| V1 | Wild catch, party: `src/battle/battle_command.c:7003` `Task_GetPokemon`/`Party_AddMon`. Not a script site | `capture` (area = battle area). Encounter latch `end_battle` `poll_events.lua:163` then `settled()` foe match `take()` `:361-385`, `foe_match` | O1: new key with `ot_name`/`otid` = player, `met_level`, `met_location` = area, `ball`; O3: foe PID read from battle RAM by the probe before the catch; resolves the open OTID question (DECISIONS "Capture identity": PID match, OTID = foe's or player's) | Grass leg (`gen4_routes run --target grass`) reaches the battle without balls. Throwing needs balls: bag layout not measured (`profile.json:2404`, array id only `:2984`). Tool: SYNTH `bag` kind. Then native catch, SAVE, cold reload. ~12 min lane | **BLOCKED**: no balls, no bag SYNTH, no bag read for `has_pokeballs` |
+| V2 | Wild catch, party full: `battle_command.c:7025` `PCStorage_PlaceMonInBoxFirstEmptySlot` | `capture{in_box:true}` `poll_events.lua:372-376` | O1: key in `boxes()` and not in party; `pc_meta()["modified"]` set | As V1 plus a full party. Tool: SYNTH `party6` (extend `party2`) | **BLOCKED** (V1 + new kind) |
+| V3 | Wild encounter ends without a catch (negative path) | `no_catch` `poll_events.lua:406-421`; needs `st.has_pokeballs` (`:415`) | O1: boxes/party unchanged across the battle; O3 foe PID | Grass leg + `run_from_wild`; the no-balls control (no event) is runnable now, the positive no_catch needs `has_pokeballs` (V1 blocker). ~8 min | planned (negative control runnable now) |
+| V4 | Starter: `src/choose_starter.c:81` `CreateStarter`; script `ChooseStarter` `scr_seq_0843_T20R0101:169` (candidates Chikorita/Cyndaquil/Totodile, L5) | `capture{gift:true}`, area = current area `:380-384` | O1: key + `met_location` (Elm's lab) + species in the 3 candidates, level 5 (O2: `c_fact_checks.starter_level`) | **Cannot be reached from the owner saves**: they already hold the starter, so the first settled view learns it silently (`poll_events.lua:284`). Needs a new-game route: boot, intro, naming, Elm's lab choice. Tool: new route legs (not in `route_legs`). ~30 min lane (est.) | **BLOCKED**: no pre-starter save, no new-game route |
+| V5 | GiveMon gifts: `script_pokemon_util.c:41`, `scrcmd_party.c:31`. 13 sites: 7 literal (Tyrogue `D38R0104:37`, Dratini `D44R0103:351`, Dialga/Palkia/Giratina `D51R0201:697/704/709`, Tentacool `T24PC0101:56`, Eevee `T25R0401:34`), 5 `candidates` (fossil `T03R0101:359`, Celadon `T07R0501:479`, Saffron `T11R0701:178`, Goldenrod `T25R1101:984`, `T25SP0101:582`), 1 `unresolved` cross_entry (`T01R0301:629`) | `capture{gift:true}` `:380-384` (no foe) | O1 + O2: species = literal, level = literal arg, `met_location` = site map. Candidates: species in the candidate set | Story-gated; no flag/position SYNTH. Pick one representative per class (Eevee literal, one candidate site) since the C path is shared; the other sites are covered by the SOURCE join. Tool: SYNTH `place` (Location + script flags). ~15 min each | **planned**, blocked on the `place` kind |
+| V6 | Eggs: `scrcmd_party.c:93` `ScrCmd_GiveEgg` (3 sites `T22PC0101:79/91/103` Mareep/Wooper/Slugma); `scrcmd_pokemon_misc.c:1071` `GiveTogepiEgg` (`T22FS0101:53`); `get_egg.c:640` `GiveEggToPlayer` (daycare, `GiveDaycareEgg` `scr_seq_0265:101` listed in out_of_scope_commands) | Receipt: no event (eggs wait for hatch, `poll_events.lua:365`). Hatch: `capture{area_id:"gift_daycare", gift:true, is_egg:false}` `:298-310` (O-15) | O1 twice: before hatch the key is an egg (`is_egg`, `egg_location`); after, same key, `is_egg` false, `met_location` set | Hatch is the testable half: SYNTH egg (cloned mon, `is_egg` bit, egg-cycle byte = friendship `decode_plain:300` set to 1), then walk steps to the native hatch scene. Tool: SYNTH `egg1`. ~10 min. GiveEgg/Togepi script receipt stays SOURCE (story-gated at Violet) | hatch **planned** (tool); script sites SOURCE-only |
+| V7 | Loans: `npc_trade.c:70` `NPCTrade_MakeAndGiveLoanMon`; `GiveLoanMon` `R35R0101:61` (Spearow, record 7), `T24R0201:47` (Shuckle, record 6) | `capture{gift:true}` (loan = acquisition, `zone_policy.loan`, D11). The loan returning vanishes without the PC: `vanished` note only `poll_events.lua:401`, never a release | O1 + O2: OT name (Webster/Kirk) and `otid` from the NARC record (`npc_trade_records[6,7].record.otId`) | Story-gated (Route 35 gate house; Cianwood). SYNTH `place`. ~15 min | **planned**, blocked on `place` |
+| V8 | NPC exchange: `npc_trade.c:154` `NPCTrade_ReceiveMonToSlot`; `LoadNPCTrade` 11 sites, 10 reachable identities (ids 0,1,2,3,5,8,9,10,11,12), same-species Steelix (5) and Pikachu (10) | **`key_change{reason:"npc_trade"}`**, but the reducer only emits the note `slot_replace:old>new` (`poll_events.lua:340-355`, test `test_gen4_poll_events.py:194-207`). The wiring is a client card (DECISIONS "D11 npc_trade": `identity:begin_alias`, `box_generation()`, `rescan_boxes()`) | O1: old key absent, new key in the SAME party slot, `otid`/`ot_name`/species equal the NARC record (O2, `a/1/1/2`, generator), held item; same-species case: keys differ | Needs an ask-species mon in the party. Tool: SYNTH `species` (rewrite the party2 clone to the ask species incl. checksum/tail). Walk to the NPC (Violet record 0 `T22R0601:40` is nearest; extend `plan_errand` for a house visit); decline = negative control; loan = `V7`. ~15 min per case (replacement, same-species, decline) | **BLOCKED**: event not emitted (client card) + SYNTH kind. Reducer half is tested offline |
+| V9 | Special gift: `scrcmd_pokemon_misc.c:1139` `GiveSpikyEarPichu` (`D36R0101:1910`, L30 form 1) | `capture{gift:true}` | O1: species Pichu, form 1, level 30 | Reachability not verified (event gate unknown). SOURCE only | SOURCE-only |
+| V10 | Statics: `WildBattle` 21 sites (18 literal, 3 version_branch); catch through `Task_GetPokemon` | Should be gift namespace (`zone_policy.static`, D10). **Reducer cannot tell**: no static table, so it emits an ordinary area capture and marks the area resolved (`poll_events.lua:263-266, 372-378`). `cfg.gift_area` only suppresses `no_catch` (`:415`) | O1 + O2 (species/level/area from the site row) | Needs a client classifier keyed on (area, species, level) from `script_sites[kind=static]`, then one physical: Route 36 Sudowoodo or Snorlax (needs balls + flags). ~20 min | **GAP** (section 5 F2), then planned |
+| V11 | PC moves: `pokemon_storage_system.c` helpers; deposit/withdraw/release by the player (infrastructure) | `party_to_box`, `box_to_party`, `release` (`poll_events.lua:313-330`, `:392-404`); needs `pc_active` | O1: key moved party to box, `pc_meta()["modified"]` set, key absent on release; counter advanced | Existing `pc_*` legs + `--target pc` with `party2` SYNTH (`13844937`, `edf3d5f4`). ~10 min | **IN PROGRESS** (live run FAILED at leg 4, `route_pc_receipt.json`) |
+| V12 | Daycare withdraw: `get_egg.c:156` `Save_Daycare_MoveMonToParty`; script `RetrieveDaycareMon` `scr_seq_0265:444` | None. Deposit: `vanished` note (no PC); return: `returned:` note (`poll_events.lua:363`). `open_policy` in `unresolved` | O1: the same key is absent from party+boxes while deposited, back after withdraw | MODEL (lupa) only; physical needs the Route 34 daycare and a story-gated party. ~20 min if ever | MODEL + SOURCE |
+
+## 3. hg-engine replaced or kept-with-replaced-callee producers (own rows)
+
+hge `acquisition.json` ends with `unresolved: hge_runtime_receipt open`: replaced C needs a runtime receipt, the inventory is SOURCE + ROM data only. All hge physical cells use the pinned build `cb2dc435` and the populated hge saves (D15); one populated save was used to FILE-confirm `party_off` (`5514d94d`).
+
+| # | hge producer (replaced hook, address) | Event/path | Oracle | Physical plan | Status |
+|---|---|---|---|---|---|
+| H1 | `GiveMon` `pokemon.c:1357/1370/1394` (hook `020541DC`, full replacement; adds forme, ability, ball, encounterType) | `capture{gift:true}` as V5 | O1 via the `hge` profile (ability MSB, hidden-ability bit `d52cc4c7`); O2 | As V5, on hge. Note the 61 script sites are byte-identical, so no new site rows | planned, blocked on `place` + populated save |
+| H2 | `ScrCmd_GiveEgg` `script_commands.c:48/62` (`0204D248`); `ScrCmd_GiveTogepiEgg` `:94/125` (`022020CC`, source notes a use-after-free read of the freed party buffer) | Hatch capture as V6 | O1 | Hatch via the V6 egg SYNTH on hge | planned |
+| H3 | Hatch rewrite `sub_0206D328` (`get_egg` hatch_stats, hidden ability carried) | Hatch capture `gift_daycare` as V6 | O1 `is_egg` flips with the key unchanged and the ability preserved | V6 on hge. **Highest hge priority**: a replaced function on the O-15 path | planned |
+| H4 | `_CreateTradeMon` `npc_trade.c:14` (`02259C40`) building the exchange/loan mon; insertion stays vanilla `ReceiveMonToSlot` | `key_change` / loan gift as V8/V7 | O2: the NARC is byte-identical to vanilla (`trade_narc.all_equal`), so the O2 record applies unchanged | V8/V7 on hge | blocked (as V8) |
+| H5 | PC storage 30-box rewrite `PCStorage_PlaceMonInBoxFirstEmptySlot` `:82`, `...InFirstEmptySlotInAnyBox` `:66`, `...ByIndexPair` `:101` | V2/V11 events | O1 with the hge box stride, modified flag at SOURCE projection `PCStorage+0x1E004` | PC route on hge. **Dirty-flag offset still OPEN** (`hge/profile.json:376`, "G2 measures it (mutation/save/reload)") | **IN PROGRESS** |
+| H6 | Starter inline patch `starters.c:54` `CreateStarter_CreateMon` (`020960E6`); `Party_AddMon` kept | gift as V4 | O1 (form field), O2 (`c_fact_checks` starter equal) | New-game route on hge (V4) | blocked (as V4) |
+| H7 | Wild capture: kept `Task_GetPokemon` (patched inline) with replaced storage callee; wild enemy generation replaced `enemy_party.c:474` | as V1 | O1 + O3 | As V1 on hge; the foe identity now comes from the replaced generator | blocked (as V1) |
+| H8 | Roamer generation `field_roamer.c:123`, `ScrCmd_CreateRoamer` (`02045264`); evolution dispatch `GetMonEvolution` (`02070E34`); `ScrCmd_DaycareSanitizeMon`; `SetFixedWildEncounter`; tutorial | Roamer: D14 limit. Evolution: same PID:OTID, no event (negative control only). Others: not producers | O1: key unchanged across evolution | Roamer SOURCE+MODEL. Evolution key-stability could ride a SYNTH level-up; optional | limited / negative-only |
+| H9 | DNA Splicers restore `PartyMenu_HandleUseItemOnMon.c:179` (hge-only, `open_policy`) | `vanished`/`returned:` notes while the fused mon sits in save-misc storage | O1: party count and keys across the fuse | Not required for the RC; needs the Reshiram/Zekrom story | OPEN policy |
+
+## 4. New tooling this plan needs (none exists)
+
+| Tool | Purpose | Unblocks |
+|---|---|---|
+| `gen4_synth_save.py bag` (+ a Lua/codec bag read) | Poke Balls so a catch can be thrown; `has_pokeballs` source | V1, V2, V3 positive, V10, H7 |
+| `gen4_synth_save.py party6` | Full party for the PC-full capture | V2 |
+| `gen4_synth_save.py egg1` | A party egg with 1 egg cycle, for a native hatch | V6, H2, H3 |
+| `gen4_synth_save.py species` | Rewrite the clone to an NPC's ask species | V8, H4 |
+| `gen4_synth_save.py place` | Write `Location` (known at general+`0x1234`, `tools/gen4_routes.py:179-203`) plus script flags/vars; flag area not decoded by the codec | V5, V7, V9, V10 |
+| New-game route legs | boot, intro, naming, Elm's lab | V4, H6 |
+
+Every one of these keeps the SYNTH/native boundary: the tool writes setup bytes into lane copies with a sidecar; the game runs the script, the hatch, the trade or the deposit.
+
+## 5. Polling cannot observe truthfully (flags)
+
+- **F1 starter swallowed by the baseline.** The first settled view is learned silently (`poll_events.lua:284-287`); a save that already holds the starter never reports it. Only a new game exercises V4/H6.
+- **F2 static and roamer catches look like ordinary captures.** `take()` knows only the foe identity (`:361-385`); `cfg.gift_area` (`:263-266`) is not wired anywhere in `lua/gen4/` and only mutes `no_catch`. The 21 statics (D10, required) and the roamers (`special_modes.roamers`: Raikou/Entei L40, Latias/Latios L35, D14) both need a classifier from `acquisition.json`, or the server will fill an area slot that policy says it must not (`zone_policy.static`, `.roamer`).
+- **F3 `key_change` is never emitted** (`:340-355` notes only). V8/H4 cannot pass until the client card lands.
+- **F4 external distributions look like gifts.** A Mystery Gift or link-traded mon arrives as a no-foe new party key, so the reducer reports `capture{gift:true}`; a Pal Park box arrival is only a `box_fresh_unattributed` note (`:386`). Recorded limit, not fixable by polling.
+- **F5 Safari area is unresolvable by polling the map.** The area comes from the save's `SafariZoneAreaSet` (`special_modes.safari.resolution`; `area_map.json` safari_* have `maps: []`). SOURCE + MODEL only (D14).
+- **F6 Bug Contest.** The in-contest catch is held in the battle system and the kept bug appears at the result (`overlay_bug_contest.c:219-229`). Reported correctly only if a pending foe still matches; else a gift in the current area. MODEL only (D14).
+- **F7 `has_pokeballs` gates `no_catch`** (`poll_events.lua:415`) but the bag is unmeasured, so the positive `no_catch` cannot be receipted.
+- **F8 events fire only at idle + settled** (`ready` at `poll_events.lua:498`, `settle_frames=2` at `:54`): by design, so receipts must allow a settle window after the copy-back.
+
+## 6. G2 checklist (PLAN `:243`)
+
+Commit hashes from `git log --oneline` on this branch; receipt paths under `C:/slink/g4/`.
+
+| Clause | Evidence now | Status | Next action |
+|---|---|---|---|
+| Registration pins + four-byte fire words resolve for HG/SS/hge | Pack generator `260a904c`, hge `3ec5a0c6`, sites `f891ad9f`; `tests/unit/test_gen4_pack.py:124-140,193` mutation table (3/5-byte, reversed, ARM-mode, overlay) goes red; `--check` byte-identical against the pinned ROMs (sha1 bound) | **DONE (SOURCE)**. G2 is the SOURCE gate; live fire/residency stays G1 rows b/c (carried in the G1 a–n re-run) | None for G2 |
+| Generated acquisitions join script/C producers, NPC reachability, unresolved branches | HGSS `c6698595`, `e917eae8`; hge `1271b01a`; `tests/unit/test_gen4_data_tools.py:242-316` (counts, nothing unresolved vanishes, unclassified C producer fails). 7 species-unresolved sites + 4 policy rows carried in `unresolved` | DONE (SOURCE) | Reachability generated in `20b03aea`: all 61 script sites `resolved` with cited story gates (pinned pret `ad7a3afa`), hge via NARC member-hash proof. Map-entry routes and gate writers are out of scope (`reachability_scope`) |
+| Independent codec/save-layout controls: counter wrap, coherent banks, CRC, torn/ambiguous | `073cddd4` codec, `663c5f3d` (Pt + SS + hge geometry); `tests/unit/test_gen4_save_layout.py:87-112` (wrap, equal counters ambiguous, torn newest falls back, torn only bank refused) | DONE | None |
+| HG fixtures boot, native SAVE, cold reload with counter/keys | Bound landing receipts at FROZEN cut `c1123171` (`verify_receipt` PASS, evidence surface `tools/gen4_evidence.py`): HG `C:/slink/g4/landing-c112-pc-hg-0905/pc_receipt.json` and `C:/slink/g4/g2hatchHG-0910/hatch_receipt.json`. Counter 1 -> native SAVE 2 -> cold reload 2, keys retained (`assert_save_progress`, `gen4_routes.py:1010-1017`) | **DONE (PHYSICAL)** | None |
+| hge `party_off`, dirty flag, ability offset: source/FILE + populated mon decode | `party_off` `5514d94d`; ability 9-bit FILE-confirmed (`5514d94d`); hidden-ability bit 6 `d52cc4c7`; dirty flag MEASURED HG +0x12004 / hge +0x1E004 (RAM set by deposit, 0 after SAVE and load; battery keeps 1, `f426a76b`) | DONE | None |
+| SS / hge fixture cells | Same binding, `c1123171`: SS `C:/slink/g4/g2pcSS-pg-0909` (PC, Pokégear-errand recipe; the original `landing-c112-pc-ss-0905` RESYNC_LOOP kept as a preserved failure, not retried unchanged), `C:/slink/g4/g2hatchSS-0915`; hge `C:/slink/g4/g2pcHGE-pg-0915`, `C:/slink/g4/g2hatchHGE-0920`. All counter 1->2->2, keys retained | **DONE (PHYSICAL)**, HG/SS/hge | None |
+| Pt profile generation SOURCE; Pt decode (D3) | Pt profile + geometry `663c5f3d`; owner Pt save decoded (TTT TID 44361, Turtwig) | DONE (emulator-free, non-shipping) | None |
+| Every required producer has an independent oracle + physical receipt plan | Plan rows V1-V12 / H1-H9 (§2-§3), flags F1-F8 (§5). Tooling built: SYNTH `bag`, `egg1`, `party2`, `party6`, `species` (`211b1625`, `9d6c8fbf`), `place` (`3f5f447d`). Reachability 61/61 (`20b03aea`, `3745647c`). V1 wild capture PHYSICAL on all three titles at `c1123171`: `C:/slink/g4/g2catchHG-0922`, `g2catchSS-0929`, `g2catchHGE-0929` (`verify_receipt` catch PASS, battery-decoded mon) | **DONE (plan + oracles)**; per-producer receipts beyond V1/V6/V11 are G3/G4 execution | Carried: withdraw/release leg (§6b), new-game route (V4, `research/new_game_route.md`), `place` physical boot check + vecY fix |
+
+### 6a. Remaining G2 work in priority order (checkpoint 5, OMP cx-3a3322b0, reconciled)
+
+1. The withdraw/release PC legs in `tools/gen4_routes.py`. Deposit is PHYSICAL; withdraw and release are not yet routed.
+2. A SYNTH `place` kind in `tools/gen4_synth_save.py`, for statics and gifts. Then add `species`.
+3. A SYNTH `party6` kind, for the full-party and box-overflow cells.
+4. A new-game route (intro to first control) for the fresh-save cells.
+5. F2: the static gift-area classifier.
+6. F3: the `key_change` client wiring. This depends on the client card, see `reviews/CLIENT_DESIGN_PROPOSAL_2026-10-01.md`, and N2 must be settled first.
+
+Behaviour already observed on HG, SS and hge, but the receipts are NOT signable until the bound landing re-run (cx-fbd330af): PC deposit/SAVE/reload, wild capture and egg hatch. Row o is PHYSICAL on HG and hge, both one-mon and 2-mon.
+
+### 6b. Withdraw / release leg design (OMP cx-44f63aff, coordinator-reconciled)
+
+**Withdraw**
+- **Inputs:** reuse the `pc_deposit()` prologue (`lua/tests/gen4_route_play.lua:462-497`). Then, where deposit taps A on toolbar node 6 (STORE), tap Right then A.
+  - The toolbar is a four-node ring (`ov14_021F8A40`, pinned pokeheartgold `asm/overlay_14.s:37480-37485`).
+  - Node 7 = WITHDRAW is INFERRED from the ring order. Confirm it once with the manager-state readback before writing the leg.
+  - The box-side selection state after node 7 is UNKNOWN. That is the largest gap.
+- **Oracle:**
+  - party +1 with the box PID;
+  - `box_census` shows the slot empty and the total −1;
+  - the box-1 modified bit is set;
+  - all of the above hold after SAVE and a cold reload (template: the `RELOAD_OK` block at `:698-708`).
+- **Falsifiers:**
+  - no Right tap (presses STORE) must FAIL `withdraw_not_committed`;
+  - Right×2 (MOVE) must FAIL, not hang.
+
+**Release**
+- **Inputs:** the box slot action menu and its confirm states are unnamed in the ov14 asm. Read them from source before coding. Build release after withdraw is green.
+- **Oracle:** the PID is absent from party and boxes, the modified bit is set, and the PID is **still absent after SAVE and a cold reload**. Only the reload half separates a real release from a RAM-only zeroing.
+- **Falsifiers:**
+  - a run stopped before SAVE must read OPEN;
+  - releasing a party mon is refused.
+
+**Receipts:** keep the existing `route` kind. `RECEIPT_KINDS` `pass` is any-of (`gen4_routes.py:1040` defines it, applied at `:1088`), so appending `PC_WITHDRAW` and `PC_RELEASE` is safe. De-hard-code the `PC_DEPOSIT` literals (`gen4_routes.py:985, 1235, 1397`) into a per-target map.
+
+**State machine (OMP cx-450724f8).** `PCBox_Main` wraps `ov14_021EAF8C`, which dispatches through the word table `ov14_021F7D9C`: entry N handles state N, and each handler returns the next state. Exit is `cmp r0,#0xb3` (`asm/overlay_14.s:11368-11385`), and the state is the word read at `man+0x14`. The toolbar labels are BG tilemaps, so there are no strings to name the nodes.
+
+**Next step:** find the handler for the toolbar-select state (`ST_LIST` 0x5B), follow its branch for cursor node 7, and check which storage call it reaches. Note that the toolbar node index is NOT the state index; the OMP's "read entry 7" conflates the two.
+
+**ST_LIST handler (OMP cx-c0eda9f7).**
+- State 0x5B is handled by `ov14_021EDFA0` (pinned `asm/overlay_14.s:17200-17519`; table entry at `:37057`).
+- The cursor node is `[data+0x21] - 0x1E` (handler-relative lines 60-65 and 201-206), so toolbar nodes 6-9 are bytes 0x24-0x27. This is usable as a probe assertion now.
+- Successors are set by `bl ov14_021F2270` with the state in r2. The 0x94 state appears there, which agrees with the deposit leg.
+- **Toolbar SETTLED (OMP cx-903f44a7). This SUPERSEDES the node 6/7 assumption above.**
+  - The A branch is a 12-case jump table (`asm/overlay_14.s:17313-17342`).
+  - Node 7 → state 0xA9 (`:17367`). That is the deposit leg's documented first-button path, so the deposit's bare A is on **node 7 = STORE**.
+  - Node 8 → state 0x97 (`:17377`), after writing 8 to `data+0x2C` (`:17374`). This is a free in-RAM witness that the branch was taken.
+  - **Node 8 = WITHDRAW is UNVERIFIED** (OMP cx-11763169). State 0x97 is a trampoline (`:25770-25776`) → `ov14_021F027C` (`data+0x1E=0`, `data+0x30=9`, `:21396-21405`) → a palette fade (`ov14_021F0204`, `:21324-21348`). No box→party call was found within 4 hops, and `data+0x2C` (an op enum with values 0/1/8/0x25) is not read on that path.
+  - **Chain (OMP cx-600a3abc):** node 8 → state 0x97 → `ov14_021F0204` fades and **returns 2** (`:21344`). State 2 is `ov14_021EB170` (`:36968`).
+    - `data+0x30` is a **pending next-state**, consumed by the init state at `:11498`; it is not an op mode.
+    - No box→party call was found in 3 hops.
+  - **Next step:** a live Right+A trial asserting `data+0x2C == 8` and `data+0x30 == 9` plus the manager state names the branch cheaply. Static walking has diminishing returns.
+  - The toolbar spans nodes 6..11 plus three negative-coded nodes; their meaning is UNKNOWN.
+
+## §6b CORRECTION (2026-10-02, OMP cx-f6a47b99, coordinator spot-checked at pinned pret `ad7a3afa`)
+
+- **Withdraw is NOT a toolbar node.** Box->party is one primitive, `ov14_021E6184`: `CopyBoxPokemonToPokemon` -> `Party_AddMon` (`asm/overlay_14.s:1115`) -> delete the source.
+  - Its ONLY caller is the shared move dispatcher `ov14_021E637C` (`:1402`), reached when src < 0x1E (a box slot) and dst >= 0x1E + party count (`:1371-1402`).
+  - The entry is the per-mon popup on A (`ov14_021F0660`, `:21820-22002`), which ends in the move-execute state 0x6E (`ov14_021EE728`, `:18119-18181`). That is the deposit leg's own path, so withdraw is its sibling.
+- **Toolbar node 8 EXITS the box.** 0x97 -> `ov14_021F027C` -> fade -> state 2 returns the fade's slot (`[data+0x34]+0x440`, = 1) -> state 1 `ov14_021EB0E4` = full teardown (`:11511-11562`).
+  - The old "live Right+A trial" would close the box. Keep it only as the falsifier: `withdraw_not_committed` AND `box_closed`.
+- **Earlier readings that were wrong:**
+  - `data+0x2C` is a grid cell index for `GridInputHandler_Create` (`:34591-34648`), not an op enum. It is still a valid branch witness.
+  - `ov14_021F8A40` is a touch-hitbox array in the 11-row table `ov14_021F8B10`, not a four-node ring.
+  - The state word is sysdata+0 (`:11368-11385`), not man+0x14.
+- **Next (live trial, one owned lane):**
+  1. On the box app, A on box 0 slot 0 opens the popup.
+  2. Choose WITHDRAW. The item row is still unread: `ov14_021F6928` / `ov14_021F7D1C`; take it from the popup item table or one runtime screenshot of the popup (runtime state only).
+  3. Assert `[[data+0x34]+0xC]+0xE4` == 0 and `+0xE8` >= 0x1E + party count, then box slot 0 empty, party +1, and the box dirty mask bit 0 (`pokemon_storage_system.c:341`; it is a MASK).
+- **Still unknown:** the PC top-menu script and launch mode (`args+8` in {0..3}, `:11475-11479`); the launcher is not in `src/`.
+
+## §6b CORRECTION 2 (2026-10-02, OMP cx-9897d01e, coordinator-verified at `ad7a3afa`). It supersedes the withdraw-entry lines of CORRECTION 1
+
+- **CORRECTION 1 was half wrong:** `ov14_021F0660` (`:21860`) is the PARTY-mon popup (cells 0x1E-0x23; items {0,2,6,7,8}; next state 0x6E = party->box / release). It is NOT the withdraw entry.
+- **Box-mon withdraw = no menu.**
+  1. State 0x51 calls `ov14_021F0418` (`:16618`, body `:21594-21677`): it grabs the box mon and prints ONE line from `msg_0025` (row 37 "You can add it to your party!", or "Your party is full!" at 6/6), then schedules state **0x57** (`:21670-21673`).
+  2. State 0x57 (`ov14_021EDF28`, `:17139-17187`) reads NO input: `PlaySE(0x5EA)` -> `ov14_021E637C` -> (src < 0x1E, dst == 0x1E + party count) -> `ov14_021E6184` (`:1390-1402`) -> `Party_AddMon` (`:1115`) -> back to 0x51.
+  - There is no destination pick. dst bit7 is a box-row auto-slot (box->box), not party auto-place.
+- **The PC launch is in src.**
+  - `scr_seq_0003.s:823-833` builds the PC menu: DEPOSIT / WITHDRAW POKéMON / MOVE POKéMON / MOVE ITEMS / SEE YA!.
+  - WITHDRAW = `_0BB5` -> `ScrCmd_158 1` (`:851-856`) -> `PCBox_LaunchApp` (`src/launch_application.c:406-409`); mode = `args+8` = **1**.
+  - The modes are {0..4}. `ov14_021F7D1C` is a tilemap, not an item table.
+- **Predicted withdraw leg** (SOURCE except where marked):
+  1. PC top menu: Down x1 then A (WITHDRAW, mode 1).
+  2. The box app enters list state 0x5B (INFERRED edge).
+  3. D-pad to box cell 0 (the cell is `data+0x21`).
+  4. A: the grab plus the msg_0025 row 37 prompt, state 0x57 (`data+0x22 == 2`).
+  5. The commit, back to 0x51.
+  - **Oracle:** party count +1; box 0 slot 0 empty; box dirty-mask bit 0 set; then SAVE + cold reload.
+  - **Precondition:** party count < 6 (the 6/6 path is unverified: whether the box slot is still deleted).
+- **Conflict to settle live:** `lua/tests/gen4_route_play.lua:447,451` reads the state at man+0x14 (the deposit leg is PHYSICAL on it), while the asm says sysdata+0 (`:11368-11385`). Trust the PHYSICAL deposit read until a live trace says otherwise.
+
+### §6b CORRECTION 2 amendment (Sonnet withdraw-leg worker, coordinator-verified)
+- The box app in **mode 1 (WITHDRAW) does NOT pass through 0x5B**. State 0xB's mode-1 branch (`asm/overlay_14.s:11822-11831`) puts the cursor on box cell 0 (`ov14_021E7588(data, 0)`) and goes straight to **0x51**. Only mode 0 (DEPOSIT) goes to 0x5B with cell 0x1E (`:11814-11820`).
+- So the withdraw leg needs NO d-pad: at 0x51 with cell 0, press A, and state 0x57 commits.
+- The state word: the leg polls man+0x14 (`app_info()`), which is PHYSICAL on the deposit receipts. `PCBox_Main` receives `&man->proc_state`, so it is the same word as the asm's sysdata+0. The first live run logs the trace.
+
+## §6b CORRECTION 3 (2026-10-03, coordinator-verified, supersedes the withdraw-commit lines of CORRECTIONS 1-2)
+
+**Keyboard withdraw is TWO A presses.** The first A opens an action menu; the second A commits.
+CORRECTION 2's single-A model was the **touchscreen** path, which a d-pad run never enters.
+
+Evidence below is re-read by this card at the pinned pret `pokeheartgold @ ad7a3afa`
+(`E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold`). Tags: **SRC** = re-read here,
+**CARD** = coordinator's own verification not re-read by this card.
+
+### 1. PC top menu: WITHDRAW is reached with Right x1 (SRC)
+
+- Opcode 752 `MenuExec` -> `ov01_021F6ABC` launches bottom-screen app 3 = ov27
+  (`src/scrcmd_c.c:5025-5032`).
+- ov27 is a 2-column grid. Its nav table `ov27_0225D174` (`asm/overlay_27.s:6116-6118`) is
+  `.byte 0x00, 0x02, 0x00, 0x01, ...`, i.e. **row 0 = Up 0 / Down 2 / Left 0 / Right 1**.
+  The 6-item table `ov27_0225D1B4` (`:6129-6131`) has the same row 0.
+  So the row moves **Right**, never Down. The neighbour-table index is `count - 2`
+  (`ov27_0225CA68`, `:5418`), which selects *which* nav table, not which direction.
+- **CARD:** observed physically — `menu_result 1` / `launch_mode 1` / `state 0x51`.
+  The static table agrees; the run is what promotes it from INFERRED.
+
+### 2. Box app input model (SRC)
+
+- `GridInputHandler`: `isButtons` **+0x08**, `modeSwitchLagFrame` **+0x0C**,
+  `nextInput` **+0x0D** (`include/unk_02019BA4.h:24-26`).
+- `modeSwitchLagFrame` is written **only** as `FALSE`, once, at creation
+  (`src/unk_02019BA4.c:20`); the three other hits in the file are `== TRUE` reads
+  (`:60`, `:124`, `:167`). The `isButtons == FALSE && modeSwitchLagFrame == TRUE`
+  arm is therefore dead, so **there is no "wake A"**: the first A acts.
+- **The withdraw launch sets button mode 1.** Re-read here, and it is broader than the
+  coordinator stated: `GridInputHandler_SetButtonInputMode(grid, 1)` appears on **all four**
+  0x51 entry paths, at `asm/overlay_14.s:13581-13584` (in `ov14_021EC150`, state 0x1D's
+  successor), `:16668-16671` (0x51, no-selection / B path), `:17179-17182` (0x57 return) and
+  `:25214-25217` (in `ov14_021F21D0`). That four-site list was already carried by
+  `data/games/gen4/scenarios/README.md:338-340` and asserted by
+  `tests/unit/test_gen4_routes.py:2441-2445`; this card confirms it against the asm.
+  The mode-1 A-on-box-mon branch itself (`:16992-16995`) calls only
+  `GridInputHandler_SetNextInput(grid, 0x22)` — it does not re-assert the mode, because it
+  is already in button mode. **Confirms the claim; strengthens it.**
+
+### 3. The two A presses, state by state (SRC)
+
+The dispatcher is `ov14_021EAF8C`: `lsl r2, r1, #2` / `ldr r1, _021EAFA8` / `ldr r1,[r1,r2]` /
+`blx r1` / `str r0, [r4]` (`asm/overlay_14.s:11373-11377`). Entry N handles state N and
+returns the next state.
+
+**First A (state 0x51).** Handler is `ov14_021EDA4C` (table entry `asm/overlay_14.s:37047`),
+ **not** `ov14_021F0418`. Its box-mon A branch (`:16968-16999`):
+
+- `ov14_021F5EE4(data, ov14_021F7D2C, 4)` (`:16978-16981`) builds a **4-item action menu**.
+- `ov14_021F7D2C` = `.byte 0x45, 0x41, 0x43, 0x44` (`:36938-36940`), and
+- `msg_0024.gmm` resolves those bytes as row 69 **WITHDRAW**, 65 **SUMMARY**, 67 **MARKING**,
+  68 **RELEASE** (`files/msgdata/msg/msg_0024.gmm:274-293`). The bytes are the *labels*; the
+  item at grid position 0 is WITHDRAW, which is why the default cursor commits a withdraw.
+- `GridInputHandler_SetNextInput(grid, 0x22)` (`:16992-16995`) -> **nextInput = 0x22**.
+- `ov14_021F04D4` schedules state **0x58** (`:21712-21715`), and state 0x58 is
+  `ov14_021EE850` = `Heap_Free` then `mov r0, #0x51` (`:18286-18293`). So the leg returns
+  to 0x51 with the menu open. **There is no destination pick.**
+
+**Second A (action-menu selection 0x22).** In `ov14_021EDA4C` the menu selection feeds a
+9-case jump table (`:16697-16706`) indexed by `selection - 0x1E`; 0x22 lands on **case 4**
+-> `_021EDB98` (`:16730-16746`), which plays `PlaySE` and calls
+`ov14_021F2270(data, 4, 0xA7)`. That helper stores `data+0x30 = 0xA7` and **returns 8**
+(`:25375-25378`). Hence the coordinator's chain, each link re-read:
+
+| Hop | Where | What |
+|---|---|---|
+| 8 | `ov14_021EB27C` (`:11716-11728`) | returns `data+0x30`, i.e. **0xA7** |
+| 0xA7 | `ov14_021F27CC` -> `ov14_021F13B0` (`:26022-26025`, `:23503-23528`) | `Party_GetCount`, `cmp #6`, then `ov14_021F0234(..., 0x53)` -> **0x53** |
+| 0x53 | `ov14_021EDE38` (`:17022-17048`) | `data+0x22 = 2`, then `ov14_021F0234(..., 0x54)` -> **0x54** |
+| 0x54 | `ov14_021EDE70` (`:17050-17062`) | `ov14_021F0234(..., 0x55)` -> **0x55** |
+| 0x55 | `ov14_021EDE88` (`:17064-17119`) | `PlaySE(0x5EA)`, `SetNextInput`, `SetButtonInputMode`-free, then **`bl ov14_021E637C`** at `:17100` -> the commit |
+
+**The commit** is `ov14_021E637C` -> src < 0x1E and dst >= 0x1E + party count
+(`:1371-1402`) -> `ov14_021E6184` -> `CopyBoxPokemonToPokemon` (`:1112`) ->
+`Party_AddMon` (`:1115`) -> `ov14_021E6100` -> **`PCStorage_DeleteBoxMonByIndexPair`**
+(`:1043-1047`). Both the add and the delete are in that one primitive.
+
+**State 0x57 is touch-only.** `ov14_021F0418` (the `msg_0025` "You can add it to your
+party!" grab -> 0x57) has exactly **one** caller, `asm/overlay_14.s:16618`, and that
+caller is inside the touch branch: `System_GetTouchNewCoords` at `:16594`, then
+`ov14_021F0418` at `:16618`. State 0x57 (`ov14_021EDF28`, `:17139-17187`) reads no input
+and returns 0x51. A d-pad run never reaches it. This is exactly why CORRECTION 2 read a
+touch-only state as the keyboard path.
+
+**Oracle.** party count +1 and the box slot cleared. It is **not** a sampled state word;
+no single state value proves the commit on its own.
+
+**Addresses.** ov14 loads at `0x021E5900`, so the dispatcher table literal
+`_021EAFA8: .word ov14_021F7D9C` (`:11386`) is **ov14 + 0x56A8** (RAM `0x021EAFA8`), and the
+table it points at, `ov14_021F7D9C`, is **table + 0x1249C** (RAM `0x021F7D9C`). The state-0x55
+entry is `.word ov14_021EDE88` (`:37051`), which carries the Thumb bit in the ROM word:
+**`0x021EDE89`**. Both offsets are RAM-minus-overlay-base, not file offsets.
+
+### 4. Per title (ROM spot-check of the three pinned ROMs) — CARD, not re-read here
+
+- The ov14 action-menu bytes `45 41 43 44` and the `0x55` handler pointer are identical
+  on HG / SS / hge.
+- SS ov14 is byte-identical to HG.
+- hge ov14 differs elsewhere; hge replaces **29** `PCStorage` functions in ov129 (not 25),
+  plus display/form hooks. The keyboard path and the RAM witness offsets are unchanged.
+- The directly proved first-selection patch on hge is `BoxDisplayMon_StoreAbility` within
+  `E7358` (called from `E7588`).
+- `HandleBoxPokemonFormeChanges` is a broader replacement, **not** a proved on-path
+  requirement. Do not treat it as one.
+- Function-pin observers on hge must target **ov129** addresses, not ov14 / arm9.
+- **No per-title withdraw plan parameters are needed.** One leg serves all three titles.
+
+### 5. Open
+
+- **PHYSICAL two-A withdraw on SS and hge is pending.** The emulator is paused by owner
+  ruling; the HG run is the only physical receipt, and it predates this correction.
+
+### Superseded lines
+
+Each quote is 10 words or fewer, with its line number in this file.
+
+- `:113` — "tap Right then A" — one A is not enough; the second A is the commit. (The
+  Right is right, but for the PC top menu, not a box toolbar.)
+- `:115` — "Node 7 = WITHDRAW is INFERRED" — dead; no toolbar node is involved.
+- `:147` — "**Node 8 = WITHDRAW is UNVERIFIED**" — dead, same reason.
+- `:174` — "**Box-mon withdraw = no menu.**" — false for the keyboard path; there are two.
+- `:175` — "State 0x51 calls `ov14_021F0418`" — false; state 0x51 is `ov14_021EDA4C`.
+- `:175` — "then schedules state **0x57**" — 0x57 is touch-only.
+- `:176` — "reads NO input: `PlaySE(0x5EA)` -> `ov14_021E637C`" — true of 0x57, but 0x57 is
+  unreachable by d-pad, so it is not the withdraw commit.
+- `:183` — "PC top menu: Down x1 then A" — it is **Right** x1 (SRC: `ov27_0225D174` row 0).
+- `:186` — "the msg_0025 row 37 prompt, state 0x57" — touch-only; keyboard shows no msg_0025.
+- `:187` — "The commit, back to 0x51." — the commit is state **0x55**, reached 8 -> 0xA7 ->
+  0x53 -> 0x54 -> 0x55, and 0x55 hands off to 0x56, not straight back to 0x51.
+- `:194` — "press A, and state 0x57 commits" — the **no-d-pad** half of this line survives
+  and is now proved; the **one A / 0x57** half is superseded.
+- `:529` (in `tools/gen4_routes.py`, not this file) cites only "6b CORRECTION 2" as its
+  source of record; see the reply for the comment list in that file.
+
+### Consequence for the implemented leg
+
+`tools/gen4_routes.py`'s `grab` / `commit` steps still encode the single-A / 0x57 model.
+That file is owned by another card; the edits it needs are enumerated in this card's reply.

@@ -115,20 +115,12 @@ def expected_members(m) -> tuple[dict[str, str], set[str], set[str]]:
 
     for f in m._LICENSE_FILES:
         add(f, f)
-    for f in m._LUA_ROOT:
-        add(f"lua/{f}", f"lua/{f}")
-    for f in m._LUA_GEN1:
-        add(f"lua/gen1/{f}", f"lua/gen1/{f}")
-    for f in m._LUA_GEN3:
-        add(f"lua/gen3/{f}", f"lua/gen3/{f}")
-    for f in m._LUA_CORE:
-        add(f"lua/core/{f}", f"lua/core/{f}")
-    for f in m._LUA_GEN2:
-        add(f"lua/gen2/{f}", f"lua/gen2/{f}")
-    for f in m._LUA_CLIENTS:
-        add(f"lua/clients/{f}", f"lua/clients/{f}")
-    for f in m._LUA_GAMES:
-        add(f"lua/games/{f}", f"lua/games/{f}")
+    # Walk make_release's ONE tree table: a lua/<dir> list the checker does not name here makes a
+    # real zip fail "member is not in make_release's manifest" (the lua/gen2/* failure at a9ad03d3).
+    for sub, files in m._MANIFEST_TREES.items():
+        for f in files:
+            rel = m._lua_rel(sub, f)
+            add(rel, rel)
     for f in m._LUA_X64_OPTIONAL:
         add(f"lua/x64/{f}", f"lua/x64/{f}", opt=True)
     for gen, files in m._DATA_GAME_LUA.items():

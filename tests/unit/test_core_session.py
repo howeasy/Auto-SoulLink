@@ -557,7 +557,7 @@ def test_signals_are_drained_under_a_per_signal_pcall_and_a_failure_banners_once
     assert w.signals.handler_error is None
     w.signals.failure = "site mismatch"
     w.step(3)
-    assert len([h for h in w.hud if h[0] == "show" and "hooks stopped" in h[1]]) == 1
+    assert len([h for h in w.hud if h[0] == "show" and h[1] == "SLINK STOPPED - SEE LOG"]) == 1
 
 
 def test_safe_is_sent_once_after_a_battle_once_out_of_battle():

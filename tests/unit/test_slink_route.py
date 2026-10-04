@@ -83,9 +83,10 @@ def _run_launcher(system_id: str | None, rom: bytes, rom_hash: str = "0" * 40,
     nil (a system BizHawk failed to identify, distinct from an error); the
     `_GETSYSTEMID_THROWS` sentinel makes it raise instead.
 
-    `lua/gen1/entry.lua`, `lua/gen3/entry.lua` and `lua/json_codec.lua` are executed for
-    real (the admission logic under test); every other dofile target is recorded and
-    skipped, so no client ever actually starts.
+    `lua/gen1/entry.lua`, `lua/gen3/entry.lua`, `lua/gen4/entry.lua`, `lua/gen4/client.lua` and
+    `lua/json_codec.lua` are executed for real (the admission logic under test, including the NDS
+    block's own gate); every other dofile target is recorded and skipped, so no client ever
+    actually starts.
     """
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     g = lua.globals()
@@ -96,7 +97,8 @@ def _run_launcher(system_id: str | None, rom: bytes, rom_hash: str = "0" * 40,
         return rel.replace("\\", "/")
 
     real_dofile = g.dofile
-    _REAL_TARGETS = ("gen1/entry.lua", "gen3/entry.lua", "json_codec.lua")
+    _REAL_TARGETS = ("gen1/entry.lua", "gen3/entry.lua", "gen4/entry.lua", "gen4/client.lua",
+                     "json_codec.lua")
 
     def fake_dofile(path):
         rel = norm(path)
@@ -215,6 +217,27 @@ def test_a_gb_cartridge_still_takes_the_unchanged_gen1_route():
     assert _NEW_GEN3_CLIENT not in loaded, loaded
 
 
+_GEN4_RUN = "lua/gen4/run.lua"
+
+
+@pytest.mark.parametrize("system_id,header,rom_hash,client", [
+    ("GB", "\0\0\0\0", "f" * 40, _NEW_GEN1_CLIENT),
+    ("GBC", "\0\0\0\0", "f" * 40, _NEW_GEN1_CLIENT),
+    ("SGB", "\0\0\0\0", "f" * 40, _NEW_GEN1_CLIENT),
+    ("GBA", "\0\0\0\0", _FR_COMPANION_SHA1, _NEW_GEN3_CLIENT),
+    ("GBA", "\0\0\0\0", _LG_COMPANION_SHA1, _NEW_GEN3_CLIENT),
+    ("GBA", "\0\0\0\0", _RR_COMPANION_SHA1, _NEW_GEN3_CLIENT),
+    ("GBA", "BPEE", _EMERALD_COMPANION_SHA1, _NEW_GEN3_CLIENT),
+])
+def test_no_gen1_to_gen3_cartridge_ever_routes_into_the_gen4_client(system_id, header, rom_hash, client):
+    """G3a hard bar: the NDS block is the only way into lua/gen4/run.lua, so a GB/GBC/SGB/GBA
+    cartridge reaches its own client and never the Gen 4 bootstrap or its entry module."""
+    loaded = _run_launcher(system_id, _rom_gba(header_code=header), rom_hash=rom_hash)
+    assert client in loaded, loaded
+    assert not [p for p in loaded if p.startswith("lua/gen4/") or p.startswith("lua/nds/")], loaded
+    assert _GEN4_RUN not in loaded
+
+
 def test_an_old_bizhawk_on_a_firered_cartridge_is_refused():
     with pytest.raises(lupa.LuaError, match="too old"):
         _run_launcher("GBA", _rom_gba(), rom_hash=_FR_COMPANION_SHA1, bizhawk="2.9.1")
@@ -229,9 +252,10 @@ def test_only_one_client_is_ever_loaded_for_a_routed_cartridge():
 # ── fail-closed system identification (G5-ADMIT-HARDEN) ────────────────────────────────
 #
 # emu.getsystemid() erroring, or returning anything that is neither "GBA" nor one of the
-# other systems game_detect is legitimately asked to route (GB/GBC/SGB for Gen 1, NDS for
-# Gen 4/5), must refuse by name -- never silently fall through to game_detect, which has no
-# row for an unidentified system and could otherwise misroute.
+# other systems game_detect is legitimately asked to route (GB/GBC/SGB for Gen 1, NDS for Gen 5
+# only -- Gen 4 is routed or refused by the NDS block above), must refuse by name -- never
+# silently fall through to game_detect, which has no row for an unidentified system and could
+# otherwise misroute.
 
 def test_a_getsystemid_error_is_refused_and_never_reaches_game_detect():
     with pytest.raises(lupa.LuaError, match="could not determine the loaded system"):
@@ -243,12 +267,13 @@ def test_a_nil_systemid_is_refused_and_never_reaches_game_detect():
         _run_launcher(None, _rom_gba(), rom_hash=_FR_CLEAN_SHA1)
 
 
-def test_an_nds_cartridge_still_falls_through_to_game_detect():
-    loaded = _run_launcher("NDS", _rom_gba(), rom_hash="f" * 40,
-                           detected_game_id="gen4_hgsspt", gb_title="POKEMON CRYSTAL")
+def test_an_nds_cartridge_that_is_not_gen4_still_falls_through_to_game_detect():
+    """G3a: the NDS block admits or refuses Gen 4 and declines everything else, so Gen 5 -- the only
+    row game_detect still owns -- still reaches its client through the unchanged fall-through."""
+    loaded = _run_launcher("NDS", _rom_gba(), rom_hash="f" * 40, detected_game_id="gen5_bw")
     assert _NEW_GEN1_CLIENT not in loaded
     assert _NEW_GEN3_CLIENT not in loaded
-    assert "lua/clients/gen4_hgsspt_client.lua" in loaded
+    assert "lua/clients/gen5_bw_client.lua" in loaded
 
 
 def test_an_unrecognized_systemid_is_refused_and_never_reaches_game_detect():

@@ -1,0 +1,219 @@
+{
+  "artifacts": {
+    "heartgold": {
+      "admission": "G0_IDENTITY_ONLY",
+      "foundation": "gen4_hgss",
+      "header_code": "IPKE",
+      "md5": "258cea3a62ac0d6eb04b5a0fd764d788",
+      "role": "rom",
+      "sha1": "4fcded0e2713dc03929845de631d0932ea2b5a37",
+      "sha256": "65f02a56842b75aa92d775d56d657a56fe3fa993550b04dc20704ab82d760105",
+      "size_bytes": 134217728,
+      "state": "PINNED"
+    },
+    "heartgold_hge": {
+      "admission": "RECORDED_NOT_ADMITTED",
+      "foundation": "gen4_hge",
+      "header_code": "IPKE",
+      "md5": "c39b3fb9bc4522a0cb8c81a02adee534",
+      "role": "rom",
+      "sha1": "cb2dc435196d09c8c9209bf037240ed834f4cea1",
+      "sha256": "75472f8589e47d4b5fa94fba9d3cafe06e3637d18e965c2dbb601170a5e30b35",
+      "size_bytes": 192185312,
+      "state": "PINNED"
+    },
+    "platinum": {
+      "admission": "BIND_ONLY_NOT_ADMITTED",
+      "foundation": "gen4_pt",
+      "header_code": "CPUE",
+      "md5": "d66ad7a2a0068b5d46e0781ca4953ae9",
+      "role": "rom",
+      "sha1": "ce81046eda7d232513069519cb2085349896dec7",
+      "sha256": "ede62292aa7f7014ff27d42097e769753380531739889c29b968b67b80f80678",
+      "size_bytes": 134217728,
+      "state": "PINNED"
+    },
+    "soulsilver": {
+      "admission": "G0_IDENTITY_ONLY",
+      "foundation": "gen4_hgss",
+      "header_code": "IPGE",
+      "md5": "8a6c8888bed9e1dce952f840351b73f2",
+      "role": "rom",
+      "sha1": "f8dc38ea20c17541a43b58c5e6d18c1732c7e582",
+      "sha256": "51d0f94a16af7d77c067b4cb7d821ba890a13203a2e2c76049623332c0582e20",
+      "size_bytes": 134217728,
+      "state": "PINNED"
+    }
+  },
+  "assets": {
+    "bizhawk_config_observed": {
+      "gate": "G0",
+      "qualification": "OBSERVED_ONLY_NOT_RUN_CONFIG",
+      "role": "observed_host_config",
+      "sha256": "f9e1aa9cf8126b78db7a5b0040c998ac109df77d28a7b039627bd95bf9419231",
+      "size_bytes": 121984,
+      "state": "PINNED"
+    },
+    "bizhawk_cores": {
+      "gate": "G0",
+      "role": "emulator_file",
+      "sha256": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5",
+      "size_bytes": 10832896,
+      "state": "PINNED"
+    },
+    "bizhawk_emu_hawk": {
+      "gate": "G0",
+      "role": "emulator_file",
+      "sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+      "size_bytes": 5376512,
+      "state": "PINNED"
+    },
+    "bizhawk_melonds_waterbox": {
+      "gate": "G0",
+      "role": "emulator_file",
+      "sha256": "48acd7fbd31ec4f70d3ed0deb6cc715ea09785485c353a7d680c1f01f2a24722",
+      "size_bytes": 1078304,
+      "state": "PINNED"
+    },
+    "gen4_pins_tool": {
+      "gate": "G0",
+      "role": "tool",
+      "sha256": "1580a06194c08809fc488e09891657c35fe72ea8ca19c08a9e1a8d9b9447a3b7",
+      "size_bytes": 15920,
+      "state": "PINNED"
+    },
+    "heartgold_xmap": {
+      "gate": "G0",
+      "role": "xmap",
+      "sha256": "39397e4c16f4fe907870ab8dac450a469a8ce9ce225eb98852771ff59fe877df",
+      "size_bytes": 11646615,
+      "source_commit": "40eab3c65e0e4f46f6edd90540709aa9950ca07e",
+      "state": "PINNED"
+    },
+    "hge_nm_all": {
+      "gate": "G0",
+      "qualification": "RECORDED_EXPORT_FILE_ONLY_NOT_FRESH_BUILD_ASSOCIATION",
+      "role": "build_symbol_export",
+      "sha256": "66fd72b1754ad1a5a6fc0a905548495272091680120a954919b8b302dba66256",
+      "size_bytes": 40703,
+      "state": "PINNED"
+    },
+    "hge_offsets": {
+      "gate": "G0",
+      "qualification": "RECORDED_EXPORT_FILE_ONLY_NOT_FRESH_BUILD_ASSOCIATION",
+      "role": "build_symbol_export",
+      "sha256": "6ada8318384190b8ccbe597d87e2a38658a487b29e53eeec34b11856d764908c",
+      "size_bytes": 60654,
+      "state": "PINNED"
+    },
+    "hge_rom_gen_ld": {
+      "gate": "G0",
+      "qualification": "RECORDED_EXPORT_FILE_ONLY_NOT_FRESH_BUILD_ASSOCIATION",
+      "role": "build_symbol_export",
+      "sha256": "ad2a7c7494d2fc92e36cf8c73f356bf2dadbc6c7312d59588eac0235f5c42f24",
+      "size_bytes": 43062,
+      "state": "PINNED"
+    },
+    "platinum_xmap": {
+      "gate": "G0",
+      "role": "xmap",
+      "sha256": "c3b3451b4815a646514bf9d456062e644d83010f996eaff17abf8d2fe667e72a",
+      "size_bytes": 12107496,
+      "source_commit": "a2a62d3d8966ffe5953a5ffca1cd4f8a45e79e61",
+      "state": "PINNED"
+    },
+    "soulsilver_xmap": {
+      "gate": "G0",
+      "role": "xmap",
+      "sha256": "4ce745d56b34762300025279748b3ea3626bc2e87c0540e0a649388b758d07b2",
+      "size_bytes": 11646721,
+      "source_commit": "40eab3c65e0e4f46f6edd90540709aa9950ca07e",
+      "state": "PINNED"
+    }
+  },
+  "pending": {
+    "gen4_hge_pack": {
+      "gate": "G2",
+      "reason": "per-build pack is a later-gate output",
+      "state": "PLANNED"
+    },
+    "gen4_hgss_pack": {
+      "gate": "G2",
+      "reason": "generated profile/signals/checkpoint are later-gate outputs",
+      "state": "PLANNED"
+    },
+    "hge_duo_owner_saves": {
+      "gate": "G4",
+      "reason": "two distinct owner-played saves have not been staged",
+      "state": "OPEN"
+    },
+    "hge_fresh_build_export_association": {
+      "gate": "G1",
+      "reason": "recorded export hashes do not prove association with a newly built ROM or live function sites",
+      "state": "PLANNED"
+    },
+    "hge_populated_save": {
+      "gate": "G2",
+      "reason": "empty AP-named file is not a populated-mon fixture",
+      "state": "OPEN"
+    },
+    "platinum_populated_save": {
+      "gate": "G2",
+      "reason": "local save is blank",
+      "state": "OPEN"
+    },
+    "platinum_profile_bind": {
+      "gate": "G2",
+      "reason": "xMAP profile generation is a later-gate source check",
+      "state": "PLANNED"
+    },
+    "qualified_run_config": {
+      "gate": "G1",
+      "reason": "observed config.ini hash does not qualify RTC/JIT lane settings",
+      "state": "PLANNED"
+    },
+    "soulsilver_owner_save": {
+      "gate": "G2",
+      "reason": "owner first save has not been supplied",
+      "state": "OPEN"
+    }
+  },
+  "schema_version": 1,
+  "sources": {
+    "hg_engine_fork": {
+      "commit": "fc517576498305ecb5f5e1de44681c6e3822361b",
+      "gate": "G0",
+      "role": "source_checkout",
+      "state": "PINNED",
+      "tracked_clean": true
+    },
+    "pokeheartgold_citation": {
+      "commit": "ad7a3afa0cfc144fe6837c410cb95b2727217f54",
+      "gate": "G0",
+      "role": "source_checkout",
+      "state": "PINNED",
+      "tracked_clean": true
+    },
+    "pokeheartgold_xmap": {
+      "commit": "40eab3c65e0e4f46f6edd90540709aa9950ca07e",
+      "gate": "G0",
+      "role": "published_xmap_provenance",
+      "state": "PINNED",
+      "verification": "map SHA256 and size only; no matching checkout"
+    },
+    "pokeplatinum_citation": {
+      "commit": "c248fb3f8cc9934ded800e489567c5c0eeee92eb",
+      "gate": "G0",
+      "role": "source_checkout",
+      "state": "PINNED",
+      "tracked_clean": true
+    },
+    "pokeplatinum_xmap": {
+      "commit": "a2a62d3d8966ffe5953a5ffca1cd4f8a45e79e61",
+      "gate": "G0",
+      "role": "published_xmap_provenance",
+      "state": "PINNED",
+      "verification": "map SHA256 and size only; no matching checkout"
+    }
+  }
+}

@@ -21,7 +21,7 @@ gen<N>_<abbreviations>
 | `gen3_emerald`  | Emerald — its own admission profile/engine-signals/area-map pack for the `lua/gen3/` client; pairs only E<->E |
 | `gen3_frlge`    | Shared Gen 3 area map, locations, encounters, trainers, calc names, ROM map names and Radical Red data tables (`rr_*.json`); FRLG/RR area lookup |
 | `gen3_exp/<digest>/` | Emerald Expansion reference ROM, one directory per ROM digest (today `28877d73`): profile, engine signals, area map, encounters, trainers, layout and facts for the `lua/gen3/` client |
-| `gen4_hgsspt`   | HeartGold, SoulSilver, Platinum                 |
+| `gen4_hgss` / `gen4_hge` | HeartGold/SoulSilver and the hg-engine HeartGold fork (pack: profile, charmap, area map, locations, encounters, trainers; `gen4_pt` is bind-only) |
 | `gen5_bw`       | Black, White, Black 2, White 2                  |
 
 ## What goes where

@@ -493,6 +493,163 @@ Everything Gen 2 does not test traces back to that one fact.
 Every gate skips — never hangs — when EmuHawk, a cartridge dump (gitignored) or a fixture is
 missing.
 
+## Gen 4 battle-entry route (HGSS) — planner plus one scripted walk
+
+`tools/gen4_routes.py` plans a walk from the player's saved position to the nearest
+encounter-grass tile that has a horizontal grass partner, and `lua/tests/gen4_route_play.lua`
+drives that route in BizHawk with **normal button input only** — A, Start and the D-pad. It
+writes no game memory: the only side effects are `joypad.set`, `savestate.save`/`load`,
+`client.screenshot`, `client.exit` and its own log file.
+
+### Fixtures
+
+| Input | Default | Notes |
+|---|---|---|
+| ROM | `E:/Howard/Bizhawk/Pokemon - HeartGold Version (USA).nds` | US 1.0; the NARC layout is read from the cartridge, not assumed |
+| Save | `E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM` | a real battery save outside the player's house in New Bark Town; staged (never written in place) |
+| pret | `E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold` @ `ad7a3afa` | supplies the event/terrain behaviour sources and the Johto encounter table |
+| Emulator | `E:/Howard/Bizhawk/EmuHawk.exe` | absent is a named **SKIP** (exit 2), not a FAIL |
+| hge ROM (`--game hge`) | `.cache/gen4/hge/build-fc5175764983/test.nds` | the matrix, land-data and zone-event NARCs (`a/0/4/1`, `a/0/6/5`, `a/0/3/2`) are byte-identical to HG's, so the pret events are reused (a unit test pins the hashes) |
+| hge save | `$SLINK_WORK_ROOT/lanes/g4/saves/hge_a_OOO_630.SaveRAM` | Cyndaquil L5 outside the player's house, **no Pokégear yet**; Location at `general + 0x1424` |
+| lane root | `$SLINK_WORK_ROOT/lanes/g4` — `F:/slink-work/lanes/g4` by default | `tools.gen4_fixtures.lane_root()`; every lane, save and receipt below is `<lane root>/<lane>`. `C:/slink/g4` remains only as a temporary junction |
+
+`setx` reaches only shells started after it — export `SLINK_WORK_ROOT` and `PYTEST_DEBUG_TEMPROOT`
+in any shell opened earlier, because an unset `SLINK_WORK_ROOT` falls back to `F:/slink-work`
+silently: a stale shell then works in a different lane tree instead of failing.
+
+### Plan only (no emulator)
+
+```bash
+python tools/gen4_routes.py plan --out route.json
+```
+
+Prints the route as JSON and exits 0, or `FAIL: <reason>` (exit 1) / `SKIP: <input absent>`
+(exit 2). The planner reads the position from the save at the offset the game's pack records
+(`profile.location.file_cross_check.general_off_of_array`: HG `0x1234`, hge `0x1424` because hge's
+earlier arrays are larger; array 5, `SAVE_LOCAL_FIELD_DATA.currentPosition`; a wrong offset is
+refused by the matrix map-id check), the Johto cell map from NARC `a/0/4/1`, the tile
+attributes from `a/0/6/5` at `0x14 + the u16 at +0x12`, and the event tiles from
+`files/fielddata/eventdata/zone_event/<bank>_*.json`.
+
+### Plan and drive it (one EmuHawk per leg, own lane)
+
+```bash
+python tools/gen4_routes.py run                    # lane $SLINK_WORK_ROOT/lanes/g4/route by default
+python tools/gen4_routes.py run --lane route2 --timeout 900 --pace-max 4000
+python tools/gen4_routes.py run --game hge --errand pokegear   # lane $SLINK_WORK_ROOT/lanes/g4/route_hge, tag route_hge
+```
+
+`--game hge` swaps in the hge ROM, save, lane and state prefix. `--errand pokegear` prepends three
+legs (enter the player's house, talk to Mom, exit) for a save without the Pokégear: coord event
+T20_002 otherwise walks the player back on every pass, and the run stops with status
+`RESYNC_LOOP` instead of repeating it. States are then `route_hge_leg5_*` (legs 1-3 errand, 4 the
+Elm-call cutscene resync, 5 the walk and battle).
+
+Leg 1 boots the staged save; a coord-event cutscene is cleared with A, savestated, and reported
+as `RESULT RESYNC map=… x=… y=… dir=… state=…`, after which the next leg re-plans from that
+position and resumes from the state (at most 4 legs). Every leg writes
+`<lane>/<tag>_leg<N>.json`, `<tag>_leg<N>.log` and savestates/screenshot PNGs.
+
+### PASS criterion
+
+`run` exits 0 only when the last leg's last log line is `RESULT BATTLE`, i.e.:
+
+* the walk reached the pace tile and never crossed a warp, a bg event, an NPC box or surfable
+  water (each is refused by the planner, not stepped on),
+* the chain `fs -> +0 -> +4` (overlay id 12) `-> +0x1C -> +0x30` resolves to a battle context with
+  a non-zero enemy species (`docs/gen4/research/battle_pointer.md`),
+* the log names the species and the phase: `RESULT BATTLE phase=pace species=PIDGEY(16) level=2
+  player=155 …` (the SETTLED chain; `player` is `battleMons[0]`, 155 = Cyndaquil on both saves),
+  or `phase=approach` when the encounter fired on the way to the grass instead of while pacing,
+* `<tag>_battle_settled.png` shows the FIGHT menu.
+
+Anything else is exit 1 with `RESULT FAIL <why>` in the log, plus a `fail.png`.
+
+### Known heuristics
+
+* **The post-battle settle is a fixed 900 frames** (`G4_SETTLE` overrides it), not a state
+  predicate. The screenshot is what confirms the menu actually came up; a longer intro
+  (a trainer, a multi-Pokémon send-out) would need the override raised.
+* Surfable water is treated as impassable on foot, so a route that genuinely needs Surf is
+  refused rather than planned. There is no Surf support yet.
+* The boot loop presses A/Start while no FieldSystem exists, so the run assumes the save is
+  mid-game; the run config pins `InitialTime 2010-01-01T12:00:00` for determinism.
+* The planner does not evaluate a coord event's `var`/`val`, so a crossed event is recorded in
+  `route.soft_events` with its scriptIds and the harness names the nearby ones when a leg
+  resyncs. A script that does not clear with A ends the run after 4 legs.
+
+### The Cherrygrove PC stop (G1 row i and the `pc` phase)
+
+`--target pc` walks to the Cherrygrove Pokemon Center PC and deposits a party mon into a box by
+**normal button input only**, then saves natively. The owner's saves hold one party mon and Gen 4
+refuses to deposit the last one, so a **disclosed SYNTH setup** supplies the second mon
+(`docs/gen4/reviews/DECISIONS_2026-10-01.md`, "box-mon setup"); everything after it runs natively.
+
+```bash
+python tools/gen4_synth_save.py party2 --profile hgss --src <battery> --out $SLINK_WORK_ROOT/lanes/g4/saves/hg_party2.SaveRAM
+python tools/gen4_routes.py plan --target pc --out pc_plan.json        # offline: both walks, no emulator
+python tools/gen4_routes.py run --target pc --save $SLINK_WORK_ROOT/lanes/g4/saves/hg_party2.SaveRAM --lane route_pc
+python tools/gen4_routes.py run --game hge --errand pokegear --target pc --save <hge party2 copy> --lane route_pc_hge
+```
+
+`run --target pc` refuses (named `setup_missing` / `setup_mismatch`, before the lane is touched) a
+save without its `<save>.synth.json` sidecar describing that exact file. Every receipt
+(`<lane>/<tag>_receipt.json`) carries `setup: SYNTH`, the sidecar's sha256 and each leg's status.
+
+**Legs** (each leg re-plans from the position the previous one logged, like a cutscene resync):
+
+| Leg | What it does |
+|---|---|
+| `enter` (kind `errand`) | New Bark -> Route 29 -> Cherrygrove -> the tile in front of the Pokemon Center door -> the door step (map 69). Grass is priced (`GRASS_COST`), not forbidden: 32 grass tiles on Route 29 are unavoidable and listed in `approach_grass`. A wild encounter is escaped with the pack's `run_from_wild` recipe and the step re-issued. A coord-event cutscene ends the leg `RESYNC done=0` and the same phase is re-planned from where it stopped (`RESYNC_LOOP` when the same script puts the player back) |
+| `deposit` (kind `pc`) | Interior: from the arrival tile to (11,13), the tile south of the PC at (11,12) (the only behaviour-0x83 tile); turn north; A through the PC script; OVY_14 deposit of party slot 1; leave the PC; native SAVE through the pack's `persistence_route` legs; verify |
+
+The PC is a **metatile** script, not a bg event: `GetInteractedMetatileScript` runs
+`std_pokecenter_pc` when the tile in front has behaviour `TILE_BEHAVIOR_131` (0x83) **and the player
+faces north** (`asm/overlay_01_021E6880.s:1466-1700`, `src/metatile_behavior.c:91-93`). A unit test
+re-reads those lines from the pret clone.
+
+**Button path** (every step source-derived; pokeheartgold@ad7a3afa; offsets and state numbers in the
+header of `lua/tests/gen4_route_play.lua`): A -> "booted up the PC" (A) -> "Which PC?" cursor on the
+first item (A) -> "Storage System accessed" (A) -> sub-menu cursor on DEPOSIT POKeMON (A) ->
+`ScrCmd_158 0` -> `PCBox_LaunchApp` (OVY_14, mode 0, `scr_seq_0003.s` `_0B01`/`_0B17`/`_0BA2`). In
+the app (state int at `man->data+0x30`): state 0x5B party list, cursor on slot 0 -> Right -> A selects
+slot 1 (`data+0x21 == 0x1F`) -> A on the toolbar's first button (STORE, state 0xA9) -> state 0x61 box
+chooser on the active box -> A commits (state 0x6B, `ov14_021E6318`) -> back to 0x5B -> B ("Continue
+Box operations?", YesNo) -> B (= No) exits -> B, B closes the script menus.
+
+**Verified by RAM, per step:** the launched-app manager's overlay id is 14; the selected cell is
+slot 1; the party count drops 2 -> 1 with slot 0's PID unchanged; the clone's PID appears in exactly
+one box slot and the box count rises by one; `PCStorage.boxModifiedFlag` (HG: pack
+`profile.pc.box_modified_flag_off`) has that box's bit set, then is **0 after the native SAVE**; the
+save driver returns to idle (`probe_field.save_state == 1`, no task, no launched app). After the run
+Python decodes the lane's battery file with the codec: one party mon, the clone boxed
+(`SAVE_MISMATCH` otherwise).
+
+**PASS:** `run --target pc` exits 0 only on `RESULT PC_DEPOSIT party=2->1 box=B/S pid=... modified=0x1->0
+save_driver=idle`. Anything else is exit 1 with the named `RESULT FAIL <why>` and a `fail.png`.
+
+**OPEN (not a guess, not yet run live):** the cursor start cell and the key-mode first press (the
+leg retries Right+A up to 3 times and checks `data+0x21`); the toolbar button order (button 0 = STORE
+is read from the key-mode jump table); the B-B exit through the YesNo prompt; hge's PC UI (the
+paths above are vanilla OVY_14; hge records no `boxModifiedFlag` offset, so its modified-flag check
+is skipped and the box census plus the codec decode carry the evidence); the pack's
+`pc_*` route legs stay OPEN until the live run confirms this recipe.
+
+**Headless (no emulator):** `tests/unit/test_gen4_routes.py` plans the whole stop, pins the PC
+behaviour and facing rule to the decomp, and runs the real Lua leg against a **fake DS** (lupa): that
+proves the leg's loops, RAM readers and refusals, not the game's behaviour.
+
+### Headless
+
+```bash
+python -m pytest tests/unit/test_gen4_routes.py -v     # 51 tests, no emulator
+```
+
+The real-data cases skip by name when the ROM/pret/save is absent and fail when an input
+is present but wrong. `test_real_every_warp_tile_decodes_to_a_door` is the load-bearing one: a
+warp tile is a door by construction, so it pins the land-data offset, the row-major order and
+the matrix index in a single assertion.
+
 ---
 
 ## The Gen 1 release gate — a skip is a failure
