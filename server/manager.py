@@ -1486,7 +1486,6 @@ class RunManager:
         from server import cartridges
         from server.upr_pipeline import (
             EXPANSION_REFUSAL,
-            FAMILY_GEN2,
             FAMILY_GEN3_EXP,
             family_of,
             find_upr_jar,
@@ -1543,9 +1542,6 @@ class RunManager:
                     f"{FAMILY_WORDS.get(wanted, wanted)} dumps")}, status=400)
         if family == FAMILY_GEN3_EXP and randomize:
             return web.json_response({"ok": False, "error": EXPANSION_REFUSAL}, status=400)
-        if randomize and family == FAMILY_GEN2:
-            return web.json_response({"ok": False, "error": (
-                "Gen 2 has no randomizer support; turn Randomize off")}, status=400)
         # Either a settings file the user built in UPR's GUI, the form's spec (every option
         # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
         # two go through the SAME builder the allowlist is computed from, so a file made here

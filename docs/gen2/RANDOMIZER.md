@@ -326,3 +326,22 @@ The two probe scripts need the compiled `SlinkProbeGen2` class in `F:/slink-work
 Not covered: wild held items, trainer held items, trainer names and trainer class names, shop
 items and time-based encounters. None of these were run, so the write domain above does not
 include them.
+
+## Server pipeline (R1+R2, 2026-10-04)
+
+- `server/upr_settings.py` family `gen2_gsc`: Gen 1 parity allowlist plus tutors, trades and BW EXP.
+  Base stats, types, evolutions and movesets are refused, as for every family.
+- **Lower-case names is OFF for Gen 2.** With random statics, the pinned fork sometimes crashes in
+  `Gen2RomHandler.writePaddedPokemonName` (Game Corner prizes). It failed 2 of 40 Crystal and 5 of
+  40 Gold runs at max settings, and 0 of 100 with statics alone. It fails closed, but players would
+  see random failures. Re-enable after a fork patch.
+- **Tutors on a Crystal + Gold/Silver pair** are refused by the existing "same applied settings"
+  rule, because UPR drops tutors on G/S. Use tutors only for Crystal + Crystal pairs.
+- `cartridges.py` follows the pureRGB order: apply the UPS (md5 verified), then randomize. Then
+  `_check_content_gen2` (base stats, types, evolution graph and learnsets unchanged) and
+  `upr_gen2_write_domain.check_output` (no write in UPS hunks, `SLink*` sections or the header).
+- End-to-end runs through `cartridges.provision` succeeded for a Crystal pair and a Gold + Silver
+  pair (evidence in F:/slink-work/tmp/g2r1). One-byte mutants of base stats, types, evolution,
+  learnset, hunk, SLink section and header are all refused.
+- Not done yet: the runtime side (R3: Lua `rand_overlay` admission, adapter kind and fingerprint)
+  and ROM-derived data (R4).

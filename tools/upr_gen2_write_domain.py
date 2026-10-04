@@ -19,12 +19,11 @@ lies outside the overlay. For each title this:
         --work F:/slink-work/tmp/g2 --evidence F:/slink-work/evidence/g2-rand-r0 [--seeds 5]
     python tools/upr_gen2_write_domain.py --self-check --clean crystal=PATH   # known-positive control
 
-Library: ``audit(title, overlay_bytes, output_bytes)``.
+Library: ``audit(title, overlay_bytes, output_bytes)`` (server/upr_gen2_write_domain.py).
 """
 from __future__ import annotations
 
 import argparse
-import bisect
 import hashlib
 import json
 import os
@@ -35,16 +34,18 @@ import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "patch" / "tools"))
-from make_ups import _ups_decode, ups_apply  # noqa: E402
+from patch.tools.make_ups import ups_apply  # noqa: E402
 
+# the geometry and the audit are the server's (the pipeline re-runs them on every output)
+from server.upr_gen2_write_domain import (  # noqa: E402,F401  (re-exported: the library API)
+    HEADER,
+    TITLES,
+    Geometry,
+    audit,
+    bank_addr,
+    regions,
+)
 from server.upr_settings import MISC_TWEAKS, build  # noqa: E402
-
-# title -> (lock / provenance key, UPR settings rom name)
-TITLES = {"crystal": ("pokecrystal", "Pokemon Crystal (U)"),
-          "gold": ("pokegold", "Pokemon Gold (U)"),
-          "silver": ("pokesilver", "Pokemon Silver (U)")}
-HEADER = range(0x134, 0x150)   # cartridge header: UPR's own checksum fix-up lands here
 
 # every "unchanged" mode bit the matrix may clear, per category
 _CATEGORY_FLAGS = {
@@ -87,126 +88,6 @@ def matrix(seeds: int) -> list[tuple[str, tuple, tuple]]:
     runs += [(f"cat_{c}", (c,), ()) for c in _CATEGORY_FLAGS]
     runs += [(f"tweak_{t}", (), (t,)) for t in TWEAKS]
     return runs
-
-
-# ── ROM geometry ─────────────────────────────────────────────────────────────────────────
-def flat(bank: int, addr: int) -> int:
-    return addr if bank == 0 else bank * 0x4000 + (addr - 0x4000)
-
-
-def bank_addr(off: int) -> str:
-    bank = off // 0x4000
-    return f"{bank:02X}:{off if bank == 0 else 0x4000 + off % 0x4000:04X}"
-
-
-def ups_spans(patch: bytes) -> list[tuple[int, int]]:
-    """[start, end) runs of bytes the UPS changes (a hunk is a run of non-zero XOR bytes)."""
-    pos, out, i, end = 4, [], 0, len(patch) - 12
-    _, pos = _ups_decode(patch, pos)
-    _, pos = _ups_decode(patch, pos)
-    while pos < end:
-        rel, pos = _ups_decode(patch, pos)
-        i += rel
-        start, x = i, None
-        while pos < end:
-            x = patch[pos]
-            pos += 1
-            i += 1
-            if x == 0:
-                break
-        # the terminating 0 XOR is an unchanged byte; a hunk running to EOF has none
-        out.append((start, i - 1 if x == 0 else i))
-    return out
-
-
-def map_sections(map_path: pathlib.Path) -> list[tuple[int, int, str]]:
-    """[start, end) flat ROM ranges of every section in an rgblink .map (ROM0/ROMX only)."""
-    out, bank = [], None
-    for line in map_path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if m := re.match(r"^(ROM0|ROMX) bank #(\d+):", line):
-            bank = int(m.group(2))
-        elif re.match(r"^\S", line):
-            bank = None                                   # WRAM / SRAM / HRAM ...
-        elif bank is not None and (m := re.search(r'SECTION: \$([0-9a-f]+)(?:-\$([0-9a-f]+))? .*\["(.*)"\]', line)):
-            lo = int(m.group(1), 16)
-            hi = int(m.group(2), 16) if m.group(2) else lo
-            out.append((flat(bank, lo), flat(bank, hi) + 1, m.group(3)))
-    return sorted(out)
-
-
-def sym_labels(sym_path: pathlib.Path) -> tuple[list[int], list[str]]:
-    offs, names = [], []
-    for line in sym_path.read_text(encoding="utf-8", errors="replace").splitlines():
-        m = re.match(r"^([0-9a-f]{2}):([0-9a-f]{4}) (\S+)", line)
-        if m and (int(m.group(2), 16) < 0x8000):
-            offs.append(flat(int(m.group(1), 16), int(m.group(2), 16)))
-            names.append(m.group(3))
-    order = sorted(range(len(offs)), key=offs.__getitem__)
-    return [offs[i] for i in order], [names[i] for i in order]
-
-
-def _merge(offsets, gap: int = 1) -> list[tuple[int, int]]:
-    out: list[list[int]] = []
-    for o in sorted(offsets):
-        if out and o - out[-1][1] <= gap:
-            out[-1][1] = o + 1
-        else:
-            out.append([o, o + 1])
-    return [tuple(r) for r in out]
-
-
-class Geometry:
-    def __init__(self, title: str):
-        key = TITLES[title][0]
-        stem = {"pokecrystal": "crystal", "pokegold": "gold", "pokesilver": "silver"}[key]
-        prov = json.loads((REPO / "data" / "gen2" / "overlay_provenance.json").read_text())["outputs"][key]
-        self.prov = prov
-        self.spans = ups_spans((REPO / prov["ups"]["file"]).read_bytes())
-        self.ups_bytes = {i for a, b in self.spans for i in range(a, b)}
-        self.sections = map_sections(REPO / "data" / "gen2" / f"{stem}_slink.map")
-        self._starts = [s[0] for s in self.sections]
-        self.slink = [s for s in self.sections if s[2].lower().startswith("slink")]
-        self.slink_bytes = {i for a, b, _ in self.slink for i in range(a, b)}
-        self.touched = sorted({s for s in self.sections if any(i in self.ups_bytes for i in range(s[0], s[1]))})
-        self.touched_bytes = {i for a, b, _ in self.touched for i in range(a, b)}
-        self.label_offs, self.label_names = sym_labels(REPO / "data" / "gen2" / f"{stem}_slink.sym")
-
-    def section_of(self, off: int) -> str:
-        k = bisect.bisect_right(self._starts, off) - 1
-        if k >= 0 and self.sections[k][0] <= off < self.sections[k][1]:
-            return self.sections[k][2]
-        return "(unmapped)"
-
-    def label_of(self, off: int) -> str:
-        k = bisect.bisect_right(self.label_offs, off) - 1
-        return f"{self.label_names[k]}+{off - self.label_offs[k]:#x}" if k >= 0 else "?"
-
-
-def regions(geo: Geometry, offsets) -> list[dict]:
-    """Changed bytes merged into runs (gap <= 16) and attributed to their map section."""
-    out = []
-    for a, b in _merge(offsets, 16):
-        out.append({"start": bank_addr(a), "end": bank_addr(b - 1), "flat": [a, b],
-                    "section": geo.section_of(a), "label": geo.label_of(a),
-                    "changed": sum(1 for o in offsets if a <= o < b) if len(offsets) < 200000 else None})
-    return out
-
-
-def audit(title: str, overlay: bytes, output: bytes, geo: Geometry | None = None) -> dict:
-    geo = geo or Geometry(title)
-    if len(overlay) != len(output):
-        raise ValueError(f"size changed {len(overlay)} -> {len(output)}")
-    changed = [i for i, (x, y) in enumerate(zip(overlay, output, strict=True)) if x != y]
-    ch = set(changed)
-    return {
-        "changed": len(changed),
-        "header": [bank_addr(i) for i in changed if i in HEADER],
-        "ups_hits": [bank_addr(i) for i in sorted(ch & geo.ups_bytes) if i not in HEADER],
-        "slink_hits": [bank_addr(i) for i in sorted(ch & geo.slink_bytes)],
-        "touched_section_hits": sorted({geo.section_of(i) for i in ch & geo.touched_bytes if i not in HEADER}),
-        "regions": regions(geo, changed),
-        "_changed": changed,
-    }
 
 
 # ── running ──────────────────────────────────────────────────────────────────────────────

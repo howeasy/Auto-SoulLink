@@ -370,3 +370,73 @@ def test_option_form_is_json_safe_and_ordered_like_the_table():
     by_key = {r["key"]: r for r in rows}
     assert by_key["trainers_levels"]["min"] == -50 and by_key["trainers_levels"]["unit"] == "%"
     assert [c["value"] for c in by_key["wild"]["choices"]] == ["unchanged", "random", "area", "global"]
+
+
+# ── the Gen 2 family (owner ruling 2026-10-03, C-5; docs/gen2/RANDOMIZER.md) ──────────────
+GEN2_TWEAK_KEYS = {"fastest_text", "catching_tutorial", "ban_lucky_egg", "bw_exp"}
+
+
+def _gen2_widest():
+    from server.upr_settings import FAMILY_GEN2, default_spec
+    return dict(default_spec(FAMILY_GEN2), statics="random", trades="given_and_requested", trades_items=True,
+                trades_ivs=True, trades_nicknames=True, trades_ots=True, tms="random", tm_compat="random",
+                tutors="random", tutor_compat="random", field_items="random", **dict.fromkeys(GEN2_TWEAK_KEYS, True))
+
+
+def test_gen2_family_is_gen1_parity_plus_trades_tutors_and_five_tweaks():
+    from server.upr_settings import FAMILIES, FAMILY_GEN2, options_for
+    assert FAMILY_GEN2 == "gen2_gsc" and FAMILY_GEN2 in FAMILIES
+    opts = options_for(FAMILY_GEN2)
+    for key in ("wild", "trainers", "starters", "statics", "trades", "tms", "tm_compat", "tutors",
+                "tutor_compat", "field_items"):
+        assert key in opts, key
+    assert {k for k, o in opts.items() if "misc" in o} == GEN2_TWEAK_KEYS
+    # unmeasured by R0 (trainer names/classes, held items, shops, pickup) or out by ruling
+    for key in ("trainer_names", "trainer_class_names", "pc_potion", "nerf_x_accuracy", "fix_crit_rate",
+                "update_type_effectiveness", "wild_held_items", "trainer_items_boss", "shops", "pickup",
+                "national_dex", "running_shoes_indoors"):
+        assert key not in opts, key
+
+
+def test_bw_exp_is_gen2_only():
+    from server.upr_settings import FAMILIES, FAMILY_GEN2, families_of_option, options_for
+    assert families_of_option("bw_exp") == [FAMILY_GEN2]
+    assert all("bw_exp" not in options_for(f) for f in FAMILIES if f != FAMILY_GEN2)
+
+
+def test_gen2_widest_allowed_file_round_trips_and_is_admitted():
+    from server.upr_settings import FAMILY_GEN2, build_spec, spec_from_parsed, unexpected_settings
+    spec = _gen2_widest()
+    parsed = load(build_spec(spec, family=FAMILY_GEN2))
+    assert parsed["rom_name"] == "Pokemon Crystal (U)"
+    assert set(parsed["misc_tweak_names"]) == {"FASTEST_TEXT", "LOWER_CASE_POKEMON_NAMES",
+                                                "RANDOMIZE_CATCHING_TUTORIAL", "BAN_LUCKY_EGG", "BW_EXP_PATCH"}
+    assert forbidden_enabled(parsed, FAMILY_GEN2) == []
+    assert unexpected_settings(parsed, FAMILY_GEN2) == []
+    assert spec_from_parsed(parsed, FAMILY_GEN2) == spec
+
+
+@pytest.mark.parametrize("flag, expected", [
+    ("baseStats_UNCHANGED", "base_stats"), ("types_UNCHANGED", "types"),
+    ("evolutions_UNCHANGED", "evolutions"), ("movesets_UNCHANGED", "movesets")])
+def test_gen2_rule_bearing_domains_are_forbidden(flag, expected):
+    from server.upr_settings import FAMILY_GEN2, unexpected_settings
+    parsed = load(build({flag: False}, rom_name="Pokemon Crystal (U)"))
+    assert expected in forbidden_enabled(parsed, FAMILY_GEN2)
+    assert unexpected_settings(parsed, FAMILY_GEN2)
+
+
+@pytest.mark.parametrize("tweak", ["UPDATE_TYPE_EFFECTIVENESS", "RUNNING_SHOES_INDOORS", "NATIONAL_DEX_AT_START",
+                                   "RANDOMIZE_PC_POTION", "NERF_X_ACCURACY", "FIX_CRIT_RATE"])
+def test_gen2_refuses_every_tweak_outside_its_five(tweak):
+    from server.upr_settings import FAMILY_GEN2
+    parsed = load(build({}, MISC_TWEAKS[tweak], rom_name="Pokemon Crystal (U)"))
+    assert any(tweak in why for why in forbidden_enabled(parsed, FAMILY_GEN2))
+
+
+def test_gen2_refuses_an_unmeasured_option_by_name():
+    from server.upr_settings import FAMILY_GEN2, build_spec, unexpected_settings
+    with pytest.raises(UprSettingsError, match="trainer_names"):
+        build_spec({"trainer_names": True}, family=FAMILY_GEN2)
+    parsed = load(build({"randomizeTrainerNames": True}, rom_name="Pokemon Crystal (U)"))
+    assert unexpected_settings(parsed, FAMILY_GEN2)

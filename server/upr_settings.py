@@ -444,6 +444,7 @@ HELP: dict[str, str] = {
     "lowercase_names": "Pokémon names in Camel Case: VENUSAUR becomes Venusaur.",                  # miscLowerCasePokemonNames
     "nerf_x_accuracy": "X Accuracy no longer makes sleep, trapping and one-hit-KO moves hit every time.",  # miscNerfXAccuracy
     "fix_crit_rate": "Critical hits at the later games' 1/16 instead of Gen 1's Speed-based rate; Focus Energy and Dire Hit raise it as intended.",  # miscFixCritRate
+    "bw_exp": "Experience as in Black / White: beating a Pokémon above your level earns more, one below it less.",  # miscBWExpPatch
     "update_type_effectiveness": "The type chart as of Gen 6 (Ghost hits Psychic, Ice resists nothing extra…). No Fairy type. Both cartridges get it, so the type clause still means the same on both.",  # miscUpdateTypeEffectiveness
 }
 CHOICE_HELP: dict[tuple[str, str], str] = {
@@ -497,7 +498,12 @@ FAMILY_PURE = "gen1_purergb"
 # write nowhere near an engine site (the pipeline re-proves that on every output).
 FAMILY_FRLG = "gen3_frlg"
 FAMILY_EMERALD = "gen3_emerald"
-FAMILIES = (FAMILY_VANILLA, FAMILY_PURE, FAMILY_FRLG, FAMILY_EMERALD)
+# Gold / Silver / Crystal (owner ruling 2026-10-03, C-5; docs/gen2/RANDOMIZER.md): Gen 1 parity
+# plus what Gen 2 adds -- in-game trades, move tutors (Crystal) and the five misc tweaks R0 proved
+# write nowhere near the companion overlay (GEN2_ALLOWED_TWEAKS). Base stats, types, evolutions
+# and movesets stay forbidden; the pipeline re-proves both on every output.
+FAMILY_GEN2 = "gen2_gsc"
+FAMILIES = (FAMILY_VANILLA, FAMILY_PURE, FAMILY_GEN2, FAMILY_FRLG, FAMILY_EMERALD)
 GEN3_FAMILIES = (FAMILY_FRLG, FAMILY_EMERALD)
 GEN1_FAMILIES = (FAMILY_VANILLA, FAMILY_PURE)
 # Gen 1 code tweaks with no FR/LG implementation (Gen3RomHandler.miscTweaksAvailable), so
@@ -558,15 +564,32 @@ GEN3_OPTIONS: dict[str, dict] = {
     "ban_lucky_egg": _bool("Tweaks", "No Lucky Egg", misc="BAN_LUCKY_EGG"),
     "balance_static_levels": _bool("Tweaks", "Balance static levels", misc="BALANCE_STATIC_LEVELS"),
 }
-ALL_OPTIONS: dict[str, dict] = {**OPTIONS, **GEN3_OPTIONS}
+GEN2_OPTIONS: dict[str, dict] = {
+    "bw_exp": _bool("Tweaks", "Black / White experience", misc="BW_EXP_PATCH"),
+}
+ALL_OPTIONS: dict[str, dict] = {**OPTIONS, **GEN3_OPTIONS, **GEN2_OPTIONS}
+# The Gen 2 family as an ALLOWLIST, so a new option is never admitted for Gen 2 by accident.
+# Out because R0 never ran them (their write domain is unmeasured): trainer names and classes,
+# held items, shops, pickup. Out by ruling: the PC potion and the Gen 1 code tweaks.
+# ponytail: lowercase_names stays off for Gen 2 -- with random statics the fork crashes in
+# Gen2RomHandler.writePaddedPokemonName (Game Corner prizes, ~5% of runs); re-add after the fork fix.
+GEN2_ALLOWED_TWEAKS = ("fastest_text", "catching_tutorial", "ban_lucky_egg", "bw_exp")
+GEN2_OPTION_KEYS = (
+    *(k for k in OPTIONS if "misc" not in OPTIONS[k] and k not in ("trainer_names", "trainer_class_names")),
+    "tutors", "tutor_compat", "tutor_sanity", "tutor_keep_field",
+    "trades", "trades_items", "trades_ivs", "trades_nicknames", "trades_ots",
+    *GEN2_ALLOWED_TWEAKS)
 
 
 def options_for(family: str = FAMILY_VANILLA) -> dict[str, dict]:
     """The option table one family's files are built from and admitted against."""
     if family not in FAMILIES:
         raise UprSettingsError(f"unknown randomizer family {family!r}")
+    if family == FAMILY_GEN2:
+        return {k: ALL_OPTIONS[k] for k in GEN2_OPTION_KEYS}
     if family in GEN3_FAMILIES:
-        unavailable = (*GEN1_ONLY_OPTIONS, "balance_static_levels") if family == FAMILY_EMERALD else GEN1_ONLY_OPTIONS
+        unavailable = (*GEN1_ONLY_OPTIONS, *GEN2_OPTIONS,
+                       *(("balance_static_levels",) if family == FAMILY_EMERALD else ()))
         return {k: o for k, o in ALL_OPTIONS.items() if k not in unavailable}
     return OPTIONS
 
@@ -577,7 +600,7 @@ def families_of_option(key: str) -> list[str]:
 
 # The ROM name a family's file carries (informational: UPR matches the ROM itself).
 ROM_NAME = {FAMILY_VANILLA: "Pokemon Red (U) [!]", FAMILY_PURE: "Pokemon Red (U) [!]",
-            FAMILY_FRLG: "Fire Red (U)", FAMILY_EMERALD: "Emerald (U)"}
+            FAMILY_GEN2: "Pokemon Crystal (U)", FAMILY_FRLG: "Fire Red (U)", FAMILY_EMERALD: "Emerald (U)"}
 # The tweaks a lossless entry honours (fork patch 0008, revision 3): lower-case names is a
 # DATA write over the 190-row species-name table, which the fork re-cases byte-for-byte in
 # place (never through its string path), so nothing else in the cartridge moves.
@@ -845,11 +868,11 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
         bad += [f"{key} (not implemented for pureRGB entries)" for key in PURE_INERT_BOOLS if spec.get(key)]
         if spec.get("trainers") in PURE_INERT_TRAINER_MODES:
             bad.append(f"trainers={spec['trainers']} (pure entries carry no gym/Elite tags)")
-    if family in GEN3_FAMILIES:
-        # ruling 31: abilities and the type chart join Gen 1's set by name (Gen 1 has no
-        # abilities: there tweakForRom clears the flag). A Gen 1-only tweak would be dropped
-        # silently by tweakForRom, so it is refused rather than believed.
-        if not f.get("abilities_UNCHANGED"):
+    if family in GEN3_FAMILIES or family == FAMILY_GEN2:
+        # ruling 31: abilities and the type chart join Gen 1's set by name (Gen 1 and 2 have no
+        # abilities: there tweakForRom clears the flag). A tweak outside the family's set would be
+        # dropped silently by tweakForRom, or is unmeasured, so it is refused rather than believed.
+        if family != FAMILY_GEN2 and not f.get("abilities_UNCHANGED"):
             bad.append("abilities")
         names = parsed.get("misc_tweak_names") or []
         if "UPDATE_TYPE_EFFECTIVENESS" in names:
@@ -857,7 +880,7 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
         allowed = {o["misc"] for o in options_for(family).values() if "misc" in o}
         other = [n for n in names if n not in allowed and n != "UPDATE_TYPE_EFFECTIVENESS"]
         if other or parsed.get("misc_tweaks", 0) & ~sum(MISC_TWEAKS.values()):
-            label = "Emerald" if family == FAMILY_EMERALD else "FR/LG"
+            label = {FAMILY_EMERALD: "Emerald", FAMILY_GEN2: "Gold / Silver / Crystal"}.get(family, "FR/LG")
             bad.append("tweaks (" + ", ".join(other or ["unknown"]) + f") not available on {label}")
     if not f.get("types_UNCHANGED"):
         bad.append("types")
