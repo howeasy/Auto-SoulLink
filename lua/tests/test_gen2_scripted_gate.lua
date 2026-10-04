@@ -191,9 +191,19 @@ function G.identity(getenv, base)
     if not hex(overlay, 40) then return nil, "an overlay run requires SLINK_GEN2_OVERLAY_SHA1" end
     overlay = overlay:lower()
     if overlay == base then return nil, "the overlay sha1 equals the clean base" end
-    if exec and exec:lower() ~= overlay then return nil, "SLINK_GEN2_EXEC_SHA1 differs from SLINK_GEN2_OVERLAY_SHA1" end
+    if exec and exec:lower() ~= overlay and value("SLINK_GEN2_RANDOMIZED") ~= "1" then
+        return nil, "SLINK_GEN2_EXEC_SHA1 differs from SLINK_GEN2_OVERLAY_SHA1"
+    end
     if not hex(binding, 64) then
         return nil, "an overlay run requires the SLINK_GEN2_BINDING_SHA256 pin (data/games/gen2_<title>/overlay/binding.json)"
+    end
+    if value("SLINK_GEN2_RANDOMIZED") == "1" then
+        -- C-5: a Manager-randomized companion cartridge (rand_overlay). It executes its own sha1 (EXEC) but keeps every
+        -- overlay byte (docs/gen2/RANDOMIZER.md), so the facts, sites and checkpoint stay the overlay row's (OVERLAY).
+        if not hex(exec, 40) or exec:lower() == overlay or exec:lower() == base then
+            return nil, "a randomized run requires its own SLINK_GEN2_EXEC_SHA1, distinct from the overlay and the base"
+        end
+        return {kind="overlay", rom_sha1=exec:lower(), overlay_sha1=overlay, randomized=true, binding_sha256=binding:lower()}
     end
     return {kind="overlay", rom_sha1=overlay, binding_sha256=binding:lower()}
 end
@@ -218,6 +228,7 @@ function G.inputs(getenv, json)
     local identity, why = G.identity(getenv, env.rom_sha1)
     assert(identity, why)
     env.base_sha1, env.kind, env.exec_sha1, env.binding_sha256 = env.rom_sha1, identity.kind, identity.rom_sha1, identity.binding_sha256
+    env.overlay_sha1, env.randomized = identity.overlay_sha1, identity.randomized == true
     assert(need("SLINK_GEN2_CORE_MODE") == "CGB", "played fixtures require the CGB core")
     local qualify = getenv("SLINK_GEN2_QUALIFY")
     if qualify == nil or qualify == "" then
@@ -327,10 +338,11 @@ function G.artifact(root, json, env)
     end
     local data = {sites=read("engine_signals.json"), checkpoint=read("write_checkpoint.json"), profile=read("profile.json")}
     local Artifact = dofile(root .. "/lua/gen2/artifact.lua")
-    local view, why = Artifact.view(root, json, data, env.title, {kind="overlay", sha1=env.exec_sha1,
+    local row_sha1 = env.overlay_sha1 or env.exec_sha1   -- C-5: a randomized cart executes its overlay row's view
+    local view, why = Artifact.view(root, json, data, env.title, {kind="overlay", sha1=row_sha1,
         base_sha1=env.base_sha1, binding_sha256=env.binding_sha256})
     assert(view, "overlay execution view refused: " .. tostring(why))
-    assert(view.kind == "overlay" and view.rom_sha1 == env.exec_sha1 and view.base_sha1 == env.base_sha1,
+    assert(view.kind == "overlay" and view.rom_sha1 == row_sha1 and view.base_sha1 == env.base_sha1,
            "overlay execution view differs from the staged identity")
     return view
 end
@@ -381,7 +393,7 @@ function G.context(api, getenv)
     if phone and phone ~= "" then
         ctx.phone_call = assert(json.decode(phone), "phone call facts malformed")
         assert(ctx.phone_call.title == env.title and ctx.phone_call.kind == env.kind
-               and ctx.phone_call.rom_sha1 == env.exec_sha1
+               and ctx.phone_call.rom_sha1 == (env.overlay_sha1 or env.exec_sha1)   -- C-5: overlay-row facts
                and type(ctx.phone_call.ring) == "table"
                and ctx.phone_call.ring.symbol == "RingTwice_StartCall"
                and type(ctx.phone_call.close) == "table"
