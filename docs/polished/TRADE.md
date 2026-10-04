@@ -882,3 +882,125 @@ maintained separately and drift.
 
 **The one that must move first is unchanged: T1.** A Polished overlay must not ship a trade service
 until the stack fingerprint is measured in a linked build.
+
+## 9. Open items settled
+
+### 9.1 Dex marking: the native trade path already marks it — the overlay does not need to
+
+`engine/events/npc_trade.asm:164` — inside `DoNPCTrade`, after
+`predef RemoveMonFromParty` at `:163` — calls `predef TryAddMonToParty`. That is the
+receival branch: the wanted mon is handed in and the given mon arrives.
+
+`engine/pokemon/move_mon.asm:1278` calls `SetSeenAndCaughtMon` with
+`wCurPartySpecies` in `c` (`:1276-1277`) and the form in `b` (`:1274-1275`), guarded by
+`.done` at `:1273` when `MON_IS_EGG_F` is set (`:1271-1272`) — so **eggs are not dex-marked**,
+which is correct.
+
+**So the NPC-trade path marks the dex natively and the overlay's commit path does not
+need to call `SetSeenAndCaughtMon` itself.** Confidence: high for the NPC path.
+
+**The link-trade path — UNVERIFIED.** I traced the NPC path to the call site but did not
+walk `engine/link/link.asm`'s trade-completion path to its own `SetSeenAndCaughtMon`
+call within the budget. A tree-wide grep shows `SetSeenAndCaughtMon` is called from
+`engine/items/item_effects.asm:474`, `engine/pokemon/breeding.asm:330`,
+`evolve.asm:496`, `learn.asm:132`, `mon_menu.asm:522`, `move_mon.asm:167,503,880,1278`,
+`engine/events/specials.asm:26`, `move_deleter.asm:172`, `shiny_ditto.asm:76` — but
+**`engine/link/link.asm` does not appear in that list**. If the link path adds the
+received mon by a route that bypasses all of those, the SLink overlay's commit path
+**must** call `SetSeenAndCaughtMon` itself. This is the one unresolved piece of item 1
+and it is falsifiable by reading `LinkTrade`'s completion branch.
+
+### 9.2 `RemoveMonFromPartyOrBox` does not exist; the removal is a null-write + shift
+
+A tree-wide grep for `RemoveMonFromPartyOrBox` in Polished returns **zero hits**. The
+routine that exists is:
+
+```
+894: RemoveMonFromParty:
+895: ; Done by writing a null entry to the party slot.
+896:    ld b, 0
+897:    ld a, [wCurPartyMon]
+898:    inc a
+899:    ld c, a
+900:    ld e, 0
+901:    farjp SetStorageBoxPointer
+```
+
+**Answer: no box-or-party variant exists, and for a party mon the behaviour is
+identical in effect** — the predef writes a null entry at `wCurPartyMon` and shifts the
+tail down through `SetStorageBoxPointer`, which is exactly the "shift of
+species/mons/OTs/nicknames + count decrement" behaviour. It is **implemented, not
+inlined**, so an overlay does not have to replicate the shift.
+
+`predef RemoveMonFromParty` is the call site used by `DoNPCTrade` (`:163`), and by
+`engine/link/link.asm:1584`, `engine/pokemon/mail.asm:175`,
+`engine/events/wonder_trade.asm:203,445` and `shuckle.asm:48`.
+
+**Consequence for the overlay:** a "box withdrawal mid-trade" path (a TRADE.md open item)
+must go through the predef or through `SetStorageBoxPointer`, **not** through a
+hand-rolled parallel-array shift — the parallel arrays are the storage's business and
+the exact shift order is not spelled out at the call site.
+
+### 9.3 The lease bytes are **one byte each**, and they are flags, not an item-class bitmask
+
+`patch/gen2/src/trade_frame.asm:12-13`:
+
+```
+DEF SLINK_TRADE_OFS_AVAILABLE EQU 10
+DEF SLINK_TRADE_OFS_MASK EQU 11
+```
+
+One byte apiece. `SlinkTradeClose::` (`:77`) clears **both** to zero with the same `xor a`
+that clears COMMAND, preserving "generation/ack/result/slot/token evidence" per its own
+comment at `:76`. They are published by `SlinkTradePublishDone:` (`trade_service.asm:419`,
+called from `:202`, `:207`, `:301`).
+
+**What they encode is UNVERIFIED** — I established the width, the offsets, the clear
+semantics and the publisher, but **not what value is stored**. They are certainly not a
+2-byte class bitmask: a 2-byte bitmask cannot express 8 item classes at 2 bits each
+without overflow into 256 items, and a single byte cannot either.
+
+**The item-classification data that does exist** is `data/items/attributes.asm`:
+`MACRO item_attribute` with `price, held effect, parameter, pocket, field menu, battle
+menu`, and `ItemAttributes` keyed by the complete item id. **The `pocket` field is the
+item class** — `BALL` for every ball (`:9` onward). So the Polished class axis is
+**pocket**, from `constants/item_constants.asm`.
+
+### 9.4 Polished item space, and a proposed allowed-item rule
+
+Polished's item list is far larger than vanilla's: `constants/item_constants.asm` runs
+past the 16 vanilla balls (`PARK_BALL` at `:12`, `POKE_BALL 01` … `DIVE_BALL 11`,
+`LUXURY_BALL 12`, `HEAL_BALL 13` at `:35`, and on), and the task's note of **254 ids +
+key items** matches a table far past vanilla's `$FF`-terminated set.
+
+**A `trade_items.asm`-style per-id refusal table does not port unchanged.** Vanilla's
+table is 16 rows of 16 bytes (`trade_items.asm:36-51`), indexed by the *complete* item
+byte with `$ff` always refused (`:34`). Polished needs a longer table, and the refusal
+rule should be expressed as a **rule over `pocket`**, not as 256 hand-listed bytes.
+
+Proposed rule, consistent with `SlinkTradeMailPolicyClear` and vanilla's three refusals
+(mail, key items, non-tossable):
+
+| refuse | why | source |
+|---|---|---|
+| any pocket `MAIL` | a mail item carries the story hook; trading it breaks the trade mail policy | vanilla refuses mail (`trade_items.asm:1-3`) |
+| any item flagged key | key items are not transferable in either game | vanilla `CANT_TOSS` |
+| `MASTER_BALL` | price 0, the one ball vanilla singles out | `attributes.asm:16` price 0 |
+| **new in Polished: apricorn balls** (Level/Lure/Moon/Friend/Fast/Heavy/Love) | Polished's Kurt items; the vanilla gate does not know them | `constants/item_constants.asm:21-27` |
+| **new in Polished: Wonder Trade / mail-adjacent ids** | must not be transferable | **UNVERIFIED** — I did not enumerate them |
+
+**Allow**: `BALL` pocket except `MASTER_BALL`, and `HELD` pocket items that are neither
+mail nor key.
+
+**UNVERIFIED:** I did not read `SlinkTradeMailPolicyClear` itself, and I did not
+enumerate Polished's full pocket set — so "which class does not exist / newly exists" is
+answered only for apricorn balls, which I read directly at
+`constants/item_constants.asm:21-27`.
+
+## Coordinator correction (2026-10-04) to §9.1: dex marking is native on BOTH trade paths
+
+Locating each `SetSeenAndCaughtMon` call by its enclosing routine in `engine/pokemon/move_mon.asm`: `:167` is inside `TryAddMonToParty` (declared at `:1`; used by `DoNPCTrade`, `npc_trade.asm:164`), `:503` is inside `AddTempMonToParty` (`:448`; the LINK trade adds the received mon with `farcall AddTempMonToParty` at `engine/link/link.asm:1622`, after `predef RemoveMonFromParty` at `:1584`), `:880` is `SentPkmnIntoBox` and `:1278` is `GivePoke::` (the §9.1 citation of `:1278` for the NPC path is wrong). So both the NPC-trade and the link-trade path mark the Pokedex natively (eggs excluded by the `MON_IS_EGG_F` guard at `:502`), and the overlay's commit path must NOT call `SetSeenAndCaughtMon` again if it keeps these routines; §9.1's 'unresolved link half' is resolved. `RemoveMonFromPartyOrBox` absence (no hits) and the single-byte AVAILABLE/MASK lease fields were re-checked in source and stand.
+
+```json
+CLAIMS: [{"path":"F:/slink-work/cache/polished/src/engine/events/npc_trade.asm","line":90,"expect":"DoNPCTrade:"},{"path":"F:/slink-work/cache/polished/src/engine/events/npc_trade.asm","line":163,"expect":"predef RemoveMonFromParty"},{"path":"F:/slink-work/cache/polished/src/engine/events/npc_trade.asm","line":164,"expect":"predef TryAddMonToParty"},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/move_mon.asm","line":894,"expect":"RemoveMonFromParty:"},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/move_mon.asm","line":895,"expect":"Done by writing a null entry to the party slot."},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/move_mon.asm","line":1272,"expect":"bit MON_IS_EGG_F, a"},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/move_mon.asm","line":1274,"expect":"and SPECIESFORM_MASK"},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/move_mon.asm","line":1276,"expect":"ld a, [wCurPartySpecies]"},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/move_mon.asm","line":1278,"expect":"call SetSeenAndCaughtMon"},{"path":"F:/slink-work/cache/polished/src/engine/items/item_effects.asm","line":474,"expect":"call SetSeenAndCaughtMon"},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/breeding.asm","line":330,"expect":"call SetSeenAndCaughtMon"},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/evolve.asm","line":496,"expect":"call SetSeenAndCaughtMon"},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/learn.asm","line":132,"expect":"call SetSeenAndCaughtMon"},{"path":"F:/slink-work/cache/polished/src/engine/events/specials.asm","line":26,"expect":"call SetSeenAndCaughtMon"},{"path":"F:/slink-work/cache/polished/src/engine/events/shiny_ditto.asm","line":76,"expect":"call SetSeenAndCaughtMon"},{"path":"F:/slink-work/cache/polished/src/engine/link/link.asm","line":1584,"expect":"predef RemoveMonFromParty"},{"path":"F:/slink-work/cache/polished/src/engine/pokemon/mail.asm","line":175,"expect":"predef RemoveMonFromParty"},{"path":"F:/slink-work/cache/polished/src/engine/events/wonder_trade.asm","line":203,"expect":"predef RemoveMonFromParty"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm","line":12,"expect":"DEF SLINK_TRADE_OFS_AVAILABLE EQU 10"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm","line":13,"expect":"DEF SLINK_TRADE_OFS_MASK EQU 11"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm","line":77,"expect":"SlinkTradeClose::"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm","line":76,"expect":"End publication without erasing generation/ack/result/slot/token evidence."},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm","line":80,"expect":"ld [SLINK_TRADE_FRAME + SLINK_TRADE_OFS_AVAILABLE], a"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm","line":81,"expect":"ld [SLINK_TRADE_FRAME + SLINK_TRADE_OFS_MASK], a"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_service.asm","line":419,"expect":"SlinkTradePublishDone::"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_items.asm","line":1,"expect":"refuse mail, key items, non-tossable items and placeholder IDs."},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_items.asm","line":34,"expect":"Indexed by the complete byte (not item-1); $ff is always refused."},{"path":"F:/slink-work/wt/polished/patch/gen2/src/trade_items.asm","line":36,"expect":"db 1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1 ; $00"},{"path":"F:/slink-work/cache/polished/src/data/items/attributes.asm","line":1,"expect":"MACRO item_attribute"},{"path":"F:/slink-work/cache/polished/src/data/items/attributes.asm","line":2,"expect":"price, held effect, parameter, pocket, field menu, battle menu"},{"path":"F:/slink-work/cache/polished/src/data/items/attributes.asm","line":8,"expect":"ItemAttributes:"},{"path":"F:/slink-work/cache/polished/src/data/items/attributes.asm","line":11,"expect":"item_attribute 200, 0, 0, BALL, ITEMMENU_PARTY, ITEMMENU_CLOSE"},{"path":"F:/slink-work/cache/polished/src/data/items/attributes.asm","line":17,"expect":"item_attribute 0, 0, 0, BALL, ITEMMENU_PARTY, ITEMMENU_CLOSE"},{"path":"F:/slink-work/cache/polished/src/constants/item_constants.asm","line":12,"expect":"DEF PARK_BALL EQU NO_ITEM"},{"path":"F:/slink-work/cache/polished/src/constants/item_constants.asm","line":14,"expect":"const POKE_BALL    ; 01"},{"path":"F:/slink-work/cache/polished/src/constants/item_constants.asm","line":34,"expect":"const LUXURY_BALL  ; 12"},{"path":"F:/slink-work/cache/polished/src/constants/item_constants.asm","line":35,"expect":"const HEAL_BALL    ; 13"},{"path":"F:/slink-work/cache/polished/src/constants/item_constants.asm","line":21,"expect":"const LEVEL_BALL   ; 06"},{"path":"F:/slink-work/cache/polished/src/constants/item_constants.asm","line":27,"expect":"const LOVE_BALL    ; 0c"}]
+```
