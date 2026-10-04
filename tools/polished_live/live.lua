@@ -33,10 +33,31 @@ end
 
 -- party-count watcher (end-of-frame value) for the frame-alignment observation
 local pc_changes, last_pc = {}, nil
+-- Stage A (hello gate): end-of-frame overworld-gate bytes, written to gate_transitions.log ONLY when they change
+-- (never per frame); `first` keeps the first frame of each milestone
+local gate_log, gate_last, gate_lines, first = L.RUN .. "/gate_transitions.log", nil, 0, {}
+local function gate_bytes()
+    return L.rw("wMapStatus"), L.rw("wScriptRunning"), L.rw("wGameLogicPaused"), L.rw("wLinkMode"), L.rw("wBattleMode")
+end
 L.on_frame = function()
+    local f = emu.framecount()
     local n = L.rw("wPartyCount")
-    if last_pc ~= nil and n ~= last_pc then pc_changes[#pc_changes + 1] = {frame = emu.framecount(), from = last_pc, to = n} end
+    if last_pc ~= nil and n ~= last_pc then pc_changes[#pc_changes + 1] = {frame = f, from = last_pc, to = n} end
     last_pc = n
+    local ms, sr, gp, lm, bm = gate_bytes()
+    local running = ms == 2 and sr == 0 and gp == 0 and lm == 0
+    local hello = SLINK_GEN2_CLIENT ~= nil and SLINK_GEN2_CLIENT.hello_sent == true
+    local s = fmt("wMapStatus=%d wScriptRunning=%d wGameLogicPaused=%d wLinkMode=%d wBattleMode=%d running=%s hello_sent=%s",
+                  ms, sr, gp, lm, bm, tostring(running), tostring(hello))
+    if s ~= gate_last and gate_lines < 600 then
+        local fh = io.open(gate_log, "a")
+        if fh then fh:write(fmt("frame %d %s OWPlayerInput_hits=%d" .. string.char(10), f, s, L.hits.OWPlayerInput or 0)) fh:close() end
+        gate_lines = gate_lines + 1
+    end
+    gate_last = s
+    if not first.owpi and (L.hits.OWPlayerInput or 0) > 0 then first.owpi = L.hit.OWPlayerInput end
+    if not first.running and running then first.running = f end
+    if not first.hello and hello then first.hello = f end
 end
 
 -- ── the client, through the real entry ──────────────────────────────────────────────────────────
@@ -71,7 +92,7 @@ L.check("admitted as the Polished overlay (DEV_OVERLAY_SHA1)", P.pack == "polish
 local C = package.loaded["connector"]
 local sent_path, recv_path = L.RUN .. "/sent.jsonl", L.RUN .. "/recv.jsonl"
 local sent = {hello = {}, capture = {}, other = {}}
-local last_gen, ticks = nil, 0
+local last_gen, ticks, gen_changes, last_battle_end = nil, 0, {}, nil
 local function append(path, s) local f = io.open(path, "a") if f then f:write(s .. "\n") f:close() end end
 local orig_send, orig_recv = C.send, C.receive
 C.send = function(line, ...)
@@ -83,6 +104,7 @@ C.send = function(line, ...)
         if msg.pc_boxes ~= nil and gen ~= last_gen then
             append(sent_path, fmt('{"frame":%d,"line":%s}', emu.framecount(), line))
             last_gen = gen
+            gen_changes[#gen_changes + 1] = {frame = emu.framecount(), gen = gen, n = #msg.pc_boxes}
         end
     else
         append(sent_path, fmt('{"frame":%d,"line":%s}', emu.framecount(), line))
@@ -129,6 +151,14 @@ if hello then
     L.check("STAGE1 hello party is the save's 5 mons", #(m.party or {}) == 5, #(m.party or {}))
     L.log(fmt("[live] STAGE1 hello context: hello frame %d, TitleScreenMain last %s, MainMenu last %s, first-idle %s",
               hello.frame, tostring(L.hit.TitleScreenMain), tostring(L.hit.MainMenu), tostring(first_ow)))
+    L.log(fmt("[live] STAGEA first OWPlayerInput frame %s, first gate-running end-of-frame %s, hello_sent first seen %s, hello wire frame %d",
+              tostring(first.owpi), tostring(first.running), tostring(first.hello), hello.frame))
+    L.check("STAGEA hello leaves after the first idle overworld frame (OWPlayerInput)",
+            first.owpi ~= nil and hello.frame >= first.owpi, fmt("hello %d vs OWPlayerInput %s", hello.frame, tostring(first.owpi)))
+    L.check("STAGEA hello leaves after the gate first reads running", first.running ~= nil and hello.frame >= first.running,
+            fmt("hello %d vs running %s", hello.frame, tostring(first.running)))
+    L.check("STAGEA hello is not from the main menu", L.hit.MainMenu == nil or hello.frame > L.hit.MainMenu + 30,
+            fmt("hello %d vs MainMenu last %s", hello.frame, tostring(L.hit.MainMenu)))
 end
 L.idle(120) -- let the server reply land
 
@@ -207,6 +237,7 @@ local function battle(action, label)
         end
     end
     local f_end = emu.framecount()
+    last_battle_end = f_end
     -- outcome per throw: caught iff PokeBallEffect.caught ran after that throw and before the next
     for i, t in ipairs(throws) do
         local nxt = throws[i + 1] and throws[i + 1].frame or f_end + 1
@@ -273,6 +304,7 @@ end
 if want(3) then
     -- box arrival: the party is full, so the native catch takes PokeBallEffect.SendToPC (capture site must NOT fire)
     local gen_before = last_gen
+    local mark = #gen_changes   -- census generations before the box catch (the battle-end one is after this)
     local caught = false
     for attempt = 1, 4 do
         if L.rw("wPartyCount") < 6 then L.log("[live] STAGE3 party not full; box route unavailable") break end
@@ -287,14 +319,25 @@ if want(3) then
         end
     end
     L.check("STAGE3 a wild mon reached a box", caught)
-    -- wait for a tick whose pc_boxes generation changed
+    -- wait for a tick whose census carries the box mon (no reboot: same session as the catch)
     local f, seen = emu.framecount(), nil
-    while emu.framecount() - f < 2400 do
-        if last_gen ~= gen_before and last_gen ~= nil then seen = last_gen break end
+    for i = mark + 1, #gen_changes do if not seen and gen_changes[i].n > 0 then seen = gen_changes[i] end end
+    while not seen and emu.framecount() - f < 2400 do
+        local g = gen_changes[#gen_changes]
+        if #gen_changes > mark and g.n > 0 then seen = g end
         L.frame()
     end
-    L.check("STAGE3 a tick carried pc_boxes with a new non-null generation", seen ~= nil,
-            fmt("before %s after %s (ticks so far %d)", tostring(gen_before), tostring(last_gen), ticks))
+    for _, g in ipairs(gen_changes) do
+        L.log(fmt("[live] STAGE3 census generation %s at frame %d: pc_boxes %d", tostring(g.gen), g.frame, g.n))
+    end
+    L.log(fmt("[live] STAGE3 box-catch battle ended (overworld input) at frame %s", tostring(last_battle_end)))
+    L.check("STAGE3 a tick carried the box mon in pc_boxes without a reboot", seen ~= nil,
+            seen and fmt("generation %s frame %d (%+d frames after the battle end)", tostring(seen.gen), seen.frame,
+                         seen.frame - (last_battle_end or 0)) or fmt("before %s after %s (ticks %d)", tostring(gen_before), tostring(last_gen), ticks))
+    -- the battle-end trigger, not the 1800-frame periodic: the first box-carrying census lands within two ticks
+    L.check("STAGE3 the box census followed the battle end (within 60 frames, periodic is 1800)",
+            seen ~= nil and last_battle_end ~= nil and seen.frame - last_battle_end <= 60 and seen.frame >= last_battle_end - 30,
+            seen and (seen.frame - (last_battle_end or 0)) or "none")
     -- native save while the client keeps scanning: the census must withhold (wGameLogicPaused) during it
     local s0 = emu.framecount()
     while not L.after("StartMenu", s0) do

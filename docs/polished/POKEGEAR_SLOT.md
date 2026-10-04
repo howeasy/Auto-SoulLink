@@ -185,3 +185,21 @@ also needs both `ld bc,$8` operands widened to `$A` (two more same-size byte edi
 else draws on rows 0-1 at columns 8-9 per card (the title text/arrows) must be checked: UNVERIFIED. The free
 icon tile pair and the B-back path remain UNVERIFIED, live-checkable. Ruling basis: owner 2026-10-04 "put it in
 the Pokegear; has to feel vanilla".
+
+
+---
+
+## Coordinator note after the live Pokegear look (2026-10-04, LIVE_RESULTS.md Run 2 Stage C)
+
+Measured on the real Pokegear (flags SYNTH-set to obtained + map/radio/phone cards): rows 0-1 columns 0-7 are the same
+on every card and the cursor x is 16/32/48/64 (+16 per card); **columns 8-9 are drawn by every card** (clock border `$f7`,
+the map's landmark name, phone/radio frames), so a fifth icon at column 8 collides with each card's own layout and
+widening the black bar alone is not enough. `$58/$59` is NOT a usable icon pair (`$58` is drawn by the radio card, and
+the lower half at +`$10` would hit `$68/$69`, the phone signal bars); no pair in `$50-$75` is free with its +`$10` pair.
+Free tiles: `$59`, `$5B` (drawn, never referenced, not adjacent) and `$76-$7E` (never written by the Pokegear: the built
+`pokegear.2bpp` is trimmed to 38 tiles), plus VRAM bank 1 tiles `$50-$7F` all zero. Consequence: the "one byte plus six
+bytes" estimate above is WRONG; a native-looking fifth card needs its own tile load, a different placement routine and a
+layout that leaves columns 8-9 to the other cards. The earlier claim that column 8 is free held only for the strip itself.
+Open design choice for the owner (not yet asked): (a) a fifth card with its own tile load; (b) put the SLink entry inside an
+existing card that already has a list UI (the Phone card's contact list is the natural vanilla-feeling host, an SLink
+'contact'); (c) the retired Start-menu substitution. Nothing built.

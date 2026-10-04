@@ -1017,3 +1017,15 @@ overworld on the overlay ROM): the stack is `0DAB (DelayFrame+3)`, `25:51C2` (re
 NextOverworldFrame -> **DelayFrame directly**; section 8.3 only searched for calls to `DelayFrames` and missed this
 call to `DelayFrame`. Not yet measured: the same stack at the Pokemon Center receptionist / trade entry (that screen
 was not cheaply reachable from the synthetic save), which is what the trade hook design actually needs.
+
+
+### Live stack measurement at the receptionist (coordinator, 2026-10-04, LIVE_RESULTS.md Run 2 Stage B)
+
+Pokemon Center 2F is map group 20 #1; receptionist at (5,2), talk from (5,3). The warp used the engine's Script_warp bytes
+plus one SYNTH event flag (EVENT_GAVE_MYSTERY_EGG_TO_ELM, `wEventFlags+4` $00 -> $02). Inside the link wait
+(`Special_WaitForLinkedFriend`, frames 1039-1552, 300 samples, SP $C0DC, bank $0A) the stack is
+`DelayFrame+3`, `WaitForLinkedFriend.not_done+0xf`, `_ReturnFarCall`, FarCall-saved registers (carry caller bank $25),
+`25:62B5 ScriptEvents.loop+9`, `25:515F HandleMap+9`, `25:50E2 OverworldLoop.loop+9`, `FarCall+4`; only sp+2 varies. The
+YES/NO prompt and talk-start stacks share the same bank-$25 tail; text printing gives 167 distinct stacks over 249 samples
+(not fingerprintable). The idle-overworld constant (`$516B` at sp+12) does not hold inside the script; inside it the
+stable tail is `$62B5/$515F/$50E2`.

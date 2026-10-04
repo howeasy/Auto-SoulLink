@@ -56,6 +56,12 @@ SYMBOLS = (
     "ExitBattle", "StartBattle", "WildFled_EnemyFled_LinkBattleCanceled", "GiveANickname_YesNo",
     "sSaveVersion", "sChecksum", "wDefaultSpawnpoint", "hMapEntryMethod", "wMapStatus", "wMapTileset", "wMapWidth",
     "wMapHeight", "wMapBlocksPointer", "wCurPocket", "BattlePack", "sGameData", "sGameDataEnd", "sWritingBackup", "sNewBox1", "sBackupNewBox1",
+    # run 2 (Stage A gate log, Stage B receptionist, Stage C Pokegear)
+    "wLinkMode", "wScriptMode", "wEventFlags", "wPokegearFlags", "wTilemap", "wAttrmap", "wPokegearCard",
+    "wJumptableIndex", "wSpriteAnim1", "wShadowOAM", "PokeGear", "InitPokegearTilemap", "PokegearClock_Joypad",
+    "PokegearMap_JohtoMap", "PokegearPhone_Joypad", "PokegearRadio_Joypad", "LinkReceptionistScript_Trade",
+    "Script_TradeCenterClosed", "Special_WaitForLinkedFriend", "Special_WaitForLinkedFriend.done", "CheckPartyForMail",
+    "FixPlayerEVsAndStats", "Special_TryQuickSave",
 )
 # SYNTH party (O-33, disclosed in docs/polished/LIVE_RESULTS.md): five level-50 mons, base stats from the pinned
 # source data/pokemon/base_stats/*.asm (non-FAITHFUL rows), the modern formula Polished uses, DV 15 / IV 31, 0 EV,
@@ -255,6 +261,85 @@ def cmd_control() -> int:
     return 0 if "RESULT: PASS" in text else 1
 
 
+def cmd_explore() -> int:
+    """Run-2 read-only explorations without the client: POL_EXPLORE=B (receptionist stack) | C (Pokegear)."""
+    stage_rom()
+    which = os.environ.get("POL_EXPLORE", "B")
+    if not FIXTURE.exists():
+        raise SystemExit("no fixture: copy run 1's polished_overlay_warp.SaveRAM into <lane>/fixture")
+    SRAM.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(FIXTURE, SRAM / SAVE_NAME)
+    run = LANE / f"explore_{which}"
+    text, _ = launch("tools/polished_live/explore.lua", run, {"POL_EXPLORE": which}, 1500)
+    print(text[-5000:])
+    if (run / "stacks.json").exists():
+        resolve(run / "stacks.json")
+    return 0 if "RESULT: PASS" in text else 1
+
+
+def resolve(path: Path) -> None:
+    """Name every stack word: nearest sym at or below it; ROMX words try the sampled bank, then any bank whose bytes
+    before the word are a call (cd/c4/cc/d4/dc) or an rst. `call` = the return address really follows a call."""
+    rom = ROM.read_bytes()
+    syms: dict = {}
+    for line in SYM.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) == 2 and ":" in parts[0]:
+            b, a = (int(x, 16) for x in parts[0].split(":"))
+            syms.setdefault(b, []).append((a, parts[1]))
+    for rows in syms.values():
+        rows.sort()
+
+    def name(bank, addr):
+        best = None
+        for a, n in syms.get(bank, []):
+            if a <= addr and (a >= (0x4000 if addr >= 0x4000 else 0)):
+                best = (a, n)
+            elif a > addr:
+                break
+        return f"{best[1]}+{addr - best[0]:#x}" if best else "?"
+
+    def flat(bank, addr):
+        return addr if addr < 0x4000 else bank * 0x4000 + addr - 0x4000
+
+    def after_call(bank, addr):
+        f = flat(bank, addr)
+        if f >= 3 and rom[f - 3] in (0xCD, 0xC4, 0xCC, 0xD4, 0xDC):
+            return f"call {rom[f - 3]:02x}{rom[f - 2]:02x}{rom[f - 1]:02x}"
+        if f >= 1 and rom[f - 1] & 0xC7 == 0xC7:
+            return f"rst {rom[f - 1]:02x}"
+        return ""
+
+    stacks = json.loads(path.read_text(encoding="utf-8"))
+    # which stack bytes vary, per phase and SP (the fingerprint can only use the constant ones)
+    groups: dict = {}
+    for st in stacks:
+        groups.setdefault((st["phase"], st["sp"]), []).append(st)
+    for (phase, sp), rows in groups.items():
+        datas = [bytes.fromhex(r["bytes"]) for r in rows]
+        vary = [i for i in range(32) if len({d[i] for d in datas}) > 1]
+        print(f"[vary] {phase} SP={sp}: {len(rows)} distinct / {sum(r['count'] for r in rows)} samples; varying sp+ {vary}")
+    for st in stacks:
+        data = bytes.fromhex(st["bytes"])
+        bank = int(st["rombank"], 16)
+        print()
+        print(f"[{st['phase']}] x{st['count']} SP={st['sp']} hROMBank={st['rombank']} SVBK={st['svbk']}")
+        for off in range(0, 32, 2):
+            w = data[off] | data[off + 1] << 8
+            if w < 0x4000:
+                tag = f"00:{w:04X} {name(0, w)} {after_call(0, w)}"
+            elif w < 0x8000:
+                # call-shaped banks first (sampled bank, then the overworld/script bank $25, then the rest)
+                order = list(dict.fromkeys([bank, 0x25, *range(len(rom) // 0x4000)]))
+                banks = [b for b in order if after_call(b, w)] or [bank]
+                tag = "; ".join(f"{b:02X}:{w:04X} {name(b, w)} {after_call(b, w)}" for b in banks[:2])
+                if len(banks) > 2:
+                    tag += f" (+{len(banks) - 2} more call-shaped banks)"
+            else:
+                tag = "(RAM/data)"
+            print(f"  sp+{off:<2} {w:04X}  {tag}")
+
+
 def cmd_clean() -> int:
     for sub in ("setup", "live", "sram"):
         p = LANE / sub
@@ -265,4 +350,4 @@ def cmd_clean() -> int:
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else ""
-    raise SystemExit({"setup": cmd_setup, "live": cmd_live, "control": cmd_control, "clean": cmd_clean}.get(which, lambda: print(__doc__) or 2)())
+    raise SystemExit({"setup": cmd_setup, "live": cmd_live, "control": cmd_control, "explore": cmd_explore, "clean": cmd_clean}.get(which, lambda: print(__doc__) or 2)())
