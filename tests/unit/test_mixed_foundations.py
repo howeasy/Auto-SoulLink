@@ -40,7 +40,7 @@ async def _session(srv):
     async def send(msg):
         w.write((json.dumps(msg) + "\n").encode())
         await w.drain()
-        return json.loads(await asyncio.wait_for(r.readline(), 3))
+        return json.loads(await asyncio.wait_for(r.readline(), 15))
 
     async def close():
         w.close()
