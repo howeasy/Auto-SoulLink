@@ -689,6 +689,9 @@ local function compose_polished(deps, decision)
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
             safety={check=function(kind) return false, "no Polished write receipt for " .. tostring(kind) end},
             signals=signals, hello_unheld=true,
+            -- no box-arrival event exists in this composition: re-arm the read-only census every 1800 frames (~30 s)
+            -- and at each battle end (client.lua frame_end)
+            rescan_every=1800,
             net=deps.net, json=json, hud=hud, io=io_, profile=profile, sites={}, area_map=area_map,
             player=assert(deps.player, "explicit player required"), rom_type=P.ROM_TYPE,
             rom_sha1=decision.rom_sha1, log=deps.log, evolutions=evolutions.evolutions,

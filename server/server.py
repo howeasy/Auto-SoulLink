@@ -5300,6 +5300,15 @@ class SLinkServer:
                     for _area, players in s.pending_captures.items():
                         cap = players.get(player_id)
                         if cap and cap.key == key:
+                            # this player's cartridge adapter (a mixed pair can differ); a stub keeps the default
+                            _own = self.adapter_for(player_id) if hasattr(self, "adapter_for") else self.adapter
+                            if not getattr(_own, "supports_box_mon", lambda: True)():
+                                # the client composes no box executor: a relocation could only fail
+                                if (player_id, key, "no_box_mon") not in self._warned_memorial_keys:
+                                    self._warned_memorial_keys.add((player_id, key, "no_box_mon"))
+                                    log.warning(f"[{player_id}] Quarantined mon {key[:8]} in memorial box: "
+                                                f"not relocated (this client cannot execute box_mon)")
+                                break
                             log.warning(
                                 f"[{player_id}] Quarantined mon {key[:8]} found in memorial box! "
                                 f"Queueing party_mon + box_mon to relocate."

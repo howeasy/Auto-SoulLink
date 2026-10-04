@@ -108,6 +108,8 @@ function Client.new(p)
     -- kind the server never admitted.
     assert(p.artifact_kind == nil or p.artifact_kind == "clean" or p.artifact_kind == "overlay",
            "artifact_kind must be clean or overlay")
+    assert(p.rescan_every == nil or (type(p.rescan_every) == "number" and p.rescan_every % 1 == 0
+           and p.rescan_every >= Client.TICK_INTERVAL), "rescan_every must be nil or whole frames >= one tick")
     local self = {
         player = p.player, rom_type = p.rom_type, rom_sha1 = p.rom_sha1,
         -- Gen 2: one pairing foundation for all three packs (O-16; gen2_gsc.py game_id); Polished injects its own
@@ -130,6 +132,7 @@ function Client.new(p)
         -- until that record reads HP 0 (UpdateFaintedPlayerMon runs before the copy-back)
         faint_latches = {}, refusals_logged = {},
         pending_rescan = false, key_alias = nil, retired_alias = {},
+        rescan_every = p.rescan_every, -- Polished: periodic census refresh in frames (see frame_end); nil = never
         -- Gen 2: messages observed before this connection's hello (see send)
         held = {}, held_full = false, last_frame = nil,
         -- Gen 2 (gen2-box-durability): backing withdraws whose box copy waits for a native SAVE
@@ -1830,6 +1833,18 @@ function Client.new(p)
             hud.show("SLINK STOPPED - SEE LOG", 255, 64, 64, 600)
         end
         self:settle_faints()
+        -- p.rescan_every (Polished only, compose_polished): no engine site, PC event or box number marks a box
+        -- arrival there, so a battle end (wBattleMode nonzero -> 0) or the periodic interval re-arms the census,
+        -- checked once per tick. nil (vanilla): never entered. The rescan stays read-only and fail-closed.
+        if self.rescan_every and self.frame % Client.TICK_INTERVAL == 0 then
+            local b = reads.read_battle()
+            local mode = b and b.mode
+            if (mode == 0 and (self.census_mode or 0) ~= 0)
+                or math.abs(self.frame - (self.census_frame or 0)) >= self.rescan_every then
+                self.pending_rescan, self.census_frame = true, self.frame
+            end
+            if mode then self.census_mode = mode end
+        end
         -- KEY-SCOPE-5: an incomplete scan is retried, at most once per tick
         if self.pending_rescan or (not self.box_complete and self.frame % Client.TICK_INTERVAL == 0) then
             self.pending_rescan = false; self:rescan_boxes()

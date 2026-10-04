@@ -2183,9 +2183,13 @@ class SoulLinkState:
             # Safety: never quarantine if it would leave the player with no alive mons.
             alive_keys = {m["key"] for m in party if m.get("key") and m.get("hp", 0) > 0}
             quarantined = set()
+            # A client with no box executor (adapter.supports_box_mon False) cannot deposit: no box_mon.
+            boxable = self._adapter_for(player_id).supports_box_mon()
             for area_id, players in self.pending_captures.items():
                 cap = players.get(player_id)
-                if cap and cap.key in self.party_keys[player_id]:
+                if cap and cap.key in self.party_keys[player_id] and not boxable:
+                    log.info(f"[{player_id}] skip re-quarantine: {cap.key[:8]} (client has no box executor)")
+                elif cap and cap.key in self.party_keys[player_id]:
                     remaining_alive = alive_keys - quarantined - {cap.key}
                     if not remaining_alive:
                         log.info(f"[{player_id}] skip re-quarantine: {cap.key[:8]} (no alive mons would remain)")
@@ -2779,7 +2783,9 @@ class SoulLinkState:
         # when party_size hasn't been reported yet — prevents quarantining the
         # starter before the first hello sets the actual count.
         party_count = self.party_size.get(player_id, 0)
-        if not in_box and party_count >= 1 and not gift_capture:
+        if not in_box and party_count >= 1 and not gift_capture and not self._adapter_for(player_id).supports_box_mon():
+            log.info(f"[{player_id}] skip quarantine: {key[:8]} (client has no box executor)")
+        elif not in_box and party_count >= 1 and not gift_capture:
             self.queued_commands[player_id].append({"cmd": "box_mon", "key": key})
             log.info(f"[{player_id}] quarantine: {key[:8]} → box (pending link)")
         elif not in_box and gift_capture:
