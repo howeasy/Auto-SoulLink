@@ -470,6 +470,415 @@ Measured from the symbols: Polished `wPlayerTrademon` `00:c51c` .. `wPlayerTrade
   "path": "F:/slink-work/wt/polished/docs/polished/HOOKS.md",
   "line": 66,
   "expect": "verify_trade_hook"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 5,
+  "expect": "SLINK_TRADE_OFS_MAGIC"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 6,
+  "expect": "SLINK_TRADE_OFS_VERSION"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 8,
+  "expect": "SLINK_TRADE_OFS_GENERATION"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 11,
+  "expect": "SLINK_TRADE_OFS_SLOT"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 12,
+  "expect": "SLINK_TRADE_OFS_AVAILABLE"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 13,
+  "expect": "SLINK_TRADE_OFS_MASK"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 14,
+  "expect": "SLINK_TRADE_OFS_TOKEN"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 16,
+  "expect": "ASSERT SLINK_TRADE_OFS_TOKEN + 4 == SLINK_TRADE_LEASE_SIZE"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 45,
+  "expect": "SlinkTradeCheckToken::"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_frame.asm",
+  "line": 77,
+  "expect": "SlinkTradeClose::"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_dispatch.asm",
+  "line": 7,
+  "expect": "ld hl, sp + 5"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_dispatch.asm",
+  "line": 9,
+  "expect": "cp BANK(NextOverworldFrame)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_dispatch.asm",
+  "line": 13,
+  "expect": "cp LOW(DelayFrame + 3)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_dispatch.asm",
+  "line": 19,
+  "expect": "cp LOW(DelayFrames + 3)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_dispatch.asm",
+  "line": 25,
+  "expect": "cp LOW(NextOverworldFrame + 9)"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_service.asm",
+  "line": 568,
+  "expect": "SlinkTradeCheckIncoming::"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_service.asm",
+  "line": 280,
+  "expect": "call SlinkTradeValidateSnapshot"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_items.asm",
+  "line": 16,
+  "expect": "SlinkTradeItemAllowed::"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_items.asm",
+  "line": 1,
+  "expect": "refuse mail, key items, non-tossable items and placeholder IDs"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/patch/gen2/src/trade_items.asm",
+  "line": 33,
+  "expect": "184 allowed IDs including NONE"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gb_trade_lease.lua",
+  "line": 16,
+  "expect": "OFF_LEASE, L.LEASE_SIZE = 14, 16"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/lua/gb_trade_lease.lua",
+  "line": 71,
+  "expect": "bytes[9] <= 3"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/tools/build_gen2_companion.py",
+  "line": 514,
+  "expect": "def verify_trade_hook("
+ },
+ {
+  "path": "F:/slink-work/wt/polished/tools/build_gen2_companion.py",
+  "line": 516,
+  "expect": "0x64, 0x73b1, 0x689d"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/tools/build_gen2_companion.py",
+  "line": 527,
+  "expect": "changed outside its two-byte script pointer"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/data/polished/polishedcrystal.sym",
+  "line": 63956,
+  "expect": "00:c51c wPlayerTrademon"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/data/polished/polishedcrystal.sym",
+  "line": 64080,
+  "expect": "00:c54c wPlayerTrademonPersonality"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/data/polished/polishedcrystal.sym",
+  "line": 64085,
+  "expect": "00:c54d wPlayerTrademonForm"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/data/polished/polishedcrystal.sym",
+  "line": 64095,
+  "expect": "00:c550 wPlayerTrademonCaughtData"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/data/polished/polishedcrystal.sym",
+  "line": 64099,
+  "expect": "00:c551 wPlayerTrademonEnd"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/data/polished/polishedcrystal.sym",
+  "line": 287,
+  "expect": "00:0da8 DelayFrame"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/data/polished/polishedcrystal.sym",
+  "line": 285,
+  "expect": "00:0da1 DelayFrames"
+ },
+ {
+  "path": "F:/slink-work/wt/polished/data/polished/polishedcrystal.sym",
+  "line": 22894,
+  "expect": "25:5185 NextOverworldFrame"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/engine/events/npc_trade.asm",
+  "line": 161,
+  "expect": "ld [wMonType], a"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/engine/link/link.asm",
+  "line": 2820,
+  "expect": "CheckPartyForMail:"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/engine/link/link.asm",
+  "line": 2827,
+  "expect": "call ItemIsMail_a"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/engine/link/link.asm",
+  "line": 2823,
+  "expect": "ld hl, wPartyMon1Item"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/engine/pokemon/move_mon.asm",
+  "line": 1,
+  "expect": "TryAddMonToParty:"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/engine/pokemon/move_mon.asm",
+  "line": 8,
+  "expect": "ld de, wOTPartyCount"
+ },
+ {
+  "path": "F:/slink-work/cache/polished/src/engine/pokemon/move_mon.asm",
+  "line": 448,
+  "expect": "AddTempMonToParty:"
  }
 ]
 ```
+
+---
+
+# 8. Open items settled (2026-10-04)
+
+Coordinator correction carried through: **Polished's `trademon` is 53 bytes, vanilla's 50**, so §2.1's
+"+1 byte" framing and the 52-byte arithmetic in §2.1/§2.2 were wrong. The 16-byte lease conclusion is
+**withdrawn and re-derived below**.
+
+> **Method note, because it bit me once:** `00:c51c` is a **WRAM** address. Reading the ROM file at
+> that offset yields bytes (`3e 32 ea bd df …`) that are *not* the trademon's contents. Every ROM
+> byte quoted in this section is a real code address (bank ≠ WRAM, or ROM0 code), and none is quoted
+> for a RAM symbol.
+
+## 8.1 The 16-byte lease, byte by byte — SETTLED
+
+`patch/gen2/src/trade_frame.asm:6-14` defines every field, and the last line settles the size:
+
+```
+DEF SLINK_TRADE_OFS_MAGIC      EQU 0
+DEF SLINK_TRADE_OFS_VERSION    EQU 4
+DEF SLINK_TRADE_OFS_COMMAND    EQU 5
+DEF SLINK_TRADE_OFS_GENERATION EQU 6
+DEF SLINK_TRADE_OFS_ACK        EQU 7
+DEF SLINK_TRADE_OFS_RESULT     EQU 8
+DEF SLINK_TRADE_OFS_SLOT       EQU 9
+DEF SLINK_TRADE_OFS_AVAILABLE  EQU 10
+DEF SLINK_TRADE_OFS_MASK       EQU 11
+DEF SLINK_TRADE_OFS_TOKEN      EQU 12
+ASSERT SLINK_TRADE_OFS_TOKEN + 4 == SLINK_TRADE_LEASE_SIZE
+```
+
+| + | field | meaning | written by | read by |
+|---|---|---|---|---|
+| 0-3 | `MAGIC` | `SLT1` = `$53 $4C $54 $31` (`slink_abi.inc:42-45`) | Lua host | ROM: `SlinkTradeCheckHeader` compares all four, refuses otherwise |
+| 4 | `VERSION` | 1 (`slink_abi.inc:46`) | Lua host | ROM: same |
+| 5 | `COMMAND` | `QUERY 1 / OFFER 2 / PROMPT 3 / APPLY 5 / DONE 7 / RELEASE 8` (`slink_abi.inc:47-52`) | **both** | **both** |
+| 6 | `GENERATION` | visit counter; bumps each entry so a stale reply cannot be taken | Lua host | ROM |
+| 7 | `ACK` | host acknowledges the generation | Lua host | ROM |
+| 8 | `RESULT` | outcome code | Lua host | ROM |
+| 9 | `SLOT` | **own party slot** (0..5) | Lua host | ROM (`SlinkTradeCheckOwnSlot`); Lua validates `bytes[9] <= 3` (`lua/gb_trade_lease.lua:71`) |
+| 10 | `AVAILABLE` | item bitmask — items this mon may carry | Lua host | ROM; `SlinkTradeClose` zeroes it |
+| 11 | `MASK` | item bitmask — items the mon actually carries | Lua host | ROM; `SlinkTradeClose` zeroes it |
+| 12-15 | `TOKEN` | 4-byte per-visit token | Lua host | ROM: `SlinkTradeCheckToken` compares it against the same 4 bytes on the private stack, and refuses a **zero** token (all-zero) |
+
+**Correction to my own previous card:** I claimed `+4` and `+13..+15` were spare. **They are not** —
+`TOKEN` is a 4-byte value at `+12..+15`, and the `ASSERT` proves the 16 bytes are exactly full. All
+16 bytes are allocated.
+
+**What the lease carries today: protocol metadata and a party slot — no Pokémon data whatsoever.**
+No species, no DVs, no OT id, no form, no name.
+
+**Therefore the Polished question answers itself: the lease stays 16 bytes.** A Polished identity
+needs 3 DV bytes + Personality + the ExtSpecies/Form byte + a 9-bit species + a 2-byte OT id, and
+**none of it belongs in the lease** — it belongs in the staged trademon struct, exactly as vanilla
+does it. Growing the lease would add capacity nothing uses and break `SLINK_PUBLIC_SIZE`
+(`slink_abi.inc:53`).
+
+**But one field does change meaning.** `+9 SLOT` is a party slot, and `PARTY_LENGTH` is 6 in both
+games, so `SLOT` is fine. The `AVAILABLE`/`MASK` item bitmasks are item-domain, and Polished's item
+table differs — **UNVERIFIED** how wide those masks are and whether 16 bits suffice.
+
+## 8.2 The trademon struct, corrected to 53 bytes — SETTLED from the sym
+
+`data/polished/polishedcrystal.sym`: `wPlayerTrademon` **`00:c51c`**, `wPlayerTrademonEnd`
+**`00:c551`** → **53 bytes**. Every field, from the sym:
+
+| off | address | aliases |
+|---|---|---|
+| +0 | `00:c51c` | `Species` |
+| +1 | `00:c51d` | `SpeciesName` (11) |
+| +12 | `00:c528` | `Nickname` (11) |
+| +23 | `00:c533` | `SenderName` (11) |
+| +34 | `00:c53e` | `OTName` (11) |
+| +45 | `00:c549` | `DVs` / `HPAtkDV`, `+46` `DefSpeDV`, `+47` `SatSdfDV` |
+| +48 | `00:c54c` | `Personality` / `Shiny` / `Ability` / `Nature` |
+| +49 | `00:c54d` | `ExtSpecies` / `Form` / `Gender` / `IsEgg` |
+| +50 | `00:c54e` | `ID` (dw) |
+| +52 | `00:c550` | `CaughtData` |
+| +53 | `00:c551` | `End` |
+
+So Polished folds **two** attribute bytes where vanilla had none: `+48` (shiny/ability/nature) and
+`+49` (ext-species/form/gender/is-egg). The macro source lists them as separate labels but they
+**alias two addresses** — the sym is authoritative.
+
+**Consequence for the port:** the snapshot preimage is **53 + 11 + 11 = 75 bytes**, not 70. Any
+"70 bytes must not change" check carried over from vanilla is wrong by five. This is T4, and it is
+now a *number*, not a re-derivation.
+
+## 8.3 The frame-wait stack fingerprint — SETTLED NEGATIVE, needs a live observation
+
+First, a correction about what the card asks. **`verify_trade_hook` says nothing about the
+frame-wait call chain.** `tools/build_gen2_companion.py:514-527` asserts only that the 13-byte
+object event changes **only** its two-byte script pointer, and that the receptionist stays in its
+original map bank. The fingerprint is a **separate runtime check** in
+`patch/gen2/src/trade_dispatch.asm:8-29`, reached from `SlinkTradeDispatch`, which inspects the
+stack on entry:
+
+```
+sp+5  == BANK(NextOverworldFrame)          ; bank byte of the frame-wait caller
+sp+12..13 == LOW/HIGH(DelayFrame + 3)      ; return address into DelayFrame
+sp+14..15 == LOW/HIGH(DelayFrames + 3)     ; return address into DelayFrames
+sp+16..17 == LOW/HIGH(NextOverworldFrame + 9)
+```
+followed by live guards: `rSVBK & 7 < 2`, `wScriptMode == 0`, `wBattleMode == 0`, and more below.
+
+So it asserts a specific call chain: **NextOverworldFrame → DelayFrames → DelayFrame**, and nothing
+else may reach the service.
+
+**Polished, read from the release ROM** (bank ≠ WRAM, so these bytes are real):
+
+| symbol | bank:addr | flat | bytes at the symbol |
+|---|---|---|---|
+| `DelayFrame` | `00:0da8` | `0x000da8` | `f0 44 e0 d7 af e0 8f 76` |
+| `DelayFrames` | `00:0da1` | `0x000da1` | `cd a8 0d d2 0f ac 9f` |
+| `NextOverworldFrame` | `25:5185` | `0x095185` | `fa 93 ce a7 20 08 f0 d7` |
+
+`DelayFrames` is literally `call DelayFrame` (`cd a8 0d`) then `ret` (`d2`) — the chain is intact at
+*that* link. **But `NextOverworldFrame` does not call `DelayFrames`.** Scanning its first 64 bytes
+for `cd a1 0d` returns **nothing**; the bytes at `NextOverworldFrame+9` are
+`20 0d af e0 d7 fa 93 ce a7 c8 3d ea` — `jr nc`, `ldh`, `ld a,[…]`, `rst`, no `call`.
+
+**Settled negative: the vanilla fingerprint cannot be re-derived by substitution.** The chain
+Polished uses does not run overworld-frame → `DelayFrames` → `DelayFrame`. `HOOKS.md` §2 row 18's
+note that the caller path goes through `farjp AnimateTitleCrystal` and a scene jumptable is
+consistent with what the bytes show.
+
+**The exact live observation that would settle it:** break in the overlay's Polished build at the
+moment the trade service is entered from the frame wait, and read `sp+0 .. sp+24`. Whatever
+`sp+5` and the three return addresses are *in that build* is the new fingerprint; the overlay
+constants then become `BANK(...)`/`LOW(...)`/`HIGH(...)` over whatever symbols those addresses land
+in. No static method can produce this, because the chain is a property of the linked binary, not of
+any source file. **Until then T1 is unclosable and no Polished overlay should ship a trade service.**
+
+## 8.4 Does the received mon get Pokedex-marked? — PARTLY SETTLED
+
+`TryAddMonToParty` (`engine/pokemon/move_mon.asm`) selects the destination by `wMonType & $f`:
+clear → `wPartyCount`, set → `wOTPartyCount` (`DoNPCTrade` sets `wMonType = 0`, so the **player
+party**), bounds-checks `PARTY_LENGTH`, increments the count and copies the temp mon. The
+entry points I read (`AddTempMonToParty` at `:448`, `TryAddMonToParty`'s head) contain **no dex
+write**.
+
+**UNVERIFIED** whether the dex is marked later in `TryAddMonToParty`'s OT branch, by
+`SetSeen`/`LoadTempMon` or by the caller. Settled by grepping the rest of the function for
+`SetSeen`/`Pokedex`/`SeenMon`, and by one live trade whose received mon is checked against the dex.
+
+## 8.5 Is a box withdrawal possible mid-trade? — SETTLED
+
+Two independent answers, and they differ:
+
+* **The overlay never offers one.** `SlinkTradeCheckIncoming` (`trade_service.asm:568-571`) reads
+  the staged OT party and refuses a mismatch; `SlinkTradeValidateSnapshot` and the party-count
+  comparison at `:271-273` (`wPartyCount` before vs after) are the same-instant guards. The
+  receptionist path selects from the **party**, via `SelectTradeOrDayCareMon`
+  (`PARTYMENUACTION_GIVE_MON`). A box is never a source.
+* **The engine's removal is narrower anyway.** `RemoveMonFromPartyOrBox` → **`RemoveMonFromParty`**
+  (`engine/pokemon/move_mon.asm:894`), so the box half is gone. **UNVERIFIED** whether that is a
+  rename or a behaviour change — `HOOKS.md` §3.5 flags the same open item.
+
+**What freezes the game** during the receptionist flow is not a single flag: the service dispatch
+checks `rSVBK & 7 < 2`, `wScriptMode == 0`, `wBattleMode == 0` and (below the fold) `wLinkMode`,
+and the overlay's own hold is `wGameLogicPaused`. The frame-wait fingerprint exists precisely because
+"we are in the idle overworld's own frame wait" is a **stack shape**, not a flag — which is why
+losing it is fatal.
+
+## 8.6 One mail policy for both — PROPOSAL
+
+Two policies exist and they answer different questions:
+
+| | what it asks | scope |
+|---|---|---|
+| Polished's `CheckPartyForMail` (`engine/link/link.asm:2820`) | does **any** party slot hold mail? Walks `wPartyMon1Item` with stride `PARTYMON_STRUCT_LENGTH`, `call ItemIsMail_a`, sets `hScriptVar` TRUE on the first hit | whole party, one bit |
+| overlay's `SlinkTradeItemAllowed` (`trade_items.asm:19-33`) + `SlinkTradeCheckIncoming` | is **this** item ID tradeable at all? 256-entry table, **184 allowed IDs including `$00`**, `$FF` always refused; refuses mail, key items, non-tossable and placeholder IDs | one item |
+
+They are **complementary, not divergent** — `CheckPartyForMail` is a party precondition, and
+`SlinkTradeItemAllowed` already refuses mail among other classes. The risk is only that they are
+maintained separately and drift.
+
+**Proposed single policy — one source of truth, two call sites:**
+
+1. Keep `SlinkTradeItemAllowed`'s table as the **only** mail truth, and add Polished's condition to
+   it rather than shipping a second predicate: the trade is offered only if
+   `CheckPartyForMail`-equivalent is clear **and** every candidate item passes the table.
+2. Make the entry point **one** `SlinkTradeMailPolicyClear` that runs both, so a future item class
+   added to the table cannot be forgotten by the party check.
+3. Reuse Polished's own `ItemIsMail_a` rather than the overlay's own mail test, so an item Polished
+   newly classifies as mail is refused without an overlay change.
+4. Add the invariant as a **build-time `ASSERT`**: the number of mail IDs refused by the table equals
+   the count `data/items/mail_items.asm` declares. This is the check that fails loudly if the two
+   ever drift, and it is a one-line test.
+
+**UNVERIFIED:** the exact mail-item set in Polished's `data/items/mail_items.asm` and whether
+`ItemIsMail_a` and the overlay's table agree today.
+
+## 8.7 Card status after this pass
+
+| card | before | after |
+|---|---|---|
+| T1 frame-wait fingerprint | UNVERIFIED | **settled negative** — not substitutable; needs a live `sp` read in a linked build |
+| T2 `verify_trade_hook` re-derivation | open | open; its `(0x64, 0x73b1, 0x689d)` triple must be re-derived for `24:…` |
+| T3 symbol removals | open | open; unchanged (`BackupGSBallFlag`, `GetCaughtGender`, `PLAYER_NAME_LENGTH`) |
+| T4 snapshot contract | "re-derive" | **now a number: 75 bytes**, not 70 |
+| T5 lease payload | open | **closed** — the lease carries no mon data; 16 bytes stands |
+| T6 vblank / SGB | open | open |
+| T7 mail policy | open | **now has a proposal** (§8.6) with a build-time `ASSERT` as the drift guard |
+| T8 party replace | open | open; window shape unchanged, `TryAddMonToParty` confirmed |
+
+**The one that must move first is unchanged: T1.** A Polished overlay must not ship a trade service
+until the stack fingerprint is measured in a linked build.
