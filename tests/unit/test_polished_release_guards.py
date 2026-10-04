@@ -144,18 +144,15 @@ def _manager_dicts() -> list[tuple[str, dict]]:
     ]
 
 
-def test_manager_polished_randomize_is_refused() -> None:
-    """Guard: the Randomize refusal for Polished must remain in place.
+def test_manager_polished_randomize_is_offered() -> None:
+    """Guard (flipped 2026-10-04): the Manager offers Randomize for Polished once the fork jar with the
+    PolishedCrystalRomHandler is pinned (patches 0016-0021, data/upr_jars.json).
 
-    Located by importing the module and scanning its tables for the refusal text rather
-    than naming the owning table - server/manager.py:113 holds it, but the table name
-    is not something this test should depend on.
+    Located by importing the module and scanning its tables for the old refusal text rather
+    than naming the owning table.
 
-    Blocker flipped by: a Polished jar pinned in data/upr_jars.json AND
-    PolishedCrystalRomHandler landing (docs/polished/UPR_HANDLER.md section 1).
-
-    RED CONTROL: delete the gen2_polished "turn Randomize off" entry at
-    server/manager.py:113.
+    RED CONTROL: restore the gen2_polished "turn Randomize off" row in server/manager.py's
+    NON_RANDOMIZABLE_GAMES.
     """
     hits = [
         (name, value[POLISHED_FAMILY])
@@ -163,7 +160,8 @@ def test_manager_polished_randomize_is_refused() -> None:
         if isinstance(value.get(POLISHED_FAMILY), str)
         and "Randomize off" in value[POLISHED_FAMILY]
     ]
-    assert hits, "no manager table refuses Randomize for gen2_polished"
+    assert not hits, f"a manager table still refuses Randomize for gen2_polished: {hits}"
+    assert POLISHED_FAMILY in manager.new_run_form()["randomizer_games"]
 
 
 def test_manager_polished_family_is_still_listed_with_its_refusals() -> None:
@@ -226,16 +224,13 @@ def test_release_verifier_duo_pairs_need_no_polished_partner() -> None:
 # --------------------------------------------------------------------------- 4. randomizer
 
 
-def test_polished_randomizer_is_disabled() -> None:
-    """Guard: no Manager randomizer path may accept Polished while the handler is absent.
+def test_polished_randomizer_is_enabled() -> None:
+    """Guard (flipped 2026-10-04): the flag is on because the fork jar with a working
+    PolishedCrystalRomHandler (patches 0016-0021) is pinned in data/upr_jars.json.
 
-    Blocker flipped by: a pinned 0017-0019 fork jar in data/upr_jars.json plus a
-    working PolishedCrystalRomHandler (docs/polished/UPR_HANDLER.md §1, RELEASE.md F5).
-
-    RED CONTROL: set `POLISHED_RANDOMIZER_ENABLED = True` in
-    server/upr_pipeline.py:268.
+    RED CONTROL: set `POLISHED_RANDOMIZER_ENABLED = False` in server/upr_pipeline.py.
     """
-    assert upr_pipeline.POLISHED_RANDOMIZER_ENABLED is False
+    assert upr_pipeline.POLISHED_RANDOMIZER_ENABLED is True
 
 
 def test_polished_randomizer_flag_gates_the_manager_paths() -> None:

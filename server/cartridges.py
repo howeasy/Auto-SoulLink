@@ -38,7 +38,7 @@ def companion_admitted(info: dict) -> bool:
     also needs its activated catalog row."""
     variant = info.get("variant")
     if variant == upr_pipeline.POLISHED_VARIANT:
-        return False   # the patcher target exists (SLink-Polished.ups); held until the Polished client composes (lua/gen2/entry.lua)
+        return True    # the patcher target (SLink-Polished.ups) is the overlay the randomizer reads
     if variant in ("Crystal", "Gold", "Silver"):
         return variant in COMPANION_TITLES and patcher.gen2_overlay_admitted(variant.lower())
     return variant in COMPANION_TITLES

@@ -109,8 +109,6 @@ NON_RANDOMIZABLE_GAMES = {
     # randomizer form as its family, and "gen3_exp" is not one of upr_settings.FAMILIES.
     "gen3_exp": ("The Emerald Expansion has no randomizer and no companion patch -- it is a prebuilt "
                  "reference ROM; the randomizer supports FireRed / LeafGreen / Emerald"),
-    # ponytail: until the UPR fork handler lands (docs/polished/UPR_HANDLER.md), then drop this row.
-    "gen2_polished": "Polished Crystal randomizer support is coming via the UPR fork; turn Randomize off",
 }
 
 
@@ -1502,6 +1500,7 @@ class RunManager:
             FAMILY_GEN2,
             FAMILY_GEN3_EXP,
             FAMILY_POLISHED,
+            POLISHED_RANDOMIZER_ENABLED,
             POLISHED_RANDOMIZER_REFUSAL,
             family_of,
             find_upr_jar,
@@ -1561,7 +1560,7 @@ class RunManager:
         if randomize and family == FAMILY_GEN2:
             return web.json_response({"ok": False, "error": (
                 "Gen 2 has no randomizer support; turn Randomize off")}, status=400)
-        if randomize and family == FAMILY_POLISHED:
+        if randomize and family == FAMILY_POLISHED and not POLISHED_RANDOMIZER_ENABLED:
             return web.json_response({"ok": False, "error": POLISHED_RANDOMIZER_REFUSAL}, status=400)
         # Either a settings file the user built in UPR's GUI, the form's spec (every option
         # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last

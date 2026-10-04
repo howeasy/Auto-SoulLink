@@ -100,13 +100,13 @@
   "gen1_purergb"
  ],
  "non_randomizable": {
-  "gen2_polished": "Polished Crystal randomizer support is coming via the UPR fork; turn Randomize off",
-  "gen3_rr": "Randomized Radical Red is not supported in this release; the randomizer supports FireRed / LeafGreen / Emerald"
+   "gen3_rr": "Randomized Radical Red is not supported in this release; the randomizer supports FireRed / LeafGreen / Emerald"
  },
  "randomizer_games": [
   "gen1",
   "gen1_purergb",
   "gen2",
+  "gen2_polished",
   "gen3",
   "gen3_e"
  ],

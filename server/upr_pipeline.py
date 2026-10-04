@@ -263,10 +263,10 @@ _GEN2_TITLES = ("crystal", "gold", "silver")
 # recognised by the exact sha1s polished_rom_scan pins: the release (data/polished_sources.lock.json) and the SLink
 # companion overlay (data/polished/overlay_provenance.json). It randomizes the OVERLAY (cartridges.py applies the
 # UPS first) on a fork jar whose polished_offsets.ini has an entry for the source's header checksum. The pipeline
-# below is complete; POLISHED_RANDOMIZER_ENABLED keeps every Manager path refusing it until the Polished client
-# exists (flip it with that card; manager.py's NON_RANDOMIZABLE_GAMES row goes with it).
+# below is complete; POLISHED_RANDOMIZER_ENABLED is the one switch every Manager path reads (cartridges.provision and
+# the /api/cartridges handler refuse while it is False). The jar must be the pinned fork cut with patches 0016-0021.
 POLISHED_VARIANT = "Polished Crystal"
-POLISHED_RANDOMIZER_ENABLED = False
+POLISHED_RANDOMIZER_ENABLED = True
 POLISHED_RANDOMIZER_REFUSAL = "Polished Crystal randomizer support is coming via the UPR fork; turn Randomize off"
 POLISHED_JAR_REFUSAL = (
     "Polished Crystal randomization needs SLink's UPR fork jar with a Polished Crystal entry for this "
@@ -306,6 +306,18 @@ def jar_supports_polished(jar: str, rom: bytes) -> bool:
         # the real section line carries a trailing // comment (patch 0019's ini), so no end-of-line anchor
         return re.search(r"^CRCInHeader=-1(?![0-9])", text, flags=re.MULTILINE) is not None
     return (rom[0x14E] << 8 | rom[0x14F]) in pinned     # read big-endian, as the handler does
+
+
+def jar_has_polished(jar: str) -> bool:
+    """True when the jar carries the Polished Crystal handler's offsets (patches 0016+); an older trusted fork jar does
+    not, and the picker should say so before the button rather than after a Java failure."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            zf.getinfo("com/dabomstew/pkrandom/config/polished_offsets.ini")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return False
+    return True
 
 
 @functools.cache
@@ -678,10 +690,11 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
             info["title"] = f"{info['variant']} · {KIND_WORDS.get(g3['kind'], g3['kind'])}"
             return info
         if pol := polished_identify(rom):
-            # Recognised, but not offered: there is no Polished client to run it yet (lua/gen2/entry.lua stops at
-            # admission), so every provisioning path refuses it. Flip clean back on with the client card.
-            info.update(family=FAMILY_POLISHED, kind=pol["kind"], clean=False, variant=POLISHED_VARIANT,
-                        title=f"{POLISHED_VARIANT} 3.2.3 (the SLink client for it is not ready yet)")
+            # A pinned release or the byte-exact SLink overlay: offered, and randomized as the overlay (cartridges.py
+            # applies the UPS first). Whether the randomizer itself runs is POLISHED_RANDOMIZER_ENABLED's business.
+            info.update(family=FAMILY_POLISHED, kind=pol["kind"], clean=True, variant=POLISHED_VARIANT,
+                        title=f"{POLISHED_VARIANT} 3.2.3 · "
+                              + ("SLink companion overlay" if pol["kind"] == "overlay" else KIND_WORDS["clean"]))
             return info
         gen2_title = _gen2_clean_sha1s().get(info["sha1"])
         if gen2_title:
@@ -723,6 +736,7 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
     if out["jar_found"] and not out["jar_trusted"]:
         out["jar_error"] = untrusted_jar_message(jar)
     out["jar_fork"] = out["jar_found"] and jar_is_fork(jar)
+    out["jar_polished"] = out["jar_found"] and jar_has_polished(jar)
     # the sections the jar can randomize under -- the Cartridges form checks a pure pick's
     # "<Variant> overlay (U)" entry here, before the button, instead of after a Java failure
     out["jar_entries"] = sorted(jar_entries(jar)) if out["jar_found"] else []

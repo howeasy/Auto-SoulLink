@@ -220,9 +220,9 @@ def test_family_and_describe_rom_recognise_release_and_overlay(roms, tmp_path):
         paths[kind].write_bytes(data)
         info = P.describe_rom(str(paths[kind]), jar_fork=True)
         assert (info["family"], info["kind"], info["variant"]) == (U.FAMILY_POLISHED, kind, P.POLISHED_VARIANT)
-        assert info["clean"] is False                   # held until the Polished client card
+        assert info["clean"] is True                    # a pinned release or overlay is offered
     assert P.family_of({"a": str(paths["clean"]), "b": str(paths["overlay"])}) == U.FAMILY_POLISHED
-    assert P.FAMILY_POLISHED == U.FAMILY_POLISHED and P.POLISHED_RANDOMIZER_ENABLED is False
+    assert P.FAMILY_POLISHED == U.FAMILY_POLISHED and P.POLISHED_RANDOMIZER_ENABLED is True
 
 
 def test_randomize_never_runs_the_gen1_identify_on_polished_and_needs_a_matching_jar(roms, tmp_path, monkeypatch):

@@ -114,7 +114,7 @@ function randomizerFields(form) {
       var p = this.pre;
       if (!p) return '';
       if (!p.jar_found) return 'jar not found';
-      if (p.jar_fork) return 'SLink fork jar (vanilla + pureRGB + FireRed / LeafGreen + Emerald)';
+      if (p.jar_fork) return 'SLink fork jar (vanilla + pureRGB + FireRed / LeafGreen + Emerald + Polished Crystal)';
       return this.family === 'gen3_frlg' || this.family === 'gen3_emerald'
         ? 'stock jar (not accepted for ' + this.familyLabel(this.family) + ')' : 'stock jar (vanilla only)';
     },
@@ -373,6 +373,10 @@ function randomizerFields(form) {
       if (this.rdraft.randomize && (this.family === 'gen3_frlg' || this.family === 'gen3_emerald')
           && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
         return 'Randomizing ' + this.familyLabel(this.family) + ' needs the current SLink fork jar.';
+      }
+      if (this.rdraft.randomize && this.family === 'gen2_polished'
+          && this.pre && this.pre.jar_found && !this.pre.jar_polished) {
+        return 'Randomizing Polished Crystal needs the current SLink fork jar (patches 0016-0021).';
       }
       if (this.rdraft.randomize && this.family === 'gen1_purergb'
           && this.pre && this.pre.jar_entries) {
