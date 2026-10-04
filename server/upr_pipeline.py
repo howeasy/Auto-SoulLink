@@ -985,7 +985,9 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
     if results["a"]["spec"] != results["b"]["spec"]:
         raise UprPipelineError(
             f"the two ROMs ended up with different settings applied: "
-            f"{summarize(results['a']['spec'])} vs {summarize(results['b']['spec'])}")
+            f"{summarize(results['a']['spec'])} vs {summarize(results['b']['spec'])}"
+            + (" (Crystal has move tutors, Gold and Silver do not: with tutors on, pair Crystal with Crystal "
+               "or Gold with Silver, or turn tutors off)" if family == FAMILY_GEN2 else ""))
 
     from server.adapters.gen1_rom_scan import fingerprint_rom
     for player in ("a", "b") if family not in (*GEN3_FAMILIES, FAMILY_GEN2) else ():

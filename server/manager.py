@@ -83,7 +83,7 @@ GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # The randomizer contract a run's game names (upr_settings.FAMILY_*): a pure run takes pure
 # cartridges only, a vanilla run vanilla ones, a FireRed / LeafGreen run FR/LG ones, a Gen 2 run
-# Gen 2 ones (companion only: Gen 2 never randomizes) -- no two families can link. "gen3_rr"
+# Gen 2 ones (companion, randomized or not) -- no two families can link. "gen3_rr"
 # (Radical Red) is a DIFFERENT game key from "gen3" and is deliberately absent here: RR is not
 # randomizable by this pipeline (its map/data no longer matches the vanilla FR/LG tables R2
 # verifies against), so a run named "gen3_rr" never lands in randomizer_games and never offers
@@ -323,7 +323,7 @@ def new_run_form() -> dict:
         "support": {k: {opt: option_support(opt, m or [""]) for opt in OPTIONS} for k, _, m in GAMES},
         "gen1_games": [k for k, _, m in GAMES if m and all(
             rt in ("red", "blue", "yellow", "purered", "pureblue", "puregreen") for rt in m)],
-        # the games the Cartridges step (companion / randomizer) serves: Gen 1 and FR/LG
+        # the games the Cartridges step (companion / randomizer) serves: Gen 1, Gen 2 and FR/LG
         "randomizer_games": [k for k, _, _m in GAMES if k in GAME_FAMILY and k not in NON_RANDOMIZABLE_GAMES],
     }
 

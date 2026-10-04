@@ -421,6 +421,8 @@ HELP: dict[str, str] = {
     "wild_block_legendaries": "Legendaries never appear as wild replacements.",                      # wpDontUseLegendaries
     "wild_min_catch_rate": "0 is off. 1 to 5 raises every species with a lower catch rate to that tier: 1 ≈ 10 % with a Poké Ball at full health, 2 ≈ 17 %, 3 ≈ 27 %, 4 ≈ 34 %, 5 = guaranteed.",  # wpSetMinimumCatchRateSlider
     "wild_levels": "Raise or lower every wild Pokémon's level by this much.",                       # wpPercentageLevelModifier
+    "tutors": "Move tutors. Crystal only: Gold and Silver have no tutors, so with this on pair Crystal with Crystal, or Gold with Silver.",
+    "tutor_compat": "Which Pokémon can learn the tutor moves. Crystal only (Gold and Silver have no tutors).",
     "starters": "The three starters on the lab table.",                                             # sp*
     "statics": "The one-off encounters, gifts and purchases: Snorlax, the birds, the Eevee, the fossils…",  # stp*
     "static_levels": "Raise or lower every static encounter's level by this much.",                # stpPercentageLevelModifier
