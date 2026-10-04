@@ -71,7 +71,7 @@ def manager_dir(tmp_path, monkeypatch):
 
 async def _post(body, run_id="run_test"):
     m = mgr.RunManager.__new__(mgr.RunManager)
-    m.bind_host, m.manager_port = "127.0.0.1", 0
+    m.bind_host, m.manager_port, m._run_locks = "127.0.0.1", 0, {}
     resp = await m.handle_randomize(_Request(run_id, body))
     return resp.status, json.loads(resp.text)
 

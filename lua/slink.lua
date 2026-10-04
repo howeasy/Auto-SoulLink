@@ -104,7 +104,7 @@ do
         end
         header = header or ""
         if header:sub(1, 10) == "AP_CRYSTAL" then
-            error("[SLink] Archipelago Crystal is not supported (O-25) -- load a vanilla "
+            error("[SLink] This Crystal build is not supported -- load a vanilla "   -- AP_CRYSTAL, owner ruling O-25
                   .. "Gold, Silver or Crystal cartridge", 0)
         end
         error("[SLink] Unsupported Game Boy cartridge " .. string.format("%q", header)

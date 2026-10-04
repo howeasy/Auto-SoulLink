@@ -10,9 +10,15 @@
       "canonical_payload_sha256": "fe39393aa35f338d8cdadc8c1ce233bfc7076b1e17a914acda8f664ba90ebc53",
       "canonical_sha1": "f92dd1aa6d8fce9da31ce98bf0231540ac258652",
       "capabilities": 87,
-      "menu_version": "dev",
+      "equivalent_payload_sha256": [
+        "73fb7f8428556ff6d627be7702cc0ca1162eee1cf4da17a619d3f2f8b66818eb"
+      ],
+      "equivalent_sha1s": [
+        "f1fbbd794c26be1b50a8c61ca0cc2f44b0a8433b"
+      ],
+      "menu_version": "v0.3.0",
       "patch": "SLink-Emerald.ups",
-      "payload_sha256": "73fb7f8428556ff6d627be7702cc0ca1162eee1cf4da17a619d3f2f8b66818eb",
+      "payload_sha256": "3bb037e96dced8b1abcfbb09aecfcf22f928d0460555ec9c162dfe7b2df8dd49",
       "payload_version_slot": {
         "length": 20,
         "offset": 11012
@@ -68,10 +74,10 @@
           "size": 4
         }
       ],
-      "rom_md5": "c3e65a0c553f13b6e2030f459d14313b",
-      "rom_sha1": "f1fbbd794c26be1b50a8c61ca0cc2f44b0a8433b",
-      "rom_sha256": "d611a206172b4a91e941f66791ca5dea5f283a3f1c900235328880a77d3d52e5",
-      "ups_sha256": "238351264313f2b5efbabced91a9fbb3112891ae9408066a7271086ac444beb3",
+      "rom_md5": "d42abd51a4252ca80f53416630549944",
+      "rom_sha1": "9aff3d2a43790424e9a11b324d7a4259e64d8ee7",
+      "rom_sha256": "d2ebdbf201450e624e9b602601102ce42a9b715b937fa5ba60ce906aa40002e8",
+      "ups_sha256": "5009e87ca064a556b70bb0ca4b865bdd83ee28f13df7e7c0303dfc8ed9b08d99",
       "version_slot": {
         "length": 20,
         "offset": 14940776
@@ -86,9 +92,15 @@
       "canonical_payload_sha256": "d0429c104bdbcbac9a99d00c74e7020c5fc76e9eb69c81d13764ee0fc520e7e9",
       "canonical_sha1": "c74c99430a83c71c474fc80c6c2595feb516d7e4",
       "capabilities": 23,
-      "menu_version": "dev",
+      "equivalent_payload_sha256": [
+        "8e22b66e7a6a0676bfaa8038c48b22f9ef61accf5429cb64034fe2f075a3c3ba"
+      ],
+      "equivalent_sha1s": [
+        "96df1dd019b7ec5515b65ab26c82a251f47eb06d"
+      ],
+      "menu_version": "v0.3.0",
       "patch": "SLink-FireRed.ups",
-      "payload_sha256": "8e22b66e7a6a0676bfaa8038c48b22f9ef61accf5429cb64034fe2f075a3c3ba",
+      "payload_sha256": "c657bda8b2571628e167a953eec9a50946883de82065f9d080b935efd32edb4b",
       "payload_version_slot": {
         "length": 20,
         "offset": 8948
@@ -160,10 +172,10 @@
           "size": 32
         }
       ],
-      "rom_md5": "680f3b607ca7926ac747b43f6333ed42",
-      "rom_sha1": "96df1dd019b7ec5515b65ab26c82a251f47eb06d",
-      "rom_sha256": "e7bac7ce09754b200c601b20644d4550576640bfce9735c5f2c4e354ba045718",
-      "ups_sha256": "e841d6e15e5147a847e550d7cecf67a6994705806547a8af2efbd80394cccc91",
+      "rom_md5": "bd44b29ac1ace67e0cc6470183f82748",
+      "rom_sha1": "78ead75def87b1284b9c5b89ce1be5c1014d2fe1",
+      "rom_sha256": "5e41c6fa8f7d79f0e177172b65271d6a92ad8d304c5a539a096ceb90d9422646",
+      "ups_sha256": "4e129da28f8b3b0471bfd419cba4a6776a6ddd8c9633987e8bcd9500c8516bd0",
       "version_slot": {
         "length": 20,
         "offset": 15412756
@@ -178,9 +190,15 @@
       "canonical_payload_sha256": "10a3eed05837802785706e8039f27a5c96feee127615e71c150406bb967c5084",
       "canonical_sha1": "43b5eaf370550c9dc2313a10831a2ba578f6c022",
       "capabilities": 23,
-      "menu_version": "dev",
+      "equivalent_payload_sha256": [
+        "5e13e053aa8dedae8557f580276d93cba6aabf0b53e8c59cb3cf1bfaa9ba205b"
+      ],
+      "equivalent_sha1s": [
+        "55fb6e9bfa79d562d727b65077fa85064f342b60"
+      ],
+      "menu_version": "v0.3.0",
       "patch": "SLink-LeafGreen.ups",
-      "payload_sha256": "5e13e053aa8dedae8557f580276d93cba6aabf0b53e8c59cb3cf1bfaa9ba205b",
+      "payload_sha256": "3fc03a3f037a4accbc5f9719afe3e09a81f8fe7c01bfa3aa8ed05aa4491db6fc",
       "payload_version_slot": {
         "length": 20,
         "offset": 8948
@@ -252,10 +270,10 @@
           "size": 32
         }
       ],
-      "rom_md5": "9170ba0b85fe5d054346c0d225e11218",
-      "rom_sha1": "55fb6e9bfa79d562d727b65077fa85064f342b60",
-      "rom_sha256": "0b037f720b83053e40beedc0df0c4b59da08c827bd4cc98c681ec63e4ce3e569",
-      "ups_sha256": "714b31618909ee8ec437000c9bda756e80feb24c4f58c9b57969fd80e7b2e4e3",
+      "rom_md5": "4c2610c5d13e46daf91f0a7ab2167bd5",
+      "rom_sha1": "e77b1662d655e2e8a1911763e35b79e1b94415e4",
+      "rom_sha256": "68cb11c6273b5cb519c377ed62a136f46b492436926ff1004390007982b02b05",
+      "ups_sha256": "ac2ce48423a38f6f0f2ab9c9f038dfa2a6c697bf227e10691f6fefc43b28f7dc",
       "version_slot": {
         "length": 20,
         "offset": 15413512

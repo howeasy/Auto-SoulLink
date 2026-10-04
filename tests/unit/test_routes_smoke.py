@@ -132,30 +132,11 @@ async def test_status_json_is_wellformed(client):
     assert len(data["links"]) == 2
 
 
-@pytest.mark.asyncio
-async def test_memorial_page_lists_the_dead_pair(client):
-    resp = await client.get("/memorial")
-    assert resp.status == 200
-    assert (await resp.text()).strip()
-
-
-@pytest.mark.asyncio
-async def test_macro_smoke_harness_renders_its_mock_cast(client):
-    """`_smoke.html` exercises every macro in `_macros.html` against fixed data. It was routed
-    (`/memorial?_smoke=1`) and rendered by nobody, so a macro could break in the harness
-    alone and no one would know until a designer opened it."""
-    resp = await client.get("/memorial?_smoke=1")
-    assert resp.status == 200
-    body = await resp.text()
-    for mock in ("ZUBAT-A", "PIDGEY-B", "DUNS", "GROWL", "BIG", "FOX", "RIP", "BIRBY-A", "RAT-B"):
-        assert mock in body, f"the smoke harness lost its {mock} mock -- a macro no longer renders"
-
-
 # Every GET route on the run server (69 GET of 106 registered), as of the start of the UI migration. Routes are walked off
 # the live router above, which is the right way to cover new ones -- and exactly the wrong way to
 # notice that collapsing nine pages into three quietly dropped sixty parametrized tests. Change
 # this number on purpose, in the same commit that changes the router.
-EXPECTED_GET_ROUTES = 70   # +1: /timeline (the run's story)
+EXPECTED_GET_ROUTES = 69   # +1: /timeline (the run's story), -1: /memorial (the timeline replaced it)
 
 
 def test_route_count_changes_are_deliberate():
@@ -169,7 +150,7 @@ def test_route_count_changes_are_deliberate():
 # that with x-init="init(...)" runs the method TWICE — once with every parameter undefined.
 # That is what pointed the stylesheet <link> at /static/themes/undefined.css (a 404 on every
 # dashboard load) and registered duplicate htmx:afterSettle / storage listeners.
-HTML_ROUTES = ["/", "/memorial", "/timeline", "/stream", "/debug", "/twitch", "/obs", "/launcher/a"]
+HTML_ROUTES = ["/", "/timeline", "/stream", "/debug", "/twitch", "/obs", "/launcher/a"]
 
 
 @pytest.mark.asyncio
@@ -225,7 +206,7 @@ async def test_sprites_carry_the_class_the_stylesheet_selects_on(client, srv):
 # ── a run the Manager spawned sends its pages to the Manager ─────────────────────────────
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path,target", [
-    ("/", "/runs/r1"), ("/memorial", "/runs/r1"), ("/debug", "/runs/r1/debug"), ("/timeline", "/runs/r1/timeline"),
+    ("/", "/runs/r1"), ("/debug", "/runs/r1/debug"), ("/timeline", "/runs/r1/timeline"),
     ("/twitch", "/broadcast/twitch"), ("/obs", "/broadcast/obs"),
     ("/calc/normal.html", "/runs/r1/calc/normal.html"), ("/patcher", "/patcher"),
     ("/stream", "/broadcast"),
@@ -239,7 +220,7 @@ async def test_a_managed_run_redirects_its_pages_to_the_manager(tmp_path, path, 
         resp = await client.get(path, allow_redirects=False)
         assert resp.status == 302, path            # with or without a calc build (CI has none)
         assert resp.headers["Location"].endswith(f":8090{target}"), resp.headers["Location"]
-        for kept in ("/memorial?_smoke=1", "/api/status", "/calc/css/main.css"):
+        for kept in ("/api/status", "/calc/css/main.css"):
             r = await client.get(kept, allow_redirects=False)
             assert r.status in (200, 404), kept          # never a redirect
         assert (await client.get("/stream/linked-party", allow_redirects=False)).status == 200

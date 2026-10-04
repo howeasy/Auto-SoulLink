@@ -18,6 +18,7 @@ comparison works but not that the cartridges in patch/build carry those titles.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 
 import pytest
@@ -326,3 +327,22 @@ def test_a_retry_through_a_second_build_keeps_the_failed_cleanup_authority():
     second.start(second)
     assert parts.signals.failed_service is None
     second.signals.close(second.signals)
+
+
+def test_an_earlier_stamp_of_the_pure_overlay_is_admitted_as_that_overlay(entry):
+    """A release stamp changes only the menu-version field, so cartridges patched before it are the same canonical build.
+    Each overlay admission row lists those exact sha1s (equivalent_sha1s); the client admits them as the overlay itself,
+    not via anchors as a randomized cartridge."""
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{_ENTRY_PATH}")')
+    codec = lua.eval(f'dofile("{_REPO.replace(chr(92), "/")}/lua/json_codec.lua")')
+    table = module.admission_table(_REPO.replace("\\", "/"), codec)
+    rows = json.load(open(os.path.join(_REPO, "data", "games", "gen1_purergb", "admission_overlay.json"), encoding="utf-8"))
+    checked = 0
+    for sha1, row in rows.items():
+        for old in row.get("equivalent_sha1s") or []:
+            hit = table[old]
+            assert hit is not None, old
+            assert (hit.pack, hit.title, hit.kind) == ("gen1_purergb", row["title"], "overlay"), old
+            checked += 1
+    assert checked >= 3, "PureRed, PureBlue and PureGreen each list the build v0.3.0 replaced"

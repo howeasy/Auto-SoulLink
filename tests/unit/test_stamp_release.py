@@ -39,7 +39,7 @@ def test_every_family_is_stamped_with_the_version_and_in_dependency_order(roms):
     assert len(builds) == 7                                                    # RB, pureRGB, Gen 2, FR, LG, Emerald, RR
     assert all(s.argv[s.argv.index("--version") + 1] == "v0.3.0" for s in builds)
     pure = [s.name for s in by_family["pure"]]
-    assert pure[0] == "build pureRGB overlay" and pure[-1] == "randomizer jar entries"      # the jar follows the regenerated entries
+    assert pure[0] == "build pureRGB overlay" and pure[-1] == "re-pin Gen 3 write domains (emerald)"   # the re-pin follows the jar
     assert pure.index("UPR entries") < pure.index("randomizer jar entries")
     gen2 = by_family["gen2"]
     assert gen2[0].argv[1] == "tools/build_gen2_companion.py" and "--promote-overlays" in gen2[-1].argv
@@ -102,10 +102,24 @@ def test_the_version_file_binds_the_shipped_bytes(tmp_path, monkeypatch):
 
 def test_the_shared_jar_is_only_installed_when_asked(roms):
     names = [s.name for s in sr.plan("dev", ("pure",), roms)]
-    assert names[-1] == "randomizer jar entries"
+    assert "randomizer jar entries" in names
     assert "randomizer jar entries" not in [s.name for s in sr.plan("dev", ("pure",), roms, jar=False)]
 
 
 def test_plan_needs_no_clean_roms():
     steps = sr.plan("dev", sr.FAMILIES, [])
     assert any("<rom-dir>" in a for s in steps for a in s.argv)
+
+
+def test_installing_a_new_jar_re_pins_the_gen3_write_domains(roms):
+    """The pure stamp installs a rebuilt randomizer jar; server.upr_gen3_write_domain refuses any jar its models were not
+    built from, so a stamp that skips the re-pin breaks Manager randomization of FireRed, LeafGreen and Emerald."""
+    steps = sr.plan("v9.9.9", ("pure",), roms, jar=True)
+    argvs = [step.argv for step in steps]
+    install = next(i for i, argv in enumerate(argvs) if "tools/upr_resource_update.py" in argv)
+    for title in ("frlg", "emerald"):
+        repin = next(i for i, argv in enumerate(argvs)
+                     if "server.upr_gen3_write_domain" in argv and "--write" in argv and argv[-1] == title)
+        assert repin > install, title
+    assert not [a for a in (s.argv for s in sr.plan("v9.9.9", ("pure",), roms, jar=False))
+                if "server.upr_gen3_write_domain" in a], "no new jar, nothing to re-pin"

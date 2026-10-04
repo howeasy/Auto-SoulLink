@@ -43,7 +43,7 @@ def companion_admitted(info: dict) -> bool:
 
 def _vanilla_target(data: bytes) -> dict:
     md5 = hashlib.md5(data).hexdigest()
-    target = next((t for t in patcher.TARGETS.values() if t["base_md5"] == md5), None)
+    target = next((t for t in patcher.targets().values() if t["base_md5"] == md5), None)   # live: a stamp may have run
     if target is None:
         # patcher.TARGETS deliberately excludes Yellow: it has zero free WRAM.
         raise CartridgeError(

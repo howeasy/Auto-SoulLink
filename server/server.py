@@ -116,29 +116,6 @@ def _configure_logging(data_dir: str | None, verbose: bool) -> None:
 
 # The calc's files (dist / src resolution) live in server/calc_files.py, shared with the Manager.
 
-def _format_killed_at(raw: str | None) -> str:
-    """Render an ISO-8601 killed_at timestamp via the browser-locale format
-    (matches ``new Date(raw).toLocaleString()``). Falls back to the raw
-    value on parse errors so a malformed string is still visible to
-    operators.
-    """
-    if not raw:
-        return ""
-    try:
-        # Preserve tz-aware parsing for the trailing "+00:00" form the state
-        # machine emits at server/state.py:_set_killfeed_metadata.
-        dt = datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone()
-    except (ValueError, TypeError):
-        return raw
-    try:
-        return dt.strftime("%-m/%-d/%Y, %-I:%M:%S %p")
-    except ValueError:
-        # Windows libc has no %- modifier; use %# instead for unpadded fields.
-        return dt.strftime("%#m/%#d/%Y, %#I:%M:%S %p")
-
-
-
-
 def _build_mon_entry(key, detail, adapter):
     """Build a JSON-serialisable dict for one mon, suitable for /api/calc/mons."""
     sid = detail.get("species_id", 0)
@@ -3245,11 +3222,6 @@ class SLinkServer:
             }
         return aiohttp_web.json_response(result)
 
-    async def handle_memorial_html(self, request):
-        if request.query.get("_smoke") != "1":      # the macro harness stays reachable
-            self._to_manager(request, "/runs/{id}")
-        return await self._handle_memorial_template(request)
-
     async def handle_timeline_html(self, request):
         """GET /timeline — the run's story in order (route name: docs/public_ui/DECISIONS.md
         #1). Built from the status payload by server.board.timeline; a Manager run's lives at
@@ -3260,40 +3232,6 @@ class SLinkServer:
         ctx = self._panel_ctx(request, panel="timeline", label="Timeline")
         ctx.update({"story": timeline(d), "players": d.get("players") or {}})
         return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
-
-    async def _handle_memorial_template(self, request):
-        """Jinja-rendered memorial wall."""
-        # Smoke-test path: render every macro against mock data so a designer
-        # can visually verify a macro in isolation without needing a live run.
-        if request.query.get("_smoke") == "1":
-            return aiohttp_jinja2.render_template(
-                "_smoke.html", request,
-                {
-                    "page_title": self._page_title(),
-                    "theme": resolve_theme(request),
-                },
-            )
-
-        # Build the killfeed slice of the status dict and reverse it so the
-        # memorial wall renders oldest-first (chronological order).
-        # A dead zone where neither player caught anything lost no pair: it stays on the
-        # board and in the killfeed, but it is not a fallen pair on the wall.
-        d = self._build_status_dict()
-        killfeed = [k for k in reversed(d.get("killfeed", []))
-                    if k.get("cause") != "dead_zone" or k.get("a_key") or k.get("b_key")]
-        for entry in killfeed:
-            entry["killed_at_display"] = _format_killed_at(entry.get("killed_at"))
-
-        ctx = self._rail_ctx(page="run")
-        ctx.update({
-            "page_title": self._page_title(),
-            "theme": resolve_theme(request),
-            "body_class": "board mgr",
-            "killfeed": killfeed,
-            "run_name": self._run_name or "",
-            "sidebar_html": self._build_sidebar_html(request, "run"),
-        })
-        return aiohttp_jinja2.render_template("memorial.html", request, ctx)
 
     # ── Stream overlay handlers ──────────────────────────────────────────────
 
@@ -4792,6 +4730,9 @@ class SLinkServer:
         if entry is None:
             return aiohttp_web.json_response(
                 {"ok": False, "error": f"No link found for area {area_id}"}, status=404)
+        if s.link_in_trade(entry):
+            return aiohttp_web.json_response(
+                {"ok": False, "error": "This pair is in a trade. Settle the trade first."}, status=409)
 
         s.unindex_entry(entry)
 
@@ -5009,28 +4950,45 @@ class SLinkServer:
                 {"ok": False, "error": f"Backup slot {slot} not found"}, status=404)
         os.makedirs(backup_dir, exist_ok=True)
         # Save current state as pre-rollback snapshots
-        if os.path.exists(self.state._links_path):
+        took_pre = os.path.exists(self.state._links_path)
+        if took_pre:
             shutil.copy2(self.state._links_path,
                          os.path.join(backup_dir, "links.pre_rollback.json"))
         if os.path.exists(self._events_path):
             shutil.copy2(self._events_path,
                          os.path.join(backup_dir, "events.pre_rollback.json"))
-        # Restore links.json and reload state
+        # Restore links.json and reload state. The slot is loaded BEFORE anything else changes: a
+        # truncated or unloadable backup must leave links.json, the live state and the clients as they were.
+        pre_links = os.path.join(backup_dir, "links.pre_rollback.json")
         shutil.copy2(backup_links, self.state._links_path)
+        try:
+            restored = SoulLinkState.load(
+                data_dir=self._data_dir,
+                species_lock=self.state.species_lock,
+                gender_lock=self.state.gender_lock,
+                type_lock=self.state.type_lock,
+                explode_mode=self.state.explode_mode,
+                rival_team_swap=self.state.rival_team_swap,
+                overworld_presence=self.state.overworld_presence,
+                native_messages=self.state.native_messages,
+                native_sounds=self.state.native_sounds,
+                battle_calc=self.state.battle_calc,
+                pc_trade_npc=self.state.pc_trade_npc,
+                phone_calls=self.state.phone_calls)
+            problem = restored.load_failed
+        except Exception as exc:                        # e.g. UnsafeGameMigration from an old slot
+            restored, problem = None, f"{type(exc).__name__}: {exc}"
+        if problem:
+            if took_pre:                                 # never an older rollback's leftover
+                shutil.copy2(pre_links, self.state._links_path)
+            else:
+                os.remove(self.state._links_path)
+            log.error(f"rollback to slot {slot} refused: {problem}")
+            return aiohttp_web.json_response(
+                {"ok": False, "error": f"Backup slot {slot} could not be loaded ({problem}). Nothing was changed."},
+                status=409)
         self._disconnect_clients()
-        self.state = SoulLinkState.load(
-            data_dir=self._data_dir,
-            species_lock=self.state.species_lock,
-            gender_lock=self.state.gender_lock,
-            type_lock=self.state.type_lock,
-            explode_mode=self.state.explode_mode,
-            rival_team_swap=self.state.rival_team_swap,
-            overworld_presence=self.state.overworld_presence,
-            native_messages=self.state.native_messages,
-            native_sounds=self.state.native_sounds,
-            battle_calc=self.state.battle_calc,
-            pc_trade_npc=self.state.pc_trade_npc,
-            phone_calls=self.state.phone_calls)
+        self.state = restored
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
@@ -5439,6 +5397,9 @@ class SLinkServer:
 
         # If override requested, unlink existing entries for these keys
         if override:
+            if any(s.link_in_trade(s.entry_for(pid, k)) for pid, k in (("a", a_key), ("b", b_key))):
+                return aiohttp_web.json_response(
+                {"ok": False, "error": "This pair is in a trade. Settle the trade first."}, status=409)
             for pid, key_to_free in (("a", a_key), ("b", b_key)):
                 old_entry = s.entry_for(pid, key_to_free)
                 if old_entry:
@@ -5590,7 +5551,6 @@ def build_app(srv):
     app = aiohttp_web.Application(middlewares=[csrf_protection, theme_cache])
     setup_templating(app)
     app.router.add_get("/",            srv.handle_status_html)
-    app.router.add_get("/memorial",    srv.handle_memorial_html)
     app.router.add_get("/timeline",    srv.handle_timeline_html)
     app.router.add_get("/api/status",  srv.handle_status_json)
     app.router.add_get("/api/events",  srv.handle_sse)
@@ -5756,9 +5716,9 @@ if __name__ == "__main__":
     parser.add_argument("--species-clause", action="store_true", dest="species_lock", help="Reject links where both mons share the same evolution family")
     parser.add_argument("--gender-clause",  action="store_true", dest="gender_lock",  help="Reject links where both mons share the same gender")
     parser.add_argument("--type-clause",    action="store_true", dest="type_lock",    help="Reject links where both mons share any type")
-    parser.add_argument("--explode-mode",   action="store_true", dest="explode_mode", help="On partner death, force the linked mon to auto-Explode (RR only; menu-skip via Variant-3 memory writes)")
+    parser.add_argument("--explode-mode",   action="store_true", dest="explode_mode", help="On partner death, force the linked mon to auto-Explode (every game except the Emerald Expansion)")
     parser.add_argument("--rival-team-swap", action="store_true", dest="rival_team_swap",
-        help="On rival battles, replace the rival's team with the partner's current party (RR only; mirrors --explode-mode as an opt-in per-run rule)")
+        help="On rival battles, replace the rival's team with the partner's current party (Gen 1, pureRGB, Gen 2, Radical Red)")
     parser.add_argument("--overworld-presence", action="store_true", dest="overworld_presence",
         help="Peer ghost: render your partner walking your overworld as a live NPC (RR + companion patch required; opt-in per-run rule)")
     parser.add_argument("--native-messages", action="store_true", dest="native_messages",

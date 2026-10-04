@@ -50,7 +50,7 @@ def test_known_build_is_routed_and_unknown_build_and_ap_stay_refused():
     assert adapters.adapter_class_for_rom_type(EXP).__name__ == "Gen3ExpansionAdapter"
     assert adapters.game_id_for_rom_type("emerald_expansion_unknown") is None
     assert adapters.game_id_for_rom_type("crystal_ap") is None
-    assert "O-25" in adapters.unrouted_rom_type_reason("Crystal (AP)")
+    assert "this Crystal build is not supported" in adapters.unrouted_rom_type_reason("Crystal (AP)")
 
 
 def test_production_hello_and_persisted_reload_need_no_seam(tmp_path):

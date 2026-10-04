@@ -23,7 +23,7 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | fr | 41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc |
 | lg | 574fa542ffebb14be69902d1d36f1ec0a4afd71e |
 | rr | 964f951a0fdaf209e4ea1344883ef0d557bb3a80 |
-| rr_companion | e87a6a7e4fc98a8840ef9ea0511e443ef4659219 |
+| rr_companion | b6875d24c34d44347de6e4c211e1c00d64da1cc3 |
 
 ## PINNED / UNVERIFIED matrix
 

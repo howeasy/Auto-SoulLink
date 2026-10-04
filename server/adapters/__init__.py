@@ -149,7 +149,7 @@ def shared_calc_profile(profiles) -> dict | None:
 #
 # An explicit refusal wins over the routing table. Archipelago Crystal also has no
 # table row because its legacy adapter is gone.
-_ARCHIPELAGO_CRYSTAL = "Archipelago Crystal is not supported (O-25)"
+_ARCHIPELAGO_CRYSTAL = "this Crystal build is not supported -- use a vanilla Gold, Silver or Crystal cartridge"   # owner ruling O-25: refused, and not named to players
 _REFUSED_ROM_TYPES: dict[str, str] = {
     "crystal_ap": _ARCHIPELAGO_CRYSTAL, "Crystal (AP)": _ARCHIPELAGO_CRYSTAL,
 }

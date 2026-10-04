@@ -36,6 +36,11 @@ def manifest() -> dict:
     return json.loads((ROOT / "patch/dist/gen3_companions.json").read_text())["titles"]
 
 
+def published_version() -> str:
+    """The menu version tools/stamp_release.py last stamped into the Gen 3 family ('dev' when unstamped)."""
+    return json.loads((ROOT / "patch/dist/companion_version.json").read_text())["families"]["gen3"]
+
+
 def owner_rom_path(game: str) -> Path:
     root = os.environ.get("SLINK_GEN3_ROMS")
     if not root:
@@ -122,9 +127,9 @@ def test_a_stamped_published_pipeline_build_differs_from_dev_only_inside_the_fie
     assert dev["sha1"] != stamped["sha1"] and dev["payload_sha256"] != stamped["payload_sha256"]
     for key in ("frame_detour", "trade_detours", "panel_detours", "panel_tables", "title", "replacement", "detour"):
         assert dev[key] == stamped[key], key
-    row = manifest()[title]                                                # and the dev build is exactly what is published
-    assert (dev["sha1"], dev["canonical_sha1"], dev["canonical_payload_sha256"]) == (
-        row["rom_sha1"], row["canonical_sha1"], row["canonical_payload_sha256"])
+    row = manifest()[title]                                                # the dev build is canonically what is published,
+    assert (dev["canonical_sha1"], dev["canonical_payload_sha256"]) == (row["canonical_sha1"], row["canonical_payload_sha256"])
+    assert gc.accepts(row, "rom_sha1", dev["sha1"])                        # and vouched for exactly (published, or listed after a stamp)
 
 
 # ---- the published records ----------------------------------------------------------------------------------------------------------
@@ -135,7 +140,7 @@ def test_every_manifest_row_records_a_consistent_version_slot(title):
     assert gc.canonical_problems(row) == []
     assert row["version_slot"]["offset"] == row["protected_spans"][0]["offset"] + row["payload_version_slot"]["offset"]
     assert row["version_slot"]["length"] == row["payload_version_slot"]["length"] == ri.FIELD
-    assert row["menu_version"] == "dev"                                    # published and committed builds are the default version
+    assert row["menu_version"] == published_version()                      # the manifest records what the release stamp wrote
 
 
 @pytest.mark.parametrize("title", NATIVE)
@@ -146,7 +151,7 @@ def test_stamping_the_published_payload_moves_the_exact_digest_and_not_the_canon
     slot = row["payload_version_slot"]
     assert payload[slot["offset"]:slot["offset"] + slot["length"]] == g.menu_field(row["menu_version"])
     stamped = bytearray(payload)
-    stamped[slot["offset"]:slot["offset"] + slot["length"]] = g.menu_field("v0.3.0")
+    stamped[slot["offset"]:slot["offset"] + slot["length"]] = g.menu_field(STAMPED)
     assert hashlib.sha256(stamped).hexdigest() != row["payload_sha256"]
     assert ri.canonical_sha256(bytes(stamped), [slot]) == row["canonical_payload_sha256"]
     elsewhere = bytearray(payload)
@@ -179,7 +184,7 @@ def test_the_radical_red_row_is_recorded_and_reproduces_from_the_published_ups()
     assert rom[slot["offset"]:slot["offset"] + slot["length"]] == g.menu_field(row["version"])
     assert ri.canonical_sha1(rom, [slot]) == row["canonical_sha1"]
     stamped = bytearray(rom)
-    stamped[slot["offset"]:slot["offset"] + slot["length"]] = g.menu_field("v0.3.0")
+    stamped[slot["offset"]:slot["offset"] + slot["length"]] = g.menu_field(STAMPED)
     assert ri.canonical_sha1(bytes(stamped), [slot]) == row["canonical_sha1"]
     assert hashlib.md5(stamped).hexdigest() != row["patched_md5"]
 
@@ -199,8 +204,8 @@ def test_a_hash_is_accepted_only_if_published_or_listed():
 
 
 def test_a_stamped_rebuild_lists_the_dev_build_and_a_real_change_retires_it():
-    dev = dict(manifest()["firered"])
-    stamped = {**dev, "rom_sha1": "1" * 40, "payload_sha256": "2" * 64, "menu_version": "v0.3.0"}     # same canonical identity
+    dev = {k: v for k, v in manifest()["firered"].items() if not k.startswith("equivalent_")}           # a first publication
+    stamped = {**dev, "rom_sha1": "1" * 40, "payload_sha256": "2" * 64, "menu_version": STAMPED}       # same canonical identity
     kept = build.equivalents_after_rebuild(dev, stamped)
     assert kept == {"equivalent_sha1s": [dev["rom_sha1"]], "equivalent_payload_sha256": [dev["payload_sha256"]]}
     published = {**stamped, **kept}
@@ -242,6 +247,20 @@ def test_write_pin_replaces_one_slug_and_keeps_every_other(tmp_path, monkeypatch
     changed = json.loads(path.read_text())["pins"]["rr"]
     assert changed["note"] == "kept" and changed["equivalent_sha1s"] == []                       # a real change retires the history
     assert json.loads(path.read_text())["pins"]["rb-red"] == RB
+
+
+def test_a_stamp_lists_the_build_it_replaces(tmp_path, monkeypatch):
+    """A version stamp (same canonical identity, new exact sha1) keeps the replaced build admissible: cartridges patched with it
+    are still in players' hands. The v0.3.0 stamp dropped Radical Red's dev build because write_pin never added it."""
+    dev = {"patched_md5": "0" * 32, "rom_sha1": "d" * 40, "canonical_sha1": "e" * 40, "version": "dev"}
+    path = seeded_pins(tmp_path, monkeypatch, dev)
+    stamped = {**dev, "patched_md5": "1" * 32, "rom_sha1": "2" * 40, "version": "v0.3.0"}
+    build.write_pin("rr", stamped)
+    assert json.loads(path.read_text())["pins"]["rr"]["equivalent_sha1s"] == ["d" * 40]
+    build.write_pin("rr", {**stamped, "rom_sha1": "3" * 40, "version": "v0.3.1"})   # the next stamp keeps the history
+    assert json.loads(path.read_text())["pins"]["rr"]["equivalent_sha1s"] == sorted(["d" * 40, "2" * 40])
+    build.write_pin("rr", {**stamped, "rom_sha1": "3" * 40, "version": "v0.3.1"})   # an unchanged rebuild adds nothing
+    assert json.loads(path.read_text())["pins"]["rr"]["equivalent_sha1s"] == sorted(["d" * 40, "2" * 40])
 
 
 def test_pin_problems_reports_a_stale_or_missing_row(tmp_path, monkeypatch):

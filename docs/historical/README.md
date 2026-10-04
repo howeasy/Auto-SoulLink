@@ -17,6 +17,7 @@ counts: editing a record to look current is how you lose the record.
 | `release_notes.md` | A verification snapshot from one point in the Gen 1 effort. **Nothing has been released** — master is local and unpushed. | `tools/verify_gen1_release.py --list`, `docs/gen1_gen2_runtime_checks.md` |
 | `ui_migration_plan.md` | The two-apps-to-one-board migration. Done and shipped. | `server/templates/`, `server/static/`, `docs/REFERENCE.md` |
 | `ui_mockup_brief.md` | The design brief for the Track A / Track B mockup bake-off. Track A (Jinja + Alpine + htmx) won and shipped. | the shipped UI |
+| `reference_removed_2026-10-03.md` | Sections cut from `docs/REFERENCE.md` in the 2026-10-03 docs sweep: per-generation proof notes, Gen 1 HUD/sound cue notes, and the old Gen 3 client's ability display, Radical Red support, ROM profiles and sync timing. | `docs/REFERENCE.md`, `lua/gen3/`, `data/games/gen3_*` |
 
 ## What belongs here
 

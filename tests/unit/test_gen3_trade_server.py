@@ -989,3 +989,34 @@ def test_gen1_gen2_trade_bytes_ignore_the_gen3_recovery_extension(tmp_path, monk
     original = _legacy_trace(tmp_path / "original", title, False, rejected)
     extended = _legacy_trace(tmp_path / "extended", title, True, rejected)
     assert extended == original
+
+
+def test_events_the_trade_ignores_do_not_reset_its_watchdog(tmp_path):
+    """The watchdog counts events seen while the trade makes no progress. A partner's menu_result in `applying`, or a
+    trade_done replayed after its side was decided, is discarded by the handler and must not reset that count, or an
+    echoing client keeps a stuck trade (holding every faint and box move on both keys) alive forever (sweep cx-a4adb053)."""
+    srv, _entry, token = _applying(tmp_path)
+    pt = srv.state.pending_trade
+    pt["age"] = 7
+    srv._dispatch("b", {"event": "menu_result", "token": token, "choice": 0})
+    assert pt["age"] >= 7
+    srv._dispatch("a", {"event": "trade_done", "token": token, "new_key": KEYS["b"], "new_species": 4})
+    if srv.state.pending_trade is pt:                     # still waiting on b: a's replay is not progress
+        pt["age"] = 7
+        srv._dispatch("a", {"event": "trade_done", "token": token, "new_key": KEYS["b"], "new_species": 4})
+        assert pt["age"] >= 7
+
+
+def test_the_board_cannot_unlink_a_pair_a_trade_is_using(tmp_path):
+    """Admin Unlink removed the entry pending_trade still referenced: the trade then settled onto a detached link that
+    links.json no longer held, and a restart lost the pair while both cartridges kept the swapped mons (sweep cx-a4adb053)."""
+    import asyncio
+    srv, entry, _token = _applying(tmp_path)
+
+    class _Req:
+        async def json(self):
+            return {"area_id": entry.area_id, "index": srv.state.links.index(entry)}
+
+    resp = asyncio.run(srv.handle_debug_unlink(_Req()))
+    assert resp.status == 409
+    assert entry in srv.state.links

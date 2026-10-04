@@ -1219,14 +1219,16 @@ def test_gold_poison_a_plays_the_post_errand_save():
 
 def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
     """A 255-char SaveRAM path was never written by BizHawk (silent); the lane refuses at 240 before any launch."""
-    assert duo_module.bizhawk_path_problem(["C:/x/" + "a" * 200]) is None
-    long = "C:/x/" + "a" * 250
-    assert duo_module.bizhawk_path_problem(["C:/x/short", long]) == os.path.abspath(long)
+    # absolute on THIS platform: a literal "C:/x" is relative on Linux and would gain the cwd prefix
+    root = os.path.abspath(os.sep)
+    assert duo_module.bizhawk_path_problem([root + "x/" + "a" * 200]) is None
+    long = root + "x/" + "a" * 250
+    assert duo_module.bizhawk_path_problem([root + "x/short", long]) == os.path.abspath(long)
     run = object.__new__(DuoRun)
-    run._gen2_plans = {"a": {"directory": "C:/x", "saveram_name": "s.SaveRAM"}}
-    run._result_path = lambda inst: "C:/x/e2e_gen2_changebox_a_result.txt"
+    run._gen2_plans = {"a": {"directory": root + "x", "saveram_name": "s.SaveRAM"}}
+    run._result_path = lambda inst: root + "x/e2e_gen2_changebox_a_result.txt"
     run._check_bizhawk_paths()   # short: fine
-    run._gen2_plans["a"]["directory"] = "C:/" + "d" * 240
+    run._gen2_plans["a"]["directory"] = root + "d" * 240
     with pytest.raises(RuntimeError, match="path too long for BizHawk"):
         run._check_bizhawk_paths()
 

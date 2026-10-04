@@ -48,7 +48,7 @@ local socket_path = get_socket_path()
 local socket = assert(
     package.loadlib(socket_path, "luaopen_socket_core"),
     "Cannot load LuaSocket from: " .. socket_path ..
-    "\nCopy socket-windows-5-4.dll from Archipelago/data/lua/x64/ into lua/x64/"
+    "\nsocket-windows-5-4.dll ships in lua/x64/ of the SLink player package: download it from your host again"
 )()
 
 local M = {}

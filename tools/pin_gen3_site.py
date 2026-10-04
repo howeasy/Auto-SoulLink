@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -14,15 +15,29 @@ if str(ROOT) not in sys.path:
 from tools import rr_companion  # noqa: E402
 
 ROM_BASE = 0x08000000
+
+
+def _dump_dir() -> Path:
+    """The owner's clean dumps: $SLINK_GEN3_ROMS, else the MAIN checkout's root (a worktree's .git file names it).
+    Absent on CI; callers skip on a missing file."""
+    if os.environ.get("SLINK_GEN3_ROMS"):
+        return Path(os.environ["SLINK_GEN3_ROMS"])
+    git = ROOT / ".git"
+    if git.is_file():       # worktree: "gitdir: <main>/.git/worktrees/<name>"
+        return Path(git.read_text(encoding="utf-8").split("gitdir:", 1)[1].strip()).parents[2]
+    return ROOT
+
+
+DUMPS = _dump_dir()
 ROM_SPECS = {
     "fr": ("gen3_frlg", "firered", "clean",
-           Path("E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba"),
+           DUMPS / "Pokemon - FireRed Version (USA).gba",
            "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"),
     "lg": ("gen3_frlg", "leafgreen", "clean",
-           Path("E:/Google Drive/SLink/Pokemon - LeafGreen Version (USA).gba"),
+           DUMPS / "Pokemon - LeafGreen Version (USA).gba",
            "574fa542ffebb14be69902d1d36f1ec0a4afd71e"),
     "rr": ("gen3_rr", "radical_red", "clean",
-           Path("E:/Google Drive/SLink/Pokemon - Radical Red.gba"),
+           DUMPS / "Pokemon - Radical Red.gba",
            "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
     "rr_companion": ("gen3_rr", "radical_red", "companion",
                      ROOT / "patch/build/slink_RR.gba",
@@ -31,7 +46,7 @@ ROM_SPECS = {
 # E1-PACK: kept OUT of ROM_SPECS so the FRLG/RR generator and its tests never iterate it.
 EMERALD_SPECS = {
     "e": ("gen3_emerald", "emerald", "clean",
-          Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba"),
+          DUMPS / "Pokemon - Emerald Version (USA, Europe).gba",
           "f3ae088181bf583e55daf962a92bb46f4f1d07b7"),
 }
 

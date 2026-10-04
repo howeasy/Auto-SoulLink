@@ -1408,6 +1408,7 @@ def test_illegal_capture_in_linked_area_memorialized(tmp_path, monkeypatch):
 def test_whiteout_force_faints_all_party_partners(tmp_path, monkeypatch):
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}     # a whiteout before the first ball retires nothing
 
     for i in range(3):
         a_key = f"A:{i}"

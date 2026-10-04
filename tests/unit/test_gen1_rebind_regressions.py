@@ -473,8 +473,12 @@ def test_w14_parked_phase_callback_matches_master(tmp_path_factory):
     point, and stepped the pre-park buttons afterwards."""
     scratch = tmp_path_factory.mktemp("w14_master")
     master = scratch / "gen1_scripted_play.lua"
-    master.write_bytes(subprocess.run(["git", "show", f"{MASTER}:lua/tests/gen1_scripted_play.lua"],
-                                      cwd=REPO, check=True, capture_output=True).stdout)
+    try:
+        blob = subprocess.run(["git", "show", f"{MASTER}:lua/tests/gen1_scripted_play.lua"],
+                              cwd=REPO, check=True, capture_output=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip(f"master {MASTER} not available in this clone (shallow checkout?)")
+    master.write_bytes(blob)
     want = _park_run(master)
     assert want[0] == 6 and want[1] == 56  # 6 iterations; 5 route steps + 50 parked + 1 idle
     assert _park_run(REPO / "lua" / "tests" / "gen1_scripted_play.lua") == want

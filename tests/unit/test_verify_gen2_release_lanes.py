@@ -25,6 +25,17 @@ def _lane(name):
     return next(lane for lane in gate.LANES if lane.name == name)
 
 
+def _git_show(rev, rel):
+    """A pinned historical blob. A shallow clone lacks the history (absent input: skip); a full clone without it fails."""
+    root = Path(__file__).resolve().parents[2]
+    proc = subprocess.run(["git", "show", f"{rev}:{rel}"], cwd=root, capture_output=True, text=True, encoding="utf-8")
+    if proc.returncode and subprocess.run(["git", "rev-parse", "--is-shallow-repository"], cwd=root,
+                                          capture_output=True, text=True).stdout.strip() == "true":
+        pytest.skip(f"{rev} is not in this shallow clone (CI checks out with fetch-depth: 0)")
+    proc.check_returncode()
+    return proc.stdout
+
+
 def test_overlay_matrix_cells_have_an_independent_artifact_identity():
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text())
     rows = [row for row in doc["requirements"] if row.get("stage") == "live-duos"]
@@ -685,7 +696,7 @@ def _copy_new_gates_tree(tmp_path):
     Native feature identity is synthetic here, never rewritten into the historical files.
     The pinned pre-migration manifest remains this test's input after Stream C is committed.
     """
-    doc = json.loads(__import__("subprocess").run(["git", "show", "df26db18:" + gate.NEW_GATES], cwd=REPO, capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+    doc = json.loads(_git_show("df26db18", gate.NEW_GATES))
     for row in doc["requirements"]:
         entry = row["proofs"][0]["receipts"]["receipt"]
         src, dst = REPO / entry["path"], tmp_path / entry["path"]
@@ -2604,10 +2615,7 @@ def test_any_other_legs_clock_setup_obeys_the_same_rule(tmp_path):
 def _captured_u1_clock(title):
     # Frozen historical clock input, not release evidence for the newly titled ROM.
     # Keep the original attempt-2 11:23 control even when the live lane recaptures U1.
-    import subprocess
-    rel = f"tests/fixtures/gen2/receipts/overlay/{title}.engine_sites.json"
-    receipt = json.loads(subprocess.run(["git", "show", "ca9b564f:" + rel], cwd=REPO,
-                                       capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+    receipt = json.loads(_git_show("ca9b564f", f"tests/fixtures/gen2/receipts/overlay/{title}.engine_sites.json"))
     return next(run for run in receipt.get("runs", [receipt]) if run.get("clock_setup"))
 
 

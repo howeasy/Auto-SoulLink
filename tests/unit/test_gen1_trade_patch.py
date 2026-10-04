@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -80,6 +81,9 @@ def _rgbds() -> tuple[Path, str]:
     return directory, suffix
 
 
+SHIPPED_VERSION = json.loads((ROOT / "patch/dist/companion_pins.json").read_text())["pins"]["rb-red"]["version"]  # the release stamp
+
+
 @pytest.fixture(scope="module")
 def built() -> dict[str, bytes]:
     _rgbds()
@@ -87,7 +91,7 @@ def built() -> dict[str, bytes]:
         if not (ROOT / manifest.ROMS[key][0]).is_file():
             pytest.skip(f"clean Gen 1 {key} dump absent: {manifest.ROMS[key][0]}")
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
-    result = subprocess.run([sys.executable, str(ROOT / "patch/gen1/tools/build.py")],
+    result = subprocess.run([sys.executable, str(ROOT / "patch/gen1/tools/build.py"), "--version", SHIPPED_VERSION],
                             cwd=ROOT, env=env, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "assembled 6582 bytes" in result.stderr
@@ -217,7 +221,7 @@ def test_clean_rom_receives_only_declared_spans_and_full_bank(built, key):
     assert patched[0x0100:0x0150] == pristine[0x0100:0x0150]
     permitted = set(range(manifest.INJECT_OFFSET, manifest.INJECT_OFFSET + manifest.BANK_SIZE))
     permitted.update(range(manifest.HOOK_SITE, manifest.HOOK_SITE + len(manifest.HOOK_ORIGINAL)))
-    for offset, before, after, _why in manifest.MENU_PATCHES + title_screen.title_spans(pristine):
+    for offset, before, after, _why in manifest.MENU_PATCHES + title_screen.title_spans(pristine, SHIPPED_VERSION):
         assert len(before) == len(after)
         assert pristine[offset:offset + len(before)] == before
         assert patched[offset:offset + len(after)] == after

@@ -132,7 +132,9 @@ def test_rr_family_target_exists_in_both_own_time_tables():
     import gen3_fixtures as fx
     import rr_rom_encounters as wild
 
-    from tools.pin_gen3_site import load_rom
+    from tools.pin_gen3_site import ROM_SPECS, load_rom
+    if not ROM_SPECS["rr"][3].is_file():
+        pytest.skip(f"clean Radical Red dump absent: {ROM_SPECS['rr'][3]}")
     rom = load_rom("rr")
     directory = Path(fx.REPO) / "tests/fixtures/gen3"
     owned = {side: codec.rr_party_from_save((directory / name).read_bytes())[0]["species"]

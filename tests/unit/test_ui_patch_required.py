@@ -1,5 +1,5 @@
-"""The UI says what the policy is: the SLink companion patch is REQUIRED (except Yellow,
-Archipelago and the Emerald Expansion), and nothing the UI advertises is a feature this
+"""The UI says what the policy is: the SLink companion patch is REQUIRED (except Yellow and the
+Emerald Expansion; unsupported Archipelago builds are never mentioned), and nothing the UI advertises is a feature this
 release greys out in manager.py."""
 import json
 import os
@@ -30,7 +30,7 @@ async def test_patcher_page_states_the_requirement_and_advertises_no_deferred_fe
         text = _text(await resp.text())
         assert "optional" not in text.lower(), "the patch is required"
         assert "unpatched players are unaffected" not in text
-        assert "required" in text.lower() and "Yellow" in text and "Archipelago" in text
+        assert "required" in text.lower() and "Yellow" in text and "Archipelago" not in text
         assert "refused" in text
         # manager.py greys these two for this release (OPTION_SUPPORT)
         low = text.lower()
@@ -52,7 +52,7 @@ async def test_cartridges_form_calls_the_companion_required(manager_client):
         text = _text(page)
         assert "Optional: without it" not in page and "silently" not in page
         assert "Required" in text
-        assert "Yellow" in text and "Archipelago" in text
+        assert "Yellow" in text and "Archipelago" not in text
 
 
 def test_tools_page_does_not_advertise_greyed_features():
@@ -66,15 +66,16 @@ async def test_home_getting_started_has_the_exemptions_and_links_the_patcher(man
     step = body[body.index("Prepare your cartridge"):]
     step = step[:step.index("</li>")]
     assert 'href="/patcher"' in step
-    for name in ("Yellow", "Archipelago", "Emerald Expansion"):
+    for name in ("Yellow", "Emerald Expansion"):
         assert name in step
+    assert "Archipelago" not in step
 
 
 def test_board_step_has_the_exemptions():
     src = open(os.path.join(os.path.dirname(_JS), "..", "templates", "_board.html"), encoding="utf-8").read()
     step = src[src.index("prepares their cartridge"):]
     step = step[:step.index("</li>")]
-    assert 'href="/patcher"' in step and "Yellow" in step and "Archipelago" in step and "Emerald Expansion" in step
+    assert 'href="/patcher"' in step and "Yellow" in step and "Archipelago" not in step and "Emerald Expansion" in step
 
 
 def test_onboarding_tells_players_to_prepare_the_cartridge_first():

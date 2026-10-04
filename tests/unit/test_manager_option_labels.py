@@ -110,7 +110,7 @@ def test_native_messages_is_disabled_for_every_game(tmp_path):
     greyed on Radical Red too, and the server ignores every way of turning it on."""
     from server.state import SoulLinkState
     s = option_support("native_messages", RR)
-    assert not s["ok"] and "post-rc" in s["why"].lower(), s
+    assert not s["ok"] and "not available yet" in s["why"].lower(), s
     assert SoulLinkState(data_dir=str(tmp_path), native_messages=True).native_messages is False
 
 

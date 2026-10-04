@@ -766,7 +766,8 @@ def native_abi() -> dict:
     if constants.get("SLINK_ABI_VERSION") != 2 or "SlinkMailboxV2" not in structs:
         raise ValueError("unsupported companion ABI")
     return {"constants": constants, "structs": structs, "_src": citations,
-            "source_sha256": hashlib.sha256((REPO / ABI_SRC).read_bytes()).hexdigest()}
+            # LF-normalized: hashing raw bytes differs between a Windows (CRLF) checkout and CI
+            "source_sha256": hashlib.sha256((REPO / ABI_SRC).read_bytes().replace(b"\r\n", b"\n")).hexdigest()}
 
 
 def native_block(title: str | None = None) -> dict | None:

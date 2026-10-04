@@ -119,7 +119,10 @@ def test_gift_and_hatch_rows_have_native_carriers_and_saved_oracles(game, name):
 
 def rom_for(title):
     from tools.pin_gen3_site import EMERALD_SPECS, ROM_SPECS
-    return next(row[3] for row in (ROM_SPECS | EMERALD_SPECS).values() if row[1:3] == (title, "clean"))
+    path = next(row[3] for row in (ROM_SPECS | EMERALD_SPECS).values() if row[1:3] == (title, "clean"))
+    if not path.is_file():
+        pytest.skip(f"clean {title} dump absent: {path}")
+    return path
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald", "radical_red"])

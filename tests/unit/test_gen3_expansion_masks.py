@@ -375,7 +375,11 @@ def _load_pre_xr1_codec() -> types.ModuleType:
     tests/unit/test_check_release_zip.py for the established pattern of
     reading a historical blob this way)."""
     proc = subprocess.run(["git", "show", "798b6c80:server/adapters/gen3_codec.py"],
-                           cwd=_ROOT, capture_output=True, text=True, check=True)
+                           cwd=_ROOT, capture_output=True, text=True)
+    if proc.returncode and subprocess.run(["git", "rev-parse", "--is-shallow-repository"], cwd=_ROOT,
+                                          capture_output=True, text=True).stdout.strip() == "true":
+        pytest.skip("798b6c80 is not in this shallow clone (CI checks out with fetch-depth: 0)")
+    proc.check_returncode()
     module = types.ModuleType("gen3_codec_pre_xr1")
     exec(compile(proc.stdout, "gen3_codec_pre_xr1.py", "exec"), module.__dict__)
     return module

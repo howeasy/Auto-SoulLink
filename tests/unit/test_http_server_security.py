@@ -327,3 +327,20 @@ async def test_load_failure_still_allows_reset_and_rollback(srv, client, action)
     response = await client.post("/api/reset" if action == "reset" else "/api/debug/rollback", json={"slot": 1})
     assert response.status == 200 and (await response.json())["ok"]
     assert srv.state.load_failed == ""
+
+
+@pytest.mark.asyncio
+async def test_a_rollback_to_an_unreadable_slot_changes_nothing(srv, client):
+    """A truncated backup slot used to be copied over links.json and reported as restored, leaving a run that refuses
+    every event; the live state was replaced too. Now the slot is checked first and nothing changes (sweep cx-06955fa9)."""
+    from pathlib import Path
+    srv.state._save()
+    links = Path(srv.state._links_path)
+    before, live = links.read_bytes(), srv.state
+    backup = links.parent / "backups" / "links.backup.1.json"
+    backup.parent.mkdir(parents=True)
+    backup.write_text('{"links": [{"area_id": "route_1", "status": "alive", "a": {"bogus_field": 1}}]}')
+    response = await client.post("/api/debug/rollback", json={"slot": 1})
+    assert response.status == 409 and not (await response.json())["ok"]
+    assert links.read_bytes() == before
+    assert srv.state is live

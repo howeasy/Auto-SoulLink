@@ -230,7 +230,7 @@ async def test_crystal_ap_is_refused_on_its_own_by_name(tmp_path, ap, declare):
         before = _snapshot(srv)
         assert _unsupported(await send(_hello("a", _cart(ap, declare=declare))))
         err = srv.state.identity_error["a"]
-        assert "Archipelago Crystal is not supported (O-25)" in err, err
+        assert "this Crystal build is not supported" in err, err
         assert "a" in srv._rom_type_rejected
         assert _snapshot(srv) == before and not srv.state.rom_type
     finally:
@@ -247,7 +247,7 @@ async def test_crystal_ap_is_refused_beside_every_gen2_gsc_half(tmp_path, ap, gs
         assert not _refused(await send(_hello("a", _cart(gsc))))
         before = _gate_snapshot(srv)
         assert _unsupported(await send(_hello("b", _cart(ap))))
-        assert "O-25" in srv.state.identity_error["b"]
+        assert "this Crystal build is not supported" in srv.state.identity_error["b"]
         assert _deep(srv) == before
     finally:
         await close()
@@ -258,7 +258,7 @@ def test_the_mixed_games_check_refuses_crystal_ap_as_unsupported_too(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
     for ap in AP:
         err = srv._mixed_games_error("b", ap, "clean")
-        assert "Archipelago Crystal is not supported (O-25)" in err, err
+        assert "this Crystal build is not supported" in err, err
 
 
 # ── unknown and contradictory hellos ─────────────────────────────────────────────────────
@@ -347,7 +347,7 @@ async def test_a_restart_re_derives_gen2_gsc_from_every_persisted_spelling(tmp_p
     for rom_type in OTHER_GENS:  # the foundation gate fires before the kind lock, so "clean" is inert here
         assert "Mixed games" in restarted._mixed_games_error("b", rom_type, "clean"), rom_type
     for rom_type in AP:
-        assert "O-25" in restarted._mixed_games_error("b", rom_type, "clean"), rom_type
+        assert "this Crystal build is not supported" in restarted._mixed_games_error("b", rom_type, "clean"), rom_type
     send, close = await _session(restarted)
     try:
         assert not _refused(await send(_hello("b", _cart("Silver", declare=True))))

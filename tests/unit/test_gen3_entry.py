@@ -316,6 +316,26 @@ def test_admission_table_has_no_duplicate_digest_in_the_shipped_packs():
     assert len(table) > 0
 
 
+def test_an_earlier_stamp_of_a_companion_is_admitted_as_that_companion():
+    """A version stamp changes only the menu-version field, so cartridges patched before it are the same canonical build:
+    each companion artifact lists those exact sha1s (equivalent_sha1s), and the hash table admits them as the companion
+    itself, not via anchors as a randomized cartridge."""
+    world = World(build=False)
+    json_codec = world.lua.eval(
+        f'dofile("{(REPO / "lua" / "json_codec.lua").as_posix()}")')
+    table = lua_to_py(world.Entry.admission_table(REPO.as_posix(), json_codec))
+    checked = 0
+    for pack in ("gen3_frlg", "gen3_emerald", "gen3_rr"):
+        blob = json.loads((REPO / "data" / "games" / pack / "engine_signals.json").read_text(encoding="utf-8"))
+        for title, entry in blob["titles"].items():
+            companion = entry["artifacts"].get("companion")
+            for sha1 in (companion or {}).get("equivalent_sha1s", []):
+                row = table[sha1]
+                assert (row["pack"], row["title"], row["kind"]) == (pack, title, "companion"), sha1
+                checked += 1
+    assert checked >= 4, "FireRed, LeafGreen, Emerald and Radical Red each list the build v0.3.0 replaced"
+
+
 @pytest.mark.parametrize("other_pack,other_title", (("gen3_frlg", "leafgreen"), ("gen3_emerald", "emerald")))
 def test_admission_refuses_an_ambiguous_rom(tmp_path, other_pack, other_title):
     """Two artifacts that pin the same bytes cannot be told apart, so admission refuses

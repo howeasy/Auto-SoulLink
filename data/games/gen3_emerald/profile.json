@@ -324,7 +324,7 @@
         "SLINK_VISIT_ACCEPTED": 1,
         "SLINK_WITNESS_OFFSET": 80
       },
-      "source_sha256": "47d6ead69d37cb6c816ddb406bb73f05a2392508a3197affd837aa9c0efa7339",
+      "source_sha256": "8d02925dfbe9d604d00fb9e53db0500a3977a14497f9cbbacd84ae6947ba75a4",
       "structs": {
         "SlinkCallRecordV2": {
           "fields": {

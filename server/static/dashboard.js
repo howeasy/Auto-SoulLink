@@ -65,7 +65,7 @@ if (window._slinkDashInit) {
 // ── Theme switcher (vanilla, page-agnostic) ───────────────────────────────
 // One source of truth for the theme picker UI. Two cases:
 //
-//   1. Jinja pages (status via dashboard.html, manager, memorial) render the
+//   1. Jinja pages (status via dashboard.html, manager, timeline) render the
 //      Alpine-driven _theme_switcher.html partial — this script just moves
 //      that existing `.theme-switcher` element into the sidebar slot.
 //

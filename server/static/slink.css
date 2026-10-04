@@ -117,13 +117,12 @@
   --c-hp-mid:  #f0c030;
   --c-hp-low:  #f44;
 
-  /* Hyperlink colour — cyan-blue across the dashboard, memorial subtitle,
+  /* Hyperlink colour — cyan-blue across the dashboard and the
    * "Open in calc" button. Themes can override; default matches the existing
    * #6af used everywhere today. */
   --c-link:    #6af;
 
-  /* Cyan "info / area" accent. The dashboard's `.area` and the memorial's
-   * `.tomb-area` use this. Defaults to the existing #7cf hex literal. */
+  /* Cyan "info / area" accent. The dashboard's `.area` uses this. Defaults to the existing #7cf hex literal. */
   --c-info:    #7cf;
 
   /* ── Typography ── */
@@ -176,7 +175,6 @@
   --size-rail-collapsed: calc(var(--scale-step) * 2.5);
   --size-content-cap:    calc(var(--scale-step) * 75);
   --size-header-cap:     calc(var(--scale-step) * 45);
-  --size-tomb:           calc(var(--scale-step) * 13);
   --size-sprite-mon:     clamp(38px, 6.5vmin, 58px);
   --size-sprite-table:   clamp(40px, calc(var(--scale-step) * 1.6), 72px);
   --size-hp-bar:         calc(var(--scale-step) * 3.2);
@@ -186,7 +184,7 @@
 /* ── Figures ──────────────────────────────────────────────────────────
  * Anything that is a number wears this. A page font is a voice; digits are data, and
  * they line up only when every one is the same width. */
-.num, .enc-lv, .tomb-mon .level, .phase-stats,
+.num, .enc-lv, .phase-stats,
 .mk-hp-num, .mk-ev-ts, .mk-badges, .mk-bond-state, .mk-meta, .mk-tag, .mk-sub {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;

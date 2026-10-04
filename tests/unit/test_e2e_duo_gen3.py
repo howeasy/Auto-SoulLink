@@ -5865,11 +5865,14 @@ def test_the_probe_byte_of_the_real_builds_is_padding_inside_a_span_off_the_anch
     assert not any(a <= choice["offset"] < a + n for a, n in spans)
     slot = row["payload_version_slot"]
     base = row["protected_spans"][0]["offset"] + slot["offset"]
-    assert patched[base + 12] == 0xFF and choice["offset"] == base + slot["length"] - 1     # behind the string's terminator
+    from patch.tools.gen3_title import menu_field
+    field = menu_field(row["menu_version"])                                                # the stamped string, terminator, zero padding
+    assert bytes(patched[base:base + slot["length"]]) == field and field[-1] == 0
+    assert choice["offset"] == base + slot["length"] - 1                                    # behind the string's terminator
     assert duo.gen3_probe_flip_choice(patched, row, spans) == choice
 
 
-def test_the_probe_is_opt_in_and_in_no_plan():
+def test_the_probe_is_opt_in_and_in_no_plan(monkeypatch):
     from tools import gen3_final_cut as fc
 
     row = duo.SCENARIOS[PROBE]
@@ -5880,7 +5883,8 @@ def test_the_probe_is_opt_in_and_in_no_plan():
     # applicable to exactly the three per-title games and to NO other pairing row
     assert sorted(g for g in duo.GAMES if duo.scenario_applies(PROBE, g)) == ["gen3_emerald", "gen3_frlg", "gen3_lgfr"]
     cut = "c" * 40
-    os.environ.setdefault("SLINK_GEN3_RAND_ROMS", "R:/rand")
+    if not os.environ.get("SLINK_GEN3_RAND_ROMS"):
+        monkeypatch.setenv("SLINK_GEN3_RAND_ROMS", "R:/rand")   # restored after the test; a bare setdefault leaked into later tests
     for plan in (fc.build_plan, fc.build_plan_rr, fc.build_plan_emerald, fc.build_plan_exp, fc.build_plan_frlgc, fc.build_plan_frlgc_rand):
         assert not any("probe_protected_span_flip" in " ".join(r.argv) or "probe_flip" in r.id for r in plan(cut, "L:/lane", "L:/m")), plan
     assert len(fc.build_plan_frlgc(cut, "L:/lane", "L:/m")) == 65 and len(fc.build_plan_frlgc_rand(cut, "L:/lane", "L:/m")) == 13
@@ -6231,7 +6235,8 @@ def test_the_gen2_and_gen1_changed_sets_are_exactly_the_named_ones():
 def _module_from_source(source, tmp_path):
     import importlib.util
 
-    path = tmp_path / "e2e_duo_variant.py"
+    # a fresh name per variant: a same-size edit written within the same second would otherwise load the stale __pycache__ entry
+    path = tmp_path / f"e2e_duo_variant_{len(list(tmp_path.glob('e2e_duo_variant_*.py')))}.py"
     path.write_text(source, encoding="utf-8")
     spec = importlib.util.spec_from_file_location("e2e_duo_variant", path)
     module = importlib.util.module_from_spec(spec)

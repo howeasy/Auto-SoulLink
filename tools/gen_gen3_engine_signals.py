@@ -1066,6 +1066,9 @@ def build(roms: dict[str, bytes]) -> tuple[dict, dict]:
             # `production` does not decide admission of clean companion titles; the companion-required
             # rule does (lua/gen3/entry.lua Entry.admit_routed + server companion_refusal).
             artifact = {"production": True, **artifact}
+            from tools import rr_companion
+            if rr_companion.equivalent_sha1s():
+                artifact["equivalent_sha1s"] = rr_companion.equivalent_sha1s()
         packs[pack]["titles"].setdefault(title, {"artifacts": {}})["artifacts"][kind] = artifact
     for pack in packs.values():
         if pack["pack"] == "gen3_frlg":
