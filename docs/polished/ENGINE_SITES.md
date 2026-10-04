@@ -39,10 +39,10 @@ the client can tell "player pressed withdraw" from "the copy landed".
 
 | Vanilla site | Vanilla symbol (pokecrystal) | Polished equivalent | Verdict | What the hook must read | Note |
 |---|---|---|---|---|---|
-| `battle_faint` | `UpdateFaintedPlayerMon`, `engine/battle/core.asm:2656` | **absent** — no `UpdateFaintedPlayerMon` and no `HandleFaintedMon*` in the sym | `absent` / `UNVERIFIED` | nearest confirmed anchors: `CheckCurPartyMonFainted` (`sym:12065`, `12:451d`), `CheckAnyFaintedMon` (`sym:13081`, `13:6a39`) | **Highest-priority open item.** The vanilla site is `phase=before_party_copyback`. Polished restructures battle flow; the replacement label has not been located. Do not re-point this site at `CheckAnyFaintedMon` without reading `engine/battle/core.asm`. |
+| `battle_faint` | `UpdateFaintedPlayerMon`, `engine/battle/core.asm:2656` | **absent** — no `UpdateFaintedPlayerMon` and no `HandleFaintedMon*` in the sym | `absent` / `UNVERIFIED` | nearest confirmed anchors: `CheckCurPartyMonFainted` (`sym:12065`, `12:451d`), `CheckAnyFaintedMon` (`sym:13081`, `13:6a39`) | **SUPERSEDED (see BATTLE_FLOW.md §1):** the replacement was located — the boundary is `ldh [hBattleTurn], a` at `0f:44ca`, ROM-verified (`BATTLE_FLOW.md` coordinator note, `:241`-`:243`). This row's `absent` / `UNVERIFIED` verdict and "highest-priority open item" status are withdrawn. |
 | `battle_end` | `ExitBattle`, `engine/battle/core.asm:8268` | `ExitBattle`, `sym:11109`, `0f:72e0` | `same` | `wBattleResult` (`sym:65756`, `01:d0f6`) | Bank unchanged at `$0F`; addr `$769e` -> `$72e0`. Instruction-level `expected_hex` must be re-read from the Polished source — not verified here. |
 | `wild_ready` | `InitEnemyWildmon.skip_unown`, `engine/battle/core.asm:8206` | `InitEnemy.wildmon`, `sym:11108`, `0f:72bc` | `renamed` | `wEnemyMonSpecies`/form byte + `wEnemyMonLevel` (form byte is new — see §7) | Polished has one `InitEnemy` (`sym:11105`, `0f:7260`) with `.wildmon` (`:11108`) and `.partyloop` (`:11106`) labels; pokecrystal split these into two routines. |
-| `trainer_ready` | `InitEnemyTrainer.done`, `engine/battle/core.asm:8180` | `InitEnemy.partyloop`, `sym:11106`, `0f:72a5` | `renamed` | trainer id, `wEnemyPartyCount`, per-mon `dp` species+form | `.partyloop` is the trainer branch. The `ret` the vanilla site executes on is `UNVERIFIED` at this address. |
+| `trainer_ready` | `InitEnemyTrainer.done`, `engine/battle/core.asm:8180` | ~~`InitEnemy.partyloop`, `sym:11106`, `0f:72a5`~~ | ~~`renamed`~~ → **`wrong`** | — | **SUPERSEDED (see BATTLE_FLOW.md F5, EXPLODE_RIVAL.md §10):** `.partyloop` is the **boss-trainer happiness walk**, not the party build. The enemy party is constructed by `farcall ReadTrainerParty` at `core.asm:8040`. The row's Polished column, verdict and "what the hook must read" are all withdrawn; re-anchor on the send-out copy site, not on `.partyloop`. |
 | `poison_faint` | `DoPoisonStep.DamageMonIfPoisoned`, `engine/events/poisonstep.asm:59` | `DoPoisonStep.DamageMonIfPoisoned`, `sym:13058`, `13:68cb` | `same` | `wBattleMonHP` (`sym:63880`, `00:c4b8`), `MON_STATUS` in the party record | Label preserved verbatim. Bank `$13` vs vanilla `$14`. |
 | — (no vanilla site) | — | `BattleTurn`, `sym:10379`, `0f:4109` | **new** | see §6 `battle_hold` | Polished's battle-turn entry, the counterpart of pokecrystal's `MainInBattleLoop`. |
 
@@ -167,18 +167,24 @@ SLink's link and dead-zone rules will see and must classify.
    Polished `Special` (`sym:2648`, `03:401b`) are at the same bank and address.
    Expected for an early, stable routine, but the label alone cannot prove the
    surrounding code is unchanged. Re-read `engine/events/specials.asm` first.
-2. **`battle_faint` has no located Polished counterpart.** This blocks both the
+2. ~~**`battle_faint` has no located Polished counterpart.** This blocks both the
    faint event and the `battle_hold` checkpoint, whose two oracles are exactly the
-   faint routine and `LostBattle`. Highest priority.
+   faint routine and `LostBattle`. Highest priority.~~
+   **SUPERSEDED (see BATTLE_FLOW.md §1–§2):** the counterpart is located and the
+   checkpoint is **not** blocked. The `battle_faint` boundary is `0f:44ca`
+   (ROM-verified); `LostBattle` exists at `0f:4ff6` and `HasPlayerFainted` at
+   `00:3684` plays `HandlePlayerMonFaint`. The generated
+   `data/games/polished_crystal/engine_signals.json` and `write_checkpoint.json`
+   carry the resolved sites and are the authoritative artefacts now.
 3. **Seven vanilla sub-labels do not survive in any form:**
    `UpdateFaintedPlayerMon`, `_SaveGameData.ok`, `Continue.Check2Pass`,
    `InitEnemyWildmon.skip_unown`, `InitEnemyTrainer.done`,
    `BillsPCDepositFuncRelease`, and `TryWithdrawPokemon`'s completion offset. Each
    needs a source read to re-anchor.
-4. **No `expected_hex` was computed.** Every vanilla site carries one and the client
-   admission checks it. Polished needs the same, read from source or a built ROM.
-   This document deliberately quotes **no** Polished byte sequences — I had the
-   `.sym` and the sources, not a `.gbc`.
+4. ~~**No `expected_hex` was computed.**~~ **SUPERSEDED (see
+   `data/games/polished_crystal/engine_signals.json`, generated by
+   `tools/gen_polished_engine_sites.py`):** the sites are now generated with their
+   `expected_hex` from the release ROM. This document still quotes none.
 5. **Nothing here has run.** No row is backed by a hardware observation.
 
 ## 10. Claims

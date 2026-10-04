@@ -69,7 +69,7 @@ Vanilla column = `profile.json` `ram` + `ram_bank`. Polished column = measured `
 | `wMapNumber` | `01:DCB6` | `wMapNumber` | `01:DCAD` | moved | `-9`. |
 | `wPlayerID` | `01:D47B` | `wPlayerID` | `01:D478` | moved | `-3`. |
 | `wPlayerName` | `01:D47D` | `wPlayerName` | `01:D47B` | moved | `-2`. |
-| `wTextboxFlags` | `01:CFF4` | `wTextboxFlags` | `01:CFF4` | same | coincidence; do not rely on it. |
+| `wTextboxFlags` | `00:CFCF` | `wTextboxFlags` | `00:CFF4` | moved | corrected 2026-10-04: both cells previously read `01:CFF4`/same (wrong bank); vanilla data/gen2/pokecrystal.sym:55480, Polished sym:65521. |
 | `wNumItems` | `01:D89E` | `wNumItems` | `01:D827` | moved | `-0x77`. Pocket capacities all changed — §3.2. |
 | `wItems` | `01:D8A1` | `wItems` | `01:D828` | moved | `ds MAX_ITEMS*2+1`, MAX_ITEMS 20→75. |
 | `wNumKeyItems` | `01:D8C8` | `wNumKeyItems` | `01:D7FF` | moved | |

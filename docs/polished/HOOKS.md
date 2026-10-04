@@ -770,3 +770,31 @@ A hook table alone will not tell you these.
 ## 8. Review addendum (2026-10-04, cx-4c455434): two frame waits
 
 `hVBlankOccurred` is written at exactly five sites tree-wide; the Pokedex input poll (`engine/pokedex/pokedex.asm:3124-3129`) re-implements the lead-in and calls `MaybeDelayFrame` directly, past the 7 bytes the overlay replaces. So the overlay's `FRAME_COUNTER` stops advancing while the Pokedex polls input. Latent: P5a publishes caps 0 and nothing consumes the counter yet. Decide before any capability gates on elapsed frames: sample from the VBlank handler instead (covers every wait), hook `MaybeDelayFrame` too, or scope `FRAME_COUNTER` as not a frame index.
+
+
+## 9. Reconciliation pass (2026-10-04, cx-e1bb41ed)
+
+Checked the rest of this document against `RAM.md` and `NEWBOX.md` and against
+`data/polished/polishedcrystal.sym`. **No statement in HOOKS.md required a supersession marker** —
+the frame-hook corrections already landed in §8, and every native/HRAM/SRAM address cited here
+matches the built symbol file:
+
+| Symbol | HOOKS.md | `.sym` | |
+|---|---|---|---|
+| `hVBlankOccurred` | `$FF8F` | `00:ff8f` | agree |
+| `hDelayFrameLY` | `$FFD7` | `00:ffd7` | agree |
+| `hScriptVar` | `$FF85` | `00:ff85` | agree |
+| `hROMBank` | `$FF87` | `00:ff87` | agree |
+| `hVBlankCounter` | `$FF8E` | `00:ff8e` | agree |
+| `sBackupGameData` | `00:b208` | `00:b208` | agree |
+| `sCheckValue1` | `01:a007` | `01:a007` | agree |
+| `sChecksum` | `01:ad0d` | `01:ad0d` | agree |
+
+The §7 open-item table is still accurate: its entries (the `trade_dispatch.asm` stack
+fingerprint, `OpenSRAM`'s enable path, `RemoveMonFromParty`'s box behaviour, the
+`wOTPartySpecies` replacements) are genuinely unmeasured and are **not** superseded by any later
+document. `NEWBOX.md` supplies the SRAM layout HOOKS.md defers to; where the two overlap they agree.
+
+**One finding is recorded elsewhere, not here:** `RAM.md:72` documents `wTextboxFlags` as
+`01:CFF4` in both the vanilla and Polished columns, but `polishedcrystal.sym:65521` places it at
+`00:cff4`. RAM.md was not edited by this pass (out of scope); see `README.md` §Mismatch.

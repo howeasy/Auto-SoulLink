@@ -159,11 +159,17 @@ delta from `wCurOTMon` because Polished inserts fields inside the block.
 2. **`wCurPlayerMove` must be written last**, after the battle-struct and
    party-mirror writes, exactly as `writes.lua:245` already encodes.
 
-> **UNVERIFIED:** Polished's `DetermineMoveOrder` (`core.asm:314-327`) branches on
-> `CheckMoveSpeed` and `.equal_priority`; I did not confirm it still reads
-> `wCurPlayerMove` for move priority the way vanilla's `CompareMovePriority`
-> (`pokecrystal core.asm:815-819`) does. If Polised derived priority elsewhere, the
-> explode write would land but not take effect.
+> **UNVERIFIED (SUPERSEDED — see EXPLODE_RIVAL.md §6):** Polished's `DetermineMoveOrder`
+> (`core.asm:314-327`) branches on `CheckMoveSpeed` and `.equal_priority`; I did not confirm
+> it still reads `wCurPlayerMove` for move priority the way vanilla's `CompareMovePriority`
+> (`pokecrystal core.asm:815-819`) does. If Polished derived priority elsewhere, the explode
+> write would land but not take effect.
+>
+> **CORRECTION:** it *does* read it. `GetBattleVarAddr` (`home/battle_vars.asm:7`) is
+> table-driven and its `BATTLE_VARS_MOVE` case resolves to `wCurPlayerMove`. **The vanilla
+> explode write rule therefore transfers unchanged.** The paragraph above is retained as the
+> record of the wrong inference; it came from reading `GetMovePriority` without following the
+> constant through its dispatch table.
 
 ### 3.2 `replace_rival_team` — condition survives, layout does not
 
@@ -182,6 +188,11 @@ InitEnemy                        core.asm:8030   sym:11105  0f:7260
   ld a, -1 / ld [wCurOTMon], a          :8051-8052
   ld a, TRAINER_BATTLE / ld [wBattleMode], a  :8053-8054
 ```
+
+**SUPERSEDED (see EXPLODE_RIVAL.md §7):** the paragraph below treats `wCurOTMon == $FF` as
+*the* rival gate. It is not. The gate is the **PC at `0f:47dd`**; `wCurOTMon` commits at
+`0f:47cc`, **before** the copy, and is last consumed at `0f:480d`. The `wCurOTMon == $FF`
+condition is retained below as the record of the earlier reading.
 
 **The `wCurOTMon == $FF` condition survives.** `core.asm:8051-8052` sets
 `wCurOTMon` to `$FF` for every trainer battle, exactly as vanilla does. Vanilla's
@@ -223,11 +234,11 @@ of the vanilla write **has no equivalent at all**.
 
 | Blocker | Answer | Status |
 |---|---|---|
-| (1) `battle_faint` / `before_party_copyback` | `ldh [hBattleTurn], a` at `engine/battle/core.asm:727`, i.e. `0f:44ca` (2 bytes past `.no_fainted_mons` `0f:44c7`, `sym:10439`). Battle struct (`wBattleMonHP` `00:c4b8`) is authoritative; the party record is stale until `UpdateBattleMonInParty` (`sym:1099`) fires. | resolved; address `UNVERIFIED` |
+| (1) `battle_faint` / `before_party_copyback` | `ldh [hBattleTurn], a` at `engine/battle/core.asm:727`, i.e. `0f:44ca` (2 bytes past `.no_fainted_mons` `0f:44c7`, `sym:10439`). Battle struct (`wBattleMonHP` `00:c4b8`) is authoritative; the party record is stale until `UpdateBattleMonInParty` (`sym:1099`) fires. **SUPERSEDED: address is ROM-verified** — see the coordinator note at the end of this file. | resolved; address verified on ROM |
 | (2a) oracle `LostBattle` | `LostBattle` **exists** in Polished at `0f:4ff6` (`sym:10612`), `core.asm:2589`. `ENGINE_SITES.md` was wrong to call it absent. | resolved |
 | (2b) oracle `HandlePlayerMonFaint` | absent by name; the role is `HasPlayerFainted` (`sym:1159`, `00:3684`) plus the `.player_not_fleeing` dispatch in `engine/battle/endturn.asm:97-110`. | resolved by role |
-| (3a) `force_explode` hold | hold immediately before `call DetermineMoveOrder` at `core.asm:190` (inside `BattleTurn` `0f:4109`). `wCurPlayerMove` still written LAST. | safe equivalent exists |
-| (3b) `replace_rival_team` | `wCurOTMon == $FF` condition survives (`core.asm:8051-8052`, `wCurOTMon` `00:c4dd`). Enemy-party **species list does not exist** — those bytes are `wMirrorHerbPendingBoosts`. | condition same, layout changed-semantics |
+| (3a) `force_explode` hold | hold immediately before `call DetermineMoveOrder` at `core.asm:190` (inside `BattleTurn` `0f:4109`). `wCurPlayerMove` still written LAST. **SUPERSEDED (EXPLODE_RIVAL.md §6): the priority read is confirmed, so the vanilla rule transfers.** | safe equivalent exists |
+| (3b) `replace_rival_team` | `wCurOTMon == $FF` condition survives (`core.asm:8051-8052`, `wCurOTMon` `00:c4dd`). Enemy-party **species list does not exist** — those bytes are `wMirrorHerbPendingBoosts`. **SUPERSEDED (EXPLODE_RIVAL.md §7): the gate is the PC at `0f:47dd`, not `wCurOTMon`.** | condition same, layout changed-semantics |
 
 ## 5. Claims
 
@@ -240,4 +251,9 @@ CLAIMS: [{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","
 
 ## Coordinator note (2026-10-04): the boundary is ROM-verified
 
-Release ROM bytes at `0f:44c7` (`ResolveFaints.no_fainted_mons`): `f1` (`pop af`), `e0 d1` (`ldh [hBattleTurn], a`), then at `0f:44ca` `cd b0 34` = `call UpdateBattleMonInParty` (sym `00:34b0`), followed by `cd c3 34` = `call UpdateEnemyMonInParty` (sym `00:34c3`). So `0f:44ca` is the first instruction of the copy-back, i.e. the last point at which the battle struct is authoritative. `LostBattle` is `0f:4ff6`. Still UNVERIFIED: whether Polished's `DetermineMoveOrder` reads `wCurPlayerMove` for priority (decides whether `force_explode` does anything), and the enemy-party write window.
+Release ROM bytes at `0f:44c7` (`ResolveFaints.no_fainted_mons`): `f1` (`pop af`), `e0 d1` (`ldh [hBattleTurn], a`), then at `0f:44ca` `cd b0 34` = `call UpdateBattleMonInParty` (sym `00:34b0`), followed by `cd c3 34` = `call UpdateEnemyMonInParty` (sym `00:34c3`). So `0f:44ca` is the first instruction of the copy-back, i.e. the last point at which the battle struct is authoritative. `LostBattle` is `0f:4ff6`. Still UNVERIFIED at the time of writing: whether Polished's `DetermineMoveOrder` reads
+`wCurPlayerMove` for priority, and the enemy-party write window.
+
+**Both are now answered — see `EXPLODE_RIVAL.md` §6 (the priority read *is* `wCurPlayerMove`,
+via `GetBattleVarAddr`'s `BATTLE_VARS_MOVE` case) and §7/§10 (the rival gate is the PC at
+`0f:47dd`, with the trainer send-out copy site proven from ROM bytes).**
