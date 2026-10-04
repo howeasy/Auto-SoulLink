@@ -194,23 +194,33 @@ function P.admit(args, beacon_path)
     return nil, reason
 end
 
--- (species_id * 32 + form) of every REGIONAL/variant form, from profile.derived.variant_forms (set by P.new).
+-- VARIANT: (species_id * 32 + form) -> BaseData record index of every REGIONAL/variant form; RECORD: the reverse.
 -- Owner 2026-10-04: regional forms are different mons; every other (cosmetic) form is one mon and keys as form 0.
+-- A variant's EFFECTIVE species id is its record index (polished_codec.effective_species): the record's species_id
+-- and every wire species_id carry it, so the server's species-keyed rules judge the variant as its own mon; the
+-- key keeps the raw 9-bit species + form bits (polished_codec.key). Record ids (292..) never collide with a
+-- species*32+form slot, so effective() is idempotent.
 -- ponytail: module-level because the key builder is injected without the profile; unset = fail closed.
-local VARIANT = nil
+local VARIANT, RECORD = nil, nil
 
--- profile.derived.variant_forms = {{species_id, form_id}, ...}; P.new calls this, tests may call it directly.
+-- profile.derived.variant_forms = {{species_id, form_id, record_index}, ...}; P.new calls this, tests may call it.
 function P.load_variants(list)
     if type(list) ~= "table" or #list == 0 then return nil, "profile.derived.variant_forms required" end
-    local variant = {}
-    for _, pair in ipairs(list) do
-        if type(pair) ~= "table" or not integer(pair[1], 1, MAX_SPECIES) or not integer(pair[2], 1, 31) then
+    local variant, record = {}, {}
+    for _, row in ipairs(list) do
+        if type(row) ~= "table" or not integer(row[1], 1, MAX_SPECIES) or not integer(row[2], 1, 31)
+           or not integer(row[3], 1, MAX_SPECIES) or record[row[3]] then
             return nil, "invalid variant_forms row"
         end
-        variant[pair[1] * 32 + pair[2]] = true
+        variant[row[1] * 32 + row[2]], record[row[3]] = row[3], row[1] * 32 + row[2]
     end
-    VARIANT = variant
+    VARIANT, RECORD = variant, record
     return true
+end
+
+-- the species the server judges a mon as: a variant form's record index, else the species itself
+local function effective(species_id, form)
+    return VARIANT[species_id * 32 + form] or species_id
 end
 
 -- polished_codec.key: 3 DV bytes, OT ID, 9-bit species, traits (shiny bit 7, female bit 6, variant form 0-4).
@@ -221,9 +231,13 @@ function P.mon_key(mon)
     if not integer(mon.ot_id, 0, 0xFFFF) then return nil, "invalid or missing ot_id" end
     if not integer(mon.species_id, 1, MAX_SPECIES) then return nil, "invalid or missing species_id" end
     if not integer(mon.form, 0, 31) then return nil, "invalid or missing form" end
-    local form = VARIANT[mon.species_id * 32 + mon.form] and mon.form or 0
+    local species, packed = mon.species_id, RECORD[mon.species_id]
+    -- an effective (record) id with its own form: the key names the raw species. ponytail: any other id keys as
+    -- itself (a raw species never reaches 292, so only a corrupt record lands here, and the server refuses its key)
+    if packed and packed % 32 == mon.form then species = packed // 32 end
+    local form = VARIANT[species * 32 + mon.form] and mon.form or 0
     local traits = (mon.shiny and 0x80 or 0) + (mon.gender == "female" and 0x40 or 0) + form
-    return string.format("%06X:%04X:%03X:%02X", mon.dv_bytes, mon.ot_id, mon.species_id, traits)
+    return string.format("%06X:%04X:%03X:%02X", mon.dv_bytes, mon.ot_id, species, traits)
 end
 
 local function four(list)
@@ -304,7 +318,7 @@ function P.box_entry(mon, box_index)
     if not moves then return nil, "invalid or missing moves" end
     if not integer(mon.held_item, 0, 255) then return nil, "invalid or missing held_item" end
     if mon.nickname ~= nil and type(mon.nickname) ~= "string" then return nil, "nickname must be a decoded string" end
-    local entry = {box=box_index, slot=mon.slot, key=key, species_id=mon.species_id, level=mon.level,
+    local entry = {box=box_index, slot=mon.slot, key=key, species_id=effective(mon.species_id, mon.form), level=mon.level,
                    held_item_id=mon.held_item, moves=moves}
     if mon.nickname ~= nil then entry.nickname = mon.nickname end
     return entry
@@ -362,7 +376,8 @@ function P.new(profile, io, decode_name)
         mon.gender = field(c.GENDER_MASK, form_byte) == 1 and "female" or "male"
         mon.is_egg = field(c.IS_EGG_MASK, form_byte) == 1
         mon.form = field(c.FORM_MASK, form_byte)
-        mon.species_id = mon.species_id + field(c.EXTSPECIES_MASK, form_byte) * 256
+        -- the EFFECTIVE species (P.mon_key maps it back): captures, foes and the party wire all carry it
+        mon.species_id = effective(mon.species_id + field(c.EXTSPECIES_MASK, form_byte) * 256, mon.form)
     end
 
     local function dvs_of(mon, bytes, at)

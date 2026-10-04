@@ -419,10 +419,12 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         return match[2] if match else ""
 
     def gender_from_key(self, key, species_id):
+        # species_id is the wire's EFFECTIVE id (a variant's record index); the key carries the raw species + form
         match = self._key(key)
-        if match is None or int(match[3], 16) != species_id:
+        raw, form = (int(match[3], 16), int(match[4], 16) & 0x1F) if match else (None, 0)
+        if match is None or species_id not in (raw, polished_codec.effective_species(raw, form)):
             return ""
-        ratio = self._row(species_id, int(match[4], 16) & 0x1F)["gender_ratio"]
+        ratio = self._row(raw, form)["gender_ratio"]
         if ratio == _GENDERLESS:
             return "genderless"
         # Polished stores gender explicitly (form byte bit 7, FEMALE = %10000000); the ratio only
@@ -441,9 +443,8 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
 
     def species_name(self, species_id, form=0):
         record = self._variant_by_record.get(species_id) if type(species_id) is int else None
-        if record is not None:
-            label = _form_label(record)
-            return f"{label} {self._species[record['species']]['name']}".strip()
+        if record is not None:   # an effective id: named exactly as species_name(species, form) names it
+            return f"{self._species[record['species']]['name']} ({_form_label(record)})"
         if not _integer(species_id, 1, 0x1FF) or species_id not in self._species:
             return f"#{species_id}" if type(species_id) is int else "#?"
         variant = self._variants.get((species_id, form))
@@ -578,7 +579,8 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         # gen2_gsc's acquisition branch validates species 1..251; Polished species are 9-bit.
         _require(isinstance(area_id, str) and _AREA.fullmatch(area_id), "invalid acquisition area")
         if acquisition is not None:
-            _require(species_id in self._species, "acquisition requires an actual species, not EGG")
+            _require(species_id in self._species or species_id in self._variant_by_record,
+                     "acquisition requires an actual species, not EGG")
             if acquisition == "egg_hatch":
                 return "gift_daycare"
             if acquisition == "roamer":

@@ -708,7 +708,7 @@ class SLinkServer:
         if failed:
             log.info("[%s] encounter data marked unavailable", player_id)
         else:
-            log.info("[%s] using this cartridge's own encounter tables (%d areas)",
+            log.info("[%s] using this cartridge's own encounter tables (%d top-level keys)",
                      player_id, len(tables))
 
     def _load_rom_contract(self) -> dict | None:

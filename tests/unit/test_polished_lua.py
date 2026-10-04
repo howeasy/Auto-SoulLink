@@ -22,7 +22,8 @@ REPO = Path(__file__).resolve().parents[2]
 ROOT = str(REPO).replace("\\", "/")
 def load_variants(lua, module):
     """A bare dofile'd polished.lua has no variant table until P.new / P.load_variants (the key fails closed)."""
-    assert module.load_variants(lua.table_from([lua.table_from(p) for p in P["derived"]["variant_forms"]]))
+    # `is True`: a refusal comes back as the (None, why) tuple, which is truthy
+    assert module.load_variants(lua.table_from([lua.table_from(p) for p in P["derived"]["variant_forms"]])) is True
     return module
 
 

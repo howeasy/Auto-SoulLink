@@ -286,9 +286,10 @@ def build() -> dict:
                     "name_length": constants["NAME_LENGTH"], "mon_name_length": constants["MON_NAME_LENGTH"],
                     "player_name_length": constants["PLAYER_NAME_LENGTH"], "num_boxes": constants["NUM_BOXES"],
                     "rom_size": out["size"], "pockets": pockets, **rom_derived,
-                    # (species_id, form_id) pairs that are REGIONAL/variant forms = different mons (owner 2026-10-04);
+                    # (species_id, form_id, record_index) of every REGIONAL/variant form = a different mon (owner
+                    # 2026-10-04) whose effective species id is its BaseData record index (polished_codec.effective_species);
                     # every other form is cosmetic and keys as form 0 (polished_codec.key_form). From forms_index.json.
-                    "variant_forms": sorted([r["species_id"], r["form_id"]] for r in json.loads(
+                    "variant_forms": sorted([r["species_id"], r["form_id"], r["record_index"]] for r in json.loads(
                         (OUT.parent / "forms_index.json").read_text(encoding="utf-8"))["variant_forms"])},
         "overlay": overlay,
     }
