@@ -350,6 +350,174 @@ code that shares the symbol.
 
 `menu_coords` is `x1, y1, x2, y2` (`macros/coords.asm:66-69`: start and END coordinates), not width/height, and the bottom row is recomputed from the item count: `AutomaticGetMenuBottomCoord` (`home/menu.asm:454-465`) sets `bottom = top + items*2 + 1`. So the box is rows 0..7 with 3 items, 0..9 with 4, 0..11 with 5 (New Game+), which is what HOOKS.md §4 said ("rows 0-11"); that file is right and §7 F1 above is withdrawn. Rows 12-13 are free of the menu in every state. The clock area is drawn by `MainMenu_PrintCurrentTimeAndDay` only when a save exists (`wSaveFileExists`): with the RTC set it is a 4-row box at rows 14-17; with the RTC NOT set, `SpeechTextbox` (rows 12-17) is redrawn on every pass of `MainMenuJoypadLoop .loop` (`main_menu.asm:105-121`, the per-iteration `call MainMenu_PrintCurrentTimeAndDay`), wiping anything printed at row 13 once. The `call SetUpMenu` hook at `MainMenuJoypadLoop` runs ONCE before that loop, so a version string printed there at (1,13) survives with the RTC set (or no save) but is erased on the first loop pass when a save exists and the RTC is unset. Consequence for the card: print the version from a bridge on the per-iteration `call MainMenu_PrintCurrentTimeAndDay` in `.loop` (print after the redraw each pass), or accept that state shows no version; decide before writing the overlay. T2 is NOT retired. The LY finding (§7.3: the title clears wLYOverrides and never refills it; rows 10-11 cannot be displaced) is unaffected.
 
+## 8. Version placement and tiles, round 2
+
+This section **withdraws §7.1**. The coordinator's correction is right: `menu_coords` is
+`x1, y1, x2, y2` and the bottom row is recomputed from the item count, so the menu box
+does reach row 11 with five items — `docs/polished/HOOKS.md` was right and §7.1 was wrong.
+
+### 8.1 Screen occupancy, every state
+
+`home/menu.asm:454-467`:
+
+```
+AutomaticGetMenuBottomCoord::
+   ld a, [wMenuBorderLeftCoord]  ; -> c
+   ld a, [wMenuBorderRightCoord]
+   sub c                          ; -> c = width
+   ld a, [wMenuDataItems]
+   add a
+   inc a
+   ld b, a                        ; b = items * 2 + 1
+   ld a, [wMenuBorderTopCoord]
+   add b
+   ld [wMenuBorderBottomCoord], a
+```
+
+so **bottom = top + items*2 + 1**. With `menu_coords 0, 0, 16, 7` the top is 0 and
+`MenuBoxCoord2Tile` uses the computed bottom, not the literal `7`.
+
+Box bottom by item count: 3 items -> **row 7**; 4 -> **row 9**; 5 -> **row 11**.
+
+The lower region depends on the save/RTC state:
+
+| region | source | rows | redrawn |
+|---|---|---|---|
+| menu box | `AutomaticGetMenuBottomCoord` | `0 .. items*2+1` | once, by `SetUpMenu` |
+| time box (RTC set) | `main_menu.asm:149-151` `hlcoord 0, 14` / `lb bc, 2, 18` / `jmp Textbox` | **14-15** | **every pass** |
+| speech box (RTC unset) | `main_menu.asm:146-148` `call CheckRTCStatus` / `and $80` / `jmp nz, SpeechTextbox` | **12-17** | **every pass** |
+| time text | `:190` `hlcoord 1, 14`, `:179` `decoord 4, 16` | 14, 16 | every pass |
+
+`SpeechTextbox::` (`home/text.asm:52-55`) uses `TEXTBOX_X`/`TEXTBOX_Y`/
+`TEXTBOX_INNERH`/`TEXTBOX_INNERW`, and `constants/text_constants.asm` gives
+`TEXTBOX_HEIGHT EQU 6` (`:15`), `TEXTBOX_Y EQU SCREEN_HEIGHT - TEXTBOX_HEIGHT` (`:18`)
+— so **rows 12-17**.
+
+`MainMenu_PrintCurrentTimeAndDay:` (`:127-143`) is called from `MainMenuJoypadLoop`'s
+`.loop` (`:107`), which `jr MainMenu` (`:22`) re-enters. So the lower region is
+**repainted every frame** in every state where a save exists.
+
+### 8.2 The full occupancy matrix
+
+| save | RTC | items | menu box | lower region | rows free below the box |
+|---|---|---|---|---|---|
+| none | — | 3 | 0-7 | none (`:129-130` returns) | 8-17 |
+| yes | set | 3 | 0-7 | time box 14-15, text 14/16 | 8-13, 17 |
+| yes | unset | 3 | 0-7 | speech box **12-17** | 8-11 |
+| yes | set | 4 | 0-9 | time box 14-15, text 14/16 | 10-13, 17 |
+| yes | unset | 4 | 0-9 | speech box **12-17** | 10-11 |
+| yes | set | 5 | 0-11 | time box 14-15, text 14/16 | 12-13, 17 |
+| yes | unset | 5 | 0-11 | speech box **12-17** | **none** |
+
+### 8.3 There is no row free in every state
+
+The worst case is **save present, RTC unset, five items**: the box reaches row 11 and
+the speech box takes 12-17. **Rows 12-17 are not always free**, so §3.3's "print once
+from the `SetUpMenu` hook" is wrong: with the RTC unset, `SpeechTextbox` erases anything
+written there on the next `.loop` pass.
+
+**Consequence: the version string must be printed on every pass, not once.** There is no
+placement that avoids this, because the region that would be free in the RTC-unset state
+is exactly the region the speech box occupies. This is a design consequence of Polished's
+own menu, not a limitation of the hook.
+
+### 8.4 The per-pass hook
+
+**Anchor.** `MainMenu_PrintCurrentTimeAndDay` is `12:43ed` (`.sym`), and the call site
+inside `MainMenuJoypadLoop` (`12:43ca`, flat `0x483CA`) is at **flat `0x483CD`, bytes
+`cd ed 43`** — verified in the ROM: the routine opens `cd a0 19` (`call SetUpMenu`) then
+`cd ed 43` (`call $43ed`). Exactly **3 bytes**, so a same-size rewrite is available.
+
+**Rewrite** `cd ed 43` -> `cd lo hi` (`call SlinkMainMenuLoopBridge`).
+
+**Bridge**, in ROM0:
+
+```
+SlinkMainMenuLoopBridge::
+   call MainMenu_PrintCurrentTimeAndDay
+   ; the original ended with `ld a,$1 / ldh [hBGMapMode],a` (main_menu.asm:141-142),
+   ; so the tilemap is already flushed. Writing after that needs a second flush.
+   xor a
+   ldh [hBGMapMode], a
+   farcall SlinkPrintVersion        ; rst FarCall takes inline data on Polished
+   ld a, 1
+   ldh [hBGMapMode], a
+   ret
+```
+
+**Ordering.** `MainMenu_PrintCurrentTimeAndDay` clears `hBGMapMode` to 0 at `:131-132`
+before drawing and sets it to 1 at `:141-142` after, which is the flush. Anything printed
+*after* it lands in `wTilemap` with `hBGMapMode == 1` and is **never copied to VRAM** —
+so the `xor a` / `ld a,1` pair around the print is mandatory, not cosmetic. Printing
+*before* the original would instead be erased by the very next thing the original does.
+
+**One-time vs per-pass trade-off.** A one-time print at `SetUpMenu` is cheaper but, per
+§8.3, is erased in the RTC-unset state. A per-pass print costs one extra
+`PlaceString` per frame in the main menu — a menu that is idle and redrawn at 60 Hz. That
+is the price of correctness here, and it is the only correct option.
+
+**`PlaceString` is the vanilla printer and is safe here**: `PlaceString 00:0030` per
+HOOKS.md §3.3, and the version text is a normal Polished string with `@` = `$53`
+(`constants/charmap.asm:43`), so `patch/gen2/src/version.asm`'s
+`db "SoulLink {SLINK_BUILD_VERSION}@"` form ports over unchanged, including its 20-byte
+fixed field and both `ASSERT`s.
+
+### 8.5 Tile allocation — settled
+
+`python tools/gen_gen1_title.py` from the worktree root:
+
+```
+crystal 18 tiles, gold/silver 16 tiles
+gen3 logo 72x16
+pure line 37px in 6 tiles
+18 tiles
+```
+
+`patch/gen2/src/title_rows_crystal.inc` then reads:
+
+```
+DEF SLINK_TITLE_LOGO_TILES EQU 18
+DEF SLINK_TITLE_FIRST_TILE EQU $60
+SlinkTitleLogoRow0:   db $60,$61,$62,$63,$64,$65,$66,$67,$68
+SlinkTitleLogoRow1:   db $69,$6A,$6B,$6C,$6D,$6E,$6F,$70,$71
+```
+
+So the Crystal band is **18 tiles at `$60`-`$71`** (9 + 9, no dedup collisions in the
+Crystal style; G/S dedups to 16 over 8 columns).
+
+**Collision proof.** The range `$60`-`$71` goes into **`vTiles2`**. `engine/movie/title.asm`
+writes only `vTiles1` (`TitleSuicuneGFX` `:26-27`, `TitleLogoGFX` `:93-94`) and `vTiles0`
+(`TitleCrystalGFX` `:98-99`). **No line in the file writes `vTiles2`**, so no tile the
+title places can occupy `$60`-`$71`. Because the whole allocation sits in an unwritten
+block, the range is safe regardless of what the title's tilesets contain.
+
+**Generator side effect — reported and repaired.** The run modified the tracked file
+`patch/tools/gen3_title_art.py`. I restored it with
+`git show HEAD:patch/tools/gen3_title_art.py > patch/tools/gen3_title_art.py`;
+`git diff --numstat` on it is now empty (only git's `core.autocrlf` LF/CRLF warning
+remains, which is the known checkout-dependence in this repo, not a content change).
+`patch/gen2/src/title_rows_crystal.inc` and `title_rows_gs.inc` were unchanged by the
+run, so the committed values already matched.
+
+### 8.6 Palette immediates for rows 3 and 5
+
+Read from `engine/movie/title.asm`: row 3 at `:51` is followed by `ld a, 2` (`:53`), and
+row 5 at `:56` by `ld a, 3` (`:58`). Combined with §7.2: row 6 -> 4, row 7 -> 5,
+row 8 -> 6, row 9 -> 1, row 12 -> 8. **Every title text row is now accounted for.**
+
+### 8.7 What this changes in the earlier sections
+
+- **§3.3's proposal is withdrawn.** One-time printing at `(1, 13)` does not survive the
+  RTC-unset state. Replace it with the per-pass hook in §8.4 and a placement that is
+  *re-painted*, not merely *placed*.
+- **§7.1 is withdrawn** (§8.1 supersedes it).
+- **§7.3's tile unknowns are settled**: 18 tiles at `$60`-`$71`, collision-free (§8.5).
+- **§6's card T2 is withdrawn and replaced** by the per-pass hook card; T1 is done.
+
+## Coordinator correction (2026-10-04) to §8 F3 'flush ordering'
+
+The claim that text printed after the original returns 'lands in wTilemap with hBGMapMode == 1 and is never copied to VRAM' is WRONG. `UpdateBGMap` (`home/video.asm:148-166`) treats `hBGMapMode` 1 as 'copy BG map 0 tiles from wTilemap, in halves, each VBlank', so anything written to `wTilemap` while the mode is 1 reaches VRAM within a frame or two. Wrapping the print in `xor a / ldh [hBGMapMode],a` ... restore is still the right hygiene (it makes the string appear in the same copy as the clock text, with no one-frame tear), but it is not required for visibility; falsifier 4 as written would not fail. The rest of §8 stands and was independently re-verified: the hook anchor is `cd ed 43` at flat `0x483CD` (`MainMenuJoypadLoop` `12:43ca` reads `cd a0 19 cd ed 43`; `MainMenu_PrintCurrentTimeAndDay` is `12:43ed`), and per-pass printing is required.
+
 ```json
-CLAIMS: [{"path":"F:/slink-work/wt/polished/tools/gen_gen1_title.py","line":32,"expect":"COLS, ROWS = 9, 2"},{"path":"F:/slink-work/wt/polished/tools/gen_gen1_title.py","line":73,"expect":"img = Image.new(\"L\", (cols * 8, ROWS * 8), WHITE)"},{"path":"F:/slink-work/wt/polished/tools/gen_gen1_title.py","line":117,"expect":"data, order, n = pack(draw(), COLS, ROWS, CRYSTAL_ROLES)"},{"path":"F:/slink-work/wt/polished/tools/gen_gen1_title.py","line":126,"expect":"data, order, n = pack(draw(8), 8, ROWS, GS_ROLES)"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":17,"expect":"SlinkPrintVersion:"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":18,"expect":"hlcoord 1, 10"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":22,"expect":"db \"SoulLink {SLINK_BUILD_VERSION}@\""},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":26,"expect":"ds 20 - (.end - .text), 0"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":27,"expect":"ASSERT .end - .text - 1 <= SCREEN_WIDTH - 1"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":28,"expect":"ASSERT .end - .text <= 20"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":14,"expect":"jp SetUpMenu"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title.asm","line":26,"expect":"SlinkTitleBridge::"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title.asm","line":30,"expect":"jp EnableLCD"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title.asm","line":40,"expect":"ld de, vTiles2 tile SLINK_TITLE_FIRST_TILE"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title.asm","line":44,"expect":"decoord 6, 10"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title.asm","line":55,"expect":"ld a, 6 ; the Pokemon logo's gold"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title.asm","line":41,"expect":"ld bc, SLINK_TITLE_LOGO_TILES tiles"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":1,"expect":"_TitleScreen:"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":26,"expect":"ld hl, TitleSuicuneGFX"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":93,"expect":"ld hl, TitleLogoGFX"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":98,"expect":"ld hl, TitleCrystalGFX"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":142,"expect":"ld hl, TitleScreenPalettes"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":368,"expect":"TitleScreenPalettes:"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":170,"expect":"set B_IE_STAT, [hl]"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":179,"expect":"call EnableLCD"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":208,"expect":"SuicuneFrameIterator:"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":335,"expect":"AnimateTitleCrystal:"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":83,"expect":"hlbgcoord 0, 12"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":77,"expect":"hlbgcoord 5, 9"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":163,"expect":"ld hl, wLYOverrides"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":156,"expect":"; LY/SCX trickery starts here"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":34,"expect":"rst ByteFill"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":369,"expect":"INCLUDE \"gfx/title/title.pal\""},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":360,"expect":"INCBIN \"gfx/title/suicune.2bpp.lz\""},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":363,"expect":"INCBIN \"gfx/title/logo_version.2bpp.lz\""},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":366,"expect":"INCBIN \"gfx/title/crystal.2bpp.lz\""},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":61,"expect":"hlbgcoord 0, 6"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":66,"expect":"hlbgcoord 0, 7"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":71,"expect":"hlbgcoord 0, 8"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":51,"expect":"hlbgcoord 0, 3"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":56,"expect":"hlbgcoord 0, 5"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":1,"expect":"MainMenu:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":86,"expect":"MainMenu_GetWhichMenu:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":104,"expect":"MainMenuJoypadLoop:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":105,"expect":"call SetUpMenu"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":149,"expect":"hlcoord 0, 14"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":179,"expect":"decoord 4, 16"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":190,"expect":"hlcoord 1, 14"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":22,"expect":"jr MainMenu"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":127,"expect":"MainMenu_PrintCurrentTimeAndDay:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":11,"expect":"call MainMenu_PrintCurrentTimeAndDay"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":56,"expect":"const MAINMENU_ITEM_MUSIC_PLAYER  ; 4"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":58,"expect":"MainMenuItems:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":24,"expect":".MenuDataHeader:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":26,"expect":"menu_coords 0, 0, 16, 7"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":25,"expect":"db MENU_BACKUP_TILES"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":59,"expect":"MAINMENU_MENU_NEW_GAME"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":65,"expect":"MAINMENU_MENU_CONTINUE"},{"path":"F:/slink-work/cache/polished/src/home/menu.asm","line":589,"expect":"PlaceMenuStrings::"},{"path":"F:/slink-work/cache/polished/src/constants/charmap.asm","line":43,"expect":"ctxtmap \"@\",        $53, 001011010"},{"path":"F:/slink-work/wt/polished/data/polished/free_space.txt","line":3,"expect":"2 ROMX bank(s) never allocated by the linker"},{"path":"F:/slink-work/wt/polished/data/polished/free_space.txt","line":10,"expect":"bank 126:  16384 free ($4000)"},{"path":"F:/slink-work/wt/polished/data/polished/free_space.txt","line":6,"expect":"bank   0:    351 free ($015f) of 16384"},{"path":"F:/slink-work/wt/polished/data/polished_sources.lock.json","line":14,"expect":"\"sha1\": \"6930b48af5844d373e3c9130f26d6dd1084cf4ed\""},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":32325,"expect":"35:4000 _TitleScreen"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":725,"expect":"00:24da EnableLCD"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":12041,"expect":"12:43ca MainMenuJoypadLoop"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":540,"expect":"00:19a0 SetUpMenu"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":12038,"expect":"12:439f MainMenuItems"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":560,"expect":"00:1a96 PlaceMenuStrings"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":69819,"expect":"05:de00 wLYOverrides"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":69820,"expect":"05:de90 wLYOverridesEnd"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":32340,"expect":"35:41af TitleSuicuneGFX"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":32343,"expect":"35:4b50 TitleScreenPalettes"}]
+CLAIMS: [{"path":"F:/slink-work/cache/polished/src/home/menu.asm","line":454,"expect":"AutomaticGetMenuBottomCoord::"},{"path":"F:/slink-work/cache/polished/src/home/menu.asm","line":94,"expect":"ld a, [wMenuDataItems]"},{"path":"F:/slink-work/cache/polished/src/home/menu.asm","line":360,"expect":"ld [wMenuBorderBottomCoord], a"},{"path":"F:/slink-work/cache/polished/src/home/menu.asm","line":589,"expect":"PlaceMenuStrings::"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":104,"expect":"MainMenuJoypadLoop:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":105,"expect":"call SetUpMenu"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":11,"expect":"call MainMenu_PrintCurrentTimeAndDay"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":127,"expect":"MainMenu_PrintCurrentTimeAndDay:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":132,"expect":"ldh [hBGMapMode], a"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":149,"expect":"hlcoord 0, 14"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":150,"expect":"lb bc, 2, 18"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":153,"expect":".PlaceTime:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":190,"expect":"hlcoord 1, 14"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":179,"expect":"decoord 4, 16"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":22,"expect":"jr MainMenu"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":26,"expect":"menu_coords 0, 0, 16, 7"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":86,"expect":"MainMenu_GetWhichMenu:"},{"path":"F:/slink-work/cache/polished/src/engine/menus/main_menu.asm","line":58,"expect":"MainMenuItems:"},{"path":"F:/slink-work/cache/polished/src/home/text.asm","line":52,"expect":"SpeechTextbox::"},{"path":"F:/slink-work/cache/polished/src/constants/text_constants.asm","line":14,"expect":"DEF TEXTBOX_HEIGHT EQU 6"},{"path":"F:/slink-work/cache/polished/src/constants/text_constants.asm","line":18,"expect":"DEF TEXTBOX_Y      EQU SCREEN_HEIGHT - TEXTBOX_HEIGHT"},{"path":"F:/slink-work/cache/polished/src/constants/text_constants.asm","line":11,"expect":"DEF BORDER_WIDTH   EQU 2"},{"path":"F:/slink-work/cache/polished/src/constants/text_constants.asm","line":12,"expect":"DEF TEXTBOX_WIDTH  EQU SCREEN_WIDTH"},{"path":"F:/slink-work/cache/polished/src/constants/charmap.asm","line":43,"expect":"ctxtmap \"@\",        $53, 001011010"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":51,"expect":"hlbgcoord 0, 3"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":56,"expect":"hlbgcoord 0, 5"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":61,"expect":"hlbgcoord 0, 6"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":66,"expect":"hlbgcoord 0, 7"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":71,"expect":"hlbgcoord 0, 8"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":77,"expect":"hlbgcoord 5, 9"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":83,"expect":"hlbgcoord 0, 12"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":26,"expect":"ld hl, TitleSuicuneGFX"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":93,"expect":"ld hl, TitleLogoGFX"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":98,"expect":"ld hl, TitleCrystalGFX"},{"path":"F:/slink-work/cache/polished/src/engine/movie/title.asm","line":179,"expect":"call EnableLCD"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title_rows_crystal.inc","line":2,"expect":"DEF SLINK_TITLE_LOGO_TILES EQU 18"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title_rows_crystal.inc","line":3,"expect":"DEF SLINK_TITLE_FIRST_TILE EQU $60"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title_rows_crystal.inc","line":4,"expect":"SlinkTitleLogoRow0:"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/title_rows_crystal.inc","line":6,"expect":"SlinkTitleLogoRow1:"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":17,"expect":"SlinkPrintVersion:"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":18,"expect":"hlcoord 1, 10"},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":22,"expect":"db \"SoulLink {SLINK_BUILD_VERSION}@\""},{"path":"F:/slink-work/wt/polished/patch/gen2/src/version.asm","line":26,"expect":"ds 20 - (.end - .text), 0"},{"path":"F:/slink-work/wt/polished/tools/gen_gen1_title.py","line":32,"expect":"COLS, ROWS = 9, 2"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":12041,"expect":"12:43ca MainMenuJoypadLoop"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":12045,"expect":"12:43ed MainMenu_PrintCurrentTimeAndDay"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":32325,"expect":"35:4000 _TitleScreen"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":725,"expect":"00:24da EnableLCD"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":32343,"expect":"35:4b50 TitleScreenPalettes"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":560,"expect":"00:1a96 PlaceMenuStrings"},{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","line":18,"expect":"00:0030 PlaceString"},{"path":"F:/slink-work/wt/polished/data/polished/free_space.txt","line":3,"expect":"2 ROMX bank(s) never allocated by the linker"},{"path":"F:/slink-work/wt/polished/data/polished/free_space.txt","line":10,"expect":"bank 126:  16384 free ($4000)"},{"path":"F:/slink-work/wt/polished/docs/polished/HOOKS.md","line":59,"expect":"MainMenuJoypadLoop"}]
 ```
