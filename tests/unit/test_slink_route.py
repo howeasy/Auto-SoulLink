@@ -217,6 +217,27 @@ def test_a_gb_cartridge_still_takes_the_unchanged_gen1_route():
     assert _NEW_GEN3_CLIENT not in loaded, loaded
 
 
+_GEN4_RUN = "lua/gen4/run.lua"
+
+
+@pytest.mark.parametrize("system_id,header,rom_hash,client", [
+    ("GB", "\0\0\0\0", "f" * 40, _NEW_GEN1_CLIENT),
+    ("GBC", "\0\0\0\0", "f" * 40, _NEW_GEN1_CLIENT),
+    ("SGB", "\0\0\0\0", "f" * 40, _NEW_GEN1_CLIENT),
+    ("GBA", "\0\0\0\0", _FR_COMPANION_SHA1, _NEW_GEN3_CLIENT),
+    ("GBA", "\0\0\0\0", _LG_COMPANION_SHA1, _NEW_GEN3_CLIENT),
+    ("GBA", "\0\0\0\0", _RR_COMPANION_SHA1, _NEW_GEN3_CLIENT),
+    ("GBA", "BPEE", _EMERALD_COMPANION_SHA1, _NEW_GEN3_CLIENT),
+])
+def test_no_gen1_to_gen3_cartridge_ever_routes_into_the_gen4_client(system_id, header, rom_hash, client):
+    """G3a hard bar: the NDS block is the only way into lua/gen4/run.lua, so a GB/GBC/SGB/GBA
+    cartridge reaches its own client and never the Gen 4 bootstrap or its entry module."""
+    loaded = _run_launcher(system_id, _rom_gba(header_code=header), rom_hash=rom_hash)
+    assert client in loaded, loaded
+    assert not [p for p in loaded if p.startswith("lua/gen4/") or p.startswith("lua/nds/")], loaded
+    assert _GEN4_RUN not in loaded
+
+
 def test_an_old_bizhawk_on_a_firered_cartridge_is_refused():
     with pytest.raises(lupa.LuaError, match="too old"):
         _run_launcher("GBA", _rom_gba(), rom_hash=_FR_COMPANION_SHA1, bizhawk="2.9.1")
