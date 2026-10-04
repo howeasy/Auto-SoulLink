@@ -504,7 +504,13 @@ def test_no_pack_carries_the_stale_pc_fixture_blocker(mode):
 @pytest.mark.parametrize("mode", ["hgss", "hge", "pt"])
 def test_committed_pack_is_current_and_regeneration_is_byte_identical(mode, capsys):
     _need("heartgold", "soulsilver", "heartgold_hge", "platinum")
-    assert g.main([mode, "--check"]) == g.EXIT_OK, capsys.readouterr().err
+    code = g.main([mode, "--check"])
+    err = capsys.readouterr().err
+    if code == g.EXIT_SKIP:
+        # The generator names the absent input itself (e.g. the pinned xMAP under .cache/gen4): a clean
+        # clone has none of them, and absent skips while a present-but-wrong input fails (EXIT_FAIL).
+        pytest.skip(err.strip() or "generator reported an absent input")
+    assert code == g.EXIT_OK, err
 
 
 def test_hg_and_ss_phase_cases_are_identical():
