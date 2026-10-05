@@ -18,7 +18,9 @@ Three refusals, all RED, none a skip:
     other production code is not evidence for this tree, so installing it would only move the
     staleness from one error to another;
   * a manifest pins a receipt the packet does not contain, or names a cell this release does not
-    require (an install must not smuggle in extra or foreign cells).
+    require (an install must not smuggle in extra or foreign cells);
+  * a manifest's own `code_digest` is not current (each manifest is evidence, the summary only a
+    witness), or the packet holds a file named like the generated install manifest.
 
 The install is atomic-ish: files are written into a temp dir beside the destination and moved into
 place only after every source byte has been read and hashed, so a failure part-way leaves the
@@ -63,6 +65,9 @@ def collect(folder: Path) -> dict[str, Path]:
     """
     if not folder.is_dir():
         raise InstallError(f"{folder}: no C-5 packet; run `tools/c5_runner.py run` first")
+    reserved = verifier.C5_INSTALL_MANIFEST
+    if (folder / reserved).exists():
+        raise InstallError(f"{folder}: holds {reserved}, the reserved install manifest name")
     manifests = sorted(folder.glob("*.manifest.json"))
     if not manifests:
         raise InstallError(f"{folder}: no *.manifest.json; nothing PASSed, so there is nothing to install")
@@ -75,6 +80,8 @@ def collect(folder: Path) -> dict[str, Path]:
             raise InstallError(f"{manifest.name}: unreadable manifest ({exc})") from exc
         for rel in pinned:
             name = Path(str(rel)).name
+            if name == reserved:
+                raise InstallError(f"{manifest.name}: pins {reserved}, the reserved install manifest name")
             if name in files:
                 continue
             source = folder / name
@@ -82,6 +89,19 @@ def collect(folder: Path) -> dict[str, Path]:
                 raise InstallError(f"{manifest.name}: pins {name}, which the packet does not contain")
             files[name] = source
     return files
+
+
+def stale_manifest_errors(manifests, digest: str) -> None:
+    """Each manifest carries the code digest its cells were earned on; all must be the current one."""
+    for path in manifests:
+        try:
+            recorded = json.loads(path.read_text(encoding="utf-8")).get("code_digest")
+        except (OSError, ValueError, AttributeError) as exc:
+            raise InstallError(f"{path.name}: unreadable manifest ({exc})") from exc
+        if recorded != digest:
+            raise InstallError(f"STALE: {path.name} records code digest {str(recorded)[:12]}, the current "
+                               f"production digest is {digest[:12]}; re-run tools/c5_runner.py run "
+                               "(it needs EmuHawk) before installing")
 
 
 def plan(lane: Path, dest: Path, digest: str) -> dict:
@@ -100,6 +120,7 @@ def plan(lane: Path, dest: Path, digest: str) -> dict:
                                f"production digest is {digest[:12]}; re-run tools/c5_runner.py run "
                                "(it needs EmuHawk) before installing")
     files = collect(folder)
+    stale_manifest_errors([p for n, p in sorted(files.items()) if n.endswith(".manifest.json")], digest)
     # c5_runner writes the manifest as cid.replace("/", "__"), so the file name is not a cell id:
     # map it back before comparing against C5_CELLS, or every real cell reads as foreign.
     cells = sorted(name[:-len(".manifest.json")].replace("__", "/")
@@ -122,6 +143,10 @@ def install(lane: Path, dest: Path, digest: str, *, dry_run: bool = False) -> di
     try:
         for name, path in sorted(collect(source_dir(lane, digest)).items()):
             shutil.copy2(path, staging / name)
+        # Pin the STAGED bytes, not plan()'s earlier read: a source that changed in between must
+        # yield a pin that matches what is installed (and a manifest that is still current).
+        stale_manifest_errors(sorted(staging.glob("*.manifest.json")), digest)
+        manifest["files"] = {name: c5_runner.lf_sha256(staging / name) for name in sorted(manifest["files"])}
         (staging / verifier.C5_INSTALL_MANIFEST).write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
         # Replace only what the manifest pins, plus the manifest itself: an old packet's leftovers
@@ -132,6 +157,9 @@ def install(lane: Path, dest: Path, digest: str, *, dry_run: bool = False) -> di
                 existing.unlink()
         for name in sorted(wanted):
             shutil.move(str(staging / name), str(dest / name))
+        for name, sha in manifest["files"].items():
+            if c5_runner.lf_sha256(dest / name) != sha:
+                raise InstallError(f"{name}: installed bytes do not match the pin just computed")
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return manifest

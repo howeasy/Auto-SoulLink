@@ -176,6 +176,64 @@ def test_red_the_installer_refuses_a_cell_this_release_does_not_require(tmp_path
         installer.install(lane, root / DEST, HEAD)
 
 
+def test_red_a_stale_manifest_in_a_packet_with_a_current_summary_is_refused(tmp_path):
+    """The summary digest is optional and only one witness; each manifest's own code_digest is the
+    evidence. A current summary must not launder a manifest earned on other production code."""
+    root, lane = _tree(tmp_path)
+    victim = installer.source_dir(lane, HEAD) / "c5__cc__link.manifest.json"
+    doc = json.loads(victim.read_text(encoding="utf-8"))
+    doc["code_digest"] = "e" * 64
+    _write(victim, json.dumps(doc, indent=1) + "\n")
+    with pytest.raises(installer.InstallError, match=r"STALE: c5__cc__link\.manifest\.json"):
+        installer.install(lane, root / DEST, HEAD)
+    assert not (root / DEST).exists()
+    # and with no summary at all, the manifest alone still decides
+    (lane / "out" / HEAD[:12] / "summary.json").unlink()
+    with pytest.raises(installer.InstallError, match="STALE"):
+        installer.install(lane, root / DEST, HEAD)
+
+
+@pytest.mark.parametrize("pinned", [False, True], ids=["loose-file", "pinned-by-a-manifest"])
+def test_red_a_packet_containing_the_reserved_install_manifest_name_is_refused(tmp_path, pinned):
+    """install.json is the generated install manifest; a receipt of that name would be hashed and then
+    silently overwritten, so the packet is refused instead."""
+    root, lane = _tree(tmp_path)
+    folder = installer.source_dir(lane, HEAD)
+    _write(folder / gate.C5_INSTALL_MANIFEST, "{}\n")
+    if pinned:
+        victim = folder / "c5__cc__link.manifest.json"
+        doc = json.loads(victim.read_text(encoding="utf-8"))
+        doc["receipts"][f"receipts/c5/{gate.C5_INSTALL_MANIFEST}"] = "0" * 64
+        _write(victim, json.dumps(doc, indent=1) + "\n")
+    with pytest.raises(installer.InstallError, match="reserved"):
+        installer.install(lane, root / DEST, HEAD)
+    assert not (root / DEST).exists()
+
+
+def test_a_source_changed_between_plan_and_copy_never_yields_a_mismatched_pin(tmp_path, monkeypatch):
+    """plan() hashes the sources; install() copies them later. The pins must describe the bytes that
+    were actually installed, whatever happened to the source in between."""
+    root, lane = _tree(tmp_path)
+    real_copy = installer.shutil.copy2
+    mutated = []
+
+    def racing_copy(src, dst, *a, **k):
+        src = Path(src)
+        if not mutated and src.name.endswith("_result.txt"):
+            src.write_text(src.read_text(encoding="utf-8") + "RACED\n", encoding="utf-8")
+            mutated.append(src.name)
+        return real_copy(src, dst, *a, **k)
+
+    monkeypatch.setattr(installer.shutil, "copy2", racing_copy)
+    dest = root / DEST
+    installer.install(lane, dest, HEAD)
+    assert mutated, "the race was never injected"
+    pins = json.loads((dest / gate.C5_INSTALL_MANIFEST).read_text(encoding="utf-8"))["files"]
+    assert pins[mutated[0]] == installer.c5_runner.lf_sha256(dest / mutated[0])
+    assert all(installer.c5_runner.lf_sha256(dest / n) == sha for n, sha in pins.items())
+    assert "RACED" in (dest / mutated[0]).read_text(encoding="utf-8")
+
+
 # ── the installer's own contract ──────────────────────────────────────────────
 
 def test_dry_run_writes_nothing(tmp_path):
