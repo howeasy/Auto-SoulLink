@@ -31,7 +31,11 @@ sys.path.insert(0, str(REPO / "tools"))
 sys.path.insert(0, str(REPO))
 
 os.environ.setdefault("POL_LANE", "F:/slink-work/lanes/pol-livew")
-os.environ.setdefault("POL_FIXTURE", "F:/slink-work/lanes/g2int-ov/live/sram_overlay/pol overlay.SaveRAM")
+# The PROVEN fixture, the one sounds_run.py boots to the overworld with. The previous default was a
+# POST-RUN save (g2int-ov/live/sram_overlay/...), which is the state the game writes on exit, not a
+# bootable fixture -- with it the cartridge came up as a fresh new game.
+os.environ.setdefault("POL_FIXTURE", "F:/slink-work/lanes/g2int-live/pol/fixture/polished_overlay_warp.SaveRAM")
+FIXTURE_SHA256_PREFIX = "75c7a5dc"
 
 import harness  # noqa: E402
 from patch.tools.make_ups import ups_apply  # noqa: E402
@@ -39,7 +43,12 @@ from patch.tools.make_ups import ups_apply  # noqa: E402
 LANE = harness.LANE
 RELEASE = Path("F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc")
 UPS = REPO / "patch/dist/SLink-Polished.ups"
-STAGED = LANE / "rom" / "pol_writes.gbc"
+# BizHawk derives the save name from the ROM FILE STEM with underscores turned into spaces
+# (harness.py:48): `pol_overlay.gbc` -> `pol overlay.SaveRAM`, which IS harness.SAVE_NAME.
+# Staging as `pol_writes.gbc` made it look for `pol writes.SaveRAM`, so no copy ever loaded and
+# BizHawk silently created a fresh one -- that is why the boot came up as a new game twice.
+# Stage under the harness's own name.
+STAGED = LANE / "rom" / "pol_overlay.gbc"
 # the integrated overlay sha1, as staged by lanes/g2int-ov/drv/mkrom.py
 INTEGRATED_SHA1 = "deebb1004d4f6123667d5d9e061ad0bf867ac021"
 
@@ -64,19 +73,22 @@ def main() -> int:
     source = harness.FIXTURE
     if not source.is_file():
         raise SystemExit(f"no save fixture at {source}")
-    fixture = LANE / "fixture" / "pol_writes.SaveRAM"
-    fixture.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, fixture)
-    print(f"[writes] fixture sha256 {hashlib.sha256(fixture.read_bytes()).hexdigest()}", flush=True)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    if not digest.startswith(FIXTURE_SHA256_PREFIX):
+        raise SystemExit(f"fixture sha256 {digest} does not start {FIXTURE_SHA256_PREFIX}: {source}")
+    print(f"[writes] fixture {source} sha256 {digest}", flush=True)
 
-    # BizHawk names the SaveRAM from the ROM FILE STEM, not from the game database: the fixture
-    # copy must share the staged ROM's stem or the boot is a fresh new game (the coordinator's
-    # screenshot: the Options screen looping).
+    # Copy the fixture ONLY under the harness's own save name (harness.SAVE_NAME), exactly as
+    # harness.py:287 does -- that is the name BizHawk resolves for this cartridge. Every previous
+    # *.SaveRAM* in the SRAM dir goes first, so a stale save from an earlier run can never be the
+    # one that loads.
     sram = harness.SRAM
+    if sram.exists():
+        for stale in sram.glob("*.SaveRAM*"):
+            stale.unlink()
     sram.mkdir(parents=True, exist_ok=True)
-    save_name = STAGED.stem + ".SaveRAM"
-    shutil.copyfile(fixture, sram / save_name)
-    print(f"[writes] save as {sram / save_name} (rom stem {STAGED.stem!r})", flush=True)
+    shutil.copyfile(source, sram / harness.SAVE_NAME)
+    print(f"[writes] save as {sram / harness.SAVE_NAME}", flush=True)
 
     # The real client dials a TCP peer on start. There is no SLink server here (the card drives
     # the client), so start the harness's own server exactly as harness.cmd_live does -- otherwise
@@ -97,9 +109,27 @@ def main() -> int:
                            cwd=str(REPO), stdout=srv_log, stderr=subprocess.STDOUT)
     print(f"[writes] server pid {srv.pid} tcp {port}", flush=True)
     time.sleep(1.5)
+    # This card stops at the overworld: the command checks belong to the next one. The Lua driver
+    # is one long synchronous pass, but EmuHawk runs it in its own process, so the poll below can
+    # see the log mid-pass and kill the emulator (harness.launch's finally, own PID only) before
+    # the driver reaches L.idle(90) + handle_command.
+    def stop_at_overworld():
+        result = run / "result.txt"
+        if result.is_file() and "party from the client's own read path" in result.read_text(
+                encoding="utf-8", errors="replace"):
+            raise RuntimeError("stop-at-overworld")
+
+    pid = None
     try:
         text, pid = harness.launch("tools/polished_live/writes.lua", run,
-                                   {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port)}, 300)
+                                   {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port)}, 300,
+                                   poll=stop_at_overworld)
+    except RuntimeError as exc:
+        if "stop-at-overworld" not in str(exc):
+            raise
+        print(f"[writes] {exc}", flush=True)
+        text = (run / "result.txt").read_text(encoding="utf-8", errors="replace") \
+            if (run / "result.txt").is_file() else ""
     finally:
         # only our own PIDs: the emulator harness.kill_own handles, this is the server
         if srv.poll() is None:
