@@ -129,11 +129,21 @@ first, as a U1G `roamer` leg that proves those sites. Only after that can an O-3
 
 ## What the verifier does not consume yet
 
-`tools/verify_gen2_release.py` has no C-5 receipt kind. `duo_matrix_errors` and `_receipt_errors` require
-`rom_sha1 == the published overlay sha1` for overlay cells (`:1113`), so randomized receipts cannot live in
-`tests/gen2_release_requirements.json`. Install the `out/<digest12>/receipts/c5/` files under
-`tests/fixtures/gen2/receipts/c5/` only once a reader exists. That reader would be a `--c5` lane, or the
-release-evidence lane reading `*.manifest.json` (RANDOMIZER_GATES.md §3.4). Pin their sha256s at the same time.
+**SUPERSEDED (2026-10-04): the `--c5` reader now exists.** `tools/verify_gen2_release.py` gained a `--c5 <dir>`
+option and `c5_errors()` (`:2368`), backed by `tests/gen2_c5_requirements.json` (`:2276`) and the
+`gen2-c5-duo-cell-v1` manifests `tools/c5_runner.py` writes; `tests/unit/test_verify_gen2_c5.py` covers it.
+What is STILL true:
+
+* `--c5` is **not** one of the `LANES` (`:126`), so the standard release gate does not run it. Its own docstring
+  says so: "`--c5 <dir> (no lane; C-5 was closed by owner ruling 2026-10-04)`" (`:31`).
+* `--c5` is **not** called from `release_evidence_errors` (`:2090`).
+* The receipts are **not installed**: there is no `tests/fixtures/gen2/receipts/c5/` directory yet, so `--c5`
+  has nothing to read. `tools/c5_runner.py run` still has to produce them into `out/<digest12>/receipts/c5/`
+  and they must be installed there with their sha256s pinned.
+* `duo_matrix_errors` and `_receipt_errors` still pin `rom_sha1 == the published overlay sha1` for overlay
+  cells (`:1113`), so randomized receipts still cannot live in `tests/gen2_release_requirements.json`.
+
+So the remaining work is INSTALL THE RECEIPTS and WIRE THE LANE, not write the reader.
 
 ## Verifier lane
 

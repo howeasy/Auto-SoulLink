@@ -121,7 +121,9 @@ existing contact — I have not read which).
 
 **Space.** Bank `$7E` is entirely unallocated (16384 free, `data/polished/free_space.txt`),
 as is `$7F`. The script, the service, the 24-byte record's accessor and the text variants
-fit with room to spare. ROM0 has **351 bytes free** at `$015f`, enough for same-size
+fit with room to spare. ROM0 has **351 bytes free** in total (SUPERSEDED 2026-10-04: `$015f` is that COUNT, not an address; the real
+gaps are `$0089-$00FF` and the part of `$3F34-$3FFF` after the phone bridge -- `docs/polished/HOOKS.md:812-813`),
+enough for same-size
 `call`/`jp` rewrites.
 
 **Mailbox.** ABI fields `SLINK_OFS_PHONE_REQUEST 32` / `SLINK_OFS_PHONE_ARMED 33`

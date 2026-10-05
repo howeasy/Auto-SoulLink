@@ -353,8 +353,12 @@ raised with the owner before any edit.
 ## Owner rulings 2026-10-04 (recorded by the coordinator)
 
 * **Cosmetic forms are ONE mon** (Unown letters, other cosmetic-only forms): the SLink identity key must NOT
-  distinguish them, so `polished_codec.key` has to normalise the cosmetic form bits to 0 (today it keeps form 0-4
-  as traits, `polished_codec.py:207-215`).
+  distinguish them, so `polished_codec.key` has to normalise the cosmetic form bits to 0.
+  **SUPERSEDED (2026-10-04):** the parenthetical "(today it keeps form 0-4 as traits, `polished_codec.py:207-215`)"
+  is stale. `polished_codec.key_form` now does the normalisation --
+  `server/adapters/polished_codec.py:82-85`, `return int(form) if is_variant_form(species_id, form) else 0` --
+  and `key()` calls it (`polished_codec.py:265-267`). Proving test:
+  `tests/unit/test_polished_effective_wire.py`. Variant/regional forms still keep their bits.
 * **Regional/variant forms are DIFFERENT mons** from the standard counterpart (Alolan Rattata is not Rattata):
   type clause, evolution family and duplicate handling judge them separately.
 * The owner allows editing `server/state.py` if needed. Preferred design (adapter isolation): the Polished codec

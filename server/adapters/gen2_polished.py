@@ -749,7 +749,8 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
 
     # ── boxes, sprites, trainers ─────────────────────────────────────────────────────
     def supports_explode_mode(self):
-        return False             # no Polished client handler exists yet: a queued force_explode would never fire
+        return False             # no Polished force_explode client handler exists yet (the client landed
+                                  # 2026-10-04, force_explode did not): a queued force_explode would never fire
 
     def supports_box_mon(self):
         return False             # compose_polished composes no box executor: a queued box_mon only comes back failed

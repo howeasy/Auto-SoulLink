@@ -1083,7 +1083,8 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         if family == FAMILY_POLISHED:
             scan = _check_content_polished(sources[player], info["output"])
             info["write_domain"] = upr_polished_write_domain.check_output(sources[player], info["output"])
-            # no client-reproducible fingerprint yet (the Polished client card); the content hash covers
+            # no client-reproducible fingerprint yet (the Polished client has landed since: lua/gen2/polished.lua + entry.lua
+            # admit_polished, but it still publishes no fingerprint); the content hash covers
             # the decoded tables, as Gen 1's does
             info["content_hash"], info["fingerprint"] = profile_hash(scan), ""
             results[player] = info

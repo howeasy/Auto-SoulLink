@@ -450,6 +450,8 @@ the PHYSICAL overlay receipts), so `lua/gen2/signals.lua` cannot classify a roam
 Same-species roamer slots already fail safe. C-5 closes on the 10 passing cells.
 
 Open: (1) the evidence is at a digest that moves when the Polished lane merges (`lua/gen2/**`, `server/**` edits); re-run
-`python tools/c5_runner.py run` after the merge (resumable, about 20 minutes); (2) `tools/verify_gen2_release.py` has no reader for
-these receipts (its duo checks pin the PUBLISHED overlay sha1, `:1113`): a `--c5` lane or the release-evidence lane must read the
-`gen2-c5-duo-cell-v1` manifests; (3) the receipts are PHYSICAL with SYNTH/HARNESS/NATIVE disclosures per cell.
+`python tools/c5_runner.py run` after the merge (resumable, about 20 minutes); (2) `tools/verify_gen2_release.py` **now has a `--c5` reader** (`c5_errors()`, `:2368`) for the
+`gen2-c5-duo-cell-v1` manifests -- **SUPERSEDED 2026-10-04**. Still open: `--c5` is not one of the `LANES` (`:126`)
+and is not called from `release_evidence_errors` (`:2090`), and the receipts are not installed under
+`tests/fixtures/gen2/receipts/c5/`. The duo checks also still pin the PUBLISHED overlay sha1 (`:1113`), so these
+receipts still cannot live in `tests/gen2_release_requirements.json`; (3) the receipts are PHYSICAL with SYNTH/HARNESS/NATIVE disclosures per cell.
