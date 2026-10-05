@@ -2098,7 +2098,10 @@ def release_evidence_errors(root: Path | None = None, duo=None, receipt_validate
              ("live-new-gates", new_gates_errors(root, receipt_validate)),
              ("live-gates", live_gates_errors(root, receipt_validate)),
              ("live-trade-gates", trade_gates_errors(root, duo)),
-             ("duo-pairs", duo_pairs_errors(root, duo)))
+             ("duo-pairs", duo_pairs_errors(root, duo)),
+             # G2-C5-WIRE: C-5 is a real gate here, not a separate LANE, so it cannot be double-judged
+             # and cannot be opted out of. An uninstalled packet is the named RED C5_NOT_INSTALLED.
+             ("c5", c5_gate_errors(root, head)))
     return [f"{lane}: {error}" for lane, errors in parts for error in errors]
 
 
@@ -2403,6 +2406,65 @@ def c5_errors(receipts_dir, root: Path | None = None, head: str | None = None) -
         elif len(seen[cid]) > 1:
             errors.append(f"{cid}: duplicated ({', '.join(seen[cid])})")
     return errors
+
+
+# G2-C5-WIRE: the INSTALLED C-5 packet. c5_errors above judges a folder the caller names; on its own it could
+# never be a gate, because a repository with no C-5 receipts installed would simply not have anything to
+# judge. These two make it one: the packet is expected at a fixed path, pinned by its own install manifest,
+# at the CURRENT production code digest, and its absence is a NAMED RED -- never a skip, never a silent pass.
+C5_RECEIPTS = "tests/fixtures/gen2/receipts/c5"
+C5_INSTALL_MANIFEST = "install.json"
+C5_INSTALL_SCHEMA = "gen2-c5-install-v1"
+C5_NOT_INSTALLED = (f"{C5_RECEIPTS}: C-5 receipts are NOT installed; run `tools/c5_runner.py run` and then "
+                    f"`tools/c5_install_receipts.py` to install them. An absent packet is RED, never a skip.")
+
+
+def c5_install_errors(root: Path | None = None, head: str | None = None) -> list[str]:
+    """The installed C-5 packet itself: present, at the current code digest, every file byte as installed."""
+    import c5_runner
+
+    root = ROOT if root is None else root
+    folder = root / C5_RECEIPTS
+    if not folder.is_dir():
+        return [C5_NOT_INSTALLED]
+    try:
+        head = code_digest.head_digest(root) if head is None else head
+    except (OSError, subprocess.CalledProcessError) as exc:
+        return [f"cannot compute the current production code digest: {exc}"]
+    try:
+        install = json.loads((folder / C5_INSTALL_MANIFEST).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return [f"{C5_INSTALL_MANIFEST}: unreadable ({exc}); re-run tools/c5_install_receipts.py"]
+    errors = []
+    if install.get("schema") != C5_INSTALL_SCHEMA:
+        errors.append(f"install manifest schema {install.get('schema')!r} is not {C5_INSTALL_SCHEMA}")
+    if install.get("code_digest") != head:
+        errors.append(f"STALE: the installed C-5 packet is at code digest "
+                      f"{str(install.get('code_digest'))[:12]}, the current production digest is {head[:12]} "
+                      "(re-run tools/c5_runner.py run -- it needs EmuHawk -- then reinstall)")
+    files = install.get("files") if isinstance(install.get("files"), dict) else {}
+    if not files:
+        errors.append("install manifest pins no files")
+    for name, sha in sorted(files.items()):
+        target = folder / str(name)
+        if not target.is_file():
+            errors.append(f"installed receipt missing: {name}")
+        elif c5_runner.lf_sha256(target) != sha:
+            errors.append(f"installed receipt tampered: {name} sha256 {c5_runner.lf_sha256(target)[:12]} "
+                          f"!= installed pin {str(sha)[:12]}")
+    return errors
+
+
+def c5_gate_errors(root: Path | None = None, head: str | None = None) -> list[str]:
+    """What release-evidence asks of C-5: the installed packet is sound AND every required cell is a
+    PHYSICAL PASS at the current digest. Both halves always report, so a tampered install is never
+    mistaken for a complete one."""
+    root = ROOT if root is None else root
+    errors = c5_install_errors(root, head)
+    folder = root / C5_RECEIPTS
+    if not folder.is_dir():
+        return errors
+    return errors + c5_errors(folder, root, head)
 
 
 def _c5_main(receipts_dir: str) -> int:

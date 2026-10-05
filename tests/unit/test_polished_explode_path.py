@@ -757,3 +757,70 @@ def test_an_in_battle_active_faint_says_held_once_and_refuses_once():
     assert rig.hp(0) == 300 and len(rig.client.pending_battle_writes) == 1
     order(rig, "force_faint", mons, slot=1)                               # a bench mon: no held cue
     assert sum("held for the checkpoint" in line for line in rig.lines()) == 1
+
+
+# ── defensive gaps: nil ids, and a token that outlives a failed write ────────────────────────────────────────
+
+FACADE = """
+function(parts, io, reads)
+    local E = dofile(ROOTDIR .. "/lua/gen2/polished_explode.lua")
+    local Permit = dofile(ROOTDIR .. "/lua/write_permit.lua")
+    return E.new({root = ROOTDIR, profile = parts.profile, io = io, Permit = Permit, reads = reads,
+                  overworld = parts.overworld.writes, overworld_hold = parts.overworld.checkpoint})
+end
+"""
+
+
+def facade_over(rig, species_id):
+    """A second facade over the rig's own io whose read_battle_mon answers a battle mon with `species_id` (maybe nil)."""
+    reads = rig.lua.eval("function(id) return {read_battle_mon = function() return {species_id = id} end} end")(species_id)
+    return rig.lua.eval(FACADE.replace("ROOTDIR", json.dumps(ROOT)))(rig.parts, rig.io, reads)
+
+
+def matches(rig, battle_id, mon_id):
+    built = facade_over(rig, battle_id)
+    mon = rig.lua.eval("function(id) return {species_id = id} end")(mon_id)
+    return built.species_matches(mon)
+
+
+def test_nil_species_ids_never_match():
+    rig, _ = ready()
+    assert matches(rig, 25, 25) is True and matches(rig, 25, 26) is False         # the composed control
+    assert matches(rig, None, None) is False
+    assert matches(rig, 25, None) is False and matches(rig, None, 25) is False
+
+
+def test_red_10_without_the_nil_guard_two_missing_ids_match():
+    source = mutate(EXPLODE, """ battle.species_id ~= nil and mon.species_id ~= nil
+               and battle.species_id == mon.species_id""", " battle.species_id == mon.species_id")
+    rig, _ = ready(overrides=mutant("polished_explode.lua", source))
+    assert matches(rig, None, None) is True, "the nil guard is not load-bearing"
+
+
+def enter_fail_disarm_arm(rig):
+    """enter -> a write that FAILS (linked snapshot) -> disarm -> arm again with no new enter; (ok, why) of the 2nd arm."""
+    writes, entry = rig.parts.battle.writes, rig.parts.battle.entry
+    entry.enter("explode")
+    ok, why = lcall(rig, writes.arm, writes, "battle_hold")
+    assert ok is True, why
+    ok, why = lcall(rig, writes.explode_active_battler, writes, 0, snapshot(rig, link_mode=1))
+    assert ok is False and "linked or unknown battle context" in why
+    writes.disarm(writes)
+    ok, why = lcall(rig, writes.arm, writes, "battle_hold")
+    writes.disarm(writes)
+    entry.leave()
+    return ok, why
+
+
+def test_a_failed_write_and_disarm_spend_the_token():
+    rig, _ = ready()
+    ok, why = enter_fail_disarm_arm(rig)
+    assert ok is False and "not inside the explode hold hook" in why and rig.writes() == []
+
+
+def test_red_11_without_the_disarm_clearing_the_token_a_fresh_arm_passes():
+    source = mutate(EXPLODE, "        entered = nil -- a write (landed or refused) spends the token: the next arm needs its own enter()\n",
+                    "")
+    rig, _ = ready(overrides=mutant("polished_explode.lua", source))
+    ok, why = enter_fail_disarm_arm(rig)
+    assert ok is True, "the disarm token clear is not load-bearing"

@@ -12,7 +12,8 @@
 --     (explode -> battle_hold.execution_before, rival -> battle_hold.rival_swap_gate). That assertion is
 --     therefore tautological here, and it is NOT what pins the CPU to the PC. Three guards do, honestly bounded:
 --     (a) a HOOK-ENTRY TOKEN: the client's bus-exec callback (client.lua, p.battle_hold_entry) enters the token
---     "explode" before it runs at_battle_hold and clears it after; arm() and every write refuse unless the token
+--     "explode" before it runs at_battle_hold and clears it after (disarm() clears it too, so one hold arms ONE write
+--     and a failed write cannot leave it open); arm() and every write refuse unless the token
 --     names their site ("explode" for the explode, "rival_gate" for the rival write - a future rival hold sets
 --     it). So a call made outside the exec callback is refused. What it proves is "BizHawk reported an execution
 --     of 0f:416A and we are inside that callback", NOT a PC register read-back (none is made);
@@ -140,7 +141,9 @@ function E.new(deps)
     end
     local function species_matches(mon)
         local battle = reads.read_battle_mon("player")
-        return type(battle) == "table" and battle.species_id == mon.species_id
+        -- nil == nil must not match: an unreadable battle struct or a mon without an id is never "the same mon"
+        return type(battle) == "table" and battle.species_id ~= nil and mon.species_id ~= nil
+               and battle.species_id == mon.species_id
     end
 
     local function wram(label)
@@ -173,6 +176,7 @@ function E.new(deps)
         return writer:arm(reason, allow)
     end
     function self:disarm()
+        entered = nil -- a write (landed or refused) spends the token: the next arm needs its own enter()
         overworld:disarm()
         return writer:disarm()
     end

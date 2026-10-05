@@ -137,10 +137,10 @@ def expected(mon: dict, rows, pp_rows, variants, perfect_ivs=False) -> bytes:
     out[26], out[27] = entry[23], entry[24]
     out[28:31] = entry[25:28]
     out[31] = mon["level"]
-    out[34:36] = bytes((0, 0)) if mon.get("is_egg") else bytes((stats[0] & 255, stats[0] >> 8))
-    out[36:38] = bytes((stats[0] & 255, stats[0] >> 8))
+    out[34:36] = bytes((0, 0)) if mon.get("is_egg") else bytes((stats[0] >> 8, stats[0] & 255))
+    out[36:38] = bytes((stats[0] >> 8, stats[0] & 255))
     for index, value in enumerate(stats[1:], start=1):
-        out[36 + index * 2:38 + index * 2] = bytes((value & 255, value >> 8))
+        out[36 + index * 2:38 + index * 2] = bytes((value >> 8, value & 255))
     return bytes(out)
 
 
@@ -189,8 +189,8 @@ def test_hand_checked_bulbasaur_level_50(variants):
     Attack: ((49+15)*2+1)*50/100 = 50, +5 = 55. Read the codec's own bytes."""
     mon = make_mon(random.Random(0), 1, level=50, dv=[15] * 6, ev=[0] * 6, nature=0)
     party = build(pc.encode_savemon(mon), variants)
-    hp = party[36] | party[37] << 8
-    atk = party[38] | party[39] << 8
+    hp = party[36] << 8 | party[37]
+    atk = party[38] << 8 | party[39]
     assert hp == (((45 + 15) * 2 + 1) * 50 // 100) + 50 + 10      # 61 + 60
     assert atk == (((49 + 15) * 2 + 1) * 50 // 100) + 5           # 50 + 5
     assert party[34:36] == party[36:38]                            # HP = MaxHP on withdraw
@@ -215,6 +215,55 @@ def test_a_fainted_deposit_comes_back_at_full_hp(species_rows, variants):
     rebuilt = build(box, variants)
     assert rebuilt[34:36] == rebuilt[36:38]
     assert pc.decode_party_mon(rebuilt)["hp"] == pc.decode_party_mon(rebuilt)["max_hp"] > 0
+
+
+def oracle_values(mon, rows, pp_rows, variants, perfect):
+    """The oracle's six stat VALUES (not bytes): re-derived through expected() is byte-based, so redo the arithmetic."""
+    record = pc.effective_species(mon["species_id"], mon["form"])
+    base = (variants[record] if pc.is_variant_form(mon["species_id"], mon["form"])
+            else tuple(rows[str(record)]["base_stats"][n] for n in STATS))
+    trained = bytes.fromhex(mon["extra_hex"])[0] & 0xFC
+    return [oracle_stat(base[i - 1], 15 if perfect or trained & (0x80 >> (i - 1)) else oracle_dv(mon["dvs"], i),
+                        mon["evs"][n], mon["level"], i, mon["nature"]) for i, n in enumerate(STATS, start=1)]
+
+
+def endianness_failures(module, rows, pp_rows, variants):
+    """Vectors where the EXISTING reader (decode_party_mon, big-endian) does not see the computed integers."""
+    rng = random.Random(0xBE01)
+    records = sorted(int(k) for k in rows)
+    bad = 0
+    for n in range(60):
+        mon = make_mon(rng, records[rng.randrange(len(records))], level=rng.randrange(1, 101),
+                       dv=[rng.randrange(16) for _ in STATS], ev=[rng.randrange(256) for _ in STATS])
+        mon["is_egg"] = n % 6 == 0
+        perfect = n % 2 == 0
+        party = module.savemon_to_party(module.encode_savemon(mon), variant_base_stats=variants,
+                                        apply_evs=True, natures_on=True, perfect_ivs=perfect)
+        got = pc.decode_party_mon(party)
+        want = oracle_values(mon, rows, pp_rows, variants, perfect)
+        ok = got["max_hp"] == want[0] and got["hp"] == (0 if mon["is_egg"] else want[0])
+        ok = ok and [got["stats"][name] for name in STATS[1:]] == want[1:]
+        bad += not ok
+    return bad
+
+
+def test_party_hp_and_stats_decode_big_endian_to_the_computed_values(species_rows, move_rows, variants):
+    """The withdraw read-back caught 50 reading as 12800: the writer must agree with decode_party_mon."""
+    assert endianness_failures(pc, species_rows, move_rows, variants) == 0
+
+
+def test_the_endianness_check_goes_red_on_a_little_endian_mutant(species_rows, move_rows, variants):
+    path = REPO / "server/adapters/polished_codec.py"
+    source = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    hp = 'party[36:38] = stats[0].to_bytes(2, "big")'
+    stat = 'party[offset:offset + 2] = value.to_bytes(2, "big")'
+    for name, before in (("HP/MaxHP little", hp), ("stats little", stat)):
+        assert source.count(before) == 1, name
+        module = types.ModuleType("mutant_endian")
+        module.__dict__["__file__"] = str(path)
+        exec(compile(source.replace(before, before.replace('"big"', '"little"')), str(path), "exec"),
+             module.__dict__)
+        assert endianness_failures(module, species_rows, move_rows, variants) > 0, name
 
 
 def test_round_trip_party_to_savemon_preserves_the_savemon(species_rows, variants):
@@ -360,7 +409,7 @@ def test_perfect_ivs_option_changes_exactly_the_hp_and_five_stat_low_bytes(varia
     mon = make_mon(random.Random(14), 1, level=50, dv=[0, 1, 2, 3, 4, 5], ev=[0] * 6, nature=0)
     box = pc.encode_savemon(mon)
     off, on = build(box, variants, perfect_ivs=False), build(box, variants, perfect_ivs=True)
-    assert [i for i in range(48) if off[i] != on[i]] == [34, 36, 38, 40, 42, 44, 46]
+    assert [i for i in range(48) if off[i] != on[i]] == [35, 37, 39, 41, 43, 45, 47]
 
 
 def test_the_999_cap_is_unreachable_for_a_legal_mon(species_rows):

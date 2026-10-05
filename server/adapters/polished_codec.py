@@ -579,10 +579,11 @@ def savemon_to_party(savemon, *, variant_base_stats, apply_evs, natures_on, perf
     party[31] = level
     party[32] = 0                                # SetTempPartyMonData: xor a / ld [wTempMonStatus], a
     party[33] = 0                                # the unused byte is never written by the engine
-    party[34:36] = bytes((0, 0)) if mon["is_egg"] else bytes((stats[0] & 255, stats[0] >> 8))
-    party[36:38] = bytes((stats[0] & 255, stats[0] >> 8))
+    # HP, MaxHP and the five stats are BIG-endian (CalcPkmnStats stores hMultiplicand+1 first)
+    party[34:36] = bytes((0, 0)) if mon["is_egg"] else stats[0].to_bytes(2, "big")
+    party[36:38] = stats[0].to_bytes(2, "big")
     for offset, value in zip(range(38, 48, 2), stats[1:], strict=True):  # five battle stats
-        party[offset:offset + 2] = bytes((value & 255, value >> 8))
+        party[offset:offset + 2] = value.to_bytes(2, "big")
     return bytes(party)
 
 
