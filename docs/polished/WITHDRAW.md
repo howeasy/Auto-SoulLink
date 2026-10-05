@@ -56,6 +56,5 @@ confirms it.
 
 ## 4. Open
 
-* Cosmetic forms (Unown letters, Magikarp, Spinda): `GetBaseData(wTempMonForm)` may pick a different record than the
-  effective-species mapping; unverified.
+* RESOLVED (Codex fact-check cx-be6a1e40, 2026-10-05): cosmetic forms (Unown letters, Magikarp patterns, Pikachu/Pichu variants, Arbok markings; Arbok Johto is the default form 1) are only in the cosmetic table, so `GetBaseData` falls back to the plain species record (home/pokemon.asm:151-167, 466-527); only the 46 variant rows (records 292..337) select a different BaseData record. The repo's `variant_record[species*32+form]` rule matches the engine for all 289 defined species x 32 forms x gender/egg bits (36,992 source-model cases, 0 differences). Exceptions are only invalid species ids (0, 256, 511), which the codec refuses. TODO: add an engine-table-derived lookup test (the current oracle reuses `pc.effective_species`).
 * The write path is not composed; no live run exists. `supports_box_mon` must flip **with** the executor, never before.
