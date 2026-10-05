@@ -1,0 +1,46 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "scenario_id": "live/capture-party-only",
+  "date": "2026-10-04",
+  "lane": "F:/slink-work/lanes/pol-phone",
+  "requirement_id": "LIVE-CAPTURE-PARTY-ONLY",
+  "narrative": "docs/polished/LIVE_RESULTS.md — STAGE 2 (capture-site discipline) and 'Existing stages on the new overlay'",
+  "evidence_dir": "F:/slink-work/lanes/pol-phone/live_stageA",
+  "evidence_file": "F:/slink-work/lanes/pol-phone/live_stageA/result.txt",
+  "evidence_sha256": "4f682b5439ff7a532b4e0ebb95f47e8bc356941ecb4059a9150f85527542c146",
+  "evidence_size": 6592,
+  "rom_sha1_executed": "34942315bb3e62189a56dabbcb9cef6dd3e9a9f5",
+  "overlay_provenance_sha256": "1da613da23c41dac3ee7d36653318fb424096e361951dd3fcf0b5b899ccae0df",
+  "code_digest": "UNRECORDED",
+  "code_digest_note": "No code digest or commit in the lane evidence.",
+  "capture_site": {
+    "address": "bank 3, flat 0xE52B (PC $652B)",
+    "expected_rom_bytes": "D7084513FA09D1",
+    "source": "data/games/polished_crystal/engine_signals.json",
+    "quoted": "[live] capture_party site from the pack: 03:652B flat 0xE52B expected D7084513FA09D1"
+  },
+  "synth": [
+    "Same SYNTH save as the other live_stageA checks: the run-1 warp fixture; the wild encounters themselves are native game RNG plus scripted native button input.",
+    "Nothing about the hit count is SYNTH: memory.write* was wrapped before lua/slink.lua loaded and the driver wrote nothing."
+  ],
+  "checks": [
+    {"name": "run verdict", "result": "PASS", "observed": "RESULT: PASS polished-live (0 checks failed) frame 10766"},
+    {"name": "escape does not fire the capture site", "result": "PASS", "observed": "[ok] STAGE2 escape does not fire the capture site -- 0"},
+    {"name": "escape took the Run path", "result": "PASS", "observed": "[ok] STAGE2 escape took the Run path -- 1"},
+    {"name": "party catch fires the capture site exactly once", "result": "PASS", "observed": "[ok] STAGE2 the party catch fires the capture site exactly once -- 1"},
+    {"name": "hROMBank at the hit is 3", "result": "PASS", "observed": "[ok] STAGE2 hROMBank == 3 at the hit -- 3"},
+    {"name": "hit record", "result": "PASS", "observed": "[live] STAGE2 capture-site hit: frame 3398 bank 03 PC 652B SP C0CF party_count@hit 6 last-slot species@hit 161"},
+    {"name": "wPartyCount change is the frame after the hit", "result": "PASS", "observed": "[ok] STAGE2 wPartyCount 5 -> 6 observed at end of frame 3399 (hit frame 3398, delta 1)"},
+    {"name": "client emitted capture on hit +1", "result": "PASS", "observed": "[ok] STAGE2 client emitted `capture` -- frame 3399 (hit +1 frames)"},
+    {"name": "capture line", "result": "PASS", "observed": "[live] STAGE2 capture line: {\"area_id\":\"route_29\",\"event\":\"capture\",\"gift\":false,\"held_item_id\":0,\"hp\":15,\"in_box\":false,\"key\":\"0327A8:D1C2:0A1:40\",\"level\":3,\"maxHP\":15,\"nickname\":\"Sentret\",\"player\":\"a\",\"seq\":65,\"species_id\":161,\"stats\":{\"level\":3,\"maxHP\":15}}"},
+    {"name": "party grew by exactly one", "result": "PASS", "observed": "[ok] STAGE2 party 5 -> 6 -- 5 -> 6"},
+    {"name": "a wild mon was caught into the party", "result": "PASS", "observed": "[ok] STAGE2 a wild mon was caught into the party"},
+    {"name": "box catch does NOT fire the capture site", "result": "PASS", "observed": "[ok] STAGE3 the box catch does NOT fire the capture site -- 0 (five throws, the fifth sent it to the PC; capture-site bank-3 hits stayed 0)"},
+    {"name": "full-party catch went to the PC", "result": "PASS", "observed": "[ok] STAGE3 the full-party catch went to the PC"},
+    {"name": "no hits in any other bank", "result": "PASS", "observed": "[live] totals: capture-site bank-3 hits 1, other-bank hits 0, throws 6, caught 2, to_pc 1, ticks 210"}
+  ],
+  "not_proven": [
+    "signals.lua still lists itself unproven on exactly this point: 'a live exec hit at the capture_party PC on a running cartridge' and 'the capture RAM-effect frame alignment (signals.lua qualified_sites live_capture: no non-synthetic run)'. The run observed hits; the client has not promoted its own qualification string past DEV_OVERLAY_SHA1."
+  ]
+}

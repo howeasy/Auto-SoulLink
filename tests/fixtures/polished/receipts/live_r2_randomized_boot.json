@@ -1,0 +1,58 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "scenario_id": "r2/randomized-boot-adopt-form-key",
+  "date": "2026-10-04",
+  "lane": "F:/slink-work/lanes/pol-rand",
+  "requirement_id": "LIVE-R2-RANDOMIZED-BOOT",
+  "narrative": "docs/polished/LIVE_RESULTS.md — Run 3 STAGE R2 'live boot of the randomized cartridge. PASS, with one presentation gap'; legs R2a (Route 29) and R2b (Route 30)",
+  "evidence_dir": "F:/slink-work/lanes/pol-rand/live",
+  "evidence_file": "F:/slink-work/lanes/pol-rand/live/r2b/result.txt",
+  "evidence_sha256": "8758b4aedb89e48cd408edc06afd51b4c520a1eee4d15957ca01ede4c8d9f076",
+  "evidence_size": 3791,
+  "evidence_note": "R2b is the binding file: it holds the variant-form catch, which is the part of R2 that proves a form is keyed distinctly. R2a's adoption half is pinned below.",
+  "secondary_evidence": [
+    {"path": "F:/slink-work/lanes/pol-rand/live/r2a/result.txt",
+     "sha256": "cb2d8db3365cd20e7cb27c3aa1888adcdf236d447c89a28d85dc2678dce6e64b",
+     "note": "the adoption half: hello, gate frames and five fled encounters"},
+    {"path": "F:/slink-work/lanes/pol-rand/live/r2b/encounters.jsonl",
+     "sha256": "0cedff588ad2dc5382e0cfb3d88012dcdc38277add148c31dd9bc65fcc221c89",
+     "note": "{\"foe\":{\"form\":2,\"form_byte\":2,\"frame\":1378,\"level\":3,\"map\":[26,1],\"species\":53},\"i\":1,\"stage\":6,\"throws\":1}"},
+    {"path": "F:/slink-work/lanes/pol-rand/live/r2a/encounters.jsonl",
+     "sha256": "a42e8810a2b2c79c4a0116e10de211515b24d8dce857f5581e1538899a50d947"}
+  ],
+  "rom_sha1_executed": "0d75313f20ec83ad1827b9cf66a6b7202793db86",
+  "rom_sha1_executed_note": "The randomized cartridge R1 produced for player a. The harness checks the ROM's sha1 against the contract pin before every launch.",
+  "source_overlay_sha1": "29ea04c24a46d9210c899355fe752f32d2880de8",
+  "overlay_provenance_sha256": "UNRECORDED",
+  "code_digest": "UNRECORDED",
+  "code_digest_note": "No code digest or commit in the lane evidence. docs/polished/LIVE_RESULTS.md:444 names e0fd92dd; the evidence does not. 'runtime_rom_sha1' appears in no evidence file, so it is not recorded here.",
+  "synth": [
+    "SYNTH (O-33, disclosed): the run-1 recipe run on ROM a itself — five-mon party (CROBAT 169, JOLTEON 135, GOLDUCK 55, NIDOKING 34, DODRIO 85; all existing species; base stats are not randomized by this spec), 99 Poke Balls, and the position by the engine warp bytes (wDefaultSpawnpoint $FF, hMapEntryMethod $F1, wMapStatus 1).",
+    "NOT SYNTH: cold boot, the intro and START -> SAVE all ran natively; MAPSETUP_WARP landed natively in both fixtures.",
+    "Fixtures: s29 = map 24:3 (48,12), sha256 94b394d1..., checksum $13E4 (the same as run 1's overlay fixture); s30 = 26:1 ROUTE_30 (11,48), sha256 942c07f1.... (11,48) is TALL_GRASS in maps/Route30.ablk x8..13 and no trainer's sight line reaches row 48."
+  ],
+  "checks": [
+    {"name": "R2a run verdict", "result": "PASS", "observed": "r2a/result.txt:50 'RESULT: PASS polished-live (0 checks failed) frame 5591'"},
+    {"name": "R2b run verdict", "result": "PASS", "observed": "r2b/result.txt:37 'RESULT: PASS polished-live (0 checks failed) frame 2733'"},
+    {"name": "admitted as the Polished rand_overlay", "result": "PASS", "observed": "r2a/result.txt:5 '[ok] admitted as the Polished rand_overlay (DEV_OVERLAY_SHA1)'"},
+    {"name": "hello identity is rand_overlay", "result": "PASS", "observed": "r2a/result.txt:12 hello rom_type polished_crystal foundation gen2_polished kind rand_overlay sha1 0d75313f20ec83ad1827b9cf66a6b7202793db86 abi 3 panel false party 5"},
+    {"name": "hello rom_sha1 is the client's own rehash", "result": "PASS", "observed": "r2a/result.txt:14 '[ok] STAGE1 hello rom_sha1 is the client rehash -- 0d75313f20ec83ad1827b9cf66a6b7202793db86'"},
+    {"name": "hello gate frames", "result": "PASS", "observed": "r2a/result.txt:18-20 hello 343 vs OWPlayerInput 335, vs running 336, MainMenu last 220"},
+    {"name": "the cartridge's own encounter table is adopted", "result": "PASS", "observed": "r2a/result.txt:22-45 five fled encounters, each '[ok] STAGE5 a fled encounter does not fire the capture site -- 0'; docs/polished/LIVE_RESULTS.md:539-540 server 'route polished_crystal -> gen2_polished (production)' and 'using this cartridge's own encounter tables'"},
+    {"name": "the adopted species are not the vanilla ones", "result": "PASS", "observed": "r2a encounters.jsonl species 170,170,170,170,156 (form bytes 01,01,81,81,01) at levels 2,2,2,2,3; docs/polished/LIVE_RESULTS.md:547-553; the vanilla Route 29 table is 16,161,16,161,19,187,187"},
+    {"name": "the server presents ROM a's own table", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:556-558 players.a.encounter_table (route_29) ends in {'species_id': 53, 'form': 2, 'name': 'Persian (Alolan)', 'effective_species_id': 305, 'rate': 2}"},
+    {"name": "a variant form is caught", "result": "PASS", "observed": "r2b/result.txt:32 '[ok] STAGE6 caught the target 53 form 2 (1 seen)'; encounters.jsonl foe {'species': 53, 'form': 2, 'form_byte': 2, 'level': 3, 'map': [26,1], 'frame': 1378, 'throws': 1}"},
+    {"name": "the variant catch fires the capture site exactly once", "result": "PASS", "observed": "r2b/result.txt:26-27 '[ok] STAGE6 the variant catch fires the capture site exactly once -- 1' and 'capture-site hit: frame 2358 bank 03 PC 652B SP C0CF party_count@hit 6'"},
+    {"name": "the form is inside the mon key", "result": "PASS", "observed": "r2b/result.txt:29 capture line key '39068D:D1C2:035:02' — the trailing :02 is the form; docs/polished/LIVE_RESULTS.md:565 'The key carries the form'"},
+    {"name": "party grew by exactly one", "result": "PASS", "observed": "r2b/result.txt:30 '[ok] STAGE6 party grew by one -- 5 -> 6'"},
+    {"name": "0 Lua-originated writes in both legs", "result": "PASS", "observed": "r2a/result.txt:46 and r2b/result.txt:33 '[ok] no Lua-originated memory write during the whole run (client included) -- 0'; exactly one hook registered (capture_party)"},
+    {"name": "server admitted the randomized cartridge", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:539 '[a] admission: admitted — cartridge sha1 matches the contract'"}
+  ],
+  "gap_closed_after_this_run": "docs/polished/LIVE_RESULTS.md:573-582 recorded a GAP here: pending_captures and party_details showed species_id 53 / 'Persian' / the Kanto sprite for an Alolan Persian, because server.py called adapter.species_name(sid) without the form it had read, and the client sent no form field. Commit 43ee19f0 ('regional forms judged as distinct mons end to end') and 78dddd8b carry the effective-species work that closed it. The run recorded HERE predates that fix, so this receipt proves the key carries the form, not that the name does.",
+  "minor": "The '(8 areas)' in server.py's adoption log counts the 8 top-level keys of scan_randomized (title, wild, fishing, ...), not areas (docs/polished/LIVE_RESULTS.md:584-585).",
+  "not_proven": [
+    "A randomized cartridge cannot be admitted without a Manager contract: that refusal is R3's cell.",
+    "The server's route table came from the cartridge itself; this does not prove the contract's rom_contract.json covers anything beyond the two sha1s."
+  ]
+}

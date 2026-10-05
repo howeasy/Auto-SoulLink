@@ -1,0 +1,59 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "scenario_id": "explore/C-pokegear-icon-strip",
+  "date": "2026-10-04",
+  "lane": "F:/slink-work/lanes/pol-live2",
+  "requirement_id": "LIVE-POKEGEAR-MEASUREMENT",
+  "narrative": "docs/polished/LIVE_RESULTS.md — Run 2 STAGE C ('Pokegear icon strip. MEASURED (read-only)')",
+  "evidence_dir": "F:/slink-work/lanes/pol-live2/x/explore_C",
+  "evidence_file": "F:/slink-work/lanes/pol-live2/x/explore_C/result.txt",
+  "evidence_sha256": "cdee2ef1d6eb75c8af39f8337daea1c3a9fdb7c8fa23d2fce82cf553bf567df0",
+  "evidence_size": 1892,
+  "secondary_evidence": [
+    {"path": "F:/slink-work/lanes/pol-live2/x/explore_C/pokegear.json",
+     "sha256": "d302ec169ede626510cb99f4b331bf2fa4c2f5c2c2e0dd97e91c616b7e2270df",
+     "note": "per-card rows, attributes and wSpriteAnim1"}
+  ],
+  "rom_sha1_executed": "29ea04c24a46d9210c899355fe752f32d2880de8",
+  "overlay_provenance_sha256": "UNRECORDED",
+  "code_digest": "UNRECORDED",
+  "code_digest_note": "No code digest or commit in the lane evidence. docs/polished/LIVE_RESULTS.md:225 names 78dddd8b; the evidence does not.",
+  "staleness": "This run booted the PREVIOUS overlay (29ea04c2). The phone-card commit republished the overlay as 34942315, so the measurement has not been re-taken and this cell is STALE until it is.",
+  "probe": "read-only. START menu items 1,2,7,3,4,5,6 with POKEGEAR (id 7) on row 3; PokeGear ran at frame 523; Right presses moved card to card, each read in its joypad state after a 90-frame dwell.",
+  "synth": [
+    "SYNTH (disclosed, result.txt:3): wPokegearFlags $00 -> $87 (POKEGEAR_OBTAINED_F plus the MAP, RADIO and PHONE card bits). The EXPN bit was left clear.",
+    "NOT SYNTH: the START menu presses, the Right presses and the tilemap/VRAM reads."
+  ],
+  "cards": [
+    {"card": 0, "name": "clock", "wJumptableIndex": "$01", "cursor_x": 16, "row0_cols8_19": "f7 f7 f7 f7 40 7f..7f 41", "attr_rows0_1": "all 0"},
+    {"card": 1, "name": "map", "wJumptableIndex": "$04", "cursor_x": 32, "row0_cols8_19": "44 91 ae b4 b3 a4 7f e2 e9 7f 7f 7f", "attr_rows0_1": "all 0"},
+    {"card": 2, "name": "phone", "wJumptableIndex": "$0A", "cursor_x": 48, "row0_cols8_19": "06 07 07 .. 07 17", "attr_rows0_1": "pal 1 from col 8"},
+    {"card": 3, "name": "radio", "wJumptableIndex": "$0E", "cursor_x": 64, "row0_cols8_19": "06 07 07 .. 07 17", "attr_rows0_1": "pal 1 from col 8"}
+  ],
+  "checks": [
+    {"name": "run verdict", "result": "PASS", "observed": "RESULT: PASS explore-C (0 checks failed) frame 945"},
+    {"name": "all four native cards visited", "result": "PASS", "observed": "[ok] all four native cards visited"},
+    {"name": "per-card state", "result": "PASS", "observed": "result.txt:6-9 'STAGEC card 0 (state 01) ... card 1 (state 04) ... card 2 (state 0A) ... card 3 (state 0E)' with cursor x 16 / 32 / 48 / 64"},
+    {"name": "columns 0-7 identical in all four cards", "result": "PASS", "observed": "result.txt:6-9 all four rows0-1 begin 5657505154555253 — docs/polished/LIVE_RESULTS.md:384-385"},
+    {"name": "arrow XOFFSET is card << 4", "result": "PASS", "observed": "cursor 16/32/48/64 for cards 0..3; docs/polished/LIVE_RESULTS.md:395 'a card 4 lands at 64 + 16 = 80'"},
+    {"name": "columns 8-9 of rows 0-1 are drawn by every native card", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:396-397 — the clock border ($f7), the map's landmark name and the phone/radio card frames ($06/$07/$16 with palette 1)"},
+    {"name": "tile ids in any card tilemap", "result": "INFO", "observed": "result.txt:10 the full id list; $50-$75 are the Pokegear tiles, $7F the blank fill"}
+  ],
+  "finding": {
+    "verdict": "$58/$59 are NOT usable as a SLink icon pair.",
+    "why": [
+      "$58 is drawn by the radio card.",
+      ".PlacePokegearCardIcon puts the lower half at top + $10, so a $58 icon's lower pair would be $68/$69 — the phone signal bars (.PlacePhoneBars, seen live in the phone card's row 1).",
+      "No pair of adjacent ids in $50-$75 has both itself and its +$10 pair free.",
+      "$76-$7E are not Pokegear gfx at all: the built gfx/pokegear/pokegear.2bpp is 608 bytes = 38 tiles ($50-$75) because the Makefile passes --trim-whitespace (Makefile:228). Those ids keep whatever the previous screen left in VRAM."
+    ],
+    "free_ids": "$59 and $5B (inked but unreferenced, 2 tiles, not adjacent) and $76-$7E (9 ids, never written by the Pokegear load).",
+    "design_call": "A fifth icon needs its own tile load plus a placement routine that is not top+$10, or the VRAM-bank-1 route (the bank is empty during the Pokegear). That is a design call for docs/polished/POKEGEAR_SLOT.md — docs/polished/LIVE_RESULTS.md:427-430."
+  },
+  "not_proven": [
+    "The Kanto and Orange map views were not visited.",
+    "Radio tuning redraws were not observed.",
+    "VRAM bank 1 content in states other than radio was not read."
+  ]
+}
