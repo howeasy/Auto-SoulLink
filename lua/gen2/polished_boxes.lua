@@ -302,11 +302,7 @@ function B.new(coords, io, mon_key, decode_text)
                 durability = "VOLATILE_UNTIL_NATIVE_SAVE"}
     end)
 
-    --- §6.3: `bytes` = a 49-byte sealed entry (verified, never re-sealed) or a 70-byte party transfer blob
-    --- (built + sealed here). Picks the first free pokedb entry (bank 1 then 2, flag clear and no record of
-    --- either copy pointing at it), writes it, sets its flag, then points the first empty slot of `box` at it.
-    --- The gameplay record only: a reset before the next native save drops the mon (backup mirror: not done).
-    r.insert_mon = wrap(function(permit, box, bytes)
+    local function plan(permit, box, bytes)
         gated(permit)
         if not integer(box, 1, B.NUM_BOXES) then refuse("box outside 1..20") end
         local e
@@ -341,6 +337,16 @@ function B.new(coords, io, mon_key, decode_text)
             if d then break end
         end
         if not d then refuse("no free pokedb entry: native save required") end
+        return {e = e, mon = mon, rec = rec, s = s, d = d, entry = entry, box = box}
+    end
+
+    --- §6.3: `bytes` = a 49-byte sealed entry (verified, never re-sealed) or a 70-byte party transfer blob
+    --- (built + sealed here). Picks the first free pokedb entry (bank 1 then 2, flag clear and no record of
+    --- either copy pointing at it), writes it, sets its flag, then points the first empty slot of `box` at it.
+    --- The gameplay record only: a reset before the next native save drops the mon (backup mirror: not done).
+    r.insert_mon = wrap(function(permit, box, bytes)
+        local p = plan(permit, box, bytes)
+        local e, mon, rec, s, d, entry = p.e, p.mon, p.rec, p.s, p.d, p.entry
         local fb = flag_byte(d, entry)
         permit:write_batch({{domain = CART, addr = entry_at(d, entry), bytes = e},
                             {domain = WRAM, addr = fb, bytes = {rd(WRAM, fb) | (1 << ((entry - 1) & 7))}},
@@ -348,6 +354,36 @@ function B.new(coords, io, mon_key, decode_text)
         return {box = box, slot = s, bank = d, entry = entry, key = mon.key,
                 durability = "VOLATILE_UNTIL_NATIVE_SAVE"}
     end)
+
+    --- The same insert as two steps, so a caller can VERIFY between them. stage_entry writes ONLY the 49-byte
+    --- sealed entry into the first free pokedb entry (flag clear, no record points at it: nothing the game can
+    --- see). publish_entry then sets the WRAM allocation flag, the Banks bit (only the target bit) and the
+    --- Entries pointer. A failure after stage_entry leaves unreferenced, unallocated bytes: harmless.
+    r.stage_entry = wrap(function(permit, box, bytes)
+        local p = plan(permit, box, bytes)
+        permit:write_batch({{domain = CART, addr = entry_at(p.d, p.entry), bytes = p.e}})
+        return {box = box, slot = p.s, bank = p.d, entry = p.entry, key = p.mon.key}
+    end)
+    r.publish_entry = wrap(function(permit, staged)
+        gated(permit)
+        if type(staged) ~= "table" or not integer(staged.box, 1, B.NUM_BOXES) or not integer(staged.slot, 1, B.MONS_PER_BOX)
+           or not integer(staged.bank, 1, 2) or not integer(staged.entry, 1, B.ENTRIES_PER_BANK) then
+            refuse("publish needs a staged entry")
+        end
+        local rec = record("gameplay", staged.box)
+        if rd(CART, rec + staged.slot - 1) ~= 0 then refuse("staged slot is no longer empty") end
+        if flagged(staged.bank, staged.entry) then refuse("staged entry is no longer free") end
+        local fb = flag_byte(staged.bank, staged.entry)
+        permit:write_batch({{domain = WRAM, addr = fb, bytes = {rd(WRAM, fb) | (1 << ((staged.entry - 1) & 7))}},
+                            bank_span(rec, staged.slot, staged.bank),
+                            {domain = CART, addr = rec + staged.slot - 1, bytes = {staged.entry}}})
+        return {box = staged.box, slot = staged.slot, bank = staged.bank, entry = staged.entry, key = staged.key,
+                durability = "VOLATILE_UNTIL_NATIVE_SAVE"}
+    end)
+    --- raw reads for a caller's read-back (the same io as the census): one pokedb entry's 49 bytes, and the
+    --- gameplay Banks byte that holds a slot's bit.
+    function r.entry_bytes(d, e) return read_entry(d, e) end
+    function r.banks_byte(box, slot) return rd(CART, bank_byte(record("gameplay", box), slot)) end
 
     return r
 end
