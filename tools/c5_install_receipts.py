@@ -19,6 +19,8 @@ Three refusals, all RED, none a skip:
     staleness from one error to another;
   * a manifest pins a receipt the packet does not contain, or names a cell this release does not
     require (an install must not smuggle in extra or foreign cells);
+  * the destination (or a parent up to the repo root) is a symlink or junction, which would let the
+    cleanup delete files outside the fixture directory;
   * a manifest's own `code_digest` is not current (each manifest is evidence, the summary only a
     witness), or the packet holds a file named like the generated install manifest.
 
@@ -134,7 +136,32 @@ def plan(lane: Path, dest: Path, digest: str) -> dict:
             "source": str(folder).replace("\\", "/"), "cells": cells, "files": pins}
 
 
+def _is_redirect(path: Path) -> bool:
+    if os.path.islink(path):
+        return True
+    if hasattr(os.path, "isjunction"):
+        return os.path.isjunction(path)
+    try:   # ponytail: py<3.12 on Windows has no isjunction; REPARSE_POINT covers it
+        return bool(os.lstat(path).st_file_attributes & 0x400)
+    except (OSError, AttributeError):
+        return False
+
+
+def refuse_redirected_dest(dest: Path) -> None:
+    """dest and every parent up to the repo root (or, outside the repo, dest's own parent) must be real
+    directories: the cleanup below unlinks whatever the path resolves to."""
+    dest = Path(os.path.abspath(dest))
+    stop = ROOT if ROOT in dest.parents else dest.parent
+    for path in [dest, *dest.parents]:
+        if _is_redirect(path):
+            raise InstallError(f"{path}: is a symlink or junction; refusing to install through it "
+                               f"(destination {dest})")
+        if path == stop:
+            break
+
+
 def install(lane: Path, dest: Path, digest: str, *, dry_run: bool = False) -> dict:
+    refuse_redirected_dest(dest)
     manifest = plan(lane, dest, digest)
     if dry_run:
         return manifest

@@ -2452,6 +2452,10 @@ def c5_install_errors(root: Path | None = None, head: str | None = None) -> list
         elif c5_runner.lf_sha256(target) != sha:
             errors.append(f"installed receipt tampered: {name} sha256 {c5_runner.lf_sha256(target)[:12]} "
                           f"!= installed pin {str(sha)[:12]}")
+    # the pinned set must EQUAL the directory: an extra file is unjudged bytes the packet never vouched for
+    for extra in sorted(p.name for p in folder.iterdir()):
+        if extra != C5_INSTALL_MANIFEST and extra not in files:
+            errors.append(f"unpinned file in the installed C-5 packet: {extra}")
     return errors
 
 

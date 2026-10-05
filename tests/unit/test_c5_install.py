@@ -7,7 +7,9 @@ asserts the named error, not merely that some error appeared.
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -232,6 +234,55 @@ def test_a_source_changed_between_plan_and_copy_never_yields_a_mismatched_pin(tm
     assert pins[mutated[0]] == installer.c5_runner.lf_sha256(dest / mutated[0])
     assert all(installer.c5_runner.lf_sha256(dest / n) == sha for n, sha in pins.items())
     assert "RACED" in (dest / mutated[0]).read_text(encoding="utf-8")
+
+
+def test_red_an_extra_unpinned_file_in_the_installed_packet_is_named(tmp_path):
+    root, lane = _tree(tmp_path)
+    dest = _install(root, lane)
+    assert gate.c5_gate_errors(root=root, head=HEAD) == []          # control: clean install is green
+    (dest / "smuggled.txt").write_text("PYDEC: PASS forged\n", encoding="utf-8")
+    errors = gate.c5_gate_errors(root=root, head=HEAD)
+    assert "unpinned file in the installed C-5 packet: smuggled.txt" in errors, errors
+
+
+def _link(link: Path, target: Path) -> None:
+    """A directory symlink, or on Windows a junction; skip only if the OS refuses to make either."""
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.symlink(target, link, target_is_directory=True)
+        return
+    except (OSError, NotImplementedError) as exc:
+        reason = f"symlink refused ({exc})"
+    if os.name == "nt":
+        done = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True)
+        if done.returncode == 0 and link.exists():
+            return
+        reason += f"; mklink /J failed ({done.stdout.decode(errors='replace').strip()})"
+    pytest.skip(f"cannot create a directory link on this OS: {reason}")
+
+
+@pytest.mark.parametrize("where", ["dest", "dest-parent"])
+@pytest.mark.parametrize("dry_run", [False, True], ids=["install", "dry-run"])
+def test_red_a_redirected_destination_is_refused_and_the_outside_survives(tmp_path, where, dry_run):
+    """The cleanup unlinks whatever the destination resolves to; through a link that is outside the
+    fixture directory. Refused before any mutation, dry-run included."""
+    root, lane = _tree(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel.txt"
+    sentinel.write_text("keep me\n", encoding="utf-8")
+    dest = root / DEST
+    _link(dest if where == "dest" else dest.parent, outside)
+    with pytest.raises(installer.InstallError, match="symlink or junction"):
+        installer.install(lane, dest, HEAD, dry_run=dry_run)
+    assert sentinel.read_text(encoding="utf-8") == "keep me\n"
+    assert sorted(p.name for p in outside.iterdir()) == ["sentinel.txt"]
+
+
+def test_a_real_destination_is_not_mistaken_for_a_redirect(tmp_path):
+    root, lane = _tree(tmp_path)
+    _install(root, lane)                  # control for the refusal above: same flow, real directories
+    assert gate.c5_gate_errors(root=root, head=HEAD) == []
 
 
 # ── the installer's own contract ──────────────────────────────────────────────
