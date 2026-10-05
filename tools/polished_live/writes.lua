@@ -112,6 +112,8 @@ for i = 1, math.min(#mons, 6) do
     L.log(fmt("[writes]   mon %d: key=%s species=%s level=%s", i, tostring(mons[i].key),
               tostring(mons[i].species), tostring(mons[i].level)))
 end
+L.check("read_party() SUCCEEDED (a refusal is a FAIL, never an empty list)", party_block ~= nil,
+        party_block and #party_block.mons or tostring(party_why))
 L.check("the save has a party of >= 2 (the card's precondition)", #mons >= 2, #mons)
 
 -- the gate bytes the write path predicates on (live.lua's own running test)
@@ -135,6 +137,55 @@ local WRAM_BASE = L.woff("wPartyMons")        -- the same block in the WRAM doma
 local STRIDE, STATUS_OFF, HP_OFF, MAXHP_OFF = 48, 32, 34, 36
 L.log(fmt("[writes] party block: SystemBus $%04X / WRAM $%04X, stride %d, status +%d, HP +%d, MaxHP +%d",
           SB_BASE, WRAM_BASE, STRIDE, STATUS_OFF, HP_OFF, MAXHP_OFF))
+local CO = (P.overworld and P.overworld.coords) or {}
+
+-- ── EXACT DIFF DISCIPLINE ──────────────────────────────────────────────────────────────────────
+-- Snapshot the three regions a write could touch, so "what changed" is measured rather than
+-- inferred from the write log. CartRAM is read flat (0..0x7FFF) exactly as the census reads it;
+-- the party block and the pokedb allocation windows are read in their own domains.
+local function snapshot()
+    local cart, party, alloc = {}, {}, {}
+    for i = 0, 0x7FFF do cart[i] = memory.read_u8(i, "CartRAM") end
+    for a = SB_BASE - 8, SB_BASE + 6 * 48 + 11 + 11 do party[a] = memory.read_u8(a, "System Bus") end
+    for _, label in ipairs({"wPokeDB1UsedEntries", "wPokeDB2UsedEntries"}) do
+        local c = CO[label]
+        if c then for i = 0, 25 do alloc[c[1] * 0x1000 + c[2] - 0xD000 + i] = memory.read_u8(c[1] * 0x1000 + c[2] - 0xD000 + i, "WRAM") end end
+    end
+    return cart, party, alloc
+end
+local function changed(before, after)
+    local out = {}
+    out = {}
+    for a, v in pairs(before[1]) do if after[1][a] ~= v then out[#out + 1] = { kind = "cart", a = a } end end
+    for a, v in pairs(before[2]) do if after[2][a] ~= v then out[#out + 1] = { kind = "party", a = a } end end
+    for a, v in pairs(before[3]) do if after[3][a] ~= v then out[#out + 1] = { kind = "alloc", a = a } end end
+    table.sort(out, function(x, y) if x.kind ~= y.kind then return x.kind < y.kind end return x.a < y.a end)
+    return out
+end
+local function fmt_changed(list, cap)
+    local parts, n = {}, 0
+    for _, c in ipairs(list) do
+        n = n + 1
+        if n <= (cap or 12) then parts[#parts + 1] = fmt("%s@%d", c.kind, c.a) end
+    end
+    if n > (cap or 12) then parts[#parts + 1] = fmt("...+%d more", n - (cap or 12)) end
+    return fmt("%d byte(s): %s", n, table.concat(parts, ", "))
+end
+local function is_subset(got, expect)
+    local set = {}
+    for k, v in pairs(expect) do set[k] = v end
+    local extra = {}
+    for _, c in ipairs(got) do
+        local k = c.kind .. "@" .. c.a
+        if not set[k] then extra[#extra + 1] = k end
+        set[k] = nil
+    end
+    local missing = {}
+    for k in pairs(set) do missing[#missing + 1] = k end
+    table.sort(missing)
+    return #extra == 0, extra, missing
+end
+
 local function be16(slot, off) return L.bus(SB_BASE + slot * STRIDE + off) * 256
                                     + L.bus(SB_BASE + slot * STRIDE + off + 1) end
 local function status(slot) return L.bus(SB_BASE + slot * STRIDE + STATUS_OFF) end
@@ -151,6 +202,7 @@ L.log(fmt("[writes] slot %d before: HP %d/%d status $%02X party %d", SLOT, hp_be
 L.check("the target slot is alive before the faint (HP > 0)", hp_before > 0,
         fmt("HP %d/%d status $%02X", hp_before, max_before, st_before))
 
+local b_cart, b_party, b_alloc = snapshot()
 local w_before = #writes
 local g = gate()
 L.check("the overworld predicate is satisfied at queue time (no battle, no script)",
@@ -166,6 +218,39 @@ L.check("(a1) the bench mon's HP bytes are 0/0 (big-endian pair)", hp_after == 0
         fmt("%d/%d (before %d/%d)", hp_after, L.bus(SB_BASE + SLOT * STRIDE + HP_OFF + 1), hp_before, max_before))
 L.check("(a2) the mon's status byte is 0", st_after == 0, fmt("$%02X (before $%02X)", st_after, st_before))
 L.check("(a3) the party count is unchanged", after_count == before_count, fmt("%d -> %d", before_count, after_count))
+
+-- (a5) the EXACT changed set. Independently derived: the faint's own record, status +32 and HP
+-- +34..35 -- nothing else, anywhere in CartRAM, the party block or the pokedb flags.
+local a_cart, a_party, a_alloc = snapshot()
+local diff_a = changed({ b_cart, b_party, b_alloc }, { a_cart, a_party, a_alloc })
+local expect_a = {}
+for _, off in ipairs({ STATUS_OFF, HP_OFF, HP_OFF + 1 }) do
+    expect_a["party@" .. (SB_BASE + SLOT * STRIDE + off)] = true
+end
+local sub_ok, extra, missing = is_subset(diff_a, expect_a)
+L.log(fmt("[writes] (a) changed set: %s", fmt_changed(diff_a)))
+L.check("(a5) EXACT diff: nothing outside the faint record's status +32 / HP +34..35 changed", sub_ok,
+        fmt("unexpected: %s", table.concat(extra, ",")))
+-- A byte the writer stores with the value it already held is a WRITE, not a CHANGE, so the
+-- expected set is a superset bound, not an equality: on this fixture the mon is status $00 with
+-- HP 0x0098, so status +32 and HP-hi +34 were already the values the write stores and only HP-lo
+-- actually flips. What must hold: no byte OUTSIDE the faint's own three, and CartRAM untouched.
+local party_only, box_only, alloc_only = 0, 0, 0
+for _, c in ipairs(diff_a) do
+    if c.kind == "party" then party_only = party_only + 1
+    elseif c.kind == "cart" then box_only = box_only + 1 else alloc_only = alloc_only + 1 end
+end
+L.check(fmt("(a5b) every OTHER party mon and every box slot is byte-identical (party-block %d changed, "
+            .. "CartRAM %d, pokedb flags %d)", party_only, box_only, alloc_only),
+        party_only <= 3 and box_only == 0 and alloc_only == 0)
+L.check("(a5d) at least one byte actually changed (the diff is not empty)", #diff_a >= 1, #diff_a)
+-- NEGATIVE CONTROL: the same measured diff against a WRONG expected set (the faint target shifted
+-- one slot) MUST fail. Without this, (a5) could pass vacuously -- e.g. if the diff were empty.
+local wrong = {}
+for _, off in ipairs({ STATUS_OFF, HP_OFF, HP_OFF + 1 }) do wrong["party@" .. (SB_BASE + (SLOT + 1) * STRIDE + off)] = true end
+local wrong_ok = is_subset(diff_a, wrong)
+L.check("(a5c) CONTROL: the same diff against a deliberately wrong expected set FAILS", wrong_ok == false,
+        fmt("subset reported %s against a one-slot-shifted set", tostring(wrong_ok)))
 
 -- every write this run made must lie inside the declared party-record block, in EITHER domain the
 -- tap may report (the client's io.write_u8 domain is logged with each write, never assumed).
@@ -304,41 +389,12 @@ if os.getenv("POL_STOP_AFTER_B") == "1" then
     L.finish("pol-live-writes (a)+(b) complete")
 end
 
--- ── (c) negative controls ──────────────────────────────────────────────────────────────────────
--- The same commands, queued while the gate is NOT satisfied, must not write. We do not fake the
--- gate: we only queue during a frame where the engine's own bytes say so, and say NOT RUN if the
--- card's condition never occurs naturally in this boot.
-local negatives = 0
-for _, probe in ipairs({ { name = "battle", ok = function() return L.rw("wBattleMode") ~= 0 end,
-                           cmd = function(k) return { cmd = "force_faint", key = k } end },
-                         { name = "script", ok = function() return L.rw("wScriptRunning") ~= 0 end,
-                           cmd = function(k) return { cmd = "box_mon", key = k } end } }) do
-    local seen_state = false
-    local w0 = #writes
-    for _ = 1, 1800 do
-        L.frame()
-        if probe.ok() then
-            seen_state = true
-            if key then
-                local wq = #writes
-                SLINK_GEN2_CLIENT:handle_command(probe.cmd(key))
-                L.idle(6)
-                local dn = #writes - wq
-                if dn > 0 then
-                    L.check("(c-" .. probe.name .. ") nothing was written while " .. probe.name .. " was active",
-                            false, dn .. " write(s)")
-                    negatives = negatives + 1
-                end
-            end
-            break
-        end
-    end
-    L.check("(c-" .. probe.name .. ") the " .. probe.name .. " state was observed", seen_state,
-            seen_state and "queued and nothing written" or "never occurred in this boot -> NOT RUN")
-end
+-- ── (c) NEGATIVES: NOT RUN in this card ────────────────────────────────────────────────────────
+-- The three gate pokes (wBattleMode / wScriptRunning / wGameLogicPaused) are NOT attempted here:
+-- poking wBattleMode to 1 leaves OverworldLoop, so the engine stops reaching the DelayFrame the
+-- driver advances on and the run wedges (measured twice, 190 s and 300 s caps, no progress past
+-- the poke line). A poke that halts the engine is not a gate: zero writes must be measured while
+-- frames keep advancing. (c) needs a REAL battle, driven into by the game -- see the reply.
+L.log("[writes] (c) negatives: NOT RUN (synth gate pokes wedge the frame loop; a real battle is needed)")
 
-L.log(fmt("[writes] RESULT-DATA %s", J.encode({
-    rom = P.runtime_rom_sha1, party = #party, wrote = #writes,
-    gate = gate(), writes_total = select(2, write_report(0)),
-})))
 L.finish("pol-live-writes")
