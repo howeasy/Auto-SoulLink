@@ -138,9 +138,11 @@ event.onframeend(function()
     if S.phase == "boot" then
         if service_live() then
             local caps = bus(CAPS)
-            L.check("caps byte reads 0x05 (SLINK_CAP_SFX|SLINK_CAP_SFX_NOTIFY)", caps == 0x05,
+            -- POL_EXPECT_CAPS: the sound-only ROM reads 0x05 (SFX|SFX_NOTIFY); the integrated overlay adds the
+            -- panel bit (0x07). The expectation is explicit per ROM, never inferred from what the ROM says.
+            local want = tonumber(os.getenv("POL_EXPECT_CAPS") or "5")
+            L.check(string.format("caps byte reads 0x%02X", want), caps == want,
                     string.format("$%02X at frame %d", caps, f))
-            L.check("panel bit 0x02 clear in caps", math.floor(caps / 2) % 2 == 0, caps)
             L.check("phone/trade bits 0x18 clear in caps", math.floor(caps / 8) % 2 == 0, caps)
             L.check("mailbox signature live (beacon + cookie $A5)", true)
             L.log(string.format("  table from profile.json: success $%02X failure $%02X boo $%02X notify $%02X",

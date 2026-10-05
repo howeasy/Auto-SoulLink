@@ -92,3 +92,11 @@ doing its job, not a priority accident.
 One EmuHawk at a time. Only PIDs whose command line carries this lane
 (`--config=.../pol-sounds2/...`) were ever killed; `Get-Process EmuHawk` reports **0** afterwards.
 No other card's lane, worktree or emulator was touched, and nothing was rebuilt.
+## Integrated overlay run (coordinator, 2026-10-04): deebb100 PASS
+
+Same driver on the integrated overlay (`deebb1004d4f6123667d5d9e061ad0bf867ac021`, panel + sound service),
+`POL_EXPECT_CAPS=7`, lane `F:/slink-work/lanes/g2int-snd`, fixture `g2int-live`:
+`RESULT: PASS pol-sounds (0 checks failed) frame 633` (result.txt sha256 `494e8758...fb83`): all four codes post -> ack -> play
+on the edge, hold 163 frames / 162 visits (< 240), every write at `$C612`. Negative control: `POL_EXPECT_CAPS=5` on the same ROM
+goes red (caps `$07`). The sound-only ROM (`ac65532c`) expects `5`; the integrated one `7` because the panel bit is on.
+Still unexercised: the `$FF` reset latch path, a music-fade hold (`wMusicFade != 0`), stack depth.
