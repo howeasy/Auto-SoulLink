@@ -59,12 +59,40 @@ def build(clean: bytes) -> dict:
     changed = [i for i, (x, y) in enumerate(zip(clean, overlay, strict=True)) if x != y]
     if [i for a, b in spans for i in range(a, b)] != changed:
         raise SystemExit("UPS hunks disagree with the release/overlay byte diff")
+    # T8 ruling (2026-10-04): the beacon pins the overlay's identity, so the 20-byte version field
+    # and the GB global checksum it perturbs must be EXCLUDED -- re-stamping --version then moves
+    # neither beacon.json nor the canonical sha1. Both come from rom_identity (slot_from_sym /
+    # GB_CHECKSUM), so "canonical" has exactly one definition.
+    slot = out.get("version_slot")
+    if not slot:
+        raise SystemExit("provenance has no version_slot; rebuild with the T8 canonical identity")
+    excluded = set(range(slot["offset"], slot["offset"] + slot["length"])) | set(range(0x14E, 0x150))
+    beacon: list[tuple[int, int]] = []
+    for lo, hi in spans:
+        cur = lo
+        for i in range(lo, hi):
+            if i in excluded:
+                if cur < i:
+                    beacon.append((cur, i))
+                cur = i + 1
+        if cur < hi:
+            beacon.append((cur, hi))
+    keep = {i for a, b in beacon for i in range(a, b)}
+    union = {i for a, b in spans for i in range(a, b)}
+    if union - (keep | excluded):
+        raise SystemExit("beacon spans + excluded do not cover the UPS hunks")
+    if keep & excluded:
+        raise SystemExit("a beacon span overlaps an excluded byte")
+    spans = beacon
     body = b"".join(overlay[a:b] for a, b in spans)
     return {
         "schema": SCHEMA,
         "title": "polished",
         "source": {"overlay_sha1": overlay_sha1, "clean_sha1": clean_sha1, "ups_sha256": ups_sha256,
-                   "ups_file": out["ups"]["file"], "rom_size": len(overlay), "generator": "tools/gen_polished_beacon.py"},
+                   "ups_file": out["ups"]["file"], "rom_size": len(overlay),
+                   "canonical_sha1": out.get("canonical_sha1"),
+                   "version_slot": slot, "canonical_spans": out.get("canonical_spans"),
+                   "excluded": sorted(excluded), "generator": "tools/gen_polished_beacon.py"},
         "count": len(spans),
         "total": len(body),
         "sha256": hashlib.sha256(body).hexdigest(),
