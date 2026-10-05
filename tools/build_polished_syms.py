@@ -40,6 +40,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import zlib
 from datetime import UTC, datetime
 
@@ -92,12 +93,42 @@ def verify_source(repo_dir: pathlib.Path | None, lock: dict) -> pathlib.Path:
     return repo
 
 
+EXPORT_MARKER = ".slink-export"
+
+
+def remove_tree(path: pathlib.Path, attempts: int = 6, delay: float = 0.5) -> None:
+    """Delete `path`, or fail closed.
+
+    A concurrent writer (another card building the same shared cache tree) leaves a directory
+    non-empty and `shutil.rmtree` raises WinError 145. Retrying rides that out when it is a
+    transient handle; when it is a genuinely concurrent build this raises instead, so no caller
+    ever continues onto a HALF-DELETED tree -- the failure mode that produced bogus
+    "No such file or directory" errors deep inside make.
+    """
+    last: Exception | None = None
+    for attempt in range(attempts):
+        if not path.exists():
+            return
+        try:
+            shutil.rmtree(path)
+        except OSError as err:          # includes PermissionError and WinError 145
+            last = err
+        if not path.exists():
+            return
+        last = last or RuntimeError(f"{path} still exists after rmtree")
+        time.sleep(delay * (attempt + 1))
+    raise RuntimeError(
+        f"could not remove {path} after {attempts} attempts: {last}. Another build is probably "
+        f"using the same cache tree -- give this run its own SLINK_WORK_ROOT.")
+
+
 def export_source(repo: pathlib.Path, commit: str, build_dir: pathlib.Path) -> None:
     if " " in str(build_dir):
         raise RuntimeError(f"build dir {build_dir} contains a space; make cannot cope. Use --build-dir")
-    if build_dir.exists():
-        shutil.rmtree(build_dir)
+    remove_tree(build_dir)
     build_dir.mkdir(parents=True)
+    # A stale tree that survived a delete would still carry the previous run's marker.
+    (build_dir / EXPORT_MARKER).write_text(f"{commit}\n", encoding="utf-8")
     archive = subprocess.run(
         ["git", "-C", str(repo), "archive", commit], capture_output=True, check=True
     ).stdout

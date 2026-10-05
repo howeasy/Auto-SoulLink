@@ -137,27 +137,28 @@ def _window(mem, base: int, n: int = 64) -> list[int]:
 
 # ── the ROM's half ────────────────────────────────────────────────────────────────────────
 
-def test_the_panel_script_is_two_ram_lines_of_the_mailbox_text():
-    """SlinkPanelScript is `<RAM> addr <LNBRK> <RAM> addr @` in the game's own charmap, and both
-    addresses are wSlinkPanelText / wSlinkPanelText + stride -- the mailbox, never VRAM.
+def test_the_staged_page_is_painted_from_the_mailbox_at_each_lines_own_origin():
+    """The staged page is two fixed-stride mailbox lines painted with PlaceString, each at its own
+    origin (INNERY and INNERY + 1) -- a `<RAM> a <LNBRK> <RAM> b` chain resumes line 2 at the END of line 1
+    (home/text.asm HandleLineBreak advances the string's STARTING coords): live C2/C3 screen "PAR|TNER: RED".
+    Both sources are the mailbox, never VRAM, and the ROM clamps both lines' terminator itself.
 
-    Red control (applied): point the second `dw` at wTilemap and this fails, which is the property
-    that matters -- the panel can never be talked into reading or writing the tilemap."""
-    lines = PANEL_ASM.splitlines()
-    body = lines[lines.index("SlinkPanelScript:") + 1:]
-    body = body[: body.index("SlinkPanelEnd::")]
-    assert body == [
-        '\tdb "<RAM>"',
-        "\tdw wSlinkPanelText",
-        '\tdb "<LNBRK>"',
-        '\tdb "<RAM>"',
-        "\tdw wSlinkPanelText + SLINK_PANEL_STRIDE",
-        '\tdb "@"',
-    ], body
+    Red control (applied): paint line 2 from wTilemap (or at INNERY + 2) and this fails."""
+    code = [ln.split(";")[0].strip() for ln in PANEL_ASM.splitlines()]
+    code = [ln for ln in code if ln]
+    start = code.index("jr nz, .nostage")
+    window = code[start + 1: start + 16]
+    assert window[:3] == ["ld a, '@'",
+                          "ld [wSlinkPanelText + SLINK_PANEL_LINE_MAX], a",
+                          "ld [wSlinkPanelText + SLINK_PANEL_STRIDE + SLINK_PANEL_LINE_MAX], a"], window
+    assert window[3:9] == ["hlcoord TEXTBOX_INNERX, TEXTBOX_INNERY", "ld de, wSlinkPanelText", "rst PlaceString",
+                           "hlcoord TEXTBOX_INNERX, TEXTBOX_INNERY + 1",
+                           "ld de, wSlinkPanelText + SLINK_PANEL_STRIDE", "rst PlaceString"], window
+    assert "SlinkPanelScript:" not in PANEL_ASM, "the dead <RAM>/<LNBRK> script chain must stay deleted"
     codes = {k: int(v) for k, v in
              re.findall(r'\["([^"]+)"\] = (\d+)',
                         (ROOTP / "data/games/polished_crystal/charmap.lua").read_text(encoding="utf-8"))}
-    assert codes["<RAM>"] == 0x01 and codes["<LNBRK>"] == 0x55 and codes["@"] == TERM
+    assert codes["@"] == TERM
 
 
 def test_the_mailbox_is_whole_and_the_page_fits_inside_its_tail():
@@ -293,3 +294,24 @@ def test_rows_are_cut_to_the_line_padded_to_it_and_bad_payloads_refused(roms):  
     assert second[:2] == _codes("B ")
     assert second[2:LINE_MAX] == [BLANK] * (LINE_MAX - 2), "a short line is padded, not left short"
     assert second[LINE_MAX] == TERM
+
+
+def test_the_fallback_does_not_prompt_and_the_staged_path_waits_for_a_fresh_key():
+    """STAGE-2/3 DEFECT PIN. (1) SlinkPanelFallback ends in `done`, never `prompt`, so AWAIT is published before any
+    key wait. (2) PrintText never waits (home/text.asm CheckTerminatorChar returns on <PROMPT> BEFORE dispatch), so the
+    STAGED path itself must reach `.WaitForButton` (release-then-press) before .ready reads hJoyDown, or the A that chose
+    Call advances/closes the page the frame it is drawn (live C2/C3 finding). The timeout path closes the lease first.
+
+    SOURCE check on purpose; the behaviour is the live C0-C5 run (docs/polished/LIVE_PANEL.md).
+    RED CONTROL (applied): restore `prompt` on the fallback, or replace `jr .waitkey` with `jr .ready`."""
+    lines = PANEL_ASM.splitlines()
+    body = lines[lines.index("SlinkPanelFallback:") + 1: lines.index("SlinkPanelEnd::")]
+    data = [ln for ln in body if ln.strip() and not ln.strip().startswith(";")]
+    terminator = data[-1].strip().split()[0]
+    assert terminator == "done", f"the fallback must not prompt, got {terminator!r}"
+    code = [ln.split(";")[0].strip() for ln in lines]
+    code = [ln for ln in code if ln]
+    assert "jr .waitkey" in code and "jr .ready" not in code[code.index("jr nz, .nostage"):code.index(".nostage")]
+    nostage = code.index(".nostage")
+    assert code[nostage + 1: nostage + 3] == ["xor a", "ld [wSlinkMailbox + SLINK_OFS_PANEL_STATE], a"]
+    assert code[code.index(".waitkey") + 1] == "call .WaitForButton"
