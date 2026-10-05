@@ -750,6 +750,81 @@ def test_red_control_without_the_mail_table_the_deposit_lands():
     assert done is True, "the mail refusal is not load-bearing"
 
 
+# ── deposit hardening (Codex review 2026-10-05): read-back before the party is touched, count written last ───
+
+def _party_bytes(rig):
+    return [rig.mem[a] or 0 for a in range(PARTY_COUNT, PARTY_END)]
+
+
+def _drop_one_entry_byte(rig):
+    """Make the CartRAM writer silently DROP one byte of the first pokedb entry (bank 1, entry 1) - the box half
+    lands everywhere else. Returns the dropped offset."""
+    at = entry_flat(1, 1) + 10
+    real = rig.img.write
+
+    def write(offset, value, domain):
+        if domain == "CartRAM" and offset == at:
+            assert rig.img.mem["CartRAM"][at] != value, "the dropped byte must differ from what is there"
+            return
+        real(offset, value, domain)
+
+    rig.img.write = write
+    return at
+
+
+def test_a_dropped_entry_byte_refuses_the_deposit_before_the_party_is_touched():
+    mons = party()
+    rig = Rig(mons)
+    before = _party_bytes(rig)
+    _drop_one_entry_byte(rig)
+    rig.send_command({"cmd": "box_mon", "key": key_of(mons[1])})
+    reasons = [m["reason"] for m in rig.sent("box_mon_failed")]
+    assert len(reasons) == 1 and "read-back" in reasons[0], reasons
+    assert _party_bytes(rig) == before and rig.count() == 3
+    assert not [w for w in rig.writes() if w["domain"] == "System Bus"], "the party was written"
+
+
+def test_red_control_without_the_deposit_read_back_the_party_loses_the_mon():
+    """RED: the read-back refusal removed -> the same dropped byte lets the party half run (the later census
+    read-back catches it, but only after the original is gone from the party)."""
+    mons = party()
+    rig = Rig(mons)
+    before = _party_bytes(rig)
+    _drop_one_entry_byte(rig)
+    source = MODULE.replace('if bad then refuse("deposit read-back refused: " .. bad) end', "")
+    assert source != MODULE
+    path = _mutant(rig, source)
+    rig.lua.globals().SLINK_PARTS = rig.parts
+    _deposit(rig.lua, path.boxes, 1)
+    assert _party_bytes(rig) != before, "the deposit read-back is not load-bearing"
+
+
+def test_the_party_count_is_the_last_write_of_a_deposit():
+    mons = party()
+    rig = Rig(mons)
+    rig.send_command({"cmd": "box_mon", "key": key_of(mons[1])})
+    assert rig.count() == 2
+    writes = rig.writes()
+    assert writes[-1] == {"addr": PARTY_COUNT, "domain": "System Bus"}
+    assert [w["addr"] for w in writes].count(PARTY_COUNT) == 1
+    party_writes = [w for w in writes if w["domain"] == "System Bus"]
+    assert party_writes[-1]["addr"] == PARTY_COUNT and len(party_writes) == PARTY_END - PARTY_COUNT
+
+
+def test_red_control_count_first_is_not_the_last_party_write():
+    """RED: the party block written in one span from wPartyCount (the old order) puts the count FIRST."""
+    mons = party()
+    rig = Rig(mons)
+    old = ('gate:write_batch({{domain = "System Bus", addr = block + 1, bytes = rest},\n'
+           '                              {domain = "System Bus", addr = block, bytes = {bytes[1]}}})')
+    source = MODULE.replace(old, 'gate:write_batch({{domain = "System Bus", addr = block, bytes = bytes}})')
+    assert source != MODULE
+    path = _mutant(rig, source)
+    rig.lua.globals().SLINK_PARTS = rig.parts
+    done, _ = _pair(_deposit(rig.lua, path.boxes, 1))
+    assert done is True and rig.writes()[-1]["addr"] != PARTY_COUNT, "the count-last order is not load-bearing"
+
+
 # ── the Bug Catching Contest: a hidden mon's death must not be dropped ────────────────────────────────────
 
 CONTEST_AT = SYM["wStatusFlags2"][1]       # wStatusFlags2 (the profile does not carry it; the pinned .sym does)

@@ -343,7 +343,13 @@ function O.writes(profile, coords, io, Permit, policy, hold)
             assert(Permit.sequence_length(bytes, "party block") == block_length, "party block length mismatch")
             assert(policy.authorize("party_collection", {length = block_length}) == true,
                    "write ownership refused")
-            gate:write_batch({{domain = "System Bus", addr = block, bytes = bytes}})
+            -- records, OT fields and nicknames first, wPartyCount LAST (the engine's order: RemoveMonFromParty
+            -- decrements the count after the swaps), so an interrupted write never leaves a decremented count
+            -- over records that have not shifted yet.
+            local rest = {}
+            for i = 2, block_length do rest[i - 1] = bytes[i] end
+            gate:write_batch({{domain = "System Bus", addr = block + 1, bytes = rest},
+                              {domain = "System Bus", addr = block, bytes = {bytes[1]}}})
             local after = wram(block, block_length)
             for i = 1, block_length do
                 assert(after[i] == bytes[i], "read-back refused: the party block did not take the write")
@@ -477,12 +483,46 @@ function O.boxes(deps)
                 end
             end
             if not box then refuse(refusal) end
-            -- the box half first (the engine's own order), so a reset between the halves duplicates, never loses
+            -- The box half first (the engine's own order). A reset reloads the last save, so neither half persists
+            -- on its own; an exception or lifetime loss mid-write can leave a partial party until the next
+            -- save/reload (the count is written last to keep that window small). The read-back below proves the
+            -- box entry before the party is touched, so a dropped entry byte never publishes a Bad Egg while
+            -- the party original is removed.
             writes:arm("box_deposit")
             local boxed, placed, bwhy = pcall(function() return reader.insert_mon(writes, box, blob_of(raw, slot)) end)
             writes:disarm()
             if not boxed then refuse("box write refused: " .. tostring(placed)) end
             if not placed then refuse("box " .. box .. " refused the deposit: " .. tostring(bwhy)) end
+            -- READ-BACK 0 (before the party half): the entry bytes (checksum + equality with what was sealed), the
+            -- WRAM allocation flag, the Banks bit and the Entries pointer byte, re-read through the box reader's io.
+            do
+                local want = Boxes.entry_from_party(blob_of(raw, slot))
+                local snap = reader.read_boxes("gameplay")
+                local function at(list)
+                    for _, w in ipairs(list or {}) do
+                        if w.box == box and w.slot == placed.slot then return w end
+                    end
+                end
+                local bad
+                if not snap then bad = "the box census is unreadable"
+                elseif at(snap.unflagged) then bad = "allocation flag not set"
+                elseif at(snap.bad_eggs) then bad = "entry checksum fails"
+                elseif at(snap.invalid) then bad = "invalid pointer or record"
+                else
+                    local got = at(snap.mons)
+                    if not got then bad = "Entries pointer byte does not point at the entry"
+                    elseif got.entry ~= placed.entry then bad = "Entries pointer byte"
+                    elseif got.bank ~= placed.bank then bad = "Banks bit"
+                    else
+                        local have = from_hex(got.raw_hex)
+                        if not Boxes.verify(have) then bad = "entry checksum fails" end
+                        for i = 1, #want do
+                            if have[i] ~= want[i] then bad = bad or "entry bytes differ from the sealed entry" end
+                        end
+                    end
+                end
+                if bad then refuse("deposit read-back refused: " .. bad) end
+            end
             writes:arm("party_collection")
             local dropped, dwhy = pcall(function() return writes:write_party_block(removed(raw, slot)) end)
             writes:disarm()
