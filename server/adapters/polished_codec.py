@@ -448,6 +448,144 @@ def encode_savemon(mon) -> bytes:
     return seal(bytes(buf))
 
 
+# ── withdraw reconstruction (docs/polished/WITHDRAW.md) ──────────────────────
+# engine constants, cited from the pinned source
+STAT_MIN_NORMAL, STAT_MIN_HP, MAX_STAT = 5, 10, 999          # constants/battle_constants.asm:81-82
+PP_UP_MASK, PP_MASK = 0xC0, 0x3F                             # constants/pokemon_data_constants.asm:426,428
+HYPER_TRAINING_MASK = 0xFC                                   # constants/pokemon_data_constants.asm:282
+PP_UP_CAP = 7                                                # ComputeMaxPP caps base/5 at 7 (item_effects.asm:3195-3205)
+NATURES_OPT_BIT = 0                                          # wInitialOptions bit NATURES_OPT (home/pokemon.asm:195)
+
+
+def nature_multiplier(nature: int, stat: int) -> int:
+    """9 / 10 / 11 for one stat, exactly as GetNatureStatMultiplier (mon_stats.asm:878-912).
+
+    stat is 1-6 = STAT_HP..STAT_SDEF. HP is always 10 (`cp STAT_HP / jr z,.neutral`). Otherwise the
+    loop leaves d = nature//5 + 2 (the RAISED stat) and a = nature%5 + 2 (the LOWERED one); the two
+    are equal for the five neutral natures, and `.penalty: cp d / jr z,.neutral` turns those neutral.
+    """
+    if stat == 1:
+        return 10
+    raised, lowered = nature // 5 + 2, nature % 5 + 2
+    if raised == lowered:
+        return 10
+    return 9 if stat == lowered else (11 if stat == raised else 10)
+
+
+def max_pp(base_pp: int, ups: int) -> int:
+    """GetMaxPPOfMove + ComputeMaxPP (item_effects.asm:3269-3314, 3170-3216).
+
+    PP = (base | ups<<6) + ups * min(base//5, 7), masked to PP_MASK: base 40 with 3 ups is 61, not 64.
+    """
+    return (base_pp + ups * min(base_pp // 5, PP_UP_CAP)) & PP_MASK
+
+
+def _base_stats(species_id, form, variants):
+    record = effective_species(species_id, form)
+    if is_variant_form(species_id, form):
+        _require(variants is not None and record in variants,
+                 f"variant form record {record} (species {species_id}, form {form}): base stats are "
+                 f"not in the generated pack; pass variant_base_stats (see docs/polished/WITHDRAW.md)")
+        # the ROM-derived table IS the six base stats in STAT_NAMES order
+        return tuple(_integer(v, 1, 255, name) for v, name in zip(variants[record], STAT_NAMES, strict=True))
+    rows = _species_index()["species"]
+    _require(str(record) in rows, f"species record {record} is not in the generated species index")
+    base = rows[str(record)]["base_stats"]
+    return tuple(_integer(base[name], 1, 255, name) for name in STAT_NAMES)
+
+
+@cache
+def _species_index() -> MappingProxyType:
+    return MappingProxyType(json.loads((ROOT / "data/games/polished_crystal/species_index.json")
+                                      .read_text(encoding="utf-8")))
+
+
+@cache
+def _move_pp() -> MappingProxyType:
+    moves = json.loads((ROOT / "data/games/polished_crystal/moves.json").read_text(encoding="utf-8"))["moves"]
+    return MappingProxyType({m["id"]: m["pp"] for m in moves})
+
+
+def variant_base_stats_from_rom(rom: bytes, *, rom_sha1: str) -> MappingProxyType:
+    """Record index -> the six base stats, from the pinned ROM at forms_index's rom_offset.
+
+    The BaseData record opens with `db hp, atk, def, spe, sat, sdf`
+    (data/pokemon/base_stats/gyarados.asm:1-2), six bytes per record; the pack carries records
+    1..291 but not the 46 variant records 292..337, so the caller that holds the cartridge supplies them.
+    """
+    import hashlib
+    _require(isinstance(rom, bytes) and hashlib.sha1(rom).hexdigest() == rom_sha1,
+             "variant base stats: the ROM is not the pinned build")
+    forms = json.loads(FORMS_INDEX.read_text(encoding="utf-8"))["variant_forms"]
+    return MappingProxyType({int(r["record_index"]): tuple(rom[int(r["rom_offset"]):int(r["rom_offset"]) + 6])
+                             for r in forms if r.get("kind") == "variant"})
+
+
+def savemon_to_party(savemon, *, variant_base_stats, apply_evs, natures_on, perfect_ivs, ot=None,
+                     nickname=None, move_pp=None) -> bytes:
+    """A 48-byte party_struct for a boxed mon: the stats, HP and absolute PP the savemon cannot store.
+
+    The engine does this in two steps (engine/pc/bills_pc.asm): DecodeTempMon (:885-) copies the
+    savemon into wTempMon with the PP-Up byte in place of the four PP bytes, then SetTempPartyMonData
+    (:983-1029) runs `predef CalcPkmnStats`, zeroes wTempMonStatus, sets HP to MaxHP (0 for an egg) and
+    runs `farcall RestoreTempPP`. Level is the savemon's own byte (SAVEMON_LEVEL, constants/pokemon_data_
+    constants.asm:226) -- the engine never re-derives it from Exp on this path.
+
+    Four REQUIRED keyword arguments, because each is an in-game OPTION the caller must read rather
+    than a constant this module may assume: `apply_evs` (CalcPkmnStatC applies EVs only when
+    wInitialOptions2 & %11, constants/ram_constants.asm:125), `natures_on` (GetNature returns
+    NO_NATURE -- every stat neutral -- when wInitialOptions bit NATURES_OPT is clear,
+    home/pokemon.asm:195-201), `perfect_ivs` (CalcPkmnStatC uses DV 15 for EVERY stat when
+    wInitialOptions bit PERFECT_IVS_OPT is set, before hyper training is considered,
+    engine/pokemon/mon_stats.asm:704-707) and `variant_base_stats` (records 292..337 are not in the
+    generated pack). Hyper training is NOT an option: it is the OT extra byte in the savemon, always applied.
+
+    The write path must read these RAM option inputs verbatim from the cartridge:
+      * wInitialOptions bit 0 NATURES_OPT (ram_constants.asm:101; home/pokemon.asm:195-201)
+      * wInitialOptions bit 3 PERFECT_IVS_OPT (ram_constants.asm:104; mon_stats.asm:705)
+      * wInitialOptions2 & EV_OPTMASK (%11) (ram_constants.asm:125; mon_stats.asm:693-695)
+    The first two are the same byte.
+    """
+    mon = savemon if isinstance(savemon, dict) else decode_savemon(savemon)
+    species_id = _integer(mon["species_id"], 1, 0x1FF, "species")
+    form = _integer(mon.get("form", 0), 0, 31, "form")
+    level = _integer(mon["level"], 1, 100, "level")
+    base = _base_stats(species_id, form, variant_base_stats)
+    extra = bytes.fromhex(mon.get("extra_hex", "000000"))
+    trained = extra[0] & HYPER_TRAINING_MASK
+    dvs = [mon["dvs"][name] for name in STAT_NAMES]
+    evs = [mon["evs"][name] for name in STAT_NAMES]
+    pp_table = _move_pp() if move_pp is None else move_pp
+    stats = []
+    for index, _name in enumerate(STAT_NAMES, start=1):
+        dv = 15 if perfect_ivs or (trained & (0x80 >> (index - 1))) else dvs[index - 1]
+        ev = (evs[index - 1] >> 2) if apply_evs else 0
+        value = ((base[index - 1] + dv) * 2 + 1 + ev) * level // 100
+        value += (STAT_MIN_HP + level) if index == 1 else STAT_MIN_NORMAL
+        value = min(value, MAX_STAT)
+        # natures off: GetNature hands back NO_NATURE and every stat is neutral (home/pokemon.asm:199)
+        multiplier = 10 if not natures_on else nature_multiplier(_integer(mon["nature"], 0, 31, "nature"), index)
+        stats.append(value * multiplier // 10)
+    raw = bytearray(mon["raw_hex"] and bytes.fromhex(mon["raw_hex"]) or b"\x00" * SAVEMON_SIZE)
+    party = bytearray(PARTY_SIZE)
+    party[0:22] = raw[0:22]                      # SPECIES..PERSONALITY+FORM: identical in both structs
+    for index, ups in enumerate(mon["pp_ups"]):
+        move = _integer(mon["moves"][index], 0, 255, "move")
+        _require(move in pp_table or move == 0, f"move {move} is not in the generated move table")
+        party[22 + index] = (ups << 6) | (max_pp(pp_table[move], ups) if move else 0)
+    party[26] = _integer(mon.get("happiness", 0), 0, 255, "happiness")
+    party[27] = _integer(mon.get("pokerus", 0), 0, 255, "pokerus")
+    party[28:31] = raw[25:28]                    # CaughtTime/Ball/Level/Location: SAVEMON 25..27
+    party[31] = level
+    party[32] = 0                                # SetTempPartyMonData: xor a / ld [wTempMonStatus], a
+    party[33] = 0                                # the unused byte is never written by the engine
+    party[34:36] = bytes((0, 0)) if mon["is_egg"] else bytes((stats[0] & 255, stats[0] >> 8))
+    party[36:38] = bytes((stats[0] & 255, stats[0] >> 8))
+    for offset, value in zip(range(38, 48, 2), stats[1:], strict=True):  # five battle stats
+        party[offset:offset + 2] = bytes((value & 255, value >> 8))
+    return bytes(party)
+
+
 def party_to_savemon(mon) -> bytes:
     """NEWBOX.md §6.3 step 1: a sealed box entry from a decoded party mon or party blob."""
     return encode_savemon(mon)
