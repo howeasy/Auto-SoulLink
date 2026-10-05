@@ -207,3 +207,6 @@ SlinkPhoneBridgeEnd::
 ; Same ABI, same semantic codes, same private hold bytes as patch/gen2/src/sfx.asm; the native
 ; facts (SFX ids, PlaySFX/CheckSFX, wMusicFade) are Polished's own and each is ASSERTed there.
 INCLUDE "engine/slink/slink_sfx.asm"
+
+; TITLE-VERSION: the main-menu version bridge and its 20-byte stamped field.
+INCLUDE "engine/slink/version.asm"

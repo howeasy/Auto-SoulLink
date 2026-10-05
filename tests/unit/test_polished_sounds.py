@@ -169,7 +169,7 @@ def test_every_overlay_byte_the_sound_card_changed_is_in_an_intended_span(overla
     spans = B.verify_overlay(base, overlay, _symbols(clean / "polishedcrystal-3.2.3.sym"), dict(SYM))
     joined = "\n".join(spans)
     assert "ROM0 delay + reset bridges" in joined
-    assert "service + panel + sound service" in joined
+    assert "service + panel + sound + version" in joined
     assert "call DelayFrames -> SlinkResetSoundBridge" in joined, spans
     with pytest.raises(RuntimeError):
         # a byte outside every intended span must be refused, not absorbed
