@@ -10,9 +10,9 @@
     "generator": "tools/gen_polished_profile.py",
     "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
     "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
-    "overlay_provenance_sha256": "1da613da23c41dac3ee7d36653318fb424096e361951dd3fcf0b5b899ccae0df",
-    "overlay_sha1": "34942315bb3e62189a56dabbcb9cef6dd3e9a9f5",
-    "overlay_sym_sha256": "0317c69c1d013a1204bb54fb64a9cb3d4d3c414e7252272fa3ce715b9d751670",
+    "overlay_provenance_sha256": "32d6606ac3c1abaf42c1ac3c75f7ec67f75d1087aad716759ed2958f69462cfc",
+    "overlay_sha1": "9c60bc8fb26ac13c52705b8086f8a5fb91d7bd93",
+    "overlay_sym_sha256": "a7c150b74ac8ba8c7ac4c062d100f6c6a1b0aaa776cfc66e02aaa2b4f12db9fd",
     "repo": "https://github.com/Rangi42/polishedcrystal",
     "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
     "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
@@ -557,15 +557,24 @@
         "abi": 3,
         "artifact": "polished_overlay",
         "base_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
-        "md5": "de9d2ebc2d0c6831aac4badca2b21fbe",
+        "md5": "56837a1e15f3d036bc8a2a4c58ef5734",
+        "panel": {
+          "base": 50733,
+          "line_max": 16,
+          "lines": 2,
+          "stride": 17,
+          "terminator": 83
+        },
         "ram": {
           "wAttrmap": 49928,
           "wSlinkMailbox": 50699,
+          "wSlinkMailboxEnd": 50768,
+          "wSlinkPanelText": 50733,
           "wTilemap": 49568
         },
-        "rom_sha1": "34942315bb3e62189a56dabbcb9cef6dd3e9a9f5",
+        "rom_sha1": "9c60bc8fb26ac13c52705b8086f8a5fb91d7bd93",
         "sym": "polished_slink.sym",
-        "sym_sha256": "0317c69c1d013a1204bb54fb64a9cb3d4d3c414e7252272fa3ce715b9d751670"
+        "sym_sha256": "a7c150b74ac8ba8c7ac4c062d100f6c6a1b0aaa776cfc66e02aaa2b4f12db9fd"
       },
       "ram": {
         "hAppendVWFText": 65511,
@@ -1165,6 +1174,8 @@
         "wSavedAtLeastOnce": 54439,
         "wScriptRunning": 54327,
         "wSlinkMailbox": 50699,
+        "wSlinkMailboxEnd": 50768,
+        "wSlinkPanelText": 50733,
         "wTilemap": 49568,
         "wXCoord": 56495,
         "wYCoord": 56494
@@ -1767,6 +1778,8 @@
         "wSavedAtLeastOnce": 1,
         "wScriptRunning": 1,
         "wSlinkMailbox": 0,
+        "wSlinkMailboxEnd": 0,
+        "wSlinkPanelText": 0,
         "wTilemap": 0,
         "wXCoord": 1,
         "wYCoord": 1

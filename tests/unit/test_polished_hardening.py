@@ -6,7 +6,7 @@ The IO write log must stay empty on every path here; each guard's docstring name
 from __future__ import annotations
 
 import json
-
+import pathlib
 import pytest
 
 from tests.unit.test_polished_client import (  # noqa: F401
@@ -27,7 +27,14 @@ MAILBOX = SYM["wSlinkMailbox"][1]
 OFF_CAPS, OFF_STATE, OFF_COUNTER = 8, 9, 5
 BATTLE_MODE = SYM["wBattleMode"][1]
 PARTY_COUNT = SYM["wPartyCount"][1]
-CAPS_PANEL_SFX = 0x03
+MAILBOX_END = SYM["wSlinkMailboxEnd"][1]
+PANEL_TEXT = SYM["wSlinkPanelText"][1]
+TILEMAP = SYM["wTilemap"][1]
+OFF_PAGES = 11
+_PANEL = json.loads((pathlib.Path(ROOT) / "data/games/polished_crystal/profile.json")
+                    .read_text(encoding="utf-8"))["titles"]["polished"]["overlay"]["panel"]
+PANEL_LINES, PANEL_STRIDE = _PANEL["lines"], _PANEL["stride"]
+CAPS_PANEL_SFX = 0x03   # a LYING caps byte: panel + SFX, so every gate but the writer is open
 SFX_BOO = 3
 
 
@@ -47,36 +54,60 @@ def _hellos(log):
     return [json.loads(line) for line in log.sent.values() if json.loads(line)["event"] == "hello"]
 
 
-# ── H1 (F-3): the panel's write path is structurally inert ───────────────────
+# ── H1 (F-3, rewritten for POL-PANEL Stage 2): the panel's write path is NARROW ─────────────
 
-def test_a_queued_panel_request_is_refused_not_written_and_not_dropped(roms):  # noqa: F811
-    """The caps byte CLAIMS panel + SFX, so every gate but the writer is open. A sound request and a held page that
-    reaches AWAIT must both be refused BY THE WRITER: io.write_u8 never runs, each refusal raises or is logged by
-    the client, and each is recorded. Red control (applied): Panel.writes over the shared permit -> log.writes fills."""
-    lua, parts, io, log, mem = _build(roms, {MAILBOX + OFF_CAPS: CAPS_PANEL_SFX})
-    client, panel, refusals = parts.client, parts.panel, parts.panel_writes
+def test_a_panel_page_lands_only_inside_the_overlay_mailbox(roms):  # noqa: F811
+    """F-3's blanket refuse-all is retired: the panel is live, and its permit is what holds the line.
+
+    The caps byte CLAIMS panel + SFX, so every gate but the writer is open. A held page taken
+    through a real open must then stage INSIDE the overlay's own mailbox span and nowhere else --
+    in particular the tilemap must not move, because Polished's panel is a native text box and has
+    no business touching the screen buffer -- and a write aimed outside that span is still refused
+    rather than silently dropped.
+
+    Red control (applied): drop the `narrow` region from the Panel.writes call in compose_polished
+    and the containment assertion fails; drop the permit entirely and the refusal raises."""
+    lua, parts, io, log, mem = _build(roms, {MAILBOX + OFF_CAPS: CAPS_PANEL_SFX,
+                                            MAILBOX + 31: 0xA5,      # the service's init cookie
+                                            MAILBOX: 0x53, MAILBOX + 1: 0x4C,
+                                            MAILBOX + 2: 0x4E, MAILBOX + 3: 0x4B, MAILBOX + 4: 3})
+    client, panel = parts.client, parts.panel
     client.start(client)
-    for frame in range(3):  # the service counter moves each frame: the panel reads FRESH
+    for frame in range(3):  # the sampled counter moves each frame: the binder reads FRESH
         mem[MAILBOX + OFF_COUNTER] = frame + 1
         _run(io, client, 1)
     assert panel.present(panel) and panel.sfx_present(panel), "the lying caps byte must open every other gate"
 
-    assert panel.request_sfx(panel, SFX_BOO) is True  # queued in the arbiter; the next service() posts it
-    mem[MAILBOX + OFF_COUNTER] = 5
-    _run(io, client, 1)
-    assert len(log.writes) == 0, "the panel wrote to the cartridge"
-    assert len(refusals.log) == 1 and "refused" in refusals.log[1]["why"]  # refused, not silently dropped
-
-    assert panel.hold(panel, lua.table_from(["HELLO"])) is True
-    mem[MAILBOX + OFF_STATE] = 0  # CLOSED observed, then AWAIT: the only transition that arms a paint
+    tiles = [mem[TILEMAP + i] for i in range(64)]
+    assert panel.hold(panel, lua.table_from(["SOUL LINK", "PARTNER: RED"])) is True
+    mem[MAILBOX + OFF_STATE] = 0  # CLOSED observed while present, then AWAIT: the only arming edge
     mem[MAILBOX + OFF_COUNTER] = 10
     _run(io, client, 1)
     mem[MAILBOX + OFF_STATE] = 1
     mem[MAILBOX + OFF_COUNTER] = 11
     _run(io, client, 1)
-    assert len(refusals.log) >= 2 and "refused" in refusals.log[2]["why"]
-    assert any("Polished panel write refused" in line for line in log.lines.values()), list(log.lines.values())
-    assert len(log.writes) == 0 and set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party'}
+
+    addresses = [int(log.writes[i]["addr"]) for i in range(1, len(log.writes) + 1)]
+    assert addresses, "a real open must stage the page"
+    assert all(MAILBOX <= a < MAILBOX_END for a in addresses), sorted(addresses)
+    assert PANEL_TEXT in addresses and MAILBOX + OFF_PAGES in addresses
+    assert mem[MAILBOX + OFF_STATE] == 2, "STAGED is published last"
+    assert [mem[TILEMAP + i] for i in range(64)] == tiles, "the panel must not paint the tilemap"
+    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party'}
+
+
+def test_a_panel_write_outside_the_mailbox_is_still_refused(roms):  # noqa: F811
+    """The other half of H1: a write aimed outside the span is REFUSED, not silently dropped, even
+    when the caller arms the permit with an allow() that says yes to everything.
+
+    Red control (applied): make P.writes' bounds accept any WRAM0 address and this stops raising."""
+    lua, parts, io, log, mem = _build(roms, {MAILBOX + OFF_CAPS: CAPS_PANEL_SFX})
+    w = parts.panel_writes
+    w.arm(w, "panel", lambda addr, n: True)
+    for addr, n in ((TILEMAP, 4), (MAILBOX_END - 4, 8), (PANEL_TEXT + PANEL_LINES * PANEL_STRIDE, 1)):
+        with pytest.raises(Exception, match="refused"):
+            w.write_bytes(w, addr, lua.table_from([1] * n))
+    w.disarm()
 
 
 # ── H2 (F-4): hello_unheld still needs out-of-battle and a stable party ─────

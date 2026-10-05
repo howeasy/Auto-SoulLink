@@ -37,6 +37,12 @@ RAM = (
     "wOTPartyMonNicknames", "wOTPartyDataEnd", "wMirrorHerbPendingBoosts",
     "wMapStatus", "wGameLogicPaused",  # hello gate (docs/polished/HELLO_GATE.md)
 )
+# Stage 2 (docs/polished/PANEL.md): the panel's staged page is wSlinkPanelText inside the mailbox,
+# and its geometry is patch/polished/src/panel.asm's own DEF lines. The Lua client is given those
+# facts rather than repeating them, so the ROM and the host cannot drift.
+PANEL_SRC = ROOT / "patch" / "polished" / "src" / "panel.asm"
+PANEL_RAM = ("wSlinkPanelText", "wSlinkMailboxEnd")   # patch/polished/src/slink_mailbox.asm
+CHARMAP = ROOT / "data" / "games" / "polished_crystal" / "charmap.lua"
 # (id+quantity) pockets: count byte, data, End label (capacity = (End - data - 1) / 2), source constant
 POCKETS = {"items": ("wNumItems", "wItems", "wItemsEnd", "MAX_ITEMS"),
            "medicine": ("wNumMedicine", "wMedicine", "wMedicineEnd", "MAX_MEDICINE"),
@@ -184,6 +190,41 @@ def rom_tables(symbols, constants) -> tuple[dict, dict, dict]:
     }
     return rom, derived, layout
 
+def _def(source: str, name: str, seen: frozenset = frozenset()) -> int:
+    """The value of `DEF <name> EQU <int | <other name> + <int>>`, or raise."""
+    if name in seen:
+        raise ValueError(f"panel.asm DEF {name} is circular")
+    match = re.search(rf"^DEF {name} EQU (.+?)\s*(?:;.*)?$", source, re.M)
+    if not match:
+        raise ValueError(f"panel.asm no longer declares DEF {name}")
+    expr = match.group(1)
+    if expr.isdigit():
+        return int(expr)
+    other, _, offset = expr.partition(" + ")
+    if not other or not offset.isdigit():
+        raise ValueError(f"panel.asm DEF {name} = {expr!r} is neither a literal nor a named sum")
+    return _def(source, other, seen | {name}) + int(offset)
+
+
+def panel_block(ram: dict) -> dict:
+    """Where lua/gen2/panel.lua stages a page, and how the ROM reads it back (Stage 2).
+
+    The line count and glyph width are panel.asm's own constants and the terminator is the one the
+    generated charmap pack already hands the client's own token scanner, so the ROM and the host
+    cannot disagree about either."""
+    source = PANEL_SRC.read_text(encoding="utf-8")
+    lines, line_max = _def(source, "SLINK_PANEL_LINES"), _def(source, "SLINK_PANEL_LINE_MAX")
+    stride = _def(source, "SLINK_PANEL_STRIDE")
+    terminator = int(re.search(r'\["terminator"\] = (\d+)', CHARMAP.read_text(encoding="utf-8")).group(1))
+    require(stride == line_max + 1, f"panel stride {stride} is not one terminator past {line_max} glyphs")
+    require(1 <= lines <= 18, f"panel lines {lines} outside one text page")
+    require(0 < line_max < 20, f"panel line width {line_max} outside the textbox")
+    require(terminator == 0x53, f"charmap terminator {terminator} is not the game's `@`")
+    require(stride * lines <= 35, f"a staged page needs {stride * lines} of the 35-byte mailbox tail")
+    return {"base": ram["wSlinkPanelText"], "lines": lines, "line_max": line_max,
+            "stride": stride, "terminator": terminator}
+
+
 
 def build() -> dict:
     pack.verify_source()
@@ -215,7 +256,7 @@ def build() -> dict:
     names |= {f"w{side}{suffix}Level" for side in ("Player", "Enemy") for _, suffix in STAGES}
     patterns = (r"wPartyMon[1-6]\w*", r"wBattleMon\w*", r"wEnemyMon\w*", r"wRoamMon\d\w*", r"h\w+")
     names |= {n for n in symbols if any(re.fullmatch(p, n) for p in patterns)}
-    names |= set(OVERLAY_RAM)
+    names |= set(OVERLAY_RAM) | set(PANEL_RAM)
     ram, ram_bank, hram = {}, {}, {}
     for name in sorted(names):
         require(name in symbols, f"{SYM.name}: required symbol {name} missing")
@@ -269,8 +310,9 @@ def build() -> dict:
 
     overlay = {"artifact": "polished_overlay", "base_sha1": clean["sha1"], "rom_sha1": out["sha1"],
                "md5": out["md5"], "sym": SYM.name, "sym_sha256": sym_sha, "abi": abi,
-               "ram": {name: ram[name] for name in OVERLAY_RAM}}
-    for name in OVERLAY_RAM:
+               "ram": {name: ram[name] for name in OVERLAY_RAM + PANEL_RAM},
+               "panel": panel_block(ram)}
+    for name in OVERLAY_RAM + PANEL_RAM:
         require(ram_bank[name] == 0, f"{name} outside WRAM0")
     rom, rom_derived, layout = rom_tables(symbols, constants)
     source = pack.source_block()

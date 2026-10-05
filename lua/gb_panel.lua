@@ -25,6 +25,10 @@ G.SFX_QUEUE_MAX = 4                         -- a burst beyond this drops the OLD
 G.COLS, G.ROWS = 20, 18
 G.MAX_PAGES = 8                             -- 144 rows; the patch pages with A, not forever
 G.BLANK = 0x7F                              -- the space both GB charsets pad menu rows with
+-- An optional TEXT payload (spec.text): a cartridge that cannot take a graphics lease renders the
+-- page itself, so the host stages glyph codes instead of tiles (Polished has no WaitBGMap2 --
+-- docs/polished/PANEL.md E7). `stride` is one line plus the game's string terminator, so the ROM
+-- reads SLINK_PANEL_LINES fixed-stride lines and never needs a line-break code from the host.
 
 local BEACON = G.BEACON
 local CAP_SFX, CAP_PANEL = G.CAP_SFX, G.CAP_PANEL
@@ -59,11 +63,32 @@ function G.new(spec, io, writes, sanitize)
     assert(type(writes) == "table" and writes.arm and writes.disarm and writes.write_bytes,
            "writes.lua instance required")
     assert(sanitize, "injected sanitize required (hud.lua)")
+    local PAGE_ROWS = spec.rows_per_page or ROWS
+    if type(PAGE_ROWS) ~= "number" or PAGE_ROWS < 1 or PAGE_ROWS > ROWS or PAGE_ROWS % 1 ~= 0 then
+        error("gb_panel spec.rows_per_page must be 1.." .. ROWS .. ", got " .. tostring(spec.rows_per_page))
+    end
+    -- Optional text payload. `base` is where the cartridge expects the staged page, `lines` how
+    -- many fixed-stride lines it reads, `line_max` the glyphs per line and `terminator` the game's
+    -- own string terminator. Nothing else about the handshake changes: same AWAIT/STAGED, same
+    -- PAGES-then-STATE publication order. The host never needs a line-break code; the ROM's own
+    -- script puts one between the <RAM> blocks.
+    local text = spec.text
+    if text ~= nil then
+        for _, key in ipairs({"base", "stride", "lines", "line_max", "terminator"}) do
+            if type(text[key]) ~= "number" or text[key] % 1 ~= 0 then
+                error("gb_panel spec.text." .. key .. " must be an integer, got " .. tostring(text[key]))
+            end
+        end
+        if text.lines < 1 or text.lines > PAGE_ROWS or text.line_max > COLS
+           or text.stride ~= text.line_max + 1 then
+            error("gb_panel spec.text geometry does not fit the page")
+        end
+    end
 
     local ABI, CAPS, STATE = MAILBOX + G.OFF_ABI, MAILBOX + G.OFF_CAPS, MAILBOX + G.OFF_STATE
     local PAGE, PAGES, SFX = MAILBOX + G.OFF_PAGE, MAILBOX + G.OFF_PAGES, MAILBOX + G.OFF_SFX
     local attr_page
-    if attr then
+    if attr and not text then
         attr_page = {}
         for i = 1, TILES do attr_page[i] = attr.fill end
     end
@@ -73,8 +98,12 @@ function G.new(spec, io, writes, sanitize)
     local function allow(addr, n)
         if type(addr) ~= "number" then return false end
         local last = addr + (n or 1) - 1
-        if addr >= tilemap and last < tilemap + TILES then return true end
-        if attr and addr >= attr.base and last < attr.base + TILES then return true end
+        if text then
+            if addr >= text.base and last < text.base + text.lines * text.stride then return true end
+        else
+            if addr >= tilemap and last < tilemap + TILES then return true end
+            if attr and addr >= attr.base and last < attr.base + TILES then return true end
+        end
         return (addr == STATE or addr == PAGES or addr == SFX) and last == addr
     end
 
@@ -154,8 +183,8 @@ function G.new(spec, io, writes, sanitize)
     function self:hold(rows)
         if type(rows) ~= "table" then return nil, "panel rows must be a list" end
         local n = #rows
-        if n > ROWS * MAX_PAGES then
-            return nil, "panel rows exceed " .. (ROWS * MAX_PAGES) .. " (" .. MAX_PAGES .. " pages)"
+        if n > PAGE_ROWS * MAX_PAGES then
+            return nil, "panel rows exceed " .. (PAGE_ROWS * MAX_PAGES) .. " (" .. MAX_PAGES .. " pages)"
         end
         local clean = {}
         for i = 1, n do
@@ -166,14 +195,14 @@ function G.new(spec, io, writes, sanitize)
         end
         if n == 0 then self:clear() return true end   -- nothing to show; never open on blanks
 
-        local pages = math.ceil(n / ROWS)
+        local pages = math.ceil(n / PAGE_ROWS)
         local tiles = {}
         for p = 1, pages do
             local page = {}
-            for r = 0, ROWS - 1 do
-                local text = clean[(p - 1) * ROWS + r + 1] or ""
+            for r = 0, PAGE_ROWS - 1 do
+                local row_text = clean[(p - 1) * PAGE_ROWS + r + 1] or ""
                 for c = 1, COLS do
-                    local ch = text:sub(c, c)               -- pad AND truncate to 20
+                    local ch = row_text:sub(c, c)               -- pad AND truncate to 20
                     page[r * COLS + c] = ch == "" and BLANK or tile_for(ch)
                 end
             end
@@ -183,13 +212,25 @@ function G.new(spec, io, writes, sanitize)
         return true
     end
 
-    --- Paint the page the patch asked for and hand the screen back. Requires an armed window.
+    --- Hand the page the cartridge asked for back and publish it. Requires an armed window.
+    --- The tile and text payloads publish the same three facts (page count, then STAGED last) in
+    --- the same order; only the bytes before them differ.
     function self:stage()
         assert(self.tiles, "panel has no held rows")
         local page = u8(PAGE) or 0
         if page >= self.pages then page = self.pages - 1 end   -- never index past the end
-        writes:write_bytes(tilemap, self.tiles[page + 1])
-        if attr_page then writes:write_bytes(attr.base, attr_page) end
+        if text then
+            local rows = self.tiles[page + 1]
+            for line = 0, text.lines - 1 do
+                local bytes = {}
+                for c = 1, text.line_max do bytes[c] = rows[line * COLS + c] end
+                bytes[text.line_max + 1] = text.terminator   -- the game's own string terminator
+                writes:write_bytes(text.base + line * text.stride, bytes)
+            end
+        else
+            writes:write_bytes(tilemap, self.tiles[page + 1])
+            if attr_page then writes:write_bytes(attr.base, attr_page) end
+        end
         writes:write_bytes(PAGES, { math.min(self.pages, 255) })
         writes:write_bytes(STATE, { STAGED })                  -- published last
         return page

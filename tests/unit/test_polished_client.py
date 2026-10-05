@@ -45,7 +45,10 @@ return function(rom, mem)
     local io = {frame=0}
     function io.read_u8(a, d) if d == "ROM" then return rom:byte(a + 1) end return mem[a] or 0 end
     function io.read_range(a, n, d) local out = {} for i = 1, n do out[i] = io.read_u8(a + i - 1, d) end return out end
-    function io.write_u8(a, v, d) log.writes[#log.writes + 1] = a end
+    -- Record the ADDRESS and the VALUE, and land the byte in the image: a staged panel page is
+    -- only checkable if the harness's WRAM is writable. Every other consumer of log.writes in
+    -- this suite reads its length only.
+    function io.write_u8(a, v, d) log.writes[#log.writes + 1] = {addr=a, value=v} mem[a] = v end
     function io.bank_valid() return true end
     function io.domain_size(d) return d == "ROM" and #rom or 0x8000 end
     function io.framecount() return io.frame end

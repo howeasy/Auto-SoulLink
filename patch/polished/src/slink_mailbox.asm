@@ -13,6 +13,10 @@
 ; Only SLink code (plus the Lua host through the armed write gate) may write this span.
 
 wSlinkMailbox::
-	ds 40 ; same 40-byte shape as the vanilla Crystal span (slink_mailbox_crystal.asm)
+	ds 34 ; patch/gb/slink_abi.inc's 14-byte core (+0..13), the 16-byte trade lease (+14..29)
+	       ; and the service's two private sample bytes (+30,+31). Nothing on Polished writes
+	       ; the lease or the phone extension, but both offsets are shared ABI, so they stay.
+wSlinkPanelText::
+	ds 35 ; the panel's staged page (card POL-PANEL): two fixed-stride lines of 16 glyphs,
+	       ; each closed by the game's own string terminator, plus one spare byte.
 wSlinkMailboxEnd::
-	ds 69 - 40 ; the rest of the published free span, still unused
