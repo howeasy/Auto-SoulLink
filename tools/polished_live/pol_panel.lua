@@ -110,7 +110,31 @@ local function row(y)
 end
 local function rows(a, b) local o = {} for y = a, b do o[#o + 1] = fmt("%02d|%s|", y, row(y)) end return o end
 local function screen() return table.concat(rows(0, 17), "\n") end
-local function box() return table.concat(rows(12, 17), "\n") end
+-- The textbox's own border glyphs, so a row can be compared as TEXT rather than as a picture.
+local BORDER = { ["│"] = 1, ["┃"] = 1, ["┌"] = 1, ["┐"] = 1, ["└"] = 1, ["┘"] = 1,
+                 ["─"] = 1, ["━"] = 1 }
+--- One tilemap row as trimmed text: border glyphs removed, edges trimmed.
+local function clean_row(y)
+    local t = row(y)
+    for ch in pairs(BORDER) do t = t:gsub(ch, " ") end
+    return (t:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+--- The textbox rows, each on its own. A line the ROM wrapped across a row boundary is two
+--- entries here, which is what made the old joined-substring matcher miss "PARTNER: RED".
+local function box_rows() local o = {} for y = 12, 17 do o[#o + 1] = clean_row(y) end return o end
+--- The box as one string with rows joined by a space: a phrase laid out on ONE row still matches
+--- contiguously, and a phrase the ROM wrapped is still findable.
+local function box() return table.concat(box_rows(), " ") end
+--- Rows with a column ruler, so a dump says which column a glyph is in (round 8: "PAR" landed at
+--- row 15 columns 17-19 and the dump had no way to show it).
+local function ruler(a, b)
+    local tens, ones = "     ", "     "
+    for i = 1, 20 do
+        tens = tens .. tostring(math.floor((i - 1) / 10) % 10)
+        ones = ones .. tostring((i - 1) % 10)
+    end
+    return tens .. "   (tens)\n" .. ones .. "   (cols)\n" .. table.concat(rows(a, b), "\n")
+end
 local function plist() return L.hex(L.wbytes("wPhoneList", 0, 5)) end
 local function state() return L.rw("wJumptableIndex") end
 local function cur() return L.rw("wPokegearPhoneCursorPosition"), L.rw("wPokegearPhoneScrollPosition") end
@@ -196,8 +220,8 @@ L.check("C2 AWAIT was published with NO EXTRA keypress (the fallback no longer p
 -- Do NOT judge the render on the first frame after staging: the ROM prints the page through the
 -- text engine and the tilemap is pushed on its own schedule. Poll, and dump the screen at the
 -- AWAIT and 120 frames later so a miss says WHICH screen we were looking at.
-L.log("[panel] --- screen AT AWAIT ---")
-L.log(screen())
+L.log("[panel] --- textbox AT AWAIT (column ruler) ---")
+L.log(ruler(12, 17))
 local seen_frame, seen = nil, nil
 for _ = 1, 30 do
     local b = box()
@@ -207,12 +231,17 @@ end
 L.log(seen_frame and fmt("[panel] box text appeared at frame %d", seen_frame)
       or fmt("[panel] box text NEVER appeared within 300 frames (last read at frame %d)", emu.framecount()))
 L.idle(120)
-L.log("[panel] --- screen 120 frames later ---")
-L.log(screen())
+L.log("[panel] --- textbox 120 frames later (column ruler) ---")
+L.log(ruler(12, 17))
 shot("panel_2_page1")
 local p1 = box()
 ev.page1 = p1
-L.check("C2 page 1 rendered by the ROM's own text engine", p1:find("SOUL LINK", 1, true) ~= nil
+local br1 = box_rows()
+local on_row = function(s) for _, r in ipairs(br1) do if r:find(s, 1, true) then return r end end end
+L.check("C2 page 1 rendered: SOUL LINK on one row", on_row("SOUL LINK") ~= nil, table.concat(br1, " / "))
+L.check("C2 page 1 rendered: PARTNER: RED on ONE row (row-aware)",
+        on_row("PARTNER: RED") ~= nil, table.concat(br1, " / "))
+L.check("C2 both lines present (joined form)", p1:find("SOUL LINK", 1, true) ~= nil
         and p1:find("PARTNER: RED", 1, true) ~= nil, p1)
 L.check("C2 the ROM's fallback second line is gone", p1:find("NO CLIENT", 1, true) == nil, p1)
 L.check("C2 PANEL_PAGE/PAGES published by the host",
@@ -226,8 +255,10 @@ L.idle(4)
 local p2 = box()
 shot("panel_3_page2")
 ev.page2 = p2
-L.check("C3 A advanced to page 2", p2:find("PAIRS 2/3", 1, true) ~= nil
-        and p2:find("BADGES 4/8", 1, true) ~= nil, p2)
+local br2 = box_rows()
+local on_row2 = function(s) for _, r in ipairs(br2) do if r:find(s, 1, true) then return r end end end
+L.check("C3 A advanced to page 2: PAIRS 2/3 on one row", on_row2("PAIRS 2/3") ~= nil, table.concat(br2, " / "))
+L.check("C3 A advanced to page 2: BADGES 4/8 on one row", on_row2("BADGES 4/8") ~= nil, table.concat(br2, " / "))
 L.check("C3 PANEL_PAGE advanced to 1", L.rw("wSlinkMailbox", OFF_PAGE) == 1, L.rw("wSlinkMailbox", OFF_PAGE))
 
 -- ── B closes back to the Phone list ──────────────────────────────────────────────────────
