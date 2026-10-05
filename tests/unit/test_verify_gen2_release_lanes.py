@@ -2473,7 +2473,7 @@ def test_the_activation_precondition_is_not_blocked_by_the_row_it_is_about_to_wr
 
 
 _PARTS = ("g4_packet_errors", "stale_errors", "fixtures_errors", "inspect_run_errors", "new_gates_errors",
-          "live_gates_errors", "trade_gates_errors", "duo_pairs_errors")
+          "live_gates_errors", "trade_gates_errors", "duo_pairs_errors", "c5_gate_errors")
 
 
 @pytest.mark.parametrize("red", [None, *_PARTS])
