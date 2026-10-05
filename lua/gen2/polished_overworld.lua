@@ -621,24 +621,24 @@ function O.boxes(deps)
             local cleared = bits & ~(1 << (slot & 7)) & 0xFF
             writes:arm("box_deposit")
             local okb, werr = pcall(function()
-                writes:write_batch(writes, {
+                writes:write_batch({
                     {domain = "CartRAM", addr = rec + slot, bytes = {0}},
                     {domain = "CartRAM", addr = bits_at, bytes = {cleared}},
                 })
             end)
-            writes:disarm(writes)
+            writes:disarm()
             if not okb then refuse("box half refused: " .. tostring(werr)) end
             -- ── PARTY HALF: record, nickname, OT, and wPartyCount LAST ──
             writes:arm("party_collection")
             local okp, perr = pcall(function()
-                writes:write_batch(writes, {
+                writes:write_batch({
                     {domain = "System Bus", addr = block + mons_at + target * s.End, bytes = record},
                     {domain = "System Bus", addr = block + ots_at + target * c.NAME_LENGTH, bytes = ot},
                     {domain = "System Bus", addr = block + nicks_at + target * c.MON_NAME_LENGTH, bytes = nick},
                     {domain = "System Bus", addr = block, bytes = {party.count + 1}},
                 })
             end)
-            writes:disarm(writes)
+            writes:disarm()
             if not okp then refuse("party half refused: " .. tostring(perr)) end
             -- ── READ-BACK ──
             local after = reads.read_party()
