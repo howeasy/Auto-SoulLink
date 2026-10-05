@@ -1,0 +1,48 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "scenario_id": "live/no-box-mon-boxless-client",
+  "date": "2026-10-04",
+  "lane": "F:/slink-work/lanes/pol-phone",
+  "requirement_id": "LIVE-NO-BOX-MON",
+  "narrative": "docs/polished/LIVE_RESULTS.md — Run 2 STAGE A ('Server log for the solo catch') and Run 1 observation S2-a, the behaviour this replaced",
+  "evidence_dir": "F:/slink-work/lanes/pol-phone/live_stageA",
+  "evidence_file": "F:/slink-work/lanes/pol-phone/live_stageA/server.log",
+  "evidence_sha256": "06d794f6513c6f7b1bf7224c08566b91669b63331ceb44ef58d64a50a4a92b8e",
+  "evidence_size": 32425,
+  "evidence_note": "The server log is the binding evidence for this cell: the claim is about a COMMAND QUEUE, and only the server side records what it queued and skipped.",
+  "secondary_evidence": [
+    {"path": "F:/slink-work/lanes/pol-phone/live_stageA/result.txt",
+     "sha256": "4f682b5439ff7a532b4e0ebb95f47e8bc356941ecb4059a9150f85527542c146",
+     "note": "the client side of the same run; the capture that triggered the decision is at its line 41"}
+  ],
+  "rom_sha1_executed": "34942315bb3e62189a56dabbcb9cef6dd3e9a9f5",
+  "overlay_provenance_sha256": "1da613da23c41dac3ee7d36653318fb424096e361951dd3fcf0b5b899ccae0df",
+  "code_digest": "UNRECORDED",
+  "code_digest_note": "No code digest or commit in the lane evidence.",
+  "synth": [
+    "The catch that triggers the decision is a native wild encounter on the run-1 SYNTH fixture. The decision under test is entirely server-side."
+  ],
+  "checks": [
+    {"name": "server admitted the cartridge", "result": "PASS", "observed": "server.log:14 '[a] admission: admitted — cartridge sha1 matches the contract'"},
+    {"name": "the catch reached the server", "result": "PASS", "observed": "server.log:152 '[a] capture key=0327A8:D1C2:0A1:40 lv=3 area=\\'route_29\\''"},
+    {"name": "quarantine skipped because the client has no box executor", "result": "PASS", "observed": "server.log:154 '[a] skip quarantine: 0327A8:D (client has no box executor)'"},
+    {"name": "the string box_mon never occurs in this server.log", "result": "PASS", "observed": "grep -c box_mon over F:/slink-work/lanes/pol-phone/live_stageA/server.log returns 0"},
+    {"name": "0 Lua-originated writes, so nothing was attempted client-side", "result": "PASS", "observed": "result.txt:68 '[ok] no Lua-originated memory write during the whole run (client included) -- 0'"}
+  ],
+  "replaced_behaviour": {
+    "where": "F:/slink-work/lanes/pol-live/run5_stage23/server.log",
+    "rom_sha1": "29ea04c24a46d9210c899355fe752f32d2880de8",
+    "what_it_did": [
+      "server.log:219 '[a] quarantine: AE7343:D → box (pending link)'",
+      "server.log:221 '[CMD QUEUE→a] flushing 1 cmd(s): box_mon:AE7343:D'",
+      "server.log:226 'event=box_mon_failed'",
+      "server.log:227 \"[a] unknown event 'box_mon_failed'\"",
+      "server.log:228 '[a] box_mon_failed key=AE7343:D reason=Gen 2 box executor not composed — party model restored'"
+    ],
+    "reading": "Run 1 is kept here because it is the counterexample: the same solo catch on the previous overlay queued a box_mon the client could not answer. The current behaviour is the absence of that round trip."
+  },
+  "not_proven": [
+    "This cell proves the server does not send box_mon. It says nothing about box_mon WORKING when a client does have an executor — there is no such client yet (OPEN-WRITE-PATH)."
+  ]
+}

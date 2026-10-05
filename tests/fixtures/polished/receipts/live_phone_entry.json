@@ -1,0 +1,60 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "scenario_id": "phone/slink-contact-stage-1",
+  "date": "2026-10-04",
+  "lane": "F:/slink-work/lanes/pol-phone",
+  "requirement_id": "LIVE-PHONE-ENTRY",
+  "narrative": "docs/polished/LIVE_RESULTS.md — 'Phone card SLink contact, Stage 1'; driver lanes/pol-phone/drv/phone.lua through the harness's own launch",
+  "evidence_dir": "F:/slink-work/lanes/pol-phone/phone",
+  "evidence_file": "F:/slink-work/lanes/pol-phone/phone/result.txt",
+  "evidence_sha256": "37e459f88fbcb91893f3558e277c72812f3d176050c0a0b0492b5d1e0cc724b3",
+  "evidence_size": 10494,
+  "secondary_evidence": [
+    {"path": "F:/slink-work/lanes/pol-phone/phone/phone.json",
+     "sha256": "f691c88bc20bc517d1ed1fd71b58ce268c22a6f48b68f8aa398a6febea4532e9",
+     "note": "tilemaps and hook hits"},
+    {"path": "F:/slink-work/lanes/pol-phone/phone/phone_s0_contact.png",
+     "note": "screenshot; only confirms what the tilemap already shows, per docs/polished/LIVE_RESULTS.md:636"}
+  ],
+  "rom_sha1_executed": "34942315bb3e62189a56dabbcb9cef6dd3e9a9f5",
+  "overlay_provenance_sha256": "1da613da23c41dac3ee7d36653318fb424096e361951dd3fcf0b5b899ccae0df",
+  "code_digest": "UNRECORDED",
+  "code_digest_note": "No code digest or commit in the lane evidence. docs/polished/LIVE_RESULTS.md:613 names the overlay (34942315), not the tree.",
+  "check_count": {"ok": 75, "failed": 0, "source": "grep -c '^  \\[ok\\]' = 75, grep -c '\\[fail\\]' = 0, result.txt:214 'RESULT: PASS pol-phone (0 checks failed) frame 2815'"},
+  "synth": [
+    "SYNTH (disclosed in result.txt:3): wPokegearFlags $00 -> $87 (POKEGEAR_OBTAINED_F plus the MAP, RADIO and PHONE card bits; the EXPN bit was left clear).",
+    "SYNTH (disclosed per scenario in result.txt): wPhoneList set per scenario while in the overworld.",
+    "NOT SYNTH: the fixture boot (CONTINUE from run 1's warp SaveRAM, sha256 75c7a5dc...36b8), START -> POKEGEAR -> Right to the Phone card, and every A/B press."
+  ],
+  "scenarios": [
+    {"id": "s0", "wPhoneList": "0000000000", "observation": "SLink: / '   Soul Link' then the native '----------' filler"},
+    {"id": "s1", "wPhoneList": "0100000000", "observation": "Mom, SLink"},
+    {"id": "s4", "wPhoneList": "09c0000000", "observation": "four natives; the 5th Down scrolls natively (cursor 3, scroll 1): Elm, Joey, Wade, SLink"},
+    {"id": "s3", "wPhoneList": "0940000000", "observation": "Mom, Elm, Joey, SLink; then a native delete of Joey"}
+  ],
+  "checks": [
+    {"name": "run verdict", "result": "PASS", "observed": "RESULT: PASS pol-phone (0 checks failed) frame 2815"},
+    {"name": "check accounting", "result": "PASS", "observed": "75 [ok] lines, 0 [fail] lines"},
+    {"name": "ROM booted", "result": "PASS", "observed": "[phone] boot frame 1 rom 34942315BB3E62189A56DABBCB9CEF6DD3E9A9F5"},
+    {"name": "s0 row reads 'SLink:'", "result": "PASS", "observed": "[ok] s0: row 4 reads \"SLink:\" -- <$16>▶SLink:           <$16>"},
+    {"name": "s0 row reads '   Soul Link'", "result": "PASS", "observed": "[ok] s0: row 5 reads \"   Soul Link\""},
+    {"name": "s0 has exactly one SLink row on the first screen", "result": "PASS", "observed": "[ok] s0: 1 SLink row(s) on the first screen"},
+    {"name": "A opens the contact submenu", "result": "PASS", "observed": "[ok] s0: A opened the contact submenu"},
+    {"name": "submenu offers Call and Cancel", "result": "PASS", "observed": "[ok] s0: submenu offers Call and Cancel"},
+    {"name": "submenu offers no Delete", "result": "PASS", "observed": "[ok] s0: submenu offers no Delete (Mom/Elm style)"},
+    {"name": "Call reaches SlinkPhone_CallGate and reads 'SLink is linked.'", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:629-630; the driver's gate check is among the 75 [ok] lines"},
+    {"name": "MakePhoneCallFromPokegear is NOT entered", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:630 'wCurCaller is untouched'"},
+    {"name": "virtual contact id is 38", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:631 'wPokegearPhoneSelectedPerson = 38 (the virtual id)'"},
+    {"name": "B returns to state $0A with the cursor unchanged", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:632 '▶ sits on the SLink row'"},
+    {"name": "s4 keeps the native cursor/scroll after the SLink row appears", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:626 'ok, cursor/scroll 3/1 kept'"},
+    {"name": "s3 native delete still works and leaves one SLink row", "result": "PASS", "observed": "result.txt tail '[ok] s3: wNumSetBits = 3 (2 native + SLink) -- 3' and '[ok] s3: the SLink row neither vanished nor duplicated'"},
+    {"name": "a native contact still places a real call", "result": "PASS", "observed": "result.txt tail '[ok] s3: a native contact still places a real call -- 1' and '[ok] s3: back on the Phone card after the call'"}
+  ],
+  "not_proven": [
+    "The entry text is fixed: no host or link status exists in the core mailbox (docs/polished/LIVE_RESULTS.md:644).",
+    "An incoming call ringing while the Pokegear is open was not exercised.",
+    "Only English text and the CGB palette were seen.",
+    "A first phone run on the same build failed one driver expectation only (an SLink row below the fold on s4). The driver was corrected; the ROM was not changed (docs/polished/LIVE_RESULTS.md:645-647)."
+  ]
+}

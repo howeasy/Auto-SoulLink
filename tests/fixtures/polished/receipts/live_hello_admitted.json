@@ -1,0 +1,52 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "scenario_id": "live/hello-admitted",
+  "date": "2026-10-04",
+  "lane": "F:/slink-work/lanes/pol-phone",
+  "requirement_id": "LIVE-HELLO-ADMITTED",
+  "narrative": "docs/polished/LIVE_RESULTS.md — 'Existing stages on the new overlay'; tools/polished_live/harness.py live, stages 1234",
+  "evidence_dir": "F:/slink-work/lanes/pol-phone/live_stageA",
+  "evidence_file": "F:/slink-work/lanes/pol-phone/live_stageA/result.txt",
+  "evidence_sha256": "4f682b5439ff7a532b4e0ebb95f47e8bc356941ecb4059a9150f85527542c146",
+  "evidence_size": 6592,
+  "secondary_evidence": [
+    {"path": "F:/slink-work/lanes/pol-phone/live_stageA/server.log",
+     "sha256": "06d794f6513c6f7b1bf7224c08566b91669b63331ceb44ef58d64a50a4a92b8e"},
+    {"path": "F:/slink-work/lanes/pol-phone/live_stageA/slink_lua.log",
+     "sha256": "e21a9055f153103f6018835601aaed1c06bb981629a522066662bdd1f5cec5da"}
+  ],
+  "rom_sha1_executed": "34942315bb3e62189a56dabbcb9cef6dd3e9a9f5",
+  "overlay_provenance_sha256": "1da613da23c41dac3ee7d36653318fb424096e361951dd3fcf0b5b899ccae0df",
+  "overlay_provenance_sha256_note": "sha256 of data/polished/overlay_provenance.json in the tree that staged this run; the phone-card commit is the one that published 34942315 and nothing has changed it since. The lane did not record the value itself.",
+  "code_digest": "UNRECORDED",
+  "code_digest_note": "The lane evidence prints no code digest and no commit. docs/polished/LIVE_RESULTS.md:613 names the overlay, not the tree. The narrative claims this ran at c9f1ad14; the evidence does not, so UNRECORDED.",
+  "emulator": "EmuHawk 2.11.1, per-run config copy, rewind off, CGB mode, SaveRAM in the lane dir",
+  "server": "python -m server.server, private ports, private --data-dir, --wire-log, rom_contract.json pinning the overlay sha1",
+  "synth": [
+    "SYNTH (O-33, disclosed): the save is run 1's polished_overlay_warp.SaveRAM, sha256 75c7a5dc30126f746567202cfb39fe583dfa04eb226063560541f6cbd29f36b8.",
+    "SYNTH: wPartyCount = 5 with five party structs (CROBAT 169, JOLTEON 135, GOLDUCK 55, NIDOKING 34, DODRIO 85), OT ID/name copied from the save's own wPlayerID/wPlayerName, wNumBalls/wBalls = 99 POKE_BALL.",
+    "SYNTH: position by the engine's own warp bytes (wMapGroup 24, wMapNumber 3 ROUTE_29, wXCoord 48, wYCoord 12, wDefaultSpawnpoint $FF, hMapEntryMethod MAPSETUP_WARP $F1, wMapStatus 1); the overworld loop ran MAPSETUP_WARP natively before the save.",
+    "NOT SYNTH: cold boot, title, NEW GAME, the option/clock/gender/name prompts and START -> SAVE -> YES all ran natively.",
+    "SYNTH: the engine rewrote the synthetic form byte (1 -> 0) before the save, so the party keys end :00/:40."
+  ],
+  "checks": [
+    {"name": "run verdict", "result": "PASS", "observed": "RESULT: PASS polished-live (0 checks failed) frame 10766"},
+    {"name": "ROM booted is the overlay under test", "result": "PASS", "observed": "[live] boot frame 1 rom 34942315BB3E62189A56DABBCB9CEF6DD3E9A9F5 stages 1234"},
+    {"name": "client loaded through the real entry path", "result": "PASS", "observed": "[live] lua/slink.lua returned after 6.5s cpu; client true"},
+    {"name": "pack admission", "result": "PASS", "observed": "[live] parts: pack polished_crystal title polished kind overlay qualification DEV_OVERLAY_SHA1 production_admitted false rom 34942315bb3e62189a56dabbcb9cef6dd3e9a9f5"},
+    {"name": "admitted as the Polished overlay", "result": "PASS", "observed": "[ok] admitted as the Polished overlay (DEV_OVERLAY_SHA1)"},
+    {"name": "hello identity", "result": "PASS", "observed": "[ok] STAGE1 hello identity polished_crystal/gen2_polished/overlay"},
+    {"name": "hello rom_sha1 is the client's own rehash", "result": "PASS", "observed": "[ok] STAGE1 hello rom_sha1 is the client rehash -- 34942315bb3e62189a56dabbcb9cef6dd3e9a9f5"},
+    {"name": "hello party is the save's five mons", "result": "PASS", "observed": "[ok] STAGE1 hello party is the save's 5 mons -- 5"},
+    {"name": "server admitted the cartridge against the contract", "result": "PASS", "observed": "server.log:14 '[a] admission: admitted — cartridge sha1 matches the contract'"},
+    {"name": "server recorded the hello", "result": "PASS", "observed": "server.log:15 '[a] hello rom=polished_crystal area=\\'route_29\\' party=5'"},
+    {"name": "client log line", "result": "PASS", "observed": "slink_lua.log:4 '[SLink-gen2] polished_crystal/polished overlay PRODUCTION (DEV_OVERLAY_SHA1) player a -> 127.0.0.1:54251 (rom 34942315)'"},
+    {"name": "exactly one hook registered", "result": "PASS", "observed": "signals status registered=1 registered_sites=[\"capture_party\"] physical_status OPEN"},
+    {"name": "no Lua-originated memory write", "result": "PASS", "observed": "[ok] no Lua-originated memory write during the whole run (client included) -- 0"}
+  ],
+  "not_proven": [
+    "signals.lua reports physical_status OPEN and names itself unproven: 'a live exec hit at the capture_party PC on a running cartridge' and 'the capture RAM-effect frame alignment'.",
+    "The client's own qualification string is DEV_OVERLAY_SHA1 and production_admitted false: this receipt cannot promote it."
+  ]
+}
