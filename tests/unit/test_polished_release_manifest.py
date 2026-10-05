@@ -26,6 +26,7 @@ POLISHED = {
     "data/games/polished_crystal/charmap.lua",
     "data/games/polished_crystal/evolutions.json",
     "data/games/polished_crystal/area_map.json",
+    "data/games/polished_crystal/items.json",
     "data/games/polished_crystal/engine_signals.json",
     "data/games/polished_crystal/overlay/beacon.json",
     "data/polished/overlay_provenance.json",

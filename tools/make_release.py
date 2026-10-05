@@ -387,6 +387,7 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "charmap.lua",
         "evolutions.json",
         "area_map.json",
+        "items.json",  # compose_polished: mail_ids for the box_mon mail refusal (ItemIsMail set)
         "engine_signals.json",  # Signals.new_polished (C-SITES) loads the site pack
         "overlay/beacon.json",  # P.admit's rand_overlay gate re-hashes the overlay spans (tools/gen_polished_beacon.py)
     ],
