@@ -532,4 +532,132 @@ function O.boxes(deps)
     return self
 end
 
+-- ── the BATTLE hold (sibling of O.checkpoint; lua/gen2/polished_explode.lua composes it) ─────────────────────
+--
+-- The overworld predicate above refuses a battle by construction (wBattleMode == 0, hROMBank == the overworld
+-- bank), so the battle writers get their own hold with the SAME shape and refusal conventions and a battle fact
+-- set. O.checkpoint's body is untouched: this is a sibling, not a mode.
+--   wBattleMode in {WILD, TRAINER}   a battle is running (not 0, nothing outside the source enumeration)
+--   wLinkMode == 0                   never write into a link battle (the other Game Boy would desync)
+--   wGameLogicPaused == 0            no native save is running
+--   sWritingBackup != 1              no backup save in progress
+-- and, per kind, the instruction bytes of the named sites re-read from the EXECUTED ROM at check time (so a
+-- patched or relocated ROM never takes a write), plus, for a PC-hold kind, hROMBank == the site's bank.
+--
+-- THE SITES (bank 0F, ROM = the overlay; each byte sequence occurs ONCE in bank 0F and once in its routine -
+-- verified by tests/unit/test_polished_explode_path.py over the executed overlay ROM, and every address
+-- re-derived there from data/polished/polished_slink.sym):
+--   explode       0f:416A  CD 35 42  `call DetermineMoveOrder` inside BattleTurn (engine/battle/core.asm:190): the
+--                                    PC hold the client hooks (write_checkpoint.json battle_hold.execution_before)
+--   rival_gate    0f:47DD  21 8B D2  `ld hl, wOTPartyMons` inside SendInUserPkmn's enemy branch: the PC where
+--                                    wOTPartyMons[wCurPartyMon] has not been copied yet (battle_hold.rival_swap_gate)
+--   trainer_ready 0f:7271  D7 00 40 07  inside InitEnemy's trainer branch. A UNIQUE-BYTE ANCHOR ONLY: the
+--                                    2-byte D7 00 occurs 4x in bank 0F, so the 4-byte sequence plus the address is
+--                                    the pin. No mnemonic is claimed for it.
+-- rival_gate and trainer_ready are anchors for the frame-end rival poll (lua/gen2/client.lua rival_tick is a
+-- frame_end POLL, not a PC hold): a frame-kind check re-reads their bytes but does not require the CPU to be
+-- there. Only `explode` is a PC hold.
+O.BATTLE_MODES = {[1] = true, [2] = true}            -- WILD_BATTLE, TRAINER_BATTLE (profile.constants)
+O.BATTLE_QUALIFICATION = "DEV_OVERLAY_PREDICATE_HOLD"
+O.BATTLE_SITES = {
+    explode = {bank = 0x0F, pc = 0x416A, bytes = {0xCD, 0x35, 0x42}, routine = "BattleTurn",
+               routine_start = 0x4109, routine_end = 0x41A7, instruction = "call DetermineMoveOrder"},
+    rival_gate = {bank = 0x0F, pc = 0x47DD, bytes = {0x21, 0x8B, 0xD2}, routine = "SendInUserPkmn",
+                  routine_start = 0x4748, routine_end = 0x493C, instruction = "ld hl, wOTPartyMons"},
+    trainer_ready = {bank = 0x0F, pc = 0x7271, bytes = {0xD7, 0x00, 0x40, 0x07}, routine = "InitEnemy",
+                     routine_start = 0x7260, routine_end = 0x72E0},
+}
+-- kind -> the sites whose bytes are re-read, and `at` = the site the CPU must be executing (hROMBank). The first
+-- two are what lua/gen2/client.lua asks for; the last two are the writer operations lua/gen2/polished_explode.lua
+-- maps battle_explode and enemy_party to.
+O.BATTLE_KINDS = {
+    battle_faint = {at = "explode", sites = {"explode"}},
+    battle_bench = {sites = {"rival_gate", "trainer_ready"}},
+    explode = {at = "explode", sites = {"explode"}},
+    rival = {sites = {"rival_gate", "trainer_ready"}},
+}
+
+--- sites: O.BATTLE_SITES-shaped ({bank, pc, bytes, routine, routine_start, routine_end}). Same check(kind)
+--- -> ok, why contract as O.checkpoint, qualification DEV_OVERLAY_PREDICATE_HOLD.
+function O.battle_checkpoint(profile, io, log, sites)
+    assert(type(profile) == "table" and profile.title == "polished" and type(profile.ram) == "table",
+           "generated Polished profile required")
+    assert(type(io) == "table" and type(io.read_u8) == "function" and type(io.bank_valid) == "function",
+           "explicit read_u8/bank_valid required")
+    assert(type(sites) == "table", "battle hold sites required")
+    for _, kind in pairs(O.BATTLE_KINDS) do
+        for _, id in ipairs(kind.sites) do
+            local site = sites[id]
+            assert(type(site) == "table" and integer(site.bank, 1, 0x7F) and integer(site.pc, 0x4000, 0x7FFF)
+                   and type(site.bytes) == "table", "battle hold site missing or malformed: " .. id)
+            assert(site.routine_start <= site.pc and site.pc + #site.bytes <= site.routine_end,
+                   "the battle hold site must lie inside its named routine: " .. id)
+            for _, value in ipairs(site.bytes) do assert(integer(value, 0, 255), "hold site byte out of range") end
+        end
+    end
+    local ram, banks, hram = profile.ram, profile.ram_bank, profile.hram
+    -- a copy of O.checkpoint's reader (kept separate so the overworld body stays untouched)
+    local function byte(name)
+        local at, bank = ram[name], banks[name]
+        local hram_at = (hram ~= nil) and hram[name] or nil
+        if at == nil and hram_at ~= nil then at, bank = hram_at, 0 end
+        local wram = integer(at, 0xC000, 0xDFFF)
+        local hram_window = integer(at, 0xFF80, 0xFFFF) and bank == 0
+        if not (wram or hram_window) or not integer(bank, 0, 7) then return nil, "missing " .. name end
+        if io.bank_valid(bank, at, 1) ~= true then return nil, name .. " bank not mapped" end
+        return io.read_u8(at, "System Bus")
+    end
+    local last
+    local function refuse(why)
+        if log and last ~= why then
+            last = why
+            log("[SLink-gen2] battle write refused: " .. tostring(why))
+        end
+        return false, why
+    end
+    local self = {qualification = O.BATTLE_QUALIFICATION, facts = {}}
+    function self:covers(kind) return O.BATTLE_KINDS[kind] ~= nil end
+    function self:check(kind)
+        local want = O.BATTLE_KINDS[kind]
+        if want == nil then return refuse("no composed Polished battle write kind " .. tostring(kind)) end
+        local observed = self.facts
+        for _, name in ipairs({"wBattleMode", "wLinkMode", "wGameLogicPaused"}) do
+            local value, why = byte(name)
+            if value == nil then return refuse(why) end
+            observed[name] = value
+        end
+        if not O.BATTLE_MODES[observed.wBattleMode] then
+            return refuse("not in a battle (wBattleMode $" .. string.format("%02X", observed.wBattleMode) .. ")")
+        end
+        if observed.wLinkMode ~= 0 then return refuse("link cable active (wLinkMode)") end
+        if observed.wGameLogicPaused ~= 0 then return refuse("native save running (wGameLogicPaused)") end
+        local saving = saving_byte(io)
+        if saving == nil then return refuse("sWritingBackup unreadable") end
+        if saving == 1 then return refuse("backup save in progress (sWritingBackup)") end
+        if want.at ~= nil then
+            local hold_bank, bank_why = byte("hROMBank")
+            if hold_bank == nil then return refuse(bank_why) end
+            if hold_bank ~= sites[want.at].bank then
+                return refuse("not at the " .. sites[want.at].routine .. " hold (hROMBank $"
+                              .. string.format("%02X", hold_bank) .. ")")
+            end
+        end
+        for _, id in ipairs(want.sites) do
+            local site = sites[id]
+            -- the ROM domain is addressed by its LINEAR offset, not the banked bus address
+            local rom_at = site.bank * 0x4000 + (site.pc - 0x4000)
+            for i, expected in ipairs(site.bytes) do
+                local seen = io.read_u8(rom_at + i - 1, "ROM")
+                if seen ~= expected then
+                    return refuse("hold site bytes differ at " .. string.format("%02X:%04X", site.bank, site.pc)
+                                  .. " (patched ROM)")
+                end
+            end
+        end
+        last = nil
+        return true, kind
+    end
+    return self
+end
+
 return O

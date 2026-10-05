@@ -560,6 +560,12 @@ function Client.new(p)
                     -- O-32: a bench death lands this frame instead (land_bench_deaths, from frame_end)
                     self.pending_battle_writes[#self.pending_battle_writes + 1] = entry
                     self.bench_owed = true
+                    -- p.battle_release_poll: the composition cannot land an active faint at the hold (it is handed to the
+                    -- checkpoint after the battle), so the player gets the same held-KO cue as the no-hold branch below
+                    if p.battle_release_poll and c_ == "force_faint" and battle.active_slot == slot then
+                        log("[SLink-gen2] " .. c_ .. " held for the checkpoint: no in-battle active faint composed " .. cmd.key)
+                        hud.show("KO held: " .. nick_label(cmd.key, mon and mon.nickname) .. " is battling", 255, 160, 64, 300)
+                    end
                     return
                 end
                 if battle.active_slot == slot then
@@ -1490,7 +1496,12 @@ function Client.new(p)
         end
         if p.battle_hold and not self.battle_hook then
             self.battle_hook = io.on_bus_exec(function()
+                -- p.battle_hold_entry (optional): the composed writer learns it is running INSIDE this exec callback,
+                -- i.e. with the CPU at execution_before.pc, and refuses a battle write made anywhere else
+                local entry = p.battle_hold_entry
+                if entry then entry.enter("explode") end
                 local ok, err = pcall(self.at_battle_hold, self)
+                if entry then entry.leave() end
                 if not ok then log("[SLink-gen2] battle hold: " .. tostring(err)) end
             end, p.battle_hold.execution_before.pc, "SLink-gen2-battle-hold", "System Bus")
         end
@@ -1556,7 +1567,8 @@ function Client.new(p)
         local targets = p.battle_hold.write.targets
         local function target(name)
             local t = targets[name]
-            if io.bank_valid(t.bank, t.address, 1) ~= true then return nil end
+            -- a game without that field (Polished has no wPlayerSubStatus5) simply has no such target
+            if t == nil or io.bank_valid(t.bank, t.address, 1) ~= true then return nil end
             return io.read_u8(t.address, "System Bus")
         end
         local snapshot = { mode = battle.mode, battle_type = battle.battle_type,
@@ -1573,7 +1585,11 @@ function Client.new(p)
                 -- Gen 1 active_faint_guard: the battle struct must be this slot's (Transform excepted)
                 local species, sub5 = target("wBattleMonSpecies"), target("wPlayerSubStatus5")
                 local transformed = sub5 ~= nil and math.floor(sub5 / 2 ^ transformed_bit) % 2 == 1
-                if species == mon.species_id or transformed then
+                -- p.battle_species_matches (optional): a game whose mon.species_id is not the raw battle-struct byte
+                -- (Polished: the 9-bit effective id of a variant form) compares in its own terms; vanilla compares raw
+                local same = species == mon.species_id
+                if p.battle_species_matches then same = p.battle_species_matches(mon, species) == true end
+                if same or transformed then
                     -- W-3: a committed move becomes EXPLOSION; an item/switch already spent the turn and
                     -- a landed bench write that got switched in is already dead: both take W-2
                     snapshot.player_action = target("wBattlePlayerAction")
@@ -1612,7 +1628,11 @@ function Client.new(p)
                 -- dead stays dead: EvolveAfterBattle and the Battle Tower reload can revive it (facts doc §2)
                 defer_held({ cmd = "force_faint", key = w.key, nickname = w.nickname, arrival = w.arrival, quiet = true })
             elseif err ~= nil then
-                log("[SLink-gen2] battle write refused: " .. tostring(err) .. " " .. tostring(w.key))
+                -- p.battle_release_poll compositions refuse the same queued write at every hold: say so once
+                if not (p.battle_release_poll and w.refusal_logged) then
+                    log("[SLink-gen2] battle write refused: " .. tostring(err) .. " " .. tostring(w.key))
+                end
+                w.refusal_logged = true
                 keep[#keep + 1] = w
             end
         end
@@ -1669,6 +1689,19 @@ function Client.new(p)
                 end
             end
         end
+    end
+
+    -- A composition with a battle hold but NO battle_end engine signal (Polished binds only capture_party) never runs
+    -- the battle_end hand-off above, so a death queued in battle and refused at every hold would stay queued for
+    -- good. p.battle_release_poll opts into the same hand-off from the battle mode itself: out of battle, every
+    -- owed write goes to the checkpoint. Vanilla does not set it (its battle_end signal does this, with the echo
+    -- bookkeeping), so its behaviour is unchanged.
+    function self:release_battle_writes()
+        if not p.battle_release_poll or #self.pending_battle_writes == 0 then return end
+        local battle = reads.read_battle()
+        if not battle or battle.mode ~= 0 then return end
+        for _, w in ipairs(self.pending_battle_writes) do defer_held(w) end
+        self.pending_battle_writes = {}
     end
 
     -- ── W-4 Rival Team Swap (lua/gen1/client.lua replace_rival_team / rival_window_tick) ──────────
@@ -1876,6 +1909,7 @@ function Client.new(p)
         self.replies:step()
         self:land_bench_deaths() -- O-32: a bench death lands the frame its command arrived (replies:step)
         self:rival_tick() -- W-4: announce a trainer battle; land a parked replace_rival_team (replies:step)
+        self:release_battle_writes() -- Polished: no battle_end signal, so the battle mode hands the owed writes over
         self:run_deferred()
     end
 

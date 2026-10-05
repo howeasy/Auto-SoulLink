@@ -33,6 +33,8 @@ POLISHED = {
     "lua/gen2/polished.lua",
     "lua/gen2/polished_boxes.lua",
     "lua/gen2/polished_overworld.lua",
+    "lua/gen2/polished_explode.lua",
+    "lua/gen2/polished_writes.lua",  # polished_explode.lua dofiles it
     "lua/gen2/polished_sounds.lua",
     "lua/gen2/polished_stats.lua",
 }

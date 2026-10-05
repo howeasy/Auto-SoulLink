@@ -167,6 +167,8 @@ _LUA_GEN2 = [
     "polished.lua",
     "polished_boxes.lua",
     "polished_overworld.lua",  # C-WRITE: entry.lua compose_polished loads the predicate-hold writer by path
+    "polished_explode.lua",  # C-EXPLODE: entry.lua compose_polished loads the battle facade by path
+    "polished_writes.lua",  # C-EXPLODE: polished_explode.lua dofiles the W-3/W-4 battle writers (the shared Permit is injected, not loaded)
     "polished_sounds.lua",  # POL-SOUNDS: wraps panel.lua's binder; dofiles ../write_permit.lua and ../gb_panel.lua
     "polished_stats.lua",  # POL-WDLUA: pure savemon->party reconstruction; a future composition loads it by path
 ]

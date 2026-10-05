@@ -180,8 +180,9 @@ def test_a_randomized_cartridge_composes_a_dev_grade_client(made):
     assert parts.qualification == "DEV_OVERLAY_SHA1" and parts.production_admitted is False
     assert (hello["artifact_kind"], hello["rom_sha1"], hello["rom_type"]) == ("rand_overlay", sha, "polished_crystal")
     assert hello["companion_abi"] == 3 and len(log.writes) == 0
-    # the capture site is bound; the write HOLD (25:51BF, SLink-gen2-checkpoint) is hooked too and writes nothing alone
-    assert set(log.hooks.values()) == {"SLink-gen2-polished:capture_party", "SLink-gen2-checkpoint"}
+    # the capture site (an engine site) plus the client two PC holds: the overworld frame wait and the battle hold
+    assert set(log.hooks.values()) == {"SLink-gen2-polished:capture_party", "SLink-gen2-checkpoint",
+                                       "SLink-gen2-battle-hold"}
     assert not any("engine sites refused" in line for line in log.lines.values())
 
 
