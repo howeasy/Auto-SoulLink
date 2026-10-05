@@ -1,12 +1,13 @@
-; SLink companion overlay -- Polished Crystal v3.2.3 core (P5a): beacon, ABI version,
-; sampled frame counter. Port of patch/gen2/src/slink.asm; same ABI (patch/gb/slink_abi.inc),
-; caps 0 (no SFX/panel/phone/trade yet).
+; SLink companion overlay -- Polished Crystal v3.2.3 core (P5a) + phone (Stage 1) + panel
+; (Stage 2): beacon, ABI version, sampled frame counter, the Pokegear Phone card's virtual SLink
+; contact, and the in-game text panel. Port of patch/gen2/src/slink.asm; same ABI
+; (patch/gb/slink_abi.inc), caps SLINK_CAP_PANEL.
 INCLUDE "engine/slink/slink_abi.inc"
 
 ; Bank $7E: wholly unused in the clean 3.2.3 ROM (data/polished/free_space.txt) and not named
 ; in layout.link, so this fixed BANK[] section is placed there by rgblink and nothing else moves.
 DEF SLINK_SERVICE_BANK EQU $7E
-DEF SLINK_MAILBOX_SIZE EQU 40
+DEF SLINK_MAILBOX_SIZE EQU 69
 ASSERT wSlinkMailbox == $c60b
 ASSERT wSlinkMailboxEnd - wSlinkMailbox == SLINK_MAILBOX_SIZE
 ASSERT hVBlankCounter == $ff8e
@@ -19,6 +20,11 @@ DEF SLINK_LAST_SAMPLE EQUS "wSlinkMailbox + SLINK_PUBLIC_SIZE"
 DEF SLINK_SAMPLE_VALID EQUS "wSlinkMailbox + SLINK_PUBLIC_SIZE + 1"
 DEF SLINK_SAMPLE_COOKIE EQU $a5
 ASSERT SLINK_PUBLIC_SIZE + 2 <= SLINK_MAILBOX_SIZE
+
+; The panel's staged page starts right after the shared core, the shared trade lease and the
+; service's two private bytes (patch/polished/src/slink_mailbox.asm lays the span out and names
+; it wSlinkPanelText). 34 + 2 lines * (16 glyphs + terminator) = 68 <= 69.
+DEF SLINK_OFS_PANEL_TEXT EQU 34
 
 ; Save path: Polished assembles every object with -E (export all labels), so the native save
 ; entry the vanilla trade overlay EXPORTs by edit is already linkable; no source edit needed.
@@ -70,7 +76,7 @@ SlinkService::
 	ld [hli], a
 	ld a, SLINK_ABI_VERSION
 	ld [hl], a
-	xor a ; core build: no capabilities
+	ld a, SLINK_CAP_PANEL ; the panel (patch/polished/src/panel.asm) is the only capability
 	ld [wSlinkMailbox + SLINK_OFS_CAPS], a
 
 	; Sample the engine's own clock (VBlank's hVBlankCounter). Unsigned deltas lose whole
@@ -103,6 +109,12 @@ SlinkService::
 	ld [SLINK_LAST_SAMPLE], a
 	ret
 SlinkServiceEnd::
+
+; ---- The panel (docs/polished/PANEL.md, Stage 2) ----
+; Bank $7E, after the service and before the phone bridge: the phone's ROM0 gate switches to this
+; bank, runs SlinkPanel and switches back, so the panel's script and strings are readable where
+; they link. It calls only ROM0 natives (PrintText 00:0e58, DelayFrame 00:0da8).
+INCLUDE "engine/slink/panel.asm"
 
 ; ---- Pokegear Phone card: one virtual SLink contact (docs/polished/PHONE_SLOT.md, Stage 1) ----
 ; The contact is VIRTUAL: no wPhoneList bit, no PhoneContacts row, nothing in the save. The Phone
@@ -158,14 +170,19 @@ SlinkPhone_CanDelete::
 
 SlinkPhone_CallGate::
 ; for `call GetMapPhoneService` at the top of PokegearPhone_MakePhoneCall: "Call" on SLink opens
-; the SLink entry (Stage 1: one text box) and never rings, then returns to the list like the
-; native out-of-service path does.
+; the SLink PANEL (Stage 2: the paged, host-fed text box in bank $7E) and never rings, then
+; returns to the list like the native out-of-service path does. wPokegearPhoneCursorPosition and
+; wPokegearPhoneScrollPosition are never touched, so the cursor is exactly where the player left
+; it; the list is redrawn by the native PokegearText_WhomToCall below.
 	ld a, [wPokegearPhoneSelectedPerson]
 	cp SLINK_PHONE_CONTACT
 	jp nz, GetMapPhoneService
 	pop af ; drop the return into PokegearPhone_MakePhoneCall: nothing of the call runs
-	ld hl, SlinkPhoneEntryText
-	call PrintText
+	ld a, BANK(SlinkPanel)
+	rst Bankswitch
+	call SlinkPanel
+	ld a, BANK(PokegearPhone_MakePhoneCall)
+	rst Bankswitch
 	ld a, POKEGEARSTATE_PHONEJOYPAD
 	ld [wJumptableIndex], a
 	ld hl, PokegearText_WhomToCall
@@ -176,8 +193,4 @@ SlinkPhoneCallerName:
 	text  "SLink:"
 	next1 "   Soul Link"
 	done
-
-SlinkPhoneEntryText:
-	text "SLink is linked."
-	prompt
 SlinkPhoneBridgeEnd::

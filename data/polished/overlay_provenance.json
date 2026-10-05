@@ -1,6 +1,6 @@
 {
   "schema": "polished-overlay-provenance-v1",
-  "generated": "2026-10-04T22:05:18Z",
+  "generated": "2026-10-05T00:18:02Z",
   "source": {
     "url": "https://github.com/Rangi42/polishedcrystal",
     "tag": "v3.2.3",
@@ -11,6 +11,7 @@
   "overlay": {
     "src_dir": "patch/polished/src",
     "applied": [
+      "panel.asm",
       "slink.asm",
       "slink_mailbox.asm",
       "slink_abi.inc"
@@ -22,30 +23,31 @@
       "engine/pokegear/phone.asm"
     ],
     "sources_sha256": {
-      "patch/polished/src/slink.asm": "e4f6d80ad8a1cd8e1fea267bea3c79f94ba3f54a618395ef4f739c7d624e6a5c",
-      "patch/polished/src/slink_mailbox.asm": "04593e4a687f65f1f6f4a0023f07149f5f97e29d25486ccd40879e56c7c129bb",
+      "patch/polished/src/panel.asm": "168075da831172048ba5bbdae9e0a87cde882f7e75db003140ac193179c76229",
+      "patch/polished/src/slink.asm": "ff73b34412ffcf31546256cd705c6ef367eab726a033ae9e12718b81b170d8f4",
+      "patch/polished/src/slink_mailbox.asm": "5ba31fe8ebd7adf050ad71a49d559150797d49d0b95bff473a08d8e26c09939a",
       "patch/gb/slink_abi.inc": "be0ee30a84330c794a1b5f3a2cf4c1435bdfdf3bf63fa4f010deb02a0291181e"
     },
-    "mailbox": "WRAM0 $C60B (40 bytes)",
+    "mailbox": "WRAM0 $C60B (69 bytes)",
     "service_bank": "$7E"
   },
   "command": "make -j4 CFLAGS=-O2 polishedcrystal-3.2.3.gbc",
   "output": {
-    "sha1": "34942315bb3e62189a56dabbcb9cef6dd3e9a9f5",
-    "md5": "de9d2ebc2d0c6831aac4badca2b21fbe",
-    "header_crc": "426C",
-    "crc32": "089FBC9A",
+    "sha1": "9c60bc8fb26ac13c52705b8086f8a5fb91d7bd93",
+    "md5": "56837a1e15f3d036bc8a2a4c58ef5734",
+    "header_crc": "FF1E",
+    "crc32": "00FE623E",
     "title": "PKPCRYSTAL\u0000PKPC",
     "size": 2097152,
     "identical_to_clean": false,
     "ups": {
       "file": "patch/dist/SLink-Polished.ups",
-      "size": 262,
-      "sha256": "ae378495625d8c88e287e0d578ca8419e0d4f6447e4f883fc945e000fbbc3409"
+      "size": 393,
+      "sha256": "433f94319cbc8bb15561b7baa9c6125cfcfe564c2cc2a7aec9863b00fe19a66f"
     }
   },
   "symbols": {
-    "polished_slink.sym": "0317c69c1d013a1204bb54fb64a9cb3d4d3c414e7252272fa3ce715b9d751670",
-    "polished_slink.map": "d309fff9e439b7dd6c3e8c745b3247c40262a46033433a7def0c62eb0e6aa204"
+    "polished_slink.sym": "a7c150b74ac8ba8c7ac4c062d100f6c6a1b0aaa776cfc66e02aaa2b4f12db9fd",
+    "polished_slink.map": "df4ef37b34d37aba39ac8e1279f1888a392b483f23474f1b35dff58f70cb9e37"
   }
 }

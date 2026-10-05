@@ -70,6 +70,10 @@ OVERLAY_SYMS = {
     "SlinkDelayFrameBridgeEnd": (0x00, BRIDGE_END),
     "SlinkService": SVC,
     "SlinkServiceEnd": SVC_END,
+    # Stage 2: the panel is its own BANK[$7E] section immediately after the service, and the
+    # verifier allows service+panel as ONE span because diff_spans reports one run across both.
+    "SlinkPanel": SVC_END,
+    "SlinkPanelEnd": SVC_END,
     "wSlinkMailbox": (0x00, pc.MAILBOX),
 }
 EMPTY_BANK = slice(pc._flat(pc.SERVICE_BANK, 0x4000), pc._flat(pc.SERVICE_BANK, 0x8000))

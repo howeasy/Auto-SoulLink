@@ -61,17 +61,32 @@ function P.tile_for(charmap)
     end
 end
 
---- The panel's own write window: a shared write_permit over WRAM0 only, armed by gb_panel with
---- its allow() predicate. It never shares a permit with the party/box writers.
-function P.writes(io, Permit)
+--- The panel's own write window: a shared write_permit, armed by gb_panel with its allow()
+--- predicate. It never shares a permit with the party/box writers.
+--- narrow (optional) = {base, size}: an ADDITIONAL hard bound, for a cartridge whose panel
+--- writes only its own mailbox (Polished stages text, never pixels, so nothing outside the
+--- mailbox is ever legitimate). When absent the permit keeps its WRAM0-wide shape, which is what
+--- the tile-staging titles need.
+function P.writes(io, Permit, narrow)
     assert(Permit and Permit.new, "shared write permit factory required")
+    if narrow ~= nil then
+        assert(type(narrow) == "table" and type(narrow.base) == "number" and type(narrow.size) == "number"
+               and narrow.base % 1 == 0 and narrow.size > 0,
+               "narrow panel region needs base and size")
+    end
     local permit = Permit.new({
         write_u8 = function(addr, value, domain) return io.write_u8(addr, value, domain) end,
         domains = { ["System Bus"] = {
             bounds = function(addr, n, reason)
                 -- P4.5c: lua/gen2/phone.lua posts one byte (+32 PHONE_REQUEST) under "phone"
-                return (reason == "panel" or reason == "phone" and n == 1)
+                -- `narrow`, when given, is the ONLY range this permit may ever touch: every
+                -- interval is checked whole, so a span that starts inside and runs out is refused.
+                if reason ~= "panel" and not (reason == "phone" and n == 1) then return false end
+                if narrow then
+                    return addr >= narrow.base and addr + n <= narrow.base + narrow.size
                        and addr >= P.WRAM0_LO and addr + n <= P.WRAM0_HI
+                end
+                return addr >= P.WRAM0_LO and addr + n <= P.WRAM0_HI
             end,
             mapped = function() return true end,          -- WRAM0: no bank to check
             pointer_stable = function() return true end,  -- concrete addresses from the profile
@@ -105,13 +120,26 @@ function P.new(profile, charmap, io, writes, sanitize)
     end
     local ram = ov.ram
     local MAILBOX = assert(ram.wSlinkMailbox, "overlay.ram.wSlinkMailbox required")
+    -- A cartridge whose overlay stages TEXT (Polished: native PrintText pages, no graphics lease
+    -- -- docs/polished/PANEL.md E7) publishes profile.overlay.panel. A tile-staging build has no
+    -- such block and the tile path is byte-for-byte unchanged. Every number here is a generated
+    -- overlay fact, not a constant in this file.
+    local pan = ov.panel
+    if pan ~= nil then
+        assert(type(pan) == "table" and pan.base == ram.wSlinkPanelText,
+               "overlay.panel.base must be the overlay sym's wSlinkPanelText")
+    end
     local self = G.new({
         mailbox  = MAILBOX,
         tilemap  = assert(ram.wTilemap, "overlay.ram.wTilemap required"),
-        attrmap  = { base = assert(ram.wAttrmap, "overlay.ram.wAttrmap required"), fill = P.ATTR_FILL },
+        attrmap  = pan and false or { base = assert(ram.wAttrmap, "overlay.ram.wAttrmap required"),
+                                       fill = P.ATTR_FILL },
         charmap  = P.tile_for(charmap),
         se_map   = P.SFX_CODE_FOR_GEN3_ID,
         deadline = P.DEADLINE,
+        rows_per_page = pan and pan.lines or nil,
+        text     = pan and { base = pan.base, stride = pan.stride, lines = pan.lines,
+                             line_max = pan.line_max, terminator = pan.terminator } or nil,
     }, io, writes, sanitize)
 
     local function u8(addr)

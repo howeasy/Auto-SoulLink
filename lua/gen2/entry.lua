@@ -668,19 +668,17 @@ local function compose_polished(deps, decision)
                                     read_active_box=census.read_active_box,
                                     read_storage_box=census.read_storage_box}, {__index=base})
         local hud = assert(deps.hud, "explicit hud required")
-        local Panel = load("lua/gen2/panel.lua")
-        -- (F-3) the panel's write path is structurally inert at milestone A (caps 0, no Polished write receipt): a
-        -- writes object that REFUSES every write, not Panel.writes over an always-valid permit whose only brake is the
-        -- ROM caps byte. A refusal raises (gb_panel's callers surface it: request_sfx errors, service() returns nil, why
-        -- which the client logs) and is recorded in .log; nothing reaches io.write_u8.
-        local panel_writes = {log={}}
-        function panel_writes.arm(_, reason) panel_writes.reason = reason end
-        function panel_writes.disarm() panel_writes.reason = nil end
-        function panel_writes.write_bytes(_, addr, bytes)
-            local why = "Polished panel write refused: no Polished write receipt (" .. tostring(panel_writes.reason) .. ")"
-            panel_writes.log[#panel_writes.log + 1] = {addr=addr, n=#bytes, why=why}
-            error(why, 0)
-        end
+        local Panel, Permit = load("lua/gen2/panel.lua"), load("lua/write_permit.lua")
+        -- The panel writes ONE thing on Polished: its own staged page inside the overlay's mailbox
+        -- (docs/polished/PANEL.md Stage 2 -- the ROM renders the page with PrintText, so there are
+        -- no tile writes at all). The permit is narrowed to exactly that span, and every other
+        -- write kind stays refused by construction: nothing else in this composition arms one.
+        -- F-3's blanket refuse-all is gone because it is now the ROM that refuses.
+        local ov = assert(profile.overlay, "Polished profile has no overlay block")
+        local mailbox = assert(ov.ram.wSlinkMailbox, "overlay.ram.wSlinkMailbox required")
+        local mailbox_end = assert(ov.ram.wSlinkMailboxEnd, "overlay.ram.wSlinkMailboxEnd required")
+        assert(mailbox_end > mailbox, "overlay mailbox span is empty")
+        local panel_writes = Panel.writes(io_, Permit, {base=mailbox, size=mailbox_end - mailbox})
         local panel = assert(Panel.new(profile, charmap, io_, panel_writes, hud.sanitize or function(s) return s end))
         -- C-SITES (milestone B): ONE engine site, capture_party (signals.lua S.new_polished), under this DEV-GRADE
         -- admission only. A refused binder (anchor bytes differ, malformed pack) degrades to the inert binder: the

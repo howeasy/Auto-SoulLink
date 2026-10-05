@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""Build the SLink companion overlay for Polished Crystal v3.2.3 (P5a, core only).
+"""Build the SLink companion overlay for Polished Crystal v3.2.3 (P5a core, Stage 1 phone, Stage 2 panel).
 
     tools/build_polished_syms.py build_rom_syms(check=True)  -- the clean pinned build must reproduce
         data/polished_sources.lock.json's sha1 (and the committed .sym/.map) or nothing is built
@@ -14,8 +13,9 @@
 Placement (docs/polished/HOOKS.md): layout.link pins named sections to banks; a section it does
 not name is placed by its own SECTION attributes. slink.asm's fixed ROM0[$0070] bridge sits in the
 free gap between "High Home" ($005b-$006f) and "Header" ($0100); its fixed BANK[$7E] service sits
-in a bank the clean ROM leaves wholly empty. The mailbox takes the first 40 bytes of Polished's own
-SECTION "Unused", WRAM0 without changing its size. The Phone card's virtual SLink contact
+in a bank the clean ROM leaves wholly empty. The mailbox takes Polished's own
+SECTION "Unused", WRAM0 span ($C60B-$C64F, 69 bytes) without changing its size: the first 40 are the
+Stage-0 core and the panel's staged page is the rest. The Phone card's virtual SLink contact
 (docs/polished/PHONE_SLOT.md) is a fixed ROM0[$3F34] bridge (the last free ROM0 gap) plus five
 same-size `call` operand rewrites in bank $24 (PHONE_HOOKS, each verified opcode + both operands).
 
@@ -158,8 +158,14 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
         raise RuntimeError(f"service must link in bank ${SERVICE_BANK:02X}, which must be empty in the clean ROM")
     allowed = [(delay, delay + 7, "DelayFrame lead-in"),
                (bridge, new["SlinkDelayFrameBridgeEnd"][1], "ROM0 bridge"),
-               (_flat(svc_bank, svc), _flat(*new["SlinkServiceEnd"]), f"bank ${SERVICE_BANK:02X} service"),
+               # The service and the Stage-2 panel are contiguous in the same wholly-empty bank,
+               # and diff_spans reports one run across both, so they are allowed as one span.
+               (_flat(svc_bank, svc), _flat(svc_bank, new["SlinkPanelEnd"][1]),
+                f"bank ${SERVICE_BANK:02X} service + panel"),
                (HEADER_CHECKSUMS.start, HEADER_CHECKSUMS.stop, "header checksums")]
+    panel_bank, panel = new["SlinkPanel"]
+    if panel_bank != SERVICE_BANK or panel < new["SlinkServiceEnd"][1]:
+        raise RuntimeError(f"the panel must link in bank ${SERVICE_BANK:02X} after the service")
     phone_lo, phone_hi = new["SlinkPhone_CountSetBits"][1], new["SlinkPhoneBridgeEnd"][1]
     if new["SlinkPhone_CountSetBits"][0] != 0 or base[phone_lo:phone_hi] != b"\xff" * (phone_hi - phone_lo):
         raise RuntimeError("the phone bridge must link into ROM0 bytes the clean ROM leaves free ($FF)")
@@ -261,7 +267,7 @@ def build(*, check: bool = False, rgbds_bin: pathlib.Path | None = None,
             "edits": list(dict.fromkeys(rel for rel, _old, _new in POLISHED_EDITS)),
             "sources_sha256": {p.relative_to(ROOT).as_posix(): source_sha256(p)
                                for p in sorted(SRC_DIR.glob("*.asm")) + [ABI]},
-            "mailbox": f"WRAM0 ${MAILBOX:04X} (40 bytes)",
+            "mailbox": f"WRAM0 ${MAILBOX:04X} (69 bytes)",
             "service_bank": f"${SERVICE_BANK:02X}",
         },
         "command": " ".join(["make", "-j4", *lock["make_args"], *lock["make_targets"]]),

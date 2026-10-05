@@ -620,3 +620,101 @@ bottom edge is `top + 2*items + 1` (each item takes two rows), NOT `top + items 
   slot is an option only when it is not a bug contest; that conflict is UNRESOLVED.
 * The `AutomaticGetMenuBottomCoord` CLAIMS row still verifies (the quote exists); only the
   conclusion drawn from it is wrong.
+
+---
+
+## Stage 2 implementation (2026-10-04, append-only) — the panel is a NATIVE TEXT BOX, not a graphics lease
+
+This section is the delivered answer to the card above, and it retires §5's "central open question"
+by **not asking it**. Built and published on the overlay
+`9c60bc8fb26ac13c52705b8086f8a5fb91d7bd93` (UPS 393 B); UPR patch-0020's `$0070` bridge and `$0DA8`
+lead-in spans are unchanged in extent, ABI stays 3, and `caps` is now `SLINK_CAP_PANEL`.
+
+### The blocker is avoided, not solved
+
+E7 (*"`call WaitBGMap2` … UNVERIFIED"*) and P1 (*"settle the reveal primitive"*) describe a graphics
+lease: the host paints `wTileMap`/`wAttrmap` while hidden and the cartridge reveals with a transfer
+primitive Polished does not have. **Stage 2 never takes that lease.** The host publishes the page as
+**text in the game's own charmap** and the ROM hands it to `PrintText`, whose
+`SetUpTextbox -> ClearSpeechBox -> ApplyTilemap` chain (`home/text.asm:136-163`) owns the tilemap.
+
+Consequences, all of them the point:
+
+| E7-era concern | Stage 2 |
+|---|---|
+| `WaitBGMap2` replacement | **none needed** — no host-written tilemap is ever transferred |
+| `wAttrmap` at `00:c308` | **not touched** — no attribute map is written at all |
+| `GetSGBLayout` replacement | **not needed** — `PrintText`/`SpeechTextbox` set up the text palette |
+| new graphics tiles | **none** — the page is the game's own proportional font |
+| the 90-frame stage timeout | **kept** (`.WaitForStage`, `panel.asm:83`) — a late host must not retype a page the player has already read |
+
+The page is therefore *visually* native: the game's own textbox border, palettes, blinking `▼`
+prompt and per-frame print. P1 is left un-run rather than answered; it is moot for this design.
+
+### The wire: 2 lines of 16 glyphs inside the 69-byte mailbox
+
+`patch/polished/src/slink_mailbox.asm` keeps Polished's `SECTION "Unused", WRAM0` at **exactly 69
+bytes** — no clean symbol moves, and `verify_symbol_scope` still passes — and repartitions it:
+
+```
+wSlinkMailbox::  ds 34   ; ABI core +0..13, trade lease +14..29, private sample +30/+31, phone +32/+33
+wSlinkPanelText:: ds 35  ; the staged page
+wSlinkMailboxEnd::
+```
+
+`SLINK_PANEL_LINES 2` x `SLINK_PANEL_LINE_MAX 16` + one terminator = a 17-byte stride, so a page is
+**two lines of sixteen glyphs** and `34 + 2*17 = 68 <= 69`. `lua/gb_panel.lua` pages by
+`rows_per_page`, so a five-row payload is three pages.
+
+**This is a capacity limit, not a taste call.** The mailbox cannot grow: `verify_symbol_scope`
+(`tools/build_gen2_companion.py:661`) raises on *any* moved clean symbol, and every claimable WRAM0
+`ds` region outside this section is inside a `SECTION UNION`. A full 4x16 page needs `4*17 = 68`
+bytes of page space (a 107-byte span) and therefore a gate change of its own.
+
+### Why the ROM script needs nothing new
+
+`patch/polished/src/panel.asm:101-108` is six lines of the game's own text vocabulary:
+
+```
+SlinkPanelScript:
+	db "<RAM>" / dw wSlinkPanelText
+	db "<LNBRK>"
+	db "<RAM>" / dw wSlinkPanelText + SLINK_PANEL_STRIDE
+	db "@"
+```
+
+`<RAM>` is `TextCommand_RAM` (`home/text.asm:594`), which `rst PlaceString`s from a **WRAM** pointer.
+So the host needs no line-break code and the ROM needs no new renderer — and `<LNBRK>` comes from
+the ROM's own charmap, which is why nothing about the page's encoding is duplicated on the Lua side.
+
+**Charmap safety (checked, not assumed):** `PlaceNextChar` (`home/text.asm:184-194`) treats bytes
+below `$5f` as commands/n-grams and the n-gram block is `$0a-$51`, which *overlaps printable ASCII* —
+a raw-ASCII copy would render `" "` (`$20`) as the n-gram `"ha"`. Polished's charmap puts literals at
+`$7f`+ (`" "` = 127, `"A"` = 128), above `BATTLEEXTRA_GFX_START = $5f`, so every staged byte is a
+glyph. The one control code the host writes is the terminator `$53` (`@`), and it comes from the
+generated pack (`overlay.panel.terminator`), not a literal.
+
+### Placement
+
+`SlinkPanel` lives in bank `$7E` after the service, and the ROM0 phone gate bank-switches to it and
+back (`slink.asm:181-185`). `PrintText` (`00:0e58`), `DelayFrame` (`00:0da8`) and `JoyTextDelay`
+(`00:07c3`) are all ROM0, so a `$7E` body calls them with a plain `call`. ROM0 `$3F34-$3FFF` had only
+~204 bytes and the phone bridge already uses 83.
+
+`SlinkPhone_CallGate` now **drops the Stage-1 stub text** (`"SLink is linked."`) and enters the panel.
+`wPokegearPhoneCursorPosition` (`00:C51D`) and `wPokegearPhoneScrollPosition` (`00:C51E`) are never
+touched; the list is redrawn by the native `PokegearText_WhomToCall`, so B closes with the cursor
+exactly where the player left it.
+
+### UNVERIFIED (Stage 2)
+
+1. **No live run yet.** Nothing here has been driven on a cartridge: whether `PrintText` renders a
+   host-staged WRAM page, whether the prompt's `ButtonSound` loop lets the sampled counter move
+   enough for the client to call the mailbox live (`P.STALL = 60`), and whether two lines *reads* as
+   vanilla are all open. This is the single most important gap.
+2. **Patch-0020 signature bytes not diffed** against the Stage-1 ROM `34942315…`. Span extents are
+   unchanged; bytes are unverified.
+3. **Server row width.** `Gen2GSCAdapter.info_panel_width()` returns `0`
+   (`server/adapters/gen2_gsc.py:654`), so `_build_link_panel` (`server/server.py:1886`) takes the
+   *wide* branch and emits `label|field|…` rows rather than the compact single-line rows a sixteen
+   column textbox wants. An adapter card, not this one.
