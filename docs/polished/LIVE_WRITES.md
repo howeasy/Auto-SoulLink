@@ -1,9 +1,12 @@
 # LIVE_WRITES — card POL-LIVE-WRITES (integrated overlay `deebb100`)
 
-**Result: the write path COMPOSES on the integrated overlay; nothing else ran.** The three
-command checks (force_faint, box_mon, negatives) are **NOT RUN** — the save fixture did not load,
-so the boot never reached the overworld. Evidence and the exact blocker are below; nothing here is
-inferred.
+**Status 2026-10-05: LIVE (a), (b) and (d) PASS on the integrated overlay; (c) negatives NOT RUN.**
+Command: `POL_STOP_AFTER_D=1 python tools/polished_live/writes_run.py` -> `RESULT: PASS pol-live-writes (0 checks failed)`
+(overlay `6e43f8d9`, fixture `75c7a5dc`; driver commit `d385e10e7`). (d) is the Polished withdraw executor
+(`party_mon`) against a real cartridge: it is **bank 1 only** (the entry was in pokedb bank 1, so the Banks bit
+starts and ends 0 and (d3c) proves "no other bit moved", not a bank-2 transition), one mon, one fixture.
+Everything below the table is the earlier boot-only record, kept as history. The older text claiming a/b/c "NOT RUN"
+applies to run 1 only.
 
 | artifact | sha |
 |---|---|
@@ -45,9 +48,10 @@ control.
 | check | result | evidence |
 |---|---|---|
 | composition has the overworld writer + box executor | **PASS** | `result.txt` lines above; `entry.lua:880,904` |
-| (a) `force_faint` on a non-active slot: HP 0/0, status 0, party count unchanged, only declared bytes | **NOT RUN** | no save → no party → no key to queue |
-| (b) `box_mon`: slot removed, box pointer+bank bit, pokedb checksum, census complete | **NOT RUN** | same |
-| (c) negatives: no write while in a battle / while a script runs | **NOT RUN** | same; the driver never left the boot |
+| (a) `force_faint` on a non-active slot: HP 0/0, status 0, count unchanged, EXACT diff (+ wrong-set control) | **PASS** | `result.txt` (a1)-(a5c) |
+| (b) `box_mon`: slot removed, Entries pointer set, pokedb 49 B written + allocation flag moved, checksum verifies | **PASS** | (b0b)-(b5); the Banks bit is the bank SELECTOR (0 = bank 1), not an occupied flag |
+| (c) negatives: no write while in a battle / while a script runs | **NOT RUN** | gate pokes wedge the frame loop; needs a real battle |
+| (d) `party_mon` withdraw: appended last, HP == MaxHP, status 0, Entries $01->$00, pokedb entry + flag UNCHANGED, EXACT diff, other mons identical, wrong-set control fails | **PASS** | (d0)-(d6), (d5c) |
 
 ## Two harness defects found and fixed (both from the coordinator's screenshot)
 
