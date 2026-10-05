@@ -60,6 +60,11 @@ SlinkPanel::
 	; to exactly SLINK_PANEL_LINE_MAX glyphs so they fully overwrite the fallback. Line 2 sits ONE row below line 1
 	; (the old <LNBRK> was NO_LINE_SPACING: one row; the first fix used +2 and left the fallback's `NO CLIENT` on the
 	; row in between: live C2 'fallback second line is gone' FAIL).
+	; The ROM does not trust the mailbox: force the string terminator at offset SLINK_PANEL_LINE_MAX of BOTH lines so a
+	; malformed staged page (missing '@') can never make PlaceString run past the line, the box border or the mailbox.
+	ld a, '@'
+	ld [wSlinkPanelText + SLINK_PANEL_LINE_MAX], a
+	ld [wSlinkPanelText + SLINK_PANEL_STRIDE + SLINK_PANEL_LINE_MAX], a
 	hlcoord TEXTBOX_INNERX, TEXTBOX_INNERY
 	ld de, wSlinkPanelText
 	rst PlaceString
@@ -146,14 +151,4 @@ SlinkPanelFallback:
 	next1 "NO CLIENT       "
 	done                            ; NOT prompt: see the .page comment -- AWAIT must come first
 
-; <RAM> prints from WRAM until the terminator; <LNBRK> is one text row down. The two addresses
-; are link-time constants because wSlinkPanelText lives in ram.o, and bank $7E is mapped while
-; this runs (the ROM0 phone bridge switched to it), so the script is readable where it links.
-SlinkPanelScript:
-	db "<RAM>"
-	dw wSlinkPanelText
-	db "<LNBRK>"
-	db "<RAM>"
-	dw wSlinkPanelText + SLINK_PANEL_STRIDE
-	db "<PROMPT>"                   ; the staged page is what waits for the player, not the fallback
 SlinkPanelEnd::

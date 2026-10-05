@@ -32,7 +32,7 @@ H.SYMBOLS = H.SYMBOLS + (
     "SlinkPhone_CountSetBits", "wSlinkMailbox", "wSlinkMailboxEnd", "wSlinkPanelText",
     # round 4: without these, L.hook("SlinkPanel") asserted at load and three bisects died
     # one line after the boot log -- a harness defect that looked exactly like a boot failure.
-    "SlinkPanel", "SlinkPanelEnd", "SlinkPanelScript", "SlinkPanelFallback",
+    "SlinkPanel", "SlinkPanelEnd", "SlinkPanelFallback",
 )
 H.ROM = LANE_ROOT / "rom" / os.environ.get("POL_ROM_OUT", "pol_overlay.gbc")
 

@@ -26,7 +26,7 @@ from make_ups import ups_apply  # noqa: E402
 H.SYMBOLS = H.SYMBOLS + (
     # the panel's own symbols
     "SlinkPanel", "SlinkPanel.page", "SlinkPanel.ready", "SlinkPanel.close", "SlinkPanel.WaitForStage",
-    "SlinkPanelScript", "SlinkPanelFallback", "SlinkPanelEnd", "wSlinkPanelText", "wSlinkMailboxEnd",
+    "SlinkPanelFallback", "SlinkPanelEnd", "wSlinkPanelText", "wSlinkMailboxEnd",
     # the Phone card's, as in run_phone.py
     "wPhoneList", "wNumSetBits", "wCurCaller", "wPokegearPhoneCursorPosition", "wPokegearPhoneScrollPosition",
     "wPokegearPhoneSelectedPerson", "PokegearPhoneContactSubmenu", "MakePhoneCallFromPokegear",
