@@ -1556,7 +1556,8 @@ function Client.new(p)
         local targets = p.battle_hold.write.targets
         local function target(name)
             local t = targets[name]
-            if io.bank_valid(t.bank, t.address, 1) ~= true then return nil end
+            -- a game without that field (Polished has no wPlayerSubStatus5) simply has no such target
+            if t == nil or io.bank_valid(t.bank, t.address, 1) ~= true then return nil end
             return io.read_u8(t.address, "System Bus")
         end
         local snapshot = { mode = battle.mode, battle_type = battle.battle_type,
@@ -1669,6 +1670,19 @@ function Client.new(p)
                 end
             end
         end
+    end
+
+    -- A composition with a battle hold but NO battle_end engine signal (Polished binds only capture_party) never runs
+    -- the battle_end hand-off above, so a death queued in battle and refused at every hold would stay queued for
+    -- good. p.battle_release_poll opts into the same hand-off from the battle mode itself: out of battle, every
+    -- owed write goes to the checkpoint. Vanilla does not set it (its battle_end signal does this, with the echo
+    -- bookkeeping), so its behaviour is unchanged.
+    function self:release_battle_writes()
+        if not p.battle_release_poll or #self.pending_battle_writes == 0 then return end
+        local battle = reads.read_battle()
+        if not battle or battle.mode ~= 0 then return end
+        for _, w in ipairs(self.pending_battle_writes) do defer_held(w) end
+        self.pending_battle_writes = {}
     end
 
     -- ── W-4 Rival Team Swap (lua/gen1/client.lua replace_rival_team / rival_window_tick) ──────────
@@ -1876,6 +1890,7 @@ function Client.new(p)
         self.replies:step()
         self:land_bench_deaths() -- O-32: a bench death lands the frame its command arrived (replies:step)
         self:rival_tick() -- W-4: announce a trainer battle; land a parked replace_rival_team (replies:step)
+        self:release_battle_writes() -- Polished: no battle_end signal, so the battle mode hands the owed writes over
         self:run_deferred()
     end
 

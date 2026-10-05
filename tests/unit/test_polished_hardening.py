@@ -95,7 +95,8 @@ def test_a_panel_page_lands_only_inside_the_overlay_mailbox(roms):  # noqa: F811
     assert [mem[TILEMAP + i] for i in range(64)] == tiles, "the panel must not paint the tilemap"
     # C-WRITE r2: the composition also hooks the overworld HOLD site (25:51BF, SLink-gen2-checkpoint);
     # the hook registers nothing on its own and writes nothing without a command.
-    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-checkpoint'}
+    # C-EXPLODE: the composition also hooks the battle hold (0f:416A, SLink-gen2-battle-hold): the explode PC hold, nothing written on its own.
+    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-checkpoint', 'SLink-gen2-battle-hold'}
 
 
 def test_a_panel_write_outside_the_mailbox_is_still_refused(roms):  # noqa: F811

@@ -1,0 +1,173 @@
+-- lua/gen2/polished_explode.lua -- the Polished Crystal v3.2.3 explode (W-3) / rival team swap (W-4) CLIENT PATH:
+-- the ONE writer the shared client (lua/gen2/client.lua) is given, plus the battle hold it re-checks and the
+-- p.battle_hold facts it hooks. Composed by compose_polished (lua/gen2/entry.lua); spec docs/polished/EXPLODE_RIVAL.md.
+--
+-- WHY A FACADE. The client has ONE writer slot (p.writes) and calls writes:arm("overworld" | "battle_hold" |
+-- "rival_swap"), faint_party_slot, faint_active_battler, explode_active_battler, write_enemy_party, and reads
+-- writes.sym.wCurOTMon. The overworld writer (polished_overworld.lua O.writes) has the first two only;
+-- polished_writes.lua has explode_active_battler / write_enemy_party only, and no `sym`. This module routes each
+-- call to the writer that owns it and fills in what the client never supplies:
+--   * snapshot.bank / snapshot.pc: polished_writes.common() asserts the snapshot was taken at the gate PC. The
+--     client builds one snapshot per hold and never stamps them, so the facade stamps the site it is serving
+--     (explode -> battle_hold.execution_before, rival -> battle_hold.rival_swap_gate). That assertion is
+--     therefore tautological here; the real guards are (a) the client only calls explode from its bus-exec hook
+--     on that PC and re-reads hROMBank, (b) the permit arm() re-proves the BATTLE hold (hROMBank == 0x0F and the
+--     site bytes re-read from the executed ROM) and every write authorize() re-proves it again.
+--   * snapshot.move_num: read from wCurMoveNum (the client does not carry it); polished_writes re-reads it.
+--   faint_party_slot -> the overworld writer (its own gate asserts reason "overworld" and snapshot.mode == 0, so a
+--   bench faint ARMED for a battle reason is refused there, by name: an in-battle faint is not composed).
+--   faint_active_battler is REFUSED BY NAME. Vanilla also sets wBattlePlayerAction = USEITEM so the partner cannot
+--   move after the death; the overworld writer does not reproduce that, so landing the HP write alone would let a
+--   dead mon act.
+--
+-- THE BATTLE HOLD (polished_overworld.lua O.battle_checkpoint, kinds battle_faint / battle_bench / explode /
+-- rival): wBattleMode in {1,2}, wLinkMode == 0, wGameLogicPaused == 0, no backup save, and the site bytes
+-- re-read at the linear ROM offset. battle_faint/explode additionally need hROMBank == 0x0F (a PC hold, 0f:416A
+-- `call DetermineMoveOrder`). rival_tick is a frame_end POLL, not a PC hold: its kinds only re-read the site bytes.
+-- Qualification DEV_OVERLAY_PREDICATE_HOLD; no receipt exists.
+--
+-- p.battle_hold SHAPE (what the client reads, client.lua at_battle_hold): execution_before {bank, pc},
+-- write.targets {wBattleMonSpecies, wBattlePlayerAction}. It is FABRICATED here from the pinned .sym (no pack row
+-- carries a `write` block): wPlayerSubStatus5 does NOT exist in Polished, so that target and transformed_bit are
+-- OMITTED. The vanilla Transform exception (battle struct species differs from the party mon's) therefore never
+-- applies: an active battler whose battle-struct species differs from its party record waits (kept) instead of
+-- being written. client.lua `target()` returns nil for an absent target (one-line guard, see its commit).
+--
+-- WHAT COMPOSING p.battle_hold CHANGES. A force_faint/force_explode that arrives IN a battle now queues for the
+-- next battle hold (client.lua:557) instead of waiting for the overworld checkpoint. Only force_explode of the
+-- ACTIVE battler lands there. Every other queued write (an active faint, a bench faint) is refused by name at
+-- the hold and stays queued, with one refusal line in the log per hold. Polished composes no battle_end engine
+-- signal (only capture_party is bound), so the client's battle_end hand-off to the checkpoint never runs:
+-- entry.lua sets p.battle_release_poll and client.lua release_battle_writes hands the queue to the overworld
+-- checkpoint when wBattleMode reads 0 - the same moment it landed before. Without that hand-off a death
+-- queued in battle would never land (measured). p.battle_bench is NOT composed (a bench faint on receipt
+-- would be refused every frame); p.rival_swap is NOT composed either, see below.
+--
+-- RIVAL SWAP IS WIRED BUT NOT COMPOSED, two measured blockers (both in files this card does not own):
+--   1. the client decodes a replace_rival_team blob with c.PARTYMON_STRUCT_LENGTH / c.MON_HP / c.MON_SPECIES,
+--      none of which is in the generated Polished profile.constants (it would raise on a nil);
+--   2. rival_tick polls at a frame end while wCurOTMon == 0xFF, and polished_writes.write_enemy_party refuses
+--      cur_ot_mon outside the NEW party (the write is only valid at 0f:47DD, after wCurOTMon is committed).
+-- writes.sym IS provided, so the client announces trainer_battle_start; with rival_swap unset it answers
+-- replace_rival_team "unsupported". write_enemy_party is reachable and tested through this facade at the real
+-- gate state (tests/unit/test_polished_explode_path.py).
+local E = {}
+
+-- polished_writes.lua W.COORDS, {bank, address} straight from data/polished/polished_slink.sym (the test
+-- re-derives every one). The profile carries only some of them; wCurOTMon = 00:c4dd, wBattlePlayerAction = 01:d0f4.
+E.COORDS = {
+    wBattleMonMoves = {0, 0xC4A7}, wBattleMonPP = {0, 0xC4B0}, wCurPlayerMove = {0, 0xC540},
+    wCurMoveNum = {1, 0xD0DB}, wCurBattleMon = {1, 0xD0DA}, wBattlePlayerAction = {1, 0xD0F4},
+    wPartyCount = {1, 0xDCCE}, wPartyMons = {1, 0xDCD6}, wOTPartyCount = {1, 0xD283},
+    wMirrorHerbPendingBoosts = {1, 0xD284}, wOTPartyMons = {1, 0xD28B}, wOTPartyMonOTs = {1, 0xD3AB},
+    wOTPartyMonNicknames = {1, 0xD3ED}, wOTPartyDataEnd = {1, 0xD42F}, wCurOTMon = {0, 0xC4DD},
+    wCurPartyMon = {1, 0xD10C},
+}
+-- client.lua at_battle_hold reads these through p.battle_hold.write.targets ({bank, address})
+E.TARGETS = {wBattleMonSpecies = {bank = 0, address = 0xC4A5, width = 1},
+             wBattlePlayerAction = {bank = 1, address = 0xD0F4, width = 1}}
+-- the armed reason -> the battle-hold kind it re-proves on arm()
+E.KIND_OF_REASON = {battle_hold = "explode", rival_swap = "rival"}
+-- the polished_writes.lua authorize() operation -> the battle-hold kind
+E.KIND_OF_OPERATION = {battle_explode = "explode", enemy_party = "rival"}
+
+local function copy(value)
+    if type(value) ~= "table" then return value end
+    local out = {}
+    for key, item in pairs(value) do out[key] = copy(item) end
+    return out
+end
+
+--- deps: root, profile (generated Polished title), io, Permit (lua/write_permit.lua), overworld (the O.writes writer),
+--- overworld_hold (its O.checkpoint), log. modules (optional, a test seam): {W = polished_writes, O = polished_overworld}.
+--- Returns {writes, checkpoint, safety, battle_hold, sym}.
+function E.new(deps)
+    assert(type(deps) == "table", "Polished explode options required")
+    local profile, io, Permit, log = assert(deps.profile), assert(deps.io), assert(deps.Permit), deps.log
+    local overworld, overworld_hold = assert(deps.overworld), assert(deps.overworld_hold)
+    assert(type(overworld.faint_party_slot) == "function" and type(overworld.arm) == "function",
+           "the overworld writer is required")
+    assert(type(io.read_u8) == "function" and type(io.bank_valid) == "function"
+           and type(io.framecount) == "function", "explicit read_u8/bank_valid/framecount required")
+    local modules = deps.modules or {}
+    local W = modules.W or dofile(assert(deps.root, "root required") .. "/lua/gen2/polished_writes.lua")
+    local O = modules.O or dofile(deps.root .. "/lua/gen2/polished_overworld.lua")
+
+    local sym = copy(E.COORDS)
+    local explode_site, rival_site = O.BATTLE_SITES.explode, O.BATTLE_SITES.rival_gate
+    local hold = {
+        execution_before = {bank = explode_site.bank, pc = explode_site.pc, instruction = explode_site.instruction,
+                            expected_hex = "cd3542"},
+        rival_swap_gate = {bank = rival_site.bank, pc = rival_site.pc},
+        write = {targets = copy(E.TARGETS)},
+    }
+    local battle = O.battle_checkpoint(profile, io, log, O.BATTLE_SITES)
+
+    local held, still = function() return io.framecount() end, function(token) return token == io.framecount() end
+    local policy = {
+        authorize = function(operation)
+            local kind = E.KIND_OF_OPERATION[operation]
+            return kind ~= nil and battle:check(kind) == true
+        end,
+        pointer_stable = function() return true end, -- the battle struct and the enemy party block are fixed WRAM
+        lifetime = {capture = held, valid = still},
+        provenance = function() return {site = "lua/gen2/polished_explode.lua battle",
+                                        evidence = "DEV_OVERLAY_PREDICATE_HOLD"} end,
+    }
+    local writer = W.new(profile, sym, io, Permit, policy, hold)
+
+    local function wram(label)
+        local row = sym[label]
+        assert(io.bank_valid(row[1], row[2], 1) == true, "read refused: " .. label .. " bank not mapped")
+        return io.read_u8(row[2], "System Bus")
+    end
+    -- the snapshot polished_writes re-checks, stamped with the site it is being served at
+    local function stamped(snapshot, site)
+        assert(type(snapshot) == "table", "explicit battle snapshot required")
+        local out = copy(snapshot)
+        out.bank, out.pc = site.bank, site.pc
+        return out
+    end
+
+    local self = setmetatable({sym = sym, qualification = O.BATTLE_QUALIFICATION, hold = hold},
+        {__index = function(_, key)
+            if key == "armed" then return overworld.armed or writer.armed end
+            if key == "log" then return writer.log end
+        end})
+    function self:arm(reason, allow)
+        if reason == O.FAINT_REASON then return overworld:arm(reason, allow) end
+        local kind = E.KIND_OF_REASON[reason]
+        if kind == nil then
+            error("no composed Polished write for the armed reason " .. tostring(reason), 0)
+        end
+        local ok, why = battle:check(kind)
+        assert(ok == true, "write refused at arm(" .. tostring(reason) .. "): " .. tostring(why))
+        return writer:arm(reason, allow)
+    end
+    function self:disarm()
+        overworld:disarm()
+        return writer:disarm()
+    end
+    function self:faint_party_slot(slot, snapshot) return overworld:faint_party_slot(slot, snapshot) end
+    function self:faint_active_battler()
+        error("an active-battler faint is not composed on Polished: vanilla also sets wBattlePlayerAction = USEITEM "
+              .. "so the mon cannot move after it dies, and this writer does not reproduce that", 0)
+    end
+    function self:explode_active_battler(slot, snapshot)
+        local snap = stamped(snapshot, hold.execution_before)
+        if snap.move_num == nil then snap.move_num = wram("wCurMoveNum") end
+        return writer:explode_active_battler(slot, snap)
+    end
+    function self:write_enemy_party(mons, snapshot)
+        return writer:write_enemy_party(mons, stamped(snapshot, hold.rival_swap_gate))
+    end
+
+    -- the client asks ONE safety object for every kind: the overworld hold owns party_hp, the battle hold the rest
+    local safety = {check = function(kind)
+        if O.BATTLE_KINDS[kind] ~= nil then return battle:check(kind) end
+        return overworld_hold:check(kind)
+    end}
+    return {writes = self, checkpoint = battle, safety = safety, battle_hold = hold, sym = sym}
+end
+
+return E
