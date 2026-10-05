@@ -145,13 +145,14 @@ def test_the_panel_script_is_two_ram_lines_of_the_mailbox_text():
     lines = PANEL_ASM.splitlines()
     body = lines[lines.index("SlinkPanelScript:") + 1:]
     body = body[: body.index("SlinkPanelEnd::")]
+    body = [ln.split(";")[0].rstrip() for ln in body]  # a trailing comment is not part of the script
     assert body == [
         '\tdb "<RAM>"',
         "\tdw wSlinkPanelText",
         '\tdb "<LNBRK>"',
         '\tdb "<RAM>"',
         "\tdw wSlinkPanelText + SLINK_PANEL_STRIDE",
-        '\tdb "@"',
+        '\tdb "<PROMPT>"',
     ], body
     codes = {k: int(v) for k, v in
              re.findall(r'\["([^"]+)"\] = (\d+)',
