@@ -212,7 +212,7 @@ ev.caps = caps
 -- The span is a property of the SYMBOLS' ADDRESSES, not of what is stored at them: L.rw reads the
 -- memory CONTENTS of a symbol, so End - Start was a difference of two mailbox bytes.
 local SPAN = L.SYM.wSlinkMailboxEnd[2] - L.SYM.wSlinkMailbox[2]
-L.check("C1 PANEL cap advertised (caps=02, bit 1 only)", caps == 0x02, fmt("%02X", caps))
+L.check("C1 PANEL cap advertised (integrated overlay: caps=07 = PANEL|SFX|SFX_NOTIFY)", caps == 0x07, fmt("%02X", caps))
 L.check("C1 mailbox span is the overlay's own 69 bytes (symbol addresses, not contents)",
         SPAN == 69, fmt("$%X..$%X = %d", L.SYM.wSlinkMailbox[2], L.SYM.wSlinkMailboxEnd[2], SPAN))
 

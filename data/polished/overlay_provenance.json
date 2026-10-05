@@ -1,6 +1,6 @@
 {
   "schema": "polished-overlay-provenance-v1",
-  "generated": "2026-10-05T02:26:21Z",
+  "generated": "2026-10-05T13:31:06Z",
   "source": {
     "url": "https://github.com/Rangi42/polishedcrystal",
     "tag": "v3.2.3",
@@ -15,20 +15,23 @@
       "slink.asm",
       "slink_mailbox.asm",
       "slink_sfx.asm",
+      "version.asm",
       "slink_abi.inc"
     ],
     "edits": [
       "ram/wram0.asm",
       "home/delay.asm",
       "home/init.asm",
+      "engine/menus/main_menu.asm",
       "main.asm",
       "engine/pokegear/phone.asm"
     ],
     "sources_sha256": {
-      "patch/polished/src/panel.asm": "168075da831172048ba5bbdae9e0a87cde882f7e75db003140ac193179c76229",
-      "patch/polished/src/slink.asm": "10cc4b91d0348fee5f9e33cba51ab3d1f36e575597c0b3484718ccd8e9cd27b1",
+      "patch/polished/src/panel.asm": "eff21dd57c8736096a92ebc4b653d49203cedfb89cd13bcf1569e7426ccc4679",
+      "patch/polished/src/slink.asm": "7959bdcc535b58612dd34ca42cea35da1bd17a65bad03c1a84b17a38bd98905f",
       "patch/polished/src/slink_mailbox.asm": "5ba31fe8ebd7adf050ad71a49d559150797d49d0b95bff473a08d8e26c09939a",
       "patch/polished/src/slink_sfx.asm": "16611d1282f08cee6eec076f56de25c52ebddcc2058efb0e21112fcb5ae1f1e4",
+      "patch/polished/src/version.asm": "c651a857adfc9e1004ce794d669777f498a701085054511bc3ef8e63c9399bf7",
       "patch/gb/slink_abi.inc": "be0ee30a84330c794a1b5f3a2cf4c1435bdfdf3bf63fa4f010deb02a0291181e"
     },
     "mailbox": "WRAM0 $C60B (69 bytes)",
@@ -36,21 +39,36 @@
   },
   "command": "make -j4 CFLAGS=-O2 polishedcrystal-3.2.3.gbc",
   "output": {
-    "sha1": "deebb1004d4f6123667d5d9e061ad0bf867ac021",
-    "md5": "44fc24e5e5be8acb3b33d3014e491f1a",
-    "header_crc": "C6B7",
-    "crc32": "7327D20E",
+    "sha1": "6e43f8d96eb60786ee007254e74d8fa58c3804a6",
+    "md5": "f35dae4e1ab279f9b6bdbc52c67c0460",
+    "header_crc": "9CFA",
+    "crc32": "8EF7D56E",
     "title": "PKPCRYSTAL\u0000PKPC",
     "size": 2097152,
     "identical_to_clean": false,
+    "canonical_sha1": "74c504ca43ef7151ac46347f69c5e935e5b2c7da",
+    "version_slot": {
+      "offset": 2064749,
+      "length": 20
+    },
+    "canonical_spans": [
+      {
+        "offset": 334,
+        "length": 2
+      },
+      {
+        "offset": 2064758,
+        "length": 11
+      }
+    ],
     "ups": {
       "file": "patch/dist/SLink-Polished.ups",
-      "size": 517,
-      "sha256": "97b59eb0cd3c88e5e96d401b887ffa62affa4a765f7574a9979597c26116a362"
+      "size": 610,
+      "sha256": "9bf61de8e4a2e753c29fd9588769123d0e0a326008e59498993a51dd3076654d"
     }
   },
   "symbols": {
-    "polished_slink.sym": "7549711d7ccb5762b2f0d1fd11a32dffe60e369479374ed495bb00213c235dcf",
-    "polished_slink.map": "84a1070dec34f2a0a85ba558174cf2f55cc304c99b8b06bb99bd4d2246f208f9"
+    "polished_slink.sym": "d9633b7a970c245cac117f7b09062b020708c3646d35edc9bec3ad1765512edc",
+    "polished_slink.map": "3b1f39215ae869dcd2f274587a4bd913a0b4dd73d1a7f7a6107c957a54cee87e"
   }
 }
