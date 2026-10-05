@@ -247,6 +247,112 @@ def encode_party_blob(mon) -> bytes:
             + _raw(bytes.fromhex(mon["nickname_raw_hex"]), NICKNAME_SIZE, "nickname"))
 
 
+# ── trademon_struct (docs/polished/TRADE.md §8.2) ─────────────────────────────
+# 53 bytes, measured from the built sym: wPlayerTrademon 00:c51c .. wPlayerTrademonEnd 00:c551, and
+# wOTTrademon 00:c551 .. wOTTrademonEnd 00:c586. Vanilla pokecrystal's trademon is 50: Polished adds a
+# THIRD DV byte (SatSdfDV), a personality word and a separate ExtSpecies/Form/Gender/IsEgg byte.
+# Offsets below are the macro (macros/ram.asm:252-276 `MACRO trademon`) cross-checked against that sym.
+TRADEMON = {"Species": 0, "SpeciesName": 1, "Nickname": 12, "SenderName": 23, "OTName": 34,
+            "HPAtkDV": 45, "DefSpeDV": 46, "SatSdfDV": 47, "Personality": 48, "Form": 49,
+            "ID": 50, "CaughtData": 52, "End": 53}
+TRADEMON_SIZE = 53
+# The three name fields are all NAME_LENGTH/MON_NAME_LENGTH = 11, whatever the player-name length is:
+# NAME_LENGTH is the field stride, not how many glyphs a trainer name holds.
+TRADEMON_NAME_SIZE = 11
+
+
+def decode_trademon(raw, *, name_decoder=decode_text) -> dict:
+    """The 53-byte staged struct -> the same dict shape decode_party_mon returns, so a received
+    trademon and a received 70-byte party blob are the same object to every consumer above.
+
+    A trademon carries identity and appearance only -- species, three names, three DV bytes, the two
+    attribute bytes, the OT id and the caught data. Level, item, moves, exp, EVs and stats are NOT in
+    it: the engine derives those from the species base when it builds the party member
+    (AddTempMonToParty, move_mon.asm:448), which is why this is a faithful inverse of
+    encode_trademon and not of encode_party_mon.
+    """
+    _raw(raw, TRADEMON_SIZE, "trademon")
+    personality, form_byte = raw[TRADEMON["Personality"]], raw[TRADEMON["Form"]]
+    ot = raw[TRADEMON["OTName"]:TRADEMON["OTName"] + TRADEMON_NAME_SIZE]
+    mon = {
+        "species_id": species_of(raw[TRADEMON["Species"]], form_byte),
+        "form": form_byte & FORM_MASK,
+        "gender": "female" if form_byte & GENDER_MASK else "male",
+        "is_egg": bool(form_byte & IS_EGG_MASK),
+        "shiny": bool(personality & SHINY_MASK),
+        "ability_slot": (personality & ABILITY_MASK) >> 5,
+        "nature": personality & NATURE_MASK,
+        "ot_id": int.from_bytes(raw[TRADEMON["ID"]:TRADEMON["ID"] + 2], "big"),
+        "caught_data": raw[TRADEMON["CaughtData"]],
+        "dvs": decode_dvs(raw[TRADEMON["HPAtkDV"]:TRADEMON["SatSdfDV"] + 1]),
+        "dv_bytes": int.from_bytes(raw[TRADEMON["HPAtkDV"]:TRADEMON["SatSdfDV"] + 1], "big"),
+        "species_name_raw_hex": raw[TRADEMON["SpeciesName"]:TRADEMON["Nickname"]].hex(),
+        "sender_name_raw_hex": raw[TRADEMON["SenderName"]:TRADEMON["OTName"]].hex(),
+        "ot_raw_hex": ot.hex(),
+        "nickname_raw_hex": raw[TRADEMON["Nickname"]:TRADEMON["SenderName"]].hex(),
+        "raw_hex": raw.hex(),
+    }
+    if name_decoder is not None:
+        # Same rule as decode_party_mon: only the first PLAYER_NAME_LENGTH bytes of a trainer name are
+        # text; the OT field's 3 trailing Extra bytes are not (RAM.md, OT = 8 name + 3 Extra).
+        for label, value in (("species_name", bytes.fromhex(mon["species_name_raw_hex"])),
+                             ("sender_name", bytes.fromhex(mon["sender_name_raw_hex"])),
+                             ("ot_name", ot[:PLAYER_NAME_LENGTH]),
+                             ("nickname", bytes.fromhex(mon["nickname_raw_hex"]))):
+            mon[label] = name_decoder(value)
+    return mon
+
+
+def encode_trademon(mon, *, species_name_raw=None, sender_name_raw=None) -> bytes:
+    """A 53-byte staged struct. species_name_raw / sender_name_raw are the two names the party blob
+    does not carry (the species name is engine-owned; the sender name is the partner's trainer name).
+    Either may be given as raw bytes or as decoded text, in which case the pack charmap is used.
+    """
+    buf = bytearray(TRADEMON_SIZE)
+    species = _integer(mon["species_id"], 1, 0x1FF, "species")
+    _require(mon.get("gender") in ("male", "female"), "gender: expected male/female (the form-byte bit)")
+    buf[TRADEMON["Species"]] = species & 0xFF
+    buf[TRADEMON["Personality"]] = (
+        (SHINY_MASK if mon["shiny"] else 0) | _integer(mon["ability_slot"], 0, 3, "ability slot") << 5
+        | _integer(mon["nature"], 0, 31, "nature"))
+    buf[TRADEMON["Form"]] = (
+        (GENDER_MASK if mon["gender"] == "female" else 0) | (IS_EGG_MASK if mon["is_egg"] else 0)
+        | (EXTSPECIES_MASK if species & 0x100 else 0) | _integer(mon["form"], 0, 31, "form"))
+    buf[TRADEMON["ID"]:TRADEMON["ID"] + 2] = _integer(mon["ot_id"], 0, 0xFFFF, "OT ID").to_bytes(2, "big")
+    buf[TRADEMON["CaughtData"]] = _integer(mon["caught_data"], 0, 255, "caught data")
+    dvs = encode_dvs(mon["dvs"])
+    _require(mon.get("dv_bytes", int.from_bytes(dvs, "big")) == int.from_bytes(dvs, "big"),
+             "contradictory DV fields")
+    buf[TRADEMON["HPAtkDV"]:TRADEMON["SatSdfDV"] + 1] = dvs
+
+    def field(raw_or_text, text_key, raw_key, label):
+        if raw_or_text is not None:
+            return _raw(raw_or_text, TRADEMON_NAME_SIZE, label)
+        if raw_key in mon:
+            return _raw(bytes.fromhex(mon[raw_key]), TRADEMON_NAME_SIZE, raw_key)
+        if text_key in mon:
+            return encode_text(mon[text_key], TRADEMON_NAME_SIZE)
+        return bytes(TRADEMON_NAME_SIZE)  # an all-TERMINATOR name is the engine's own blank
+
+    buf[TRADEMON["SpeciesName"]:TRADEMON["Nickname"]] = field(
+        species_name_raw, "species_name", "species_name_raw_hex", "species name")
+    buf[TRADEMON["SenderName"]:TRADEMON["OTName"]] = field(
+        sender_name_raw, "sender_name", "sender_name_raw_hex", "sender name")
+    buf[TRADEMON["OTName"]:TRADEMON["OTName"] + TRADEMON_NAME_SIZE] = field(
+        None, "ot_name", "ot_raw_hex", "OT name")
+    buf[TRADEMON["Nickname"]:TRADEMON["SenderName"]] = field(
+        None, "nickname", "nickname_raw_hex", "nickname")
+    return bytes(buf)
+
+
+def trademon_from_party_blob(blob, *, species_name_raw=None, sender_name_raw=None) -> bytes:
+    """The 70-byte wire party blob -> the 53-byte staged struct, by re-reading the same bytes the
+    engine would. This is the port's send path: the Lua client has a party blob and the overlay's
+    staging wants a trademon."""
+    mon = decode_party_blob(_raw(blob, BLOB_SIZE, "party transfer blob"))
+    return encode_trademon(mon, species_name_raw=species_name_raw, sender_name_raw=sender_name_raw)
+
+
 def key(mon) -> str:
     """DDDDDD:OOOO:SSS:TT -- 3 DV bytes, OT ID, 9-bit species, traits (shiny bit 7, gender bit 6,
     form bits 0-4 = the form when it is a VARIANT form, else 0 for cosmetic forms).
