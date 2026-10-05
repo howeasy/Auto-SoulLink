@@ -28,6 +28,10 @@ registers in tools/e2e_duo.py, each with its post-result oracle and pinned PASS 
 A missing pair, scenario, oracle or receipt is RED, never green. Enabling them requires their reviewed
 implementation and prerequisite/receipt contracts, not removing a missing-input check.
 
+--c5 <dir> (no lane; C-5 was closed by owner ruling 2026-10-04) judges tools/c5_runner.py's randomized
+duo manifests against tests/gen2_c5_requirements.json: the required cells, the current code digest and
+the G-g named limit. Stale evidence is RED.
+
 --new-gates (a live-new-gates precondition) checks the committed U1 engine-site, U2 write-window
 (each overlay has its own proof) and overlay fixture-qualification receipts against
 their pinned sha256 and their production Lua validators (reusing tests/unit/test_gen2_physical_receipts.py's
@@ -2265,6 +2269,155 @@ def fixtures_errors(root: Path | None = None, *, names=None, identity=None, witn
     return errors
 
 
+# C-5 (randomized admission; owner closed it 2026-10-04 on 10 cells, G-g a named limit). Reads the gen2-c5-duo-cell-v1
+# manifests tools/c5_runner.py writes per PASS cell. Separate from the duo matrix on purpose: those rows pin the PUBLISHED
+# overlay sha1 (_receipt_errors), a randomized cart has its own contract sha1. The cells and named limits are pinned here
+# AND in C5_REQUIREMENTS, so editing either one alone cannot waive a cell or drop the limit.
+C5_REQUIREMENTS = "tests/gen2_c5_requirements.json"
+C5_SCHEMA = "gen2-c5-duo-cell-v1"
+C5_MARKER = "gen2.requirement.C-5"
+C5_CELLS = {
+    "c5/cc/link": ["G-a"], "c5/gs/link": ["G-b"], "c5/cg/link": ["G-b"],
+    "c5/cc/gen2_reconnect": ["G-d"], "c5/gs/gen2_reconnect": ["G-d"],
+    "c5/cc/gen2_gift": ["G-e", "G-f"], "c5/gs/gen2_gift": ["G-e", "G-f"],
+    "c5/ct/gen2_npc_trade": ["G-h"], "c5/cc/gen2_c5_wrong_rom": ["G-c"], "c5/cc/gen2_c5_no_contract": ["G-i"],
+}
+C5_NAMED_LIMITS = {"G-g": ("2026-10-04", "roamer catches are not detected on overlay carts")}
+
+
+def _c5_requirement_errors(root: Path) -> list[str]:
+    try:
+        req = json.loads((root / C5_REQUIREMENTS).read_text(encoding="utf-8"))
+        cells = {row["id"]: row["covers"] for row in req["cells"]}
+        limits = {row["gate"]: (row.get("date"), row.get("text")) for row in req["named_limits"]}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return [f"{C5_REQUIREMENTS}: unreadable or malformed ({exc})"]
+    errors = []
+    if len(cells) != len(req["cells"]) or cells != C5_CELLS:
+        errors.append(f"{C5_REQUIREMENTS}: required cells differ from the pinned C-5 set {sorted(C5_CELLS)}")
+    for gate_id, (date, text) in C5_NAMED_LIMITS.items():
+        if limits.get(gate_id) != (date, text):
+            errors.append(f"{C5_REQUIREMENTS}: named limit {gate_id} missing or altered (owner ruling {date}: {text!r})")
+    return errors
+
+
+def _c5_manifest_errors(folder: Path, m: dict, cid: str, head: str, jars: set, runner) -> list[str]:
+    errors = []
+    if m.get("schema") != C5_SCHEMA:
+        errors.append(f"schema {m.get('schema')!r} is not {C5_SCHEMA}")
+    if m.get("receipt_marker") != C5_MARKER:
+        errors.append(f"receipt_marker {m.get('receipt_marker')!r} is not {C5_MARKER}")
+    if m.get("evidence_level") != "PHYSICAL":
+        errors.append(f"evidence_level {m.get('evidence_level')!r} is not PHYSICAL")
+    if m.get("covers") != C5_CELLS[cid]:
+        errors.append(f"covers {m.get('covers')} is not {C5_CELLS[cid]}")
+    pair, scenario = str(m.get("pair")), str(m.get("scenario"))
+    if f"c5/{pair}/{scenario}" != cid:
+        errors.append(f"pair/scenario {pair}/{scenario} do not name the cell")
+    disclosures = m.get("disclosures") if isinstance(m.get("disclosures"), dict) else {}
+    for kind in ("SYNTH", "HARNESS", "NATIVE"):
+        value = disclosures.get(kind)
+        values = value if isinstance(value, list) else [value]
+        if not value or not all(isinstance(v, str) and v.strip() for v in values):
+            errors.append(f"missing {kind} disclosure")
+    if m.get("code_digest") != head:
+        errors.append(f"STALE: manifest CODE_DIGEST {m.get('code_digest')} != current code digest {head} "
+                      "(evidence earned on other production code; re-run tools/c5_runner.py run)")
+    jar = (m.get("provision") or {}).get("jar_sha256")
+    if jar not in jars:
+        errors.append(f"jar sha256 {jar} is not pinned in data/upr_jars.json")
+    try:
+        contract = {"players": {s: {"rom_sha1": m["contract"]["players"][s]["rom_sha1"]} for s in ("a", "b")}}
+    except (KeyError, TypeError):
+        return errors + ["manifest records no per-side contract sha1"]
+    for side in ("a", "b"):
+        provisioned = (((m.get("provision") or {}).get("players") or {}).get(side) or {}).get("rom_sha1")
+        if provisioned != contract["players"][side]["rom_sha1"]:
+            errors.append(f"{side}: provisioned sha1 {provisioned} != contract sha1 {contract['players'][side]['rom_sha1']}")
+    receipts = m.get("receipts") if isinstance(m.get("receipts"), dict) else {}
+    if not receipts:
+        errors.append("manifest pins no receipts")
+    names = {}
+    for rel, sha in receipts.items():
+        path = folder / Path(str(rel)).name   # ponytail: keyed by file name, so the set judges in place or copied flat
+        names[path.name] = path
+        if not path.is_file():
+            errors.append(f"receipt missing: {path.name}")
+        elif runner.lf_sha256(path) != sha:
+            errors.append(f"receipt tampered: {path.name} sha256 {runner.lf_sha256(path)[:12]} != manifest {str(sha)[:12]}")
+    prefix = f"duo_{scenario.removeprefix('gen2_')}_{pair}_"
+    sides = ["a", "b", "pydec"] + (["a_initial", "a_same_save", "a_wrong_save"] if scenario == "gen2_reconnect" else [])
+    texts = {}
+    for side in sides:
+        path = names.get(f"{prefix}{side}_result.txt")
+        if path is None or not path.is_file():
+            errors.append(f"{side}: no pinned result receipt")
+        else:
+            texts[side] = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    stamps = [line for line in texts.get("pydec", []) if line.startswith("CODE_DIGEST ")]
+    try:
+        stamp = json.loads(stamps[0].split(" ", 1)[1]) if len(stamps) == 1 else None
+        if isinstance(stamp, dict) and stamp.get("dirty") != []:
+            errors.append(f"STALE: the run's CODE_DIGEST stamp is dirty ({stamp.get('dirty')}); dirty must be []")
+        errors.extend(runner.c5_receipt_errors(texts, contract, m.get("code_digest")))
+    except (ValueError, TypeError, AttributeError, IndexError) as exc:
+        errors.append(f"unparseable result receipt line ({exc})")
+    return errors
+
+
+def c5_errors(receipts_dir, root: Path | None = None, head: str | None = None) -> list[str]:
+    """--c5: every required C-5 cell exactly once, each a PHYSICAL PASS on the randomized carts its manifest's contract
+    names, at the CURRENT production code digest (stale evidence is RED), receipts byte-identical to their pins, a pinned
+    jar, and the named limit(s) still recorded. The PASS definition is c5_runner.c5_receipt_errors, never re-derived."""
+    import c5_runner
+
+    root = ROOT if root is None else root
+    folder = Path(receipts_dir)
+    errors = _c5_requirement_errors(root)
+    try:
+        head = code_digest.head_digest(root) if head is None else head
+    except (OSError, subprocess.CalledProcessError) as exc:
+        return errors + [f"cannot compute the current production code digest: {exc}"]
+    try:
+        jars = set(json.loads((root / "data/upr_jars.json").read_text(encoding="utf-8")).values())
+    except (OSError, ValueError, AttributeError) as exc:
+        return errors + [f"data/upr_jars.json unreadable ({exc})"]
+    if not folder.is_dir():
+        return errors + [f"{folder}: no C-5 receipts directory"]
+    seen = {}
+    for path in sorted(folder.glob("*.manifest.json")):
+        try:
+            m = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            errors.append(f"{path.name}: unreadable manifest ({exc})")
+            continue
+        cid = m.get("cell") if isinstance(m, dict) else None
+        if cid not in C5_CELLS:
+            errors.append(f"{path.name}: cell {cid!r} is not a required C-5 cell")
+            continue
+        seen.setdefault(cid, []).append(path.name)
+        errors.extend(f"{cid}: {e}" for e in _c5_manifest_errors(folder, m, cid, head, jars, c5_runner))
+    for cid in C5_CELLS:
+        if cid not in seen:
+            errors.append(f"{cid}: missing (no PASS manifest)")
+        elif len(seen[cid]) > 1:
+            errors.append(f"{cid}: duplicated ({', '.join(seen[cid])})")
+    return errors
+
+
+def _c5_main(receipts_dir: str) -> int:
+    errors = c5_errors(receipts_dir)
+    for error in errors:
+        print(f"RED  {error}")
+    for gate_id, (date, text) in C5_NAMED_LIMITS.items():
+        print(f"NAMED LIMIT  {gate_id}: {text} (owner ruling {date}; {C5_REQUIREMENTS})")
+    if errors:
+        print(f"C-5: {len(errors)} gap(s); a missing, stale, edited or unproven cell is not a pass")
+        return 1
+    print(f"C-5: all {len(C5_CELLS)} required cells PHYSICAL PASS at the current code digest")
+    return 0
+
+
 _RECEIPT_CLIS = {
     "--fixtures": ("fixtures", "fixtures_errors"),
     "--live-gates": ("live gates", "live_gates_errors"),
@@ -2346,6 +2499,8 @@ def main(argv: list[str] | None = None) -> int:
         return _duo_matrix_main()
     if given == ["--new-gates"]:
         return _new_gates_main()
+    if len(given) == 2 and given[0] == "--c5":
+        return _c5_main(given[1])
     if len(given) == 1 and given[0] in _RECEIPT_CLIS:
         return _receipt_cli(given[0])
     errors = manifest_errors()

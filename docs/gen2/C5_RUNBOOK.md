@@ -134,3 +134,22 @@ first, as a U1G `roamer` leg that proves those sites. Only after that can an O-3
 `tests/gen2_release_requirements.json`. Install the `out/<digest12>/receipts/c5/` files under
 `tests/fixtures/gen2/receipts/c5/` only once a reader exists. That reader would be a `--c5` lane, or the
 release-evidence lane reading `*.manifest.json` (RANDOMIZER_GATES.md §3.4). Pin their sha256s at the same time.
+
+## Verifier lane
+
+`python tools/verify_gen2_release.py --c5 <dir>` reads the `*.manifest.json` files in `<dir>` (for example
+`F:/slink-work/lanes/g2r-live/out/<digest12>/receipts/c5`) and the receipts they pin, keyed by file name. It is a CLI
+lane like `--duo-matrix`, not a release-gate lane. The overlay duo requirements stay as they were. It is RED unless:
+- each of the 10 cells in `tests/gen2_c5_requirements.json` (also pinned as `C5_CELLS` in the verifier) has exactly
+  one manifest, with schema `gen2-c5-duo-cell-v1`, marker `gen2.requirement.C-5`, `evidence_level: PHYSICAL`, its
+  `covers` gates and non-empty SYNTH/HARNESS/NATIVE disclosures;
+- the manifest's `code_digest` equals the CURRENT `tools/gen2_code_digest.py` digest. Stale evidence prints both
+  digests. The pydec `CODE_DIGEST` stamp must be clean (`dirty: []`) and at the manifest's digest;
+- `c5_runner.c5_receipt_errors` holds against the manifest's contract (both CLIENT lines `rand_overlay` at the contract
+  sha1, DUO_GEN2 headers, every reconnect A launch, RESULT/PYDEC PASS), and the provisioned sha1s equal the contract;
+- every pinned receipt sha256 matches its file, and the jar sha256 is in `data/upr_jars.json`;
+- the G-g named limit (owner ruling 2026-10-04, "roamer catches are not detected on overlay carts") is still in the
+  requirements file. The lane prints it on every run.
+
+On 2026-10-04 at `2f355684` (digest `e5b0c5c6`) the lane is green on the 10-cell run. It goes STALE when a merge touches the
+digest scope; re-run `tools/c5_runner.py run`, then `--c5` again. Unit tests: `tests/unit/test_verify_gen2_c5.py`.
