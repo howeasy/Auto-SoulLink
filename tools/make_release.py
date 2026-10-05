@@ -163,9 +163,10 @@ _LUA_GEN2 = [
     "panel.lua",  # P4.1f: entry.lua composes it (production); it dofiles ../gb_panel.lua
     "phone.lua",  # P4.5c: entry.lua composes it beside the panel
     "trade_overlay.lua",  # P4.3b: entry.lua composes it on a trade build; dofiles ../gb_trade_lease.lua
-    # Polished Crystal (dev-grade overlay admission): entry.lua compose_polished loads both by path.
+    # Polished Crystal (dev-grade overlay admission): entry.lua compose_polished loads these by path.
     "polished.lua",
     "polished_boxes.lua",
+    "polished_sounds.lua",  # POL-SOUNDS: wraps panel.lua's binder; dofiles ../write_permit.lua and ../gb_panel.lua
 ]
 
 # lua/gen4/ — the rewritten Gen 4 client (HGSS + hg-engine). run.lua is what lua/slink.lua's Gen 4
