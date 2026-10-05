@@ -396,6 +396,39 @@ def test_box_mon_moves_the_keyed_mon_into_the_first_free_box():
         assert not outside(w["addr"], w["domain"]), w
 
 
+def test_box_mon_compaction_changes_only_the_removed_slot_and_the_ones_after_it():
+    """CODEX P1 (2026-10-05): removed() started each shift one byte EARLY (a zero-based offset used as a 1-based table
+    index), so depositing slot s also overwrote the LAST byte of slot s-1 (Sp.Def low byte), the last byte of its OT
+    field (the Extra byte) and its nickname terminator. Compare EVERY byte of the party block with an independent
+    reference compaction: count - 1; slots before the removed one byte-identical; slot k >= s takes slot k+1's bytes
+    in all three arrays.
+
+    Red control (applied): start the shift loop at `from` instead of `from + 1` in removed() and this fails on the
+    byte just before the removed slot."""
+    mons = party(4)
+    for slot, mon in enumerate(mons):
+        mon["stats"]["special_defense"] = 100 + slot   # distinct LAST record bytes: the old defect copied the removed slot's
+    rig = Rig(mons)
+    base = {name: SYM[name][1] for name in ("wPartyCount", "wPartyMons", "wPartyMonOTs", "wPartyMonNicknames")}
+
+    def block():
+        out = {"count": rig.mem[base["wPartyCount"]] or 0}
+        for name, width in (("wPartyMons", RECORD), ("wPartyMonOTs", NAME), ("wPartyMonNicknames", MON_NAME)):
+            out[name] = [bytes((rig.mem[base[name] + slot * width + i] or 0) for i in range(width))
+                         for slot in range(6)]
+        return out
+
+    before = block()
+    removed_slot = 1
+    rig.send_command({"cmd": "box_mon", "key": key_of(mons[removed_slot])})
+    after = block()
+    assert after["count"] == before["count"] - 1
+    for name in ("wPartyMons", "wPartyMonOTs", "wPartyMonNicknames"):
+        for slot in range(after["count"]):
+            expected = before[name][slot if slot < removed_slot else slot + 1]
+            assert after[name][slot] == expected, (name, slot, after[name][slot].hex(), expected.hex())
+
+
 def test_box_mon_never_uses_the_memorial_box():
     mons = party()
     rig = Rig(mons)

@@ -412,7 +412,9 @@ function O.boxes(deps)
                        first[3] + (c.PARTY_LENGTH - slot) * c.MON_NAME_LENGTH}
         for array = 1, 3 do
             local from = first[array]
-            for i = from, limit[array] - width[array] do out[i] = raw[i + width[array]] end
+            -- raw is 1-based and `from` a zero-based offset: the removed slot's first byte is index from + 1.
+            -- (Starting at `from` overwrote the LAST byte of the preceding slot: Codex P1, 2026-10-05.)
+            for i = from + 1, limit[array] - width[array] do out[i] = raw[i + width[array]] end
         end
         out[1] = raw[1] - 1
         return out
