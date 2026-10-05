@@ -39,6 +39,11 @@ SlinkPanel::
 	; The fallback is printed FIRST and stays up until the host answers, so the screen is never
 	; blank, a host that never stages a page leaves a native page behind, and a late host cannot
 	; retype text the player has already read. Same lease discipline as the vanilla panel.
+	;
+	; It deliberately does NOT end in `prompt` (stage-2 live finding: with a prompt here,
+	; ButtonSound blocked on a button press BEFORE AWAIT was ever published, so the host was not
+	; asked until the player pressed and every page cost two presses). Ending in `done` returns at
+	; once, so AWAIT -- the thing the lease exists for -- is the first thing the panel waits on.
 	ld hl, SlinkPanelFallback
 	call PrintText
 	ld a, SLINK_PANEL_AWAIT
@@ -46,13 +51,37 @@ SlinkPanel::
 	call .WaitForStage
 	; A timeout closes the lease before the fallback is handed over.
 	cp SLINK_PANEL_STAGED
-	jr nz, .ready
-	ld hl, SlinkPanelScript
-	call PrintText
+	jr nz, .nostage
+	; Paint the staged lines over the fallback's two rows, each at ITS OWN origin. (The old chain
+	; `<RAM> a <LNBRK> <RAM> b` resumed line 2 at the END of line 1's cursor, so line 2 started 16
+	; columns too far right and wrapped past the box edge: live C2/C3 screen, "PAR|TNER: RED".
+	; home/text.asm HandleLineBreak advances the string's STARTING coords, not the cursor.) The text box,
+	; its border and palette are already up from the fallback's PrintText; both lines are space-padded
+	; to exactly SLINK_PANEL_LINE_MAX glyphs so they fully overwrite the fallback. Line 2 sits ONE row below line 1
+	; (the old <LNBRK> was NO_LINE_SPACING: one row; the first fix used +2 and left the fallback's `NO CLIENT` on the
+	; row in between: live C2 'fallback second line is gone' FAIL).
+	hlcoord TEXTBOX_INNERX, TEXTBOX_INNERY
+	ld de, wSlinkPanelText
+	rst PlaceString
+	hlcoord TEXTBOX_INNERX, TEXTBOX_INNERY + 1   ; the fallback's own line 2 row (next1 = one row down), so it is overwritten
+	ld de, wSlinkPanelText + SLINK_PANEL_STRIDE
+	rst PlaceString
+	; NOT `jr .ready`: the script's trailing <PROMPT> is a Huffman/text TERMINATOR, so PrintText returns
+	; without any ButtonSound wait (home/text.asm CheckTerminatorChar returns on <PROMPT> before dispatch),
+	; and hJoyDown still holds the A that chose "Call". Reading it at .ready would advance/close the page
+	; the same frame it is drawn (live C2/C3 finding). Fall through to .WaitForButton: consume that held
+	; key and wait for a FRESH edge, exactly as the no-host path does.
+	jr .waitkey
+.nostage
+	; A timeout closes the lease (vanilla discipline: PANEL_STATE back to CLOSED) so a late host cannot
+	; stage a page the player never sees.
+	xor a
+	ld [wSlinkMailbox + SLINK_OFS_PANEL_STATE], a
+.waitkey
+	; No ButtonSound ran, so the A that chose "Call" is still an unconsumed edge and would close the
+	; panel immediately. Consume it and take a fresh one (the vanilla panel's own discipline).
+	call .WaitForButton
 .ready
-	; PrintText's prompt is the game's own <PROMPT> -> ButtonSound -> CheckIfAOrBPressed, which
-	; leaves the accepted edge in hJoyDown. Consuming the opening A is that routine's job; no
-	; release loop is needed and none is written.
 	ldh a, [hJoyDown]
 	and PAD_B | PAD_START
 	jr nz, .close
@@ -92,11 +121,30 @@ SlinkPanel::
 	jr nz, .poll
 	ret
 
+; Only reached on the no-host path (.nostage), where no prompt consumed the opening key. This is
+; patch/gen2/src/panel.asm's own .WaitForButton, unchanged in behaviour: GetJoypad refreshes
+; hJoyDown and JoyTextDelay exposes a new edge in hJoyPressed.
+.WaitForButton:
+.release
+	call DelayFrame
+	call JoyTextDelay
+	ldh a, [hJoyDown]
+	and PAD_A | PAD_B | PAD_START
+	jr nz, .release
+.press
+	call DelayFrame
+	call JoyTextDelay
+	ldh a, [hJoyPressed]
+	and PAD_A | PAD_B | PAD_START
+	jr z, .press
+	ret
+
+
 ; Both strings are exactly SLINK_PANEL_LINE_MAX glyphs, space-padded, so printing the staged
 SlinkPanelFallback:
 	text "SOUL LINK       "
 	next1 "NO CLIENT       "
-	prompt
+	done                            ; NOT prompt: see the .page comment -- AWAIT must come first
 
 ; <RAM> prints from WRAM until the terminator; <LNBRK> is one text row down. The two addresses
 ; are link-time constants because wSlinkPanelText lives in ram.o, and bank $7E is mapped while
@@ -107,5 +155,5 @@ SlinkPanelScript:
 	db "<LNBRK>"
 	db "<RAM>"
 	dw wSlinkPanelText + SLINK_PANEL_STRIDE
-	db "@"
+	db "<PROMPT>"                   ; the staged page is what waits for the player, not the fallback
 SlinkPanelEnd::
