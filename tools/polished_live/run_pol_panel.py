@@ -55,10 +55,14 @@ def stage_from_committed_ups() -> str:
 def main() -> int:
     sha1 = stage_from_committed_ups()
     H.SRAM.mkdir(parents=True, exist_ok=True)
-    (H.SRAM / H.SAVE_NAME).unlink(missing_ok=True)
-    H.FIXTURE.parent.mkdir(parents=True, exist_ok=True)
+    # Every stale save, exactly as run_phone_ab.py:45 (hygiene only; the stall's real cause was the missing copy below).
+    for stale in H.SRAM.glob("*.SaveRAM*"):
+        stale.unlink()
     H.FIXTURE.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(FIXTURE_SRC, H.FIXTURE)
+    # the save BizHawk actually reads: without this copy the game boots as a NEW GAME (map 0:0, saved 0) and the
+    # driver aborts at the boot gate; run_phone_ab.py does the same copy
+    shutil.copyfile(H.FIXTURE, H.SRAM / H.SAVE_NAME)
     print(f"[pol-panel] SYNTH fixture {H.FIXTURE} <- {FIXTURE_SRC}", flush=True)
     run = LANE_ROOT / "run"
     text, pid = H.launch("tools/polished_live/pol_panel.lua", run, {}, 900)
