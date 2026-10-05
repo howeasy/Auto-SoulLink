@@ -18,6 +18,9 @@ window.SLinkCalc = (function () {
     'calc/mechanics/gen4.js', 'calc/mechanics/gen3.js', 'calc/mechanics/gen12.js',
     'calc/calc.js', 'calc/desc.js', 'calc/result.js', 'calc/adaptable.js', 'calc/index.js',
   ];
+  // ENGINE files a calc/dist built before they existed may lack: a 404 skips them instead of failing the
+  // whole preview (Gen 1/3 never read them). tests/unit/test_calc_preview.py checks it is a subset of ENGINE.
+  var OPTIONAL = ['calc/data/polished.js'];
   // Each page's setdex is its base sets plus the priority trainers merged into SETDEX_SV.
   var NORMAL_SETS   = ['js/data/sets/normal.js',   'js/data/sets/slink_priority.js'];
   var HARDCORE_SETS = ['js/data/sets/hardcore.js', 'js/data/sets/slink_priority.js'];
@@ -36,7 +39,7 @@ window.SLinkCalc = (function () {
       var s = document.createElement('script');
       s.src = '/calc/' + srcs[i++];
       s.onload = next;
-      s.onerror = fail;
+      s.onerror = OPTIONAL.indexOf(srcs[i - 1]) >= 0 ? next : fail;
       document.head.appendChild(s);
     })();
   }

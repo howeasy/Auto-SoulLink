@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess
 
 import pytest
 
@@ -42,6 +44,59 @@ def test_preview_loads_the_full_pages_engine_and_sets(page):
     assert "var calc = exports = {};" in tpl and "function require() { return exports };" in tpl
     assert "window.calc = window.exports = {};" in js
     assert "window.require = function () { return window.exports; };" in js
+
+
+def test_optional_engine_scripts_are_listed_engine_scripts():
+    """OPTIONAL entries may 404 without failing the preview, so each must still be one of the template's
+    ENGINE files (the parity check above is over the whole list, optional entries included)."""
+    js = _read("server", "static", "calc-preview.js")
+    assert _js_list(js, "OPTIONAL") == ["calc/data/polished.js"]
+    assert set(_js_list(js, "OPTIONAL")) <= set(_js_list(js, "ENGINE"))
+
+
+_NODE_RIG = r"""
+var requested = [], done, missing = new Set(process.argv.slice(1));   // node -e: argv is [node, ...args]
+global.window = global;
+global.location = {pathname: '/'};
+global.document = {
+  head: {appendChild: function (s) {
+    var src = s.src.replace('/calc/', '');
+    requested.push(src);
+    clearTimeout(done);   // quiet for 500 ms = the chain has stopped or finished
+    done = setTimeout(function () { console.log(JSON.stringify(requested)); }, 500);
+    setTimeout(function () { (missing.has(src) ? s.onerror : s.onload)(); }, 0);
+  }},
+  createElement: function () { return {}; },
+  querySelector: function () { return {}; },
+  getElementById: function () { return null; },
+};
+require(process.env.PREVIEW_JS);
+"""
+
+
+def _requested(*missing):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    out = subprocess.run([node, "-e", _NODE_RIG, *missing], capture_output=True, text=True, timeout=30, check=True,
+                         env=dict(os.environ, PREVIEW_JS=os.path.join(_REPO, "server", "static", "calc-preview.js")))
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+def test_a_missing_optional_engine_script_does_not_stop_the_load():
+    """A calc/dist without calc/data/polished.js still loads the rest, then the hardcore sets.
+    Red control: drop the OPTIONAL check in _load and the hardcore set is never requested."""
+    got = _requested("calc/data/polished.js")
+    assert "calc/calc.js" in got and "calc/index.js" in got
+    assert "calc/data/polished.js" in got and "js/data/sets/hardcore.js" in got, got[-3:]
+
+
+def test_a_missing_required_engine_script_still_fails_the_load():
+    """RED CONTROL for the above: a missing REQUIRED script stops the chain (nothing after it is
+    requested), so optional-ness is not a blanket skip."""
+    got = _requested("calc/data/purergb.js")
+    assert got[-1] == "calc/data/purergb.js", got[-3:]
+    assert "calc/calc.js" not in got and "js/data/sets/hardcore.js" not in got
 
 
 @pytest.mark.parametrize("template", ["dashboard.html", "manager.html"])
