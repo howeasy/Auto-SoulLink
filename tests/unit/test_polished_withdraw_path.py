@@ -172,6 +172,15 @@ def mutant(rig, old, new, io=None):
 FLAKY = """
 return function(real)
     local io = setmetatable({flaky = {}}, {__index = real})
+    function io.read_u8(a, d)
+        local f = io.flaky
+        if f.hook ~= nil and f.hook_at == a then
+            local h = f.hook
+            f.hook = nil
+            h()
+        end
+        return real.read_u8(a, d)
+    end
     function io.write_u8(a, v, d)
         local f = io.flaky
         if f.budget ~= nil then
@@ -220,14 +229,21 @@ def count_of_key(rig, key):
 
 # the source lines the red controls edit (exact text of lua/gen2/polished_overworld.lua)
 ORDER = "            if append then append_to_party() end\n            remove_box_copy()\n"
-BOX_LAST_SPAN = '                        {domain = "CartRAM", addr = bits_at, bytes = {cleared}},\n'
+ENTRIES_BATCH = '                    writes:write_batch({{domain = "CartRAM", addr = entries_at, bytes = {0}}})\n'
 PARTY_LAST_SPAN = '                        {domain = "System Bus", addr = at_nick, bytes = nick},\n'
 COUNT_SPAN = '                        {domain = "System Bus", addr = block, bytes = {party.count + 1}},\n'
 FIRST_SPAN = ('                    writes:write_batch({\n'
               '                        {domain = "System Bus", addr = at_rec, bytes = record},\n')
 BOX_NARROW = ('writes:arm("box_deposit", function(domain, addr, n)\n'
-              '                    return domain == "CartRAM" and n == 1 and (addr == entries_at or addr == bits_at)\n'
+              '                    return domain == "CartRAM" and n == 1 and addr == entries_at\n'
               '                end)')
+ENTRIES_CHECK = ('if io_.read_u8(entries_at, "CartRAM") ~= 0 then\n'
+                 '                    refuse("withdraw read-back refused: Entries byte not cleared')
+FINAL_ENTRIES_CHECK = 'if io_.read_u8(entries_at, "CartRAM") ~= 0 then refuse("read-back refused'
+BANKS_STEP = '                local bits = io_.read_u8(bits_at, "CartRAM")\n'
+STALE_APPEND = 'if live.count ~= party.count then refuse("party changed during withdraw") end'
+STALE_RECONCILE = 'if target >= now.count then refuse("party changed during withdraw") end\n'
+
 PARTY_NARROW = ('writes:arm("party_collection", function(domain, addr, n)\n'
                 '                    return domain == "System Bus" and ((addr == at_rec and n == s.End) '
                 'or (addr == at_ot and n == c.NAME_LENGTH)\n'
@@ -618,7 +634,8 @@ SPECIES_AT = entry_flat(1, 7)     # the first byte of the boxed pokedb entry (it
 
 
 def box_extra(domain, addr, value):
-    return [(BOX_LAST_SPAN, BOX_LAST_SPAN + f'                        {{domain = "{domain}", addr = {addr}, bytes = {{{value}}}}},\n')]
+    return [(ENTRIES_BATCH,
+             ENTRIES_BATCH.replace("bytes = {0}}})", f'bytes = {{0}}}}, {{domain = "{domain}", addr = {addr}, bytes = {{{value}}}}}}})'))]
 
 
 def party_extra(addr, value):
@@ -803,7 +820,8 @@ def test_a_silently_failed_entries_erase_is_refused_then_reconciled():
     ex = build(rig, io=fio)
     fio.flaky.swallow = box_flat(1)
     done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
-    assert done is None and why == "read-back refused: box 1 still reads the mon", (done, why)
+    assert done is None and why == ("withdraw read-back refused: Entries byte not cleared "
+                                    "(box untouched beyond that byte)"), (done, why)
     assert rig.count() == 4 and entries_byte(rig) == 7
     fio.flaky.swallow = None
     done, note = _pair(_lua_withdraw(rig.lua)(ex, key))
@@ -816,7 +834,8 @@ def test_a_silently_failed_entries_erase_is_refused_then_reconciled():
     fio = flaky_io(rig)
     fio.flaky.swallow = box_flat(1)
     bad = build(rig, [("if find_key(after_boxes[box], key) then", "if false then"),
-                      ('if io_.read_u8(entries_at, "CartRAM") ~= 0 then', "if false then")], fio)
+                      (ENTRIES_CHECK, ENTRIES_CHECK.replace("~= 0 then", "== 256 then")),
+                      (FINAL_ENTRIES_CHECK, FINAL_ENTRIES_CHECK.replace("~= 0 then", "== 256 then"))], fio)
     done, why = _pair(_lua_withdraw(rig.lua)(bad, key))
     assert done is True and entries_byte(rig) == 7, "RED: reported withdrawn while the box still holds the mon"
 
@@ -872,7 +891,7 @@ def test_red_control_dropping_the_party_full_refusal():
 
 def test_red_control_dropping_the_census_read_back():
     """RED: see test_a_silently_failed_entries_erase_is_refused_then_reconciled (the census + Entries read-backs
-    removed there); here only the census check is removed and the Entries check still brakes."""
+    removed there); here only the census check is removed and the Entries step check still brakes."""
     rig = Rig(party())
     options(rig)
     mon = boxed_mon()
@@ -881,7 +900,7 @@ def test_red_control_dropping_the_census_read_back():
     fio.flaky.swallow = box_flat(1)
     bad = build(rig, [("if find_key(after_boxes[box], key) then", "if false then")], fio)
     done, why = _pair(_lua_withdraw(rig.lua)(bad, key_of(mon)))
-    assert done is None and "Entries byte did not clear" in why
+    assert done is None and "Entries byte not cleared" in why
 
 
 def test_red_control_copying_the_stats_from_the_savemon():
@@ -921,3 +940,118 @@ def test_red_control_reading_saved_options_instead_of_live():
     done, why = _pair(_lua_withdraw(rig.lua)(bad, key_of(mon)))
     assert done is True, why
     assert record_bytes(rig, 3) != oracle(entry, apply_evs=True, natures_on=False, perfect_ivs=False)
+
+
+# ── Codex round 2: bank-2 silent erase, stale party count ─────────────────────────────────────────────────
+
+BANKS_AT = box_flat(1) + 0x14
+
+
+def test_bank2_silent_entries_failure_leaves_the_banks_byte_alone_and_reconciles():
+    """A BANK-2 mon: the Banks bit selects the pokedb bank. If the Entries write silently fails and the Banks bit
+    were cleared anyway, the still-non-zero pointer would be redirected into an unallocated bank-1 entry and the
+    census would refuse everything. The Entries byte is therefore proved 0 BEFORE the Banks byte is touched."""
+    mon = boxed_mon()
+    key = key_of(mon)
+    rig = Rig(party())
+    options(rig)
+    boxed(rig, mon, bank=2, entry=7)
+    assert rig.img.mem["CartRAM"][BANKS_AT] & 1, "fixture: the boxed mon must be in bank 2"
+    banks_before = rig.img.mem["CartRAM"][BANKS_AT]
+    fio = flaky_io(rig)
+    ex = build(rig, io=fio)
+    fio.flaky.swallow = box_flat(1)
+    done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+    assert done is None and why == ("withdraw read-back refused: Entries byte not cleared "
+                                    "(box untouched beyond that byte)"), (done, why)
+    assert rig.img.mem["CartRAM"][BANKS_AT] == banks_before, "the Banks byte must not be written"
+    assert [w for w in rig.writes() if w["domain"] == "CartRAM"] == [], "only the swallowed Entries write was tried"
+    keys, cwhy = rig.census_keys()
+    assert keys is not None and key in keys[1], cwhy               # the census still completes
+    assert rig.count() == 4
+    fio.flaky.swallow = None
+    done, note = _pair(_lua_withdraw(rig.lua)(ex, key))             # the retry reconciles
+    assert done is True and note["reconciled"] is True, (done, note)
+    assert entries_byte(rig) == 0 and not rig.img.mem["CartRAM"][BANKS_AT] & 1
+    assert rig.count() == 4 and count_of_key(rig, key) == 1
+    keys, cwhy = rig.census_keys()
+    assert keys is not None and key not in keys[1], cwhy
+    # RED: the Entries read-back removed -> the Banks bit is cleared over a still-live pointer and the census breaks
+    rig = Rig(party())
+    options(rig)
+    boxed(rig, mon, bank=2, entry=7)
+    fio = flaky_io(rig)
+    fio.flaky.swallow = box_flat(1)
+    bad = build(rig, [(ENTRIES_CHECK, ENTRIES_CHECK.replace("~= 0 then", "== 256 then"))], fio)
+    _pair(_lua_withdraw(rig.lua)(bad, key))
+    assert not rig.img.mem["CartRAM"][BANKS_AT] & 1, "RED: the Banks bit was cleared"
+    assert entries_byte(rig) == 7
+    keys, cwhy = rig.census_keys()
+    assert keys is None, "RED: the redirected pointer must break the census"
+
+
+def test_bank2_withdraw_happy_path_clears_entries_then_the_banks_bit():
+    mon = boxed_mon()
+    rig = Rig(party())
+    options(rig)
+    entry = boxed(rig, mon, bank=2, entry=7)
+    flag = rig.img.mem["WRAM"][FLAG_FLAT[2]]
+    done, why = _pair(withdraw(rig, key_of(mon)))
+    assert done is True, why
+    assert [w["addr"] for w in rig.writes() if w["domain"] == "CartRAM"] == [box_flat(1), BANKS_AT]
+    assert entries_byte(rig) == 0 and not rig.img.mem["CartRAM"][BANKS_AT] & 1
+    assert bytes(rig.img.mem["CartRAM"][entry_flat(2, 7):entry_flat(2, 7) + 49]) == entry
+    assert rig.img.mem["WRAM"][FLAG_FLAT[2]] == flag
+
+
+def test_a_party_count_that_moved_since_the_plan_refuses_the_append():
+    """The append slot is planned from an early read of wPartyCount. If it moves before the emission the executor
+    must refuse and write nothing (a stale slot index would overwrite a live record)."""
+    mon = boxed_mon()
+    key = key_of(mon)
+
+    def run(edits, new_count):
+        rig = Rig(party(4))                    # slot 3 holds a valid mon so a count of 4 still reads
+        rig.mem[PARTY_COUNT] = 3
+        options(rig)
+        boxed(rig, mon)
+        fio = flaky_io(rig)
+        ex = build(rig, edits, fio)
+        fio.flaky.hook_at = OPT2                                   # read after the plan, before the emission
+        fio.flaky.hook = lambda: rig.mem.__setitem__(PARTY_COUNT, new_count)
+        done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+        return rig, done, why
+
+    for new_count in (4, 2):
+        rig, done, why = run([], new_count)
+        assert done is None and why == "party changed during withdraw", (new_count, done, why)
+        assert rig.writes() == [] and entries_byte(rig) == 7
+    # RED: the revalidation removed -> the stale slot is written (count 3 + 1 over a party that had 4)
+    rig, done, why = run([(STALE_APPEND, "if false then refuse('x') end")], 4)
+    assert rig.writes() != [], "RED: the stale-count append wrote"
+
+
+def test_a_party_count_that_moved_since_the_plan_refuses_the_reconcile():
+    """Reconciliation reads the party a second time; the matching slot must still be inside the CURRENT count."""
+    mon = boxed_mon()
+    key = key_of(mon)
+
+    def run(edits):
+        rig = Rig(party())
+        options(rig)
+        boxed(rig, mon)
+        fio = flaky_io(rig)
+        ex = build(rig, edits, fio)
+        both_places(rig, ex, fio, key)
+        rig.lua.eval(CLEAR)(rig.log["writes"])
+        fio.flaky.hook_at = OPT2
+        fio.flaky.hook = lambda: rig.mem.__setitem__(PARTY_COUNT, 3)   # the copy fell out of the party
+        done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+        return rig, done, why
+
+    rig, done, why = run([])
+    assert done is None and why == "party changed during withdraw", (done, why)
+    assert rig.writes() == [] and entries_byte(rig) == 7
+    # RED: the check removed -> the box copy is erased though the party copy is no longer inside the count
+    rig, done, why = run([(STALE_RECONCILE, "")])
+    assert entries_byte(rig) == 0, "RED: the box copy was removed under a stale party slot"
