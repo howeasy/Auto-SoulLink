@@ -14,8 +14,9 @@ plus a runner that reads or executes every item and prints one row each. It neve
 2 manifest and it never claims a duo result.
 
     python tools/verify_polished_release.py            # run every item, print the table
-    python tools/verify_polished_release.py --list     # ids, kinds and one line each; runs nothing
-    python tools/verify_polished_release.py --only LIVE-PHONE-ENTRY
+    python tools/verify_polished_release.py --list     # ids, kinds and one line each; not a verdict
+    python tools/verify_polished_release.py --only LIVE-PHONE-ENTRY   # PARTIAL: exit 3 when green
+    python tools/verify_polished_release.py --print-code-digest       # the digest receipts must carry
     python tools/verify_polished_release.py --json     # machine-readable rows
     python tools/verify_polished_release.py --manifest PATH --root DIR
 
@@ -30,7 +31,10 @@ Fail-closed rules, all of them load-bearing:
     so the counting is the shared one, not a second convention.)
   * A LIVE item is a committed receipt, never a live re-run: this machine has no emulator. The
     receipt must exist, satisfy the schema, record DEV grade (a receipt may not promote itself
-    to PHYSICAL — that is an owner act), and bind a ROM sha1. If that sha1 is not the overlay
+    to PHYSICAL — that is an owner act), carry the item's `expect_scenario`, show every name in
+    the item's `expect_checks` with result PASS (an INFO-only receipt is red), record the sha256
+    of the committed overlay provenance, carry a `code_digest` equal to the one this verifier
+    COMPUTES from the manifest's `code_digest_files` (LF-normalised), and bind a ROM sha1. If that sha1 is not the overlay
     sha1 the CURRENT `data/polished/overlay_provenance.json` publishes, the item is STALE and
     fails, printing both hashes. The phone-card commit moved the overlay from 29ea04c2 to
     34942315, so every earlier receipt is stale until it is re-run: that is the gate working.
@@ -40,13 +44,18 @@ Fail-closed rules, all of them load-bearing:
     RC therefore runs this on the lane host (F:/slink-work/lanes present).
   * A MANAGER item is an import and an assertion against the live server modules. The jar pin is
     compared both to `data/upr_jars.json` and, when the jar file is reachable, to its own bytes.
-  * An OPEN item fails while it is open. Closing one requires a `closed_by` note, so the flip is
-    a decision with an author, not a one-word edit.
+  * An OPEN item fails while it is open, always (`blocking_rc` is not a bypass: anything but
+    true is a manifest error). Closing one requires `closed_by` to name a LIVE item that exists
+    and PASSes in the same run.
+  * The manifest's `required_ids` is the obligation census: every listed id must exist, and an id
+    that is not listed is refused until it is added there on purpose.
+  * A partial run (--only, --no-release) prints PARTIAL RUN: NOT A RELEASE VERDICT and exits 3
+    when green (1 when red); --json says `complete: false`.
   * An OPEN item that names a Manager option must still be refused by that option. If someone
     flips the Manager row to `ok` while the item reads OPEN, the two disagree and the item fails.
 
-Exit code 0 means every item ran and every item passed. Anything else is 1 (or 2 for a usage
-error: an unknown --only id, or a manifest that is itself malformed).
+Exit code 0 means every item ran and every item passed, in a COMPLETE run. 3 is a green partial
+run, which is never a verdict. Anything else is 1 (or 2 for an unreadable manifest under --list).
 """
 from __future__ import annotations
 
@@ -73,6 +82,9 @@ MANIFEST_SCHEMA = "polished-release-requirements-v1"
 # is recorded elsewhere; a lane author cannot mark their own DEV run as a release receipt.
 ALLOWED_GRADES = frozenset({"DEV"})
 KINDS = ("SOURCE", "BUILD", "MODEL", "LIVE", "MANAGER", "RELEASE", "OPEN")
+
+# The pinned forms jar. Not reachable on a host is a FAIL: the byte pin cannot be verified there.
+JAR_PATH = Path("F:/slink-work/cache/polished/jar/PokeRandoZX.jar")
 
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -134,6 +146,25 @@ def overlay_sha1(root: Path) -> str | None:
 
 def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def compute_code_digest(root: Path, patterns: list[str]) -> str:
+    """sha256 over the LF-normalised bytes of every file the patterns match, in sorted path order.
+
+    Each file contributes `<posix path>\0<bytes with CRLF -> LF>\0`. A pattern that matches no
+    file raises ValueError: a digest over fewer files than declared is not the digest.
+    """
+    found: set[str] = set()
+    for pat in patterns:
+        hits = [p for p in root.glob(pat) if p.is_file()]
+        if not hits:
+            raise ValueError(f"code_digest_files pattern {pat!r} matches no file under {root}")
+        found.update(p.relative_to(root).as_posix() for p in hits)
+    digest = hashlib.sha256()
+    for rel in sorted(found):
+        digest.update(rel.encode("utf-8") + b"\0")
+        digest.update((root / rel).read_bytes().replace(b"\r\n", b"\n") + b"\0")
+    return digest.hexdigest()
 
 
 def _run(argv: list[str], cwd: Path, timeout: int) -> tuple[int | None, str, bool]:
@@ -267,7 +298,8 @@ def receipt_schema_errors(doc: object) -> list[str]:
     return errs
 
 
-def check_live(item: dict, root: Path, current_rom: str | None) -> Row:
+def check_live(item: dict, root: Path, current_rom: str | None,
+               code_digest: str | None = None) -> Row:
     """A committed DEV receipt, schema- and byte-checked, bound to the overlay published NOW."""
     row = Row(item["id"], "LIVE", "PASS")
     rel = item.get("receipt")
@@ -311,16 +343,40 @@ def check_live(item: dict, root: Path, current_rom: str | None) -> Row:
         row.fail(f"STALE: {what} {bound} but {PROVENANCE} publishes {current_rom} — "
                  f"re-run this scenario on the current overlay")
 
-    # 2. the receipt's own claim about the provenance it was written against
-    if doc.get("overlay_provenance_sha256") not in (None, "UNRECORDED"):
+    # 2. the receipt's own claim about the provenance it was written against: REQUIRED
+    claimed = doc.get("overlay_provenance_sha256")
+    if not isinstance(claimed, str) or not _HEX64.match(claimed):
+        row.fail(f"overlay_provenance_sha256 is {claimed!r}: a receipt must record the sha256 "
+                 f"of the provenance it was written against")
+    else:
         try:
             live = _sha256_file(root / PROVENANCE)
         except OSError as exc:
             row.fail(f"cannot hash {PROVENANCE}: {exc}")
             live = None
-        if live and doc["overlay_provenance_sha256"] != live:
-            row.fail(f"overlay_provenance_sha256 {doc['overlay_provenance_sha256'][:12]} is not "
+        if live and claimed != live:
+            row.fail(f"overlay_provenance_sha256 {claimed[:12]} is not "
                      f"the committed provenance's {live[:12]}")
+
+    # 2b. the code the run exercised: the digest the verifier computes now, not a free string
+    if code_digest is None:
+        row.fail("cannot compute the code digest: the code binding cannot be checked")
+    elif doc["code_digest"] != code_digest:
+        row.fail(f"STALE: code_digest {doc['code_digest'][:12]} is not the {code_digest[:12]} "
+                 f"computed from the current code_digest_files — re-run this scenario")
+
+    # 2c. the receipt must be for THIS scenario and carry the checks this item demands
+    if doc["scenario_id"] != item.get("expect_scenario"):
+        row.fail(f"scenario_id {doc['scenario_id']!r} is not the expected "
+                 f"{item.get('expect_scenario')!r}")
+    passed = {c["name"] for c in doc["checks"] if c["result"] == "PASS"}
+    if not passed:
+        row.fail("receipt has no PASS check (INFO-only proves nothing)")
+    for name in item.get("expect_checks") or []:
+        if name not in passed:
+            row.fail(f"expected check {name!r} is not recorded as PASS")
+    if not item.get("expect_checks"):
+        row.fail("item declares no expect_checks")
 
     # 3. the evidence bytes themselves
     if not evidence.is_file():
@@ -374,9 +430,10 @@ def _jar_pin(root: Path) -> tuple[bool, str]:
     label, sha = wanted
     if not _HEX64.match(sha):
         return False, f"pin {sha!r} is not a sha256"
-    jar = Path("F:/slink-work/cache/polished/jar/PokeRandoZX.jar")
+    jar = JAR_PATH
     if not jar.is_file():
-        return True, f"jar {sha[:12]} pinned ({label}); jar file not reachable to re-hash"
+        return False, (f"jar not reachable: the byte pin cannot be verified "
+                       f"({jar}; pin {sha[:12]}, {label})")
     actual = _sha256_file(jar)
     if actual != sha:
         return False, f"pinned jar {label!r} says {sha[:12]}, the file hashes {actual[:12]}"
@@ -465,22 +522,28 @@ def check_release(item: dict, root: Path) -> Row:
 # ────────────────────────────────────────────────────────────── OPEN
 
 
-def check_open(item: dict, root: Path) -> Row:
-    """An obligation other cards are still building. Open means red; closing needs an author."""
+def check_open(item: dict, root: Path, live_passed: frozenset[str] = frozenset()) -> Row:
+    """An obligation other cards are still building. Open is ALWAYS red; closing needs a receipt.
+
+    `live_passed` is the set of LIVE item ids that PASSed in this same run.
+    """
     row = Row(item["id"], "OPEN", "PASS")
     status = item.get("status")
-    blocking = bool(item.get("blocking_rc", True))
-    row.detail = f"status={status} blocking_rc={'yes' if blocking else 'no'}"
+    row.detail = f"status={status}"
+    if item.get("blocking_rc", True) is not True:
+        row.fail(f"blocking_rc is {item.get('blocking_rc')!r}: an OPEN obligation always blocks the RC")
     if status == "OPEN":
         row.detail += "  " + (item.get("description") or "")[:60]
-        if blocking:
-            row.fail("OPEN: " + (item.get("blocker") or "work not landed"))
-        return row
+        return row.fail("OPEN: " + (item.get("blocker") or "work not landed"))
     if status != "CLOSED":
         return row.fail(f"status is {status!r}; an OPEN item reads OPEN or CLOSED only")
-    if not item.get("closed_by"):
-        return row.fail("CLOSED without a closed_by note: the flip needs an author, not a one-word edit")
-    row.detail = f"status=CLOSED by {item['closed_by']}"
+    closer = item.get("closed_by")
+    if not closer:
+        return row.fail("CLOSED without a closed_by: name the LIVE item whose receipt closes it")
+    row.detail = f"status=CLOSED by {closer}"
+    if closer not in live_passed:
+        row.fail(f"closed_by {closer!r} is not a LIVE item that PASSes in this run: closing "
+                 f"needs a real receipt")
     return row
 
 
@@ -544,6 +607,13 @@ def manifest_errors(doc: object) -> list[str]:
     items = doc.get("items")
     if not isinstance(items, list) or not items:
         return ["manifest has no items"]
+    if doc.get("open") is not None and not isinstance(doc.get("open"), list):
+        errs.append("'open' is not a list")
+    live_ids = {i.get("id") for i in items if isinstance(i, dict) and i.get("kind") == "LIVE"}
+    digest_files = doc.get("code_digest_files")
+    if (not isinstance(digest_files, list) or not digest_files
+            or not all(isinstance(p, str) and p for p in digest_files)):
+        errs.append("code_digest_files must be a non-empty list of path patterns")
     seen: set[str] = set()
     for i, item in enumerate(items):
         if not isinstance(item, dict):
@@ -566,9 +636,16 @@ def manifest_errors(doc: object) -> list[str]:
             errs.append(f"{rid}: MODEL needs files")
         if kind == "LIVE" and not item.get("receipt"):
             errs.append(f"{rid}: LIVE needs a receipt")
+        if kind == "LIVE":
+            if not isinstance(item.get("expect_scenario"), str) or not item.get("expect_scenario"):
+                errs.append(f"{rid}: LIVE needs an expect_scenario")
+            ec = item.get("expect_checks")
+            if not isinstance(ec, list) or not ec or not all(isinstance(n, str) and n for n in ec):
+                errs.append(f"{rid}: LIVE needs a non-empty expect_checks list of check names")
         if kind == "MANAGER" and item.get("check") not in _MANAGER_CHECKS:
             errs.append(f"{rid}: unknown manager check {item.get('check')!r}")
-    for i, item in enumerate(doc.get("open") or []):
+    open_list = doc.get("open") if isinstance(doc.get("open"), list) else []
+    for i, item in enumerate(open_list):
         if not isinstance(item, dict):
             errs.append(f"open[{i}] is not an object")
             continue
@@ -579,9 +656,24 @@ def manifest_errors(doc: object) -> list[str]:
             errs.append(f"open[{i}] kind is {item.get('kind')!r}, expected OPEN")
         if item.get("status") not in ("OPEN", "CLOSED"):
             errs.append(f"open[{i}] status is {item.get('status')!r}; OPEN or CLOSED only")
+        if item.get("blocking_rc", True) is not True:
+            errs.append(f"{item.get('id')}: blocking_rc must be true or absent; an OPEN "
+                        f"obligation always blocks the RC")
+        if item.get("status") == "CLOSED" and item.get("closed_by") not in live_ids:
+            errs.append(f"{item.get('id')}: closed_by {item.get('closed_by')!r} must name a LIVE "
+                        f"item id of this manifest")
         if item.get("id") in seen:
             errs.append(f"duplicate id {item.get('id')!r}")
         seen.add(item.get("id"))
+    required = doc.get("required_ids")
+    if (not isinstance(required, list) or not required
+            or not all(isinstance(r, str) and r for r in required)):
+        errs.append("required_ids must be a non-empty list of ids (the obligation census)")
+    else:
+        for rid in sorted(set(required) - seen):
+            errs.append(f"required id {rid!r} is absent from the manifest")
+        for rid in sorted(x for x in seen - set(required) if isinstance(x, str)):
+            errs.append(f"id {rid!r} is not in required_ids: add it there on purpose")
     return errs
 
 
@@ -601,6 +693,10 @@ def verify(root: Path | None = None, manifest_path: Path | None = None,
     if errs:
         return [], errs
 
+    try:
+        digest = compute_code_digest(root, doc["code_digest_files"])
+    except (OSError, ValueError) as exc:
+        return [], [f"cannot compute the code digest: {exc}"]
     items = list(doc["items"]) + list(doc.get("open") or [])
     if only:
         items = [it for it in items if it["id"] in only]
@@ -611,19 +707,21 @@ def verify(root: Path | None = None, manifest_path: Path | None = None,
     current_rom = overlay_sha1(root)
     for item in items:
         kind = item["kind"]
+        if kind == "OPEN":
+            continue                      # judged below, once every LIVE verdict is in
         if kind in ("SOURCE", "BUILD"):
             rows.append(check_command(item, root))
         elif kind == "MODEL":
             rows.append(check_model(item, root))
         elif kind == "LIVE":
-            rows.append(check_live(item, root, current_rom))
+            rows.append(check_live(item, root, current_rom, digest))
         elif kind == "MANAGER":
             rows.append(check_manager(item, root))
         elif kind == "RELEASE":
             rows.append(check_release(item, root) if run_release
                         else Row(item["id"], kind, "PASS", detail="not executed (run_release=False)"))
-        elif kind == "OPEN":
-            rows.append(check_open(item, root))
+    live_passed = frozenset(r.id for r in rows if r.kind == "LIVE" and r.ok)
+    rows.extend(check_open(it, root, live_passed) for it in items if it["kind"] == "OPEN")
     rows.extend(check_open_consistency(list(doc.get("open") or []), root))
     rows.sort(key=lambda r: r.id)
     return rows, errs
@@ -650,18 +748,28 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--only", action="append", metavar="ID", default=[],
                     help="judge only this id (repeatable); not a release verdict")
     ap.add_argument("--json", action="store_true", help="emit rows as JSON")
+    ap.add_argument("--print-code-digest", action="store_true",
+                    help="print the code_digest receipts must carry, and exit")
     ap.add_argument("--no-release", action="store_true",
                     help="skip the RELEASE item (it builds a ZIP); not a release verdict")
     args = ap.parse_args(argv)
 
     root = Path(args.root).resolve()
     manifest_path = Path(args.manifest).resolve() if args.manifest else root / MANIFEST
+    if args.print_code_digest:
+        try:
+            print(compute_code_digest(root, load_manifest(manifest_path)["code_digest_files"]))
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"cannot compute the code digest: {exc}", file=sys.stderr)
+            return 2
+        return 0
     if args.list:
         try:
             doc = load_manifest(manifest_path)
         except (OSError, ValueError) as exc:
             print(f"cannot read the manifest: {exc}", file=sys.stderr)
             return 2
+        print("LIST ONLY: not a verdict - nothing below was run or judged.")
         for item in list(doc["items"]) + list(doc.get("open") or []):
             extra = ""
             if item["kind"] in ("SOURCE", "BUILD"):
@@ -671,14 +779,19 @@ def main(argv: list[str] | None = None) -> int:
             elif item["kind"] == "LIVE":
                 extra = "  " + item.get("receipt", "")
             elif item["kind"] == "OPEN":
-                extra = f"  status={item.get('status')} blocking_rc={item.get('blocking_rc')}"
+                extra = f"  status={item.get('status')}"
             print(f"  {item['id']:<24} {item['kind']:<8} {item['description']}{extra}")
         return 0
 
     only = frozenset(args.only) if args.only else None
     rows, errs = verify(root, manifest_path, only, run_release=not args.no_release)
+    partial = bool(only) or args.no_release
+    red = bool(errs) or any(not r.ok for r in rows)
     if args.json:
-        print(json.dumps({"manifest_errors": errs, "rows": [r.as_dict() for r in rows]}, indent=2))
+        print(json.dumps({"complete": not partial, "manifest_errors": errs,
+                          "rows": [r.as_dict() for r in rows]}, indent=2))
+        if partial:
+            print("PARTIAL RUN: NOT A RELEASE VERDICT", file=sys.stderr)
     else:
         if errs:
             for err in errs:
@@ -694,14 +807,14 @@ def main(argv: list[str] | None = None) -> int:
             print("A missing, stale, unverifiable or open item is a failure here: an RC decision "
                   "cannot be made on a lane that did not run.")
             return 1
-        if only:
-            print("ITEM(S) PASSED — not a release verdict: only the named items ran.")
-            return 0
-        if args.no_release:
-            print("ITEMS PASSED — not a release verdict: the RELEASE item did not run (--no-release).")
-            return 0
+        if partial:
+            print("PARTIAL RUN: NOT A RELEASE VERDICT — "
+                  + ("only the named items ran." if only else "the RELEASE item did not run."))
+            return 3
         print("GATE PASSED — every item ran and every item passed.")
-    return 1 if (errs or any(not r.ok for r in rows)) else 0
+    if red:
+        return 1
+    return 3 if partial else 0
 
 
 if __name__ == "__main__":

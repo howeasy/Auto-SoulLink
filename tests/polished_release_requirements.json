@@ -20,6 +20,54 @@
     "evidence_bytes": "evidence_file is hashed at judge time. A mismatch is tampering; an unreachable file is also red — a transcription nobody can check is not evidence. Run this on the lane host.",
     "code_digest": "UNRECORDED where the lane evidence did not print one. The narrative docs/polished/LIVE_RESULTS.md names commits; the evidence files do not, so the receipts carry UNRECORDED and not the doc's claim."
   },
+  "required_ids": [
+    "SRC-BEACON",
+    "SRC-ENGINE-SITES",
+    "SRC-FORMS",
+    "SRC-PACK",
+    "SRC-PROFILE",
+    "SRC-SCRIPT-SITES",
+    "SRC-UPR-INI",
+    "BUILD-CLEAN-ROM",
+    "BUILD-OVERLAY",
+    "MODEL-CLIENT",
+    "MODEL-WRITES",
+    "MODEL-PHONE",
+    "MODEL-RANDOMIZER",
+    "MODEL-DATA",
+    "MODEL-RELEASE-GUARDS",
+    "LIVE-HELLO-ADMITTED",
+    "LIVE-HELLO-GATE-FRAME",
+    "LIVE-CAPTURE-PARTY-ONLY",
+    "LIVE-BOX-CENSUS",
+    "LIVE-NO-BOX-MON",
+    "LIVE-R1-MANAGER-PAIR",
+    "LIVE-R2-RANDOMIZED-BOOT",
+    "LIVE-R3-REFUSALS",
+    "LIVE-PHONE-ENTRY",
+    "LIVE-RECEPTIONIST-STACK",
+    "LIVE-POKEGEAR-MEASUREMENT",
+    "MGR-RANDOMIZER-FLAG",
+    "MGR-PICKER-GATE",
+    "MGR-COMPANION-GATE",
+    "MGR-JAR-PIN",
+    "REL-PLAYER-ZIP",
+    "OPEN-WRITE-PATH",
+    "OPEN-EXPLODE-RIVAL",
+    "OPEN-TITLE-SPLASH",
+    "OPEN-PANEL-PAGES",
+    "OPEN-IN-GAME-TRADE"
+  ],
+  "code_digest_files": [
+    "lua/gen2/polished*.lua",
+    "lua/gen2/entry.lua",
+    "lua/gen2/client.lua",
+    "lua/gen2/panel.lua",
+    "lua/gen2/signals.lua",
+    "server/adapters/polished_codec.py",
+    "server/adapters/gen2_polished.py",
+    "patch/polished/src/*.asm"
+  ],
   "items": [
     {
       "id": "SRC-BEACON",
@@ -155,37 +203,106 @@
       "id": "LIVE-HELLO-ADMITTED",
       "kind": "LIVE",
       "description": "the overlay cartridge is admitted and its hello carries the save's identity",
-      "receipt": "tests/fixtures/polished/receipts/live_hello_admitted.json"
+      "receipt": "tests/fixtures/polished/receipts/live_hello_admitted.json",
+      "expect_scenario": "live/hello-admitted",
+      "expect_checks": [
+        "run verdict",
+        "ROM booted is the overlay under test",
+        "client loaded through the real entry path",
+        "pack admission",
+        "admitted as the Polished overlay",
+        "hello identity",
+        "hello rom_sha1 is the client's own rehash",
+        "hello party is the save's five mons",
+        "server admitted the cartridge against the contract",
+        "server recorded the hello",
+        "client log line",
+        "exactly one hook registered",
+        "no Lua-originated memory write"
+      ]
     },
     {
       "id": "LIVE-HELLO-GATE-FRAME",
       "kind": "LIVE",
       "description": "the first hello leaves the overworld loop, not the main menu",
-      "receipt": "tests/fixtures/polished/receipts/live_hello_gate_frame.json"
+      "receipt": "tests/fixtures/polished/receipts/live_hello_gate_frame.json",
+      "expect_scenario": "live/hello-gate-frame",
+      "expect_checks": [
+        "run verdict",
+        "gate context",
+        "hello leaves after the first idle overworld frame",
+        "hello leaves after the gate first reads running",
+        "hello is not from the main menu"
+      ]
     },
     {
       "id": "LIVE-CAPTURE-PARTY-ONLY",
       "kind": "LIVE",
       "description": "the capture site fires exactly once on a party catch and never on escape, a failed throw or a box catch",
-      "receipt": "tests/fixtures/polished/receipts/live_capture_party_only.json"
+      "receipt": "tests/fixtures/polished/receipts/live_capture_party_only.json",
+      "expect_scenario": "live/capture-party-only",
+      "expect_checks": [
+        "run verdict",
+        "escape does not fire the capture site",
+        "escape took the Run path",
+        "party catch fires the capture site exactly once",
+        "hROMBank at the hit is 3",
+        "hit record",
+        "wPartyCount change is the frame after the hit",
+        "client emitted capture on hit +1",
+        "capture line",
+        "party grew by exactly one",
+        "a wild mon was caught into the party",
+        "box catch does NOT fire the capture site",
+        "full-party catch went to the PC",
+        "no hits in any other bank"
+      ]
     },
     {
       "id": "LIVE-BOX-CENSUS",
       "kind": "LIVE",
       "description": "a tick carries the box mon in pc_boxes without a reboot",
-      "receipt": "tests/fixtures/polished/receipts/live_box_census.json"
+      "receipt": "tests/fixtures/polished/receipts/live_box_census.json",
+      "expect_scenario": "live/box-census-refresh",
+      "expect_checks": [
+        "run verdict",
+        "a wild mon reached a box",
+        "the census carried the box mon without a reboot",
+        "the census followed the battle end, not the 1800-frame periodic rescan"
+      ]
     },
     {
       "id": "LIVE-NO-BOX-MON",
       "kind": "LIVE",
       "description": "a boxless client is sent no box_mon command (the server skips quarantine)",
-      "receipt": "tests/fixtures/polished/receipts/live_no_box_mon.json"
+      "receipt": "tests/fixtures/polished/receipts/live_no_box_mon.json",
+      "expect_scenario": "live/no-box-mon-boxless-client",
+      "expect_checks": [
+        "server admitted the cartridge",
+        "the catch reached the server",
+        "quarantine skipped because the client has no box executor",
+        "the string box_mon never occurs in this server.log",
+        "0 Lua-originated writes, so nothing was attempted client-side"
+      ]
     },
     {
       "id": "LIVE-R1-MANAGER-PAIR",
       "kind": "LIVE",
       "description": "the Manager randomizes a Polished pair from the pinned fork jar and pins both cartridge sha1s",
       "receipt": "tests/fixtures/polished/receipts/live_r1_manager_pair.json",
+      "expect_scenario": "r1/manager-randomized-pair",
+      "expect_checks": [
+        "the picker lists the Polished release dump",
+        "randomizer status is ok with the pinned fork jar",
+        "a run was created for gen2_polished",
+        "the randomizer page served",
+        "cartridges provisioned with companion + randomize",
+        "both cartridges downloaded with the sha1s the contract pins",
+        "the contract records upr_version, categories, seeds and per-player sha1s",
+        "the randomizer summary is what the form asked for",
+        "forms stay in the pool",
+        "the write domain is recorded"
+      ],
       "bind": "source",
       "bind_note": "a randomized cartridge's own sha1 can never equal the overlay sha1, so the binding is the overlay it was randomized from; a re-randomize against a new overlay is what makes this fresh again"
     },
@@ -194,6 +311,24 @@
       "kind": "LIVE",
       "description": "a randomized cartridge boots, adopts its own encounter table and keys a variant form distinctly",
       "receipt": "tests/fixtures/polished/receipts/live_r2_randomized_boot.json",
+      "expect_scenario": "r2/randomized-boot-adopt-form-key",
+      "expect_checks": [
+        "R2a run verdict",
+        "R2b run verdict",
+        "admitted as the Polished rand_overlay",
+        "hello identity is rand_overlay",
+        "hello rom_sha1 is the client's own rehash",
+        "hello gate frames",
+        "the cartridge's own encounter table is adopted",
+        "the adopted species are not the vanilla ones",
+        "the server presents ROM a's own table",
+        "a variant form is caught",
+        "the variant catch fires the capture site exactly once",
+        "the form is inside the mon key",
+        "party grew by exactly one",
+        "0 Lua-originated writes in both legs",
+        "server admitted the randomized cartridge"
+      ],
       "bind": "source"
     },
     {
@@ -201,25 +336,72 @@
       "kind": "LIVE",
       "description": "a swapped contract and two flipped bytes are refused, by the server and by the client respectively",
       "receipt": "tests/fixtures/polished/receipts/live_r3_refusals.json",
+      "expect_scenario": "r3/refusals",
+      "expect_checks": [
+        "a clean overlay against an overlay contract is admitted",
+        "a swapped contract is refused by the server",
+        "every reply after the refusal is noop",
+        "a flipped byte 0x14E is refused by the client",
+        "a flipped byte $1F8028 is refused by the client",
+        "the refusal names the fix"
+      ],
       "bind": "source"
     },
     {
       "id": "LIVE-PHONE-ENTRY",
       "kind": "LIVE",
       "description": "the SLink row appears in the Pokegear phone list, calls into the gate and takes no Delete",
-      "receipt": "tests/fixtures/polished/receipts/live_phone_entry.json"
+      "receipt": "tests/fixtures/polished/receipts/live_phone_entry.json",
+      "expect_scenario": "phone/slink-contact-stage-1",
+      "expect_checks": [
+        "run verdict",
+        "check accounting",
+        "ROM booted",
+        "s0 row reads 'SLink:'",
+        "s0 row reads '   Soul Link'",
+        "s0 has exactly one SLink row on the first screen",
+        "A opens the contact submenu",
+        "submenu offers Call and Cancel",
+        "submenu offers no Delete",
+        "Call reaches SlinkPhone_CallGate and reads 'SLink is linked.'",
+        "MakePhoneCallFromPokegear is NOT entered",
+        "virtual contact id is 38",
+        "B returns to state $0A with the cursor unchanged",
+        "s4 keeps the native cursor/scroll after the SLink row appears",
+        "s3 native delete still works and leaves one SLink row",
+        "a native contact still places a real call"
+      ]
     },
     {
       "id": "LIVE-RECEPTIONIST-STACK",
       "kind": "LIVE",
       "description": "the trade receptionist's frame-wait stack, measured to the native link wait",
-      "receipt": "tests/fixtures/polished/receipts/live_receptionist_stack.json"
+      "receipt": "tests/fixtures/polished/receipts/live_receptionist_stack.json",
+      "expect_scenario": "explore/B-trade-receptionist-stack",
+      "expect_checks": [
+        "POKECENTER_2F header loaded (8x4)",
+        "the trade prompt was answered YES",
+        "the native link wait ran and timed out (no cable)",
+        "idle Pokemon Center overworld control",
+        "idle overworld chain",
+        "native link wait chain",
+        "only sp+2 varies in the link wait"
+      ]
     },
     {
       "id": "LIVE-POKEGEAR-MEASUREMENT",
       "kind": "LIVE",
       "description": "the Pokegear icon strip: per-card tilemap rows, attributes and free tile ids",
-      "receipt": "tests/fixtures/polished/receipts/live_pokegear_measurement.json"
+      "receipt": "tests/fixtures/polished/receipts/live_pokegear_measurement.json",
+      "expect_scenario": "explore/C-pokegear-icon-strip",
+      "expect_checks": [
+        "run verdict",
+        "all four native cards visited",
+        "per-card state",
+        "columns 0-7 identical in all four cards",
+        "arrow XOFFSET is card << 4",
+        "columns 8-9 of rows 0-1 are drawn by every native card"
+      ]
     },
     {
       "id": "MGR-RANDOMIZER-FLAG",
