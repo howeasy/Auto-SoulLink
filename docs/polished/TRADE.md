@@ -1332,3 +1332,19 @@ flipped byte at any of them, never all 32.
 **NOT measured here:** the third population §10.6 asks for — a frame inside the service's own
 `SlinkTradeWaitFrame`, which needs `hROMBank = $7E`. It is unreachable until S2 lands the service;
 until then it is UNVERIFIED, not disproved.
+
+## 11. Trade slice status (coordinator, 2026-10-05)
+
+* **Slice 1 DONE (inert):** `SlinkTradeCheckHeader/Token/Close` frame + the 256-entry item-allow table are in bank `$7E`
+  at fixed `$4200`/`$4280` (a floating section made rgblink pack largest-first and shove the version field). Table is
+  generated from `FIRST_MAIL` (`$F5`) by `tools/gen_polished_trade_items.py`; policy = refuse mail only (Polished's one
+  native held-item refusal, `ItemIsMail_a`), not vanilla's key/non-tossable set: those ids mean other items here and a mon
+  cannot hold a key item. Overlay v3 sha1 `1a9094eb...`; nothing calls these routines yet.
+* **MEASURED: bank `$24` has ZERO free bytes** (release ROM, last symbol `SilphCo3FElevatorText` `24:7ff5`, no padding).
+  Closes 10.5(b): E2 cannot grow the script stream by 2. The receptionist hook must be a **same-size in-place
+  substitution** inside `LinkReceptionistScript_Trade`/`..._DoTradeOrBattle` (`maps/PokeCenter2F.asm`), e.g. fold
+  `writetext Text_PleaseWait` (3 B) + an adjacent 1-byte command into one 4-byte `callasm SlinkTradeEntry`, then re-prove
+  the script still reaches `warpcheck`. E1 (pointer to a new script in `$7E`) is impossible: an object-event script
+  pointer is 16-bit in the map bank.
+* **Next (not started):** pick the substitution site; `verify_overlay` span class for it (computed from the two syms,
+  10.5(a)); then dispatch (10.3 fingerprint) and service/commit/snapshot.
