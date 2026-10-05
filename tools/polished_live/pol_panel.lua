@@ -159,10 +159,13 @@ open_phone()
 -- C1: the caps byte advertises the panel and nothing else
 local caps = L.rw("wSlinkMailbox", OFF_CAPS)
 ev.caps = caps
+-- C1: the caps byte advertises the panel and nothing else.
+-- The span is a property of the SYMBOLS' ADDRESSES, not of what is stored at them: L.rw reads the
+-- memory CONTENTS of a symbol, so End - Start was a difference of two mailbox bytes.
+local SPAN = L.SYM.wSlinkMailboxEnd[2] - L.SYM.wSlinkMailbox[2]
 L.check("C1 PANEL cap advertised (caps=02, bit 1 only)", caps == 0x02, fmt("%02X", caps))
-L.check("C1 mailbox span is the overlay's own 69 bytes",
-        L.rw("wSlinkMailboxEnd", 0) - L.rw("wSlinkMailbox", 0) == 69,
-        L.rw("wSlinkMailboxEnd", 0) - L.rw("wSlinkMailbox", 0))
+L.check("C1 mailbox span is the overlay's own 69 bytes (symbol addresses, not contents)",
+        SPAN == 69, fmt("$%X..$%X = %d", L.SYM.wSlinkMailbox[2], L.SYM.wSlinkMailboxEnd[2], SPAN))
 
 -- the list has exactly the SLink row
 for _ = 1, 40 do local c, s = cur() if c + s == 0 then break end press("Up", 10) end
@@ -184,12 +187,30 @@ wait(function() return L.hits.SlinkPanel > panel0 end, 300, "the gate never ente
 -- KEY (the stage-2 fix: the fallback no longer ends in `prompt`). No press to dismiss.
 wait(function() return staged_count >= 1 end, 400, "the host never saw an AWAIT")
 L.idle(4)
-L.check("C2 AWAIT was published WITHOUT a keypress (the fallback no longer prompts)",
-        stage_frame_before_input == presses_before_call,
-        fmt("pressed %d times when AWAIT was staged (before Call: %d)",
-            tostring(stage_frame_before_input), presses_before_call))
-local p1 = box()
+L.check("C2 AWAIT was published with NO EXTRA keypress (the fallback no longer prompts)",
+        -- presses_before_call is captured BEFORE the Call press, so staging on presses_before_call+1
+        -- means the Call A itself and nothing after it: the lease was served without a dead press.
+        stage_frame_before_input == presses_before_call + 1,
+        fmt("presses when AWAIT was staged: %s; before Call: %d (Call itself = +1, expected %d)",
+            tostring(stage_frame_before_input), presses_before_call, presses_before_call + 1))
+-- Do NOT judge the render on the first frame after staging: the ROM prints the page through the
+-- text engine and the tilemap is pushed on its own schedule. Poll, and dump the screen at the
+-- AWAIT and 120 frames later so a miss says WHICH screen we were looking at.
+L.log("[panel] --- screen AT AWAIT ---")
+L.log(screen())
+local seen_frame, seen = nil, nil
+for _ = 1, 30 do
+    local b = box()
+    if b:find("SOUL LINK", 1, true) then seen_frame, seen = emu.framecount(), b break end
+    L.idle(10)
+end
+L.log(seen_frame and fmt("[panel] box text appeared at frame %d", seen_frame)
+      or fmt("[panel] box text NEVER appeared within 300 frames (last read at frame %d)", emu.framecount()))
+L.idle(120)
+L.log("[panel] --- screen 120 frames later ---")
+L.log(screen())
 shot("panel_2_page1")
+local p1 = box()
 ev.page1 = p1
 L.check("C2 page 1 rendered by the ROM's own text engine", p1:find("SOUL LINK", 1, true) ~= nil
         and p1:find("PARTNER: RED", 1, true) ~= nil, p1)
