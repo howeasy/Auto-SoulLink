@@ -218,7 +218,8 @@ read by `rst PlaceString` with bank `$24` mapped (the `ld hl, NonTrainerCallerNa
 `phone.asm:410-414` has no bank switch). **Bank `$24` has ZERO free bytes** (`data/polished/free_space.txt`: only banks 80-100
 and 125-127 have any), so the table cannot grow in place and a new string cannot be added in bank `$24`.
 Feasible hypothesis (not built, UNVERIFIED): replace the table lookup inside `.NotTrainer` (14 bytes, same-size rewrite) with a
-call to a ROM0 bridge (ROM0 has 351 free bytes at `$015f`) that, for the SLink contact id, copies the label from the `$7E`
+call to a ROM0 bridge (SUPERSEDED 2026-10-04: ROM0's 351 free bytes is a COUNT, not an address; the real gaps are `$0089-$00FF` and
+`$3F34-$3FFF` after the phone bridge -- `docs/polished/HOOKS.md:812-813`) that, for the SLink contact id, copies the label from the `$7E`
 service into a WRAM string buffer and returns `de` pointing at it (all other ids fall through to the native table lookup);
 `PlaceString` then reads from WRAM, so no bank switch happens mid-draw. The native row for every other contact is unchanged.
 Also open: a trainer-class-0 contact must not be dropped by `CheckCanDeletePhoneNumber` rules (does it offer Delete? an

@@ -570,7 +570,11 @@ gender bit. Capture-site hits: 0 for every fled battle. The server's `/api/statu
 - The server's Route 30 table reads `(97) Hypno, (53, 2) Persian (Alolan) eff 305, Heracross, Girafarig, Scizor,
   Ivysaur, Yanmega`.
 
-**GAP (product, not worked around): the caught variant is not presented as its effective species.**
+**SUPERSEDED (2026-10-04) by `43ee19f0` "polished: regional forms judged as distinct mons end to end - the read
+layer carries the effective species id".** The gap below is CLOSED and is kept as the historical record of it.
+
+**GAP (product, not worked around -- CLOSED 2026-10-04 by `43ee19f0`): the caught variant is not presented as its
+effective species.**
 - `pending_captures` and `party_details` show `species_id 53`, `species_name "Persian"` and the Kanto Persian sprite.
 - No field anywhere carries the form or the effective species 305. `effective_species` appears in no shared server
   file.
@@ -578,6 +582,11 @@ gender bit. Capture-site hits: 0 for every fled battle. The server's `/api/statu
   - `server/server.py:2903` calls `adapter.species_name(sid)` without the `form` it reads on the line before.
     `Gen2PolishedAdapter.species_name(species_id, form=0)` would name it.
   - The client's capture and party details carry no `form` field: the form is only inside the key.
+  - **CLOSED:** the read layer now resolves the variant's record index and puts it on the wire, so `species_id`
+    arriving at the server IS the effective id (`lua/gen2/polished.lua:199-206, 222-223, 321, 380`), and
+    `server/server.py` now threads `form` into `_get_sprite_html` (the `43ee19f0` two-line change). The residual
+    `adapter.species_name(sid)` below no longer drops the form, because `sid` is already effective; it is still
+    fragile and would break if a raw id ever reached it. Proving test: `tests/unit/test_polished_effective_wire.py`.
 - What this means: wherever the shared state goes by `species_id`, an Alolan Persian counts as a Persian. The owner's
   ruling is that a variant form is a different mon.
 

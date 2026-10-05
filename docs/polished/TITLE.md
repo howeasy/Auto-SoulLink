@@ -176,7 +176,9 @@ correct inline form) rather than hand-assembling the sequence. Any port that cop
 - **banks 126 (`$7E`) and 127 (`$7F`) are never allocated by the linker** — 16384 free
   bytes each. `$7E` is therefore a fully free service bank, matching HOOKS.md §3.1's
   proposed `SLINK_SERVICE_BANK $7E`. `$7F` is a free second bank if one is ever needed.
-- ROM0 has **351 bytes free** at `$015f` — enough for a same-size `jp`-to-bridge rewrite
+- ROM0 has **351 bytes free** in total — enough for a same-size `jp`-to-bridge rewrite
+  (SUPERSEDED 2026-10-04: `$015f` is that COUNT, not an address; the real gaps are `$0089-$00FF` and the part of
+  `$3F34-$3FFF` after the phone bridge — `docs/polished/HOOKS.md:812-813`)
   in ROM0, but not for anything larger.
 - bank 125 (`$7D`) has 660 free; everything else has under 5.
 

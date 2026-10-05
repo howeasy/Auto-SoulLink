@@ -106,7 +106,9 @@ standard Pokégear transition into that card's view. Concretely an SLink card ne
 5. **Transition + SFX.** Reuse `Pokegear_FinishTilemap`'s callers (`TownMapPals` at `:212`) and the
    standard Pokégear B-to-back path. **UNVERIFIED** — I did not trace the Pokégear's own B handling.
 6. **Text.** Inside the panel, not the Pokégear: `panel.lua` already stages text.
-7. **Space.** Per `docs/polished/HOOKS.md`, ROM0 has **351 free bytes at `$015f`**, and the overlay's
+7. **Space.** Per `docs/polished/HOOKS.md`, ROM0 has **351 free bytes in total** (SUPERSEDED 2026-10-04: `$015f` is that COUNT,
+not an address; the real gaps are `$0089-$00FF` and `$3F34-$3FFF` after the phone bridge, `HOOKS.md:812-813`), and the
+overlay's
    service bank is `$7E`. Both are cited in HOOKS.md; **UNVERIFIED** — I did not re-derive either
    figure this pass.
 
@@ -169,7 +171,7 @@ perception rather than layout. It also implicitly settles the open `PANEL.md` §
 | `Pokegear_FinishTilemap`'s own sym address (H3) | the sym lookup I ran returned only `AnimatePokegearModeIndicatorArrow 24:4e20` and `InitPokegearTilemap 24:4e35`; the Finish label is a local and needs a different lookup |
 | where `wPokegearFlags`' three bits are set (H4) | read the flag-setters; not traced |
 | the Pokégear's B-to-back path and SFX (§3.5) | read the Pokégear joypad handler |
-| ROM0 `$015f` 351 bytes and bank `$7E` space (§3.7) | cited from HOOKS.md; not re-derived this pass |
+| ROM0 351 free bytes TOTAL and bank `$7E` space (§3.7) | SUPERSEDED 2026-10-04: `$015f` is the count, not an address; gaps are `$0089-$00FF` and `$3F34-$3FFF`-after-phone-bridge (`HOOKS.md:812-813`) |
 | whether `panel.lua` needs any change to be reached from the Pokégear | my reading is that it does not (it is reached through the mailbox lease), but I did not trace `gb_panel`'s entry points |
 
 ---

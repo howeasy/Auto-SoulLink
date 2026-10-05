@@ -1,7 +1,10 @@
 # Polished Crystal client — what it takes to make the Lua client RUN
 
 Work list for taking `lua/gen2/*` from *admitted but not composed* to *composes and says hello with a party*,
-then *detects a catch*, on **Polished Crystal v3.2.3** (tag `v3.2.3`, commit `3fa43192…`, overlay sha1 `29ea04c2…`).
+then *detects a catch*, on **Polished Crystal v3.2.3** (tag `v3.2.3`, commit `3fa43192…`, overlay sha1 `29ea04c2…` **at the time of writing**; the overlay is rebuilt by
+every `pol-*` merge, so read the current value from `data/polished/overlay_provenance.json` output.sha1 — the
+committed overlay in the tree at the time of this correction was `9c60bc8f…` and the pol-panel / pol-sounds
+branches will change it again).
 
 Sources read, all read-only:
 
