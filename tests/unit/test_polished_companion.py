@@ -95,6 +95,9 @@ OVERLAY_SYMS = {
     "SlinkMainMenuLoopBridge": (0x00, PHONE_HI),
     "SlinkMainMenuLoopBridgeEnd": (0x00, TITLE_END),
     "SlinkVersionFieldEnd": SFX_END,
+    # TRADE slice 1: the inert frame/item code links after the version field (zero-length here too).
+    **{n: SFX_END for n in ("SlinkTradeCheckHeader", "SlinkTradeFrameEnd", "SlinkTradeItemAllowed",
+                            "SlinkTradeAllowedItemsEnd")},
     "wSlinkMailbox": (0x00, pc.MAILBOX),
 }
 EMPTY_BANK = slice(pc._flat(pc.SERVICE_BANK, 0x4000), pc._flat(pc.SERVICE_BANK, 0x8000))

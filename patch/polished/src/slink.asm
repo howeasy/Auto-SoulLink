@@ -210,3 +210,8 @@ INCLUDE "engine/slink/slink_sfx.asm"
 
 ; TITLE-VERSION: the main-menu version bridge and its 20-byte stamped field.
 INCLUDE "engine/slink/version.asm"
+
+; TRADE slice 1 (docs/polished/TRADE.md): the lease-frame primitives and the item policy. Inert --
+; nothing calls them until the dispatch slice.
+INCLUDE "engine/slink/trade_frame.asm"
+INCLUDE "engine/slink/trade_items.asm"

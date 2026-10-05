@@ -46762,6 +46762,17 @@
 7e:416d SlinkVersionText.text
 7e:417a SlinkVersionText.end
 7e:4181 SlinkVersionFieldEnd
+7e:4200 SlinkTradeCheckHeader
+7e:4225 SlinkTradeCheckHeader.refuse
+7e:4227 SlinkTradeCheckToken
+7e:4231 SlinkTradeCheckToken.byte
+7e:4244 SlinkTradeCheckToken.refuse
+7e:4249 SlinkTradeClose
+7e:4254 SlinkTradeFrameEnd
+7e:4280 SlinkTradeItemAllowed
+7e:428f SlinkTradeAllowedItems
+7e:428f SlinkTradeItemAllowedEnd
+7e:438f SlinkTradeAllowedItemsEnd
 00:8000 vTiles0
 00:8800 vTiles1
 00:9000 vTiles2

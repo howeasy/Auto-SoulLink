@@ -203,9 +203,14 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
                # wholly-empty bank, and diff_spans reports one run across them, so they are allowed
                # as one span (the bank is proven $FF throughout in the clean ROM above).
                (_flat(svc_bank, svc), _flat(svc_bank, max(new["SlinkPanelEnd"][1],
-                                                sfx_hi[1], new["SlinkVersionFieldEnd"][1])),
-                f"bank ${SERVICE_BANK:02X} service + panel + sound + version"),
+                                                sfx_hi[1], new["SlinkVersionFieldEnd"][1],
+                                new["SlinkTradeAllowedItemsEnd"][1])),
+                f"bank ${SERVICE_BANK:02X} service + panel + sound + version + trade frame/items"),
                (HEADER_CHECKSUMS.start, HEADER_CHECKSUMS.stop, "header checksums")]
+    # TRADE slice 1: the inert frame + item-policy code links after the version field, in the same bank
+    if any(new[n][0] != SERVICE_BANK or new[n][1] < new["SlinkVersionFieldEnd"][1] or new[n][1] > 0x8000
+           for n in ("SlinkTradeCheckHeader", "SlinkTradeFrameEnd", "SlinkTradeItemAllowed", "SlinkTradeAllowedItemsEnd")):
+        raise RuntimeError("the trade frame/item code must link in bank $7E, after the version field")
     panel_bank, panel = new["SlinkPanel"]
     if panel_bank != SERVICE_BANK or panel < new["SlinkServiceEnd"][1]:
         raise RuntimeError(f"the panel must link in bank ${SERVICE_BANK:02X} after the service")
