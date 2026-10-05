@@ -567,3 +567,12 @@ def test_gen2_refuses_an_unmeasured_option_by_name():
         build_spec({"trainer_names": True}, family=FAMILY_GEN2)
     parsed = load(build({"randomizeTrainerNames": True}, rom_name="Pokemon Crystal (U)"))
     assert unexpected_settings(parsed, FAMILY_GEN2)
+
+
+def test_tutor_help_is_family_neutral():
+    """HELP renders for every family, so a Crystal-only restriction would read as false on FireRed, LeafGreen
+    and Emerald. Red control: restore 'Crystal only' in either string and this fails."""
+    from server.upr_settings import HELP
+
+    for key in ("tutors", "tutor_compat"):
+        assert HELP[key] and "Crystal only" not in HELP[key], key
