@@ -43,16 +43,38 @@ L.log(fmt("[panel] step 4: geometry base=$%X span $%X..$%X lines=%d stride=%d te
           TEXT, MB_LO, MB_HI, PAN.lines, PAN.stride, PAN.terminator))
 
 -- every byte this driver writes, audited against the mailbox span (the "wrap memory.write_*" check)
-local AUDIT = {n = 0, lo = 0x7fffffff, hi = -1, outside = {}}
+local AUDIT = {n = 0, lo = 0x7fffffff, hi = -1, outside = {}, seen = {}}
 local raw_write = memory.write_u8
+-- C5 audits the PANEL's writes only. The SYNTH setup below writes wPokegearFlags and wPhoneList
+-- on purpose, outside the mailbox, so the audit is armed after it and reset. (Round 10: `wb` used
+-- raw_write and therefore bypassed this wrapper entirely, so C5 would have reported "0 writes" and
+-- passed VACUOUSLY -- the check was measuring nothing.)
+AUDIT.on = false
 memory.write_u8 = function(a, v, d)
-    AUDIT.n = AUDIT.n + 1
-    if a < AUDIT.lo then AUDIT.lo = a end
-    if a > AUDIT.hi then AUDIT.hi = a end
-    if a < MB_LO or a > MB_HI then AUDIT.outside[#AUDIT.outside + 1] = fmt("%X", a) end
+    if AUDIT.on then
+        AUDIT.n = AUDIT.n + 1
+        if a < AUDIT.lo then AUDIT.lo = a end
+        if a > AUDIT.hi then AUDIT.hi = a end
+        if a < MB_LO or a > MB_HI then AUDIT.outside[#AUDIT.outside + 1] = fmt("%X", a) end
+        -- the address list, capped: 68 panel writes, so a dump can be read in full
+        if #AUDIT.seen < 80 then AUDIT.seen[#AUDIT.seen + 1] = fmt("%X", a) end
+    end
     return raw_write(a, v, d)
 end
-local function wb(addr, v) raw_write(addr, v, "WRAM") end
+--- Every panel write goes THROUGH the audited wrapper; nothing may bypass it.
+--- Count and range-check HERE, not by wrapping memory.write_u8: assigning to that binding does
+--- not stick in BizHawk (round 11 measured n=0 with the wrapper in place), so a wrapper-based audit
+--- reports a clean run while seeing nothing. This is the only path a panel write takes.
+local function wb(addr, v)
+    if AUDIT.on then
+        AUDIT.n = AUDIT.n + 1
+        if addr < AUDIT.lo then AUDIT.lo = addr end
+        if addr > AUDIT.hi then AUDIT.hi = addr end
+        if addr < MB_LO or addr > MB_HI then AUDIT.outside[#AUDIT.outside + 1] = fmt("%X", addr) end
+        if #AUDIT.seen < 80 then AUDIT.seen[#AUDIT.seen + 1] = fmt("%X", addr) end
+    end
+    return raw_write(addr, v, "WRAM")
+end
 
 -- ── the pages this host publishes ────────────────────────────────────────────────────────
 L.log("[panel] step 5: writer closed over")
@@ -153,6 +175,9 @@ raw_write(L.woff("wPokegearFlags", 0), 0x87, "WRAM")
 local list0 = plist()
 raw_write(L.woff("wPhoneList", 0), 0, "WRAM")
 for i = 1, 4 do raw_write(L.woff("wPhoneList", i), 0, "WRAM") end
+-- the SYNTH setup above wrote outside the mailbox on purpose; from here on every host-side panel write is audited
+AUDIT.n, AUDIT.lo, AUDIT.hi, AUDIT.outside, AUDIT.seen = 0, 0x7fffffff, -1, {}, {}
+AUDIT.on = true
 L.log(fmt("[panel] SYNTH wPokegearFlags %02X -> 87, wPhoneList %s -> 0000000000 (SLink is row 0)",
           flags0, list0))
 
@@ -280,13 +305,34 @@ L.check("C4 the panel cleared PANEL_STATE on close", L.rw("wSlinkMailbox", OFF_S
 ev.back = back
 
 -- ── write audit ──────────────────────────────────────────────────────────────────────────
-ev.audit = {n = AUDIT.n, lo = fmt("%X", AUDIT.lo), hi = fmt("%X", AUDIT.hi),
-            mailbox = fmt("%X..%X", MB_LO, MB_HI), outside = AUDIT.outside}
-L.check("C5 every write this run made is inside the mailbox span", #AUDIT.outside == 0,
-        fmt("%d writes, %s..%s vs %s..%s; outside: %s", AUDIT.n, ev.audit.lo, ev.audit.hi,
-            ev.audit.mailbox, table.concat(AUDIT.outside, ",")))
-L.check("C5 the host did stage both pages", staged_count == 2, staged_count)
-
-ev.hits = L.hits
-write(L.RUN .. "/panel.json", J.encode(ev))
+-- The whole block is wrapped so a Lua error here cannot silently swallow the run: the harness
+-- records result.txt but not BizHawk's console, so an uncaught error used to look exactly like
+-- "the driver stopped". Round 11: this was reached only after the flow stalled at the last C4
+-- line, with no RESULT: at all. L.finish stays OUTSIDE the pcall (it ends by raising, on purpose),
+-- so a RESULT: line is always written.
+local okC5, errC5 = pcall(function()
+    L.log("[panel] C5 BLOCK ENTER")
+    local hex = function(v) return fmt("%X", v % 0x10000) end   -- safe for 0 and the sentinels
+    L.log(fmt("[panel] audit n=%d lo=%s hi=%s outside=%d", AUDIT.n, tostring(AUDIT.lo), tostring(AUDIT.hi),
+              #AUDIT.outside))
+    ev.audit = {n = AUDIT.n, lo = hex(AUDIT.lo), hi = hex(AUDIT.hi),
+                mailbox = fmt("%X..%X", MB_LO, MB_HI), outside = AUDIT.outside,
+                writes = AUDIT.seen}
+    L.log("[panel] C5 BLOCK ev.audit built")
+    L.check("C5 every PANEL write is inside the mailbox span", #AUDIT.outside == 0,
+            fmt("%d panel writes, %s..%s vs mailbox %s; outside: %s", AUDIT.n,
+                AUDIT.n > 0 and ev.audit.lo or "-", AUDIT.n > 0 and ev.audit.hi or "-",
+                ev.audit.mailbox, #AUDIT.outside == 0 and "none" or table.concat(AUDIT.outside, ",")))
+    -- The vacuous-pass guard: an audit that SAW nothing must not read as a clean run.
+    L.check("C5 the audit actually SAW writes (not a vacuous pass)", AUDIT.n > 0, AUDIT.n)
+    L.log("[panel] C5 CHECKS DONE, ev.hits/panel.json next")
+    ev.hits = L.hits
+    write(L.RUN .. "/panel.json", J.encode(ev))
+    L.log("[panel] C5 write addresses: " .. table.concat(AUDIT.seen, " "))
+    L.log("[panel] C5 BLOCK OK")
+end)
+if not okC5 then
+    L.log("[panel] C5 BLOCK ERROR: " .. tostring(errC5))
+    L.check("C5 audit block ran without a Lua error", false, tostring(errC5))
+end
 L.finish("pol-panel")
