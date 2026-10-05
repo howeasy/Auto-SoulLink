@@ -289,3 +289,29 @@ def test_rows_are_cut_to_the_line_padded_to_it_and_bad_payloads_refused(roms):  
     assert second[:2] == _codes("B ")
     assert second[2:LINE_MAX] == [BLANK] * (LINE_MAX - 2), "a short line is padded, not left short"
     assert second[LINE_MAX] == TERM
+
+
+def test_the_fallback_does_not_prompt_and_the_staged_page_does():
+    """STAGE-2 DEFECT PIN. SlinkPanelFallback used to end in `prompt`, so the game's ButtonSound
+    blocked on a keypress BEFORE `AWAIT` was ever published: the host was never asked until the
+    player pressed, and every page cost two presses. The fallback now ends in `done`, and the
+    STAGED page's script is what prompts.
+
+    This is a SOURCE check on purpose. The defect is a SEQUENCE -- a prompt ahead of the AWAIT
+    publish -- and a Lua unit test cannot observe the ROM's ordering, so this pins the shape that
+    makes the ordering possible. The ordering itself is a live claim, and is marked as such in
+    docs/polished/LIVE_PANEL.md.
+
+    RED CONTROL (applied): restore `prompt` on SlinkPanelFallback -> `got 'prompt'` here.
+    """
+    lines = PANEL_ASM.splitlines()
+    body = lines[lines.index("SlinkPanelFallback:") + 1: lines.index("SlinkPanelScript:")]
+    # the LAST data line is the terminator: text / next1 / terminator
+    data = [ln for ln in body if ln.strip() and not ln.strip().startswith(";")]
+    assert data[-1].strip().split()[0] not in ("text", "next", "next1"), (
+        f"the fallback must end in an explicit terminator, got {data[-1]!r}")
+    terminator = data[-1].strip().split()[0]
+    assert terminator == "done", f"the fallback must not prompt, got {terminator!r}"
+    script = lines[lines.index("SlinkPanelScript:"):]
+    assert any('db "<PROMPT>"' in ln for ln in script), (
+        "the staged page must be what waits for the player")
