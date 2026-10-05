@@ -83,7 +83,7 @@
   var _setdexInitStarted = false; // guards the one-time initSetdex() RR-difficulty-file kickoff
   var _sseSource      = null;
   var _retryTimer     = null;
-  var _dex            = null;   // 'rr' | 'vanilla' | 'purergb' | null — from payload's calc.dex
+  var _dex            = null;   // 'rr' | 'vanilla' | 'purergb' | 'polished' | null — from payload's calc.dex
   var _warnedMoves    = {};     // dedupe key -> true, for the unknown-move console.warn
 
   // Non-RR trainer sets (task 5/8): the vendored, pret-verified setdex named by the
@@ -181,6 +181,12 @@
     if (typeof calc !== 'undefined' && calc && typeof calc.useDex === 'function') {
       if (_dex === 'purergb') calc.useDex('purergb');
       else if (calcInfo.gen === 1) calc.useDex('vanilla');
+    }
+    // Polished Crystal shares the calc's GEN 3 mechanics slot with vanilla FireRed/Emerald
+    // (docs/polished/CALC.md §1), so its data swap has its own entry point. Re-asserted on every
+    // payload: without this a Polished payload leaves the gen 3 tables swapped for the next run.
+    if (typeof calc !== 'undefined' && calc && typeof calc.usePolished === 'function') {
+      calc.usePolished(_dex === 'polished');
     }
     var wantGen = calcInfo.gen;
     // A same-generation dex change replaces the engine's tables, but the UI caches

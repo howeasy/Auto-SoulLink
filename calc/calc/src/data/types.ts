@@ -482,6 +482,26 @@ for (const typeChart of TYPE_CHART) {
   TYPES_BY_ID.push(map);
 }
 
+// Gen 3's slot - the types.ts half of species.ts's setGen3Species, used by
+// calc/src/calc/data/polished.js's usePolished() (docs/polished/CALC.md). Polished's chart is the
+// modern one WITH a Fairy type (constants/type_constants.asm:25 `const FAIRY ; 11`), which no gen-3
+// chart carries, so the swap is what makes Fairy-vs-X resolve at all.
+//
+// `const ADV = GSC` above ALIASES the same object into slot 2, so reassigning TYPE_CHART[3] here
+// cannot disturb gen 2 - and VANILLA_GEN3_TYPES restores the very object slot 3 started with.
+const VANILLA_GEN3_TYPES = ADV;
+
+export function setGen3TypeChart(chart: TypeChart | null): void {
+  const next = chart ?? VANILLA_GEN3_TYPES;
+  TYPE_CHART[3] = next;
+  const map: {[id: string]: Type} = {};
+  for (const type in next) {
+    const t = new Type(type, {...next[type as I.TypeName]!});
+    map[t.id] = t;
+  }
+  TYPES_BY_ID[3] = map;
+}
+
 // Gen 1's slot only - used by calc/calc/src/data/purergb.ts's useDex() to swap in pureRGB's type
 // chart (6 extra types; see docs/calc_multigen/PURERGB_MECHANICS.md) at runtime, and back out
 // again. TYPE_CHART[1]/TYPES_BY_ID[1] can't just be reassigned from outside this module: the

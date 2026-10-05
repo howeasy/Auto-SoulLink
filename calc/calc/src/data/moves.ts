@@ -5237,6 +5237,24 @@ for (const moves of MOVES) {
   gen++;
 }
 
+// Gen 3's slot - the moves.ts half of species.ts's setGen3Species, used by
+// calc/src/calc/data/polished.js's usePolished() (docs/polished/CALC.md). Polished's moves carry an
+// explicit per-move PHYSICAL/SPECIAL/STATUS column (data/moves/moves.asm), which the calc needs
+// because move.ts:127 would otherwise derive the category from the move's TYPE for gen < 4.
+const VANILLA_GEN3_MOVES = ADV;
+const GEN3_MOVE_CLASS = Move;
+
+export function setGen3Moves(data: {[name: string]: MoveData} | null): void {
+  const next = data ?? VANILLA_GEN3_MOVES;
+  MOVES[3] = next;
+  const map: {[id: string]: Move} = {};
+  for (const move in next) {
+    const m = new GEN3_MOVE_CLASS(move, next[move], 3);
+    map[m.id] = m;
+  }
+  MOVES_BY_ID[3] = map;
+}
+
 // Gen 1's slot only - the moves.ts half of species.ts's setGen1Species (see its comment); used by
 // calc/calc/src/data/purergb.ts's useDex() to swap in pureRGB's own move table at runtime.
 export function setGen1Moves(data: {[name: string]: MoveData} | null): void {

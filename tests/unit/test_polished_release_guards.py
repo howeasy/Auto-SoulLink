@@ -119,18 +119,23 @@ def _polished_option_rows() -> dict[str, dict]:
 def test_manager_every_polished_capability_stays_refused() -> None:
     """Guard: no capability may report `ok` for Polished while its blocker is open.
 
-    Blocker flipped by: the per-card client work — explode and rival-swap are still
-    refused because the writers are unwired modules (docs/polished/EXPLODE_RIVAL.md);
-    the calculator is refused because it has no Polished species/forms/abilities data
-    (server/manager.py:220).
+    battle_calc is the ONE row deliberately allowed to report ok (flipped 2026-10-04 with
+    calc/src/calc/data/polished.js, tools/gen_polished_calc.py): the calculator runs its gen 3
+    mechanics on Polished's own species/move/type data, and what that does NOT model is enumerated
+    in docs/polished/CALC.md §4 rather than hidden. explode_mode and rival_team_swap stay refused
+    because the writers are unwired modules (docs/polished/EXPLODE_RIVAL.md); native_sounds,
+    phone_calls and pc_trade_npc keep their own reasons.
 
-    RED CONTROL: in server/manager.py, change any `"gen2_polished": {"ok": False, ...}`
-    to `"ok": True`.
+    RED CONTROL: in server/manager.py, change any remaining `"gen2_polished": {"ok": False, ...}`
+    to `"ok": True`, or flip battle_calc back to False.
     """
     rows = _polished_option_rows()
     assert rows, "expected server.manager.OPTION_SUPPORT to carry gen2_polished rows"
     assert "explode_mode" in rows and "rival_team_swap" in rows
+    assert rows["battle_calc"]["ok"] is True, "Polished's calculator dataset is shipped; do not re-refuse it"
     for option, entry in sorted(rows.items()):
+        if option == "battle_calc":
+            continue
         assert entry["ok"] is False, f"{option} flipped to ok for Polished without its card"
         assert entry.get("why"), f"{option} must carry a reason while refused"
 
