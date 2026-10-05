@@ -667,7 +667,14 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         return False             # no Polished client handler exists yet: a queued force_explode would never fire
 
     def supports_box_mon(self):
-        return False             # compose_polished composes no box executor: a queued box_mon only comes back failed
+        # C-WRITE round 2: the executor IS composed and proven (lua/gen2/polished_overworld.lua O.boxes,
+        # tests/unit/test_polished_write_path.py), but the capability stays FALSE. Advertising it strands every
+        # linked catch: state.py:2786 quarantines a solo catch, the link forms and state.py:2896-2912 queues the
+        # un-quarantine party_mon, this client refuses it (savemon -> party stat/PP reconstruction unqualified),
+        # sync_retrieve_failed re-boxes only a partner whose key is still in party_keys (state.py:617-643) - so
+        # both mons sit boxed with no retry and the pair never reaches the party again. The flag flips when
+        # withdraw() is composed, not before.
+        return False
 
     def reports_box_census(self):
         return True              # P3: the Polished client reads the newbox/PokeDB layout (NEWBOX.md §6.1); no client yet
