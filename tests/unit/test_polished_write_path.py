@@ -476,8 +476,9 @@ def test_box_mon_refuses_when_every_box_is_full():
 
 def test_party_mon_and_memorialize_refuse_by_name():
     rig = Rig(party())
+    # party_mon is composed (card POL-WDEXEC): with an empty box census the key is genuinely not there
     assert _pair(rig.overworld().boxes.withdraw())[0] is None
-    assert "not composed" in _pair(rig.overworld().boxes.withdraw())[1]
+    assert "key not boxed" in _pair(rig.overworld().boxes.withdraw())[1]
     assert _pair(rig.overworld().boxes.memorialize())[0] is None
     assert "not composed" in _pair(rig.overworld().boxes.memorialize())[1]
 

@@ -873,8 +873,43 @@ local function compose_polished(deps, decision)
                and items.source.rom_sha1 == wrapper.source.rom_sha1, "pack source mismatch: items")
         local mail = {}
         for _, id in ipairs(items.mail_ids or {}) do mail[id] = true end
+        -- party_mon (withdraw): the reconstruction codec and its three tables, from the generated pack. Nothing is
+        -- defaulted - a missing table is a refusal, never a silent assumption (polished_stats.lua's own contract).
+        local species_index = load_json(json, root .. "/data/games/polished_crystal/species_index.json")
+        local moves_pack = load_json(json, root .. "/data/games/polished_crystal/moves.json")
+        assert(species_index.schema == "polished-species-v1" and type(species_index.source) == "table"
+               and species_index.source.lock_sha256 == wrapper.source.lock_sha256
+               and species_index.source.rom_sha1 == wrapper.source.rom_sha1, "pack source mismatch: species_index")
+        assert(moves_pack.schema == "polished-moves-v1" and type(moves_pack.source) == "table"
+               and moves_pack.source.lock_sha256 == wrapper.source.lock_sha256
+               and moves_pack.source.rom_sha1 == wrapper.source.rom_sha1, "pack source mismatch: moves")
+        local function stats_row(b)
+            return {b.hp, b.attack, b.defense, b.speed, b.special_attack, b.special_defense}
+        end
+        local base_stats, variant_record, move_pp = {}, {}, {}
+        for id, row in pairs(species_index.species) do
+            assert(type(row.base_stats) == "table", "species " .. id .. " has no base stats")
+            base_stats[tonumber(id)] = stats_row(row.base_stats)
+        end
+        for _, row in ipairs(species_index.forms) do
+            -- only a VARIANT form is a different mon (owner ruling 2026-10-04); a cosmetic form shares its
+            -- species' record, and the plain species row already carries that base stats
+            if row.kind == "variant" and type(row.base_stats) == "table" then
+                base_stats[row.ext] = stats_row(row.base_stats)
+                variant_record[row.species * 32 + row.form] = row.ext
+            end
+        end
+        for _, row in ipairs(moves_pack.moves) do
+            assert(math.type(row.id) == "integer" and math.type(row.pp) == "integer"
+                   and row.id >= 0 and row.id <= 255 and row.pp >= 0 and row.pp <= 255, "move row without id/pp")
+            move_pp[row.id] = row.pp
+        end
+        assert(next(base_stats) and next(move_pp), "withdraw tables are empty")
+        local Stats = load("lua/gen2/polished_stats.lua")
         local boxes = Overworld.boxes({profile = profile, reads = reads, census = census, boxes = Boxes,
-                                       reader = boxes_io, writes = writes, mail = mail, log = deps.log})
+                                       reader = boxes_io, writes = writes, mail = mail, log = deps.log,
+                                       io = io_, coords = coords, stats = Stats, base_stats = base_stats,
+                                       variant_record = variant_record, move_pp = move_pp})
         local client = load("lua/gen2/client.lua").new({
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
             writes=explode.writes, boxes=boxes, safety=explode.safety, battle_hold=explode.battle_hold,

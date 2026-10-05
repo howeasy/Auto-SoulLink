@@ -390,6 +390,8 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "evolutions.json",
         "area_map.json",
         "items.json",  # compose_polished: mail_ids for the box_mon mail refusal (ItemIsMail set)
+        "species_index.json",  # compose_polished: base stats + variant records for the party_mon stat rebuild
+        "moves.json",  # compose_polished: base PP per move for the party_mon PP rebuild
         "engine_signals.json",  # Signals.new_polished (C-SITES) loads the site pack
         "overlay/beacon.json",  # P.admit's rand_overlay gate re-hashes the overlay spans (tools/gen_polished_beacon.py)
     ],

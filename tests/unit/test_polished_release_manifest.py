@@ -27,6 +27,8 @@ POLISHED = {
     "data/games/polished_crystal/evolutions.json",
     "data/games/polished_crystal/area_map.json",
     "data/games/polished_crystal/items.json",
+    "data/games/polished_crystal/species_index.json",  # compose_polished: party_mon stat rebuild tables
+    "data/games/polished_crystal/moves.json",  # compose_polished: party_mon base PP table
     "data/games/polished_crystal/engine_signals.json",
     "data/games/polished_crystal/overlay/beacon.json",
     "data/polished/overlay_provenance.json",
