@@ -362,15 +362,19 @@ function O.boxes(deps)
     assert(type(deps) == "table", "box executor deps required")
     local profile, reads, census = deps.profile, deps.reads, deps.census
     local Boxes, reader, writes = deps.boxes, deps.reader, deps.writes
+    local io_, coords = deps.io, deps.coords
     assert(type(reads) == "table" and type(reads.read_party) == "function", "reads.read_party required")
     assert(type(census) == "table" and type(census.read_storage_box) == "function", "a box census reader required")
     assert(type(Boxes) == "table", "the polished_boxes.lua module required")
     assert(type(reader) == "table" and type(reader.insert_mon) == "function", "a polished_boxes.lua reader required")
     assert(type(writes) == "table" and type(writes.arm) == "function", "the overworld writer required")
     local mail = deps.mail or {}
+    -- party_mon (withdraw) dependencies. NOT asserted here: a graph composed without them still runs box_mon, and
+    -- withdraw refuses by name (its own contract: nothing defaulted, a missing table is a refusal).
+    local STATS, BASE, VARIANT, MOVE_PP = deps.stats, deps.base_stats, deps.variant_record, deps.move_pp
     local c, s = profile.constants, profile.structs.party
     local MEMORIAL, PER_BOX = Boxes.MEMORIAL_BOX, Boxes.MONS_PER_BOX
-    local _, block_length, mons_at, ots_at, nicks_at = writes:block()
+    local block, block_length, mons_at, ots_at, nicks_at = writes:block()
     local STRIDE = s.End + c.NAME_LENGTH + c.MON_NAME_LENGTH
 
     local function refuse(why) error(why, 0) end
@@ -514,15 +518,160 @@ function O.boxes(deps)
         return nil, tostring(result)
     end
 
-    -- Not composed, refused by name rather than stubbed:
-    --  * party_mon needs the savemon -> party_struct direction, and a party record's stats and PP are not in
-    --    the savemon: they are reconstructed (CalcPkmnStats predef, engine/pc/bills_pc.asm:923, and PP from
-    --    the PPUps byte + the move's base PP). No receipt proves that arithmetic here, and a wrong stat is a
-    --    silently corrupt mon, so it refuses instead.
-    --  * memorialize targets the memorial box, and NEWBOX §6.2 leaves that choice an OPEN owner ruling.
-    function self.withdraw()
-        return nil, "Polished party_mon is not composed: savemon->party stat/PP reconstruction unqualified"
+    -- ── party_mon (withdraw) — docs/polished/WITHDRAW.md §1-§2 ───────────────────────────────────────────────
+    -- The engine (engine/pc/bills_pc.asm SetStorageBoxPointer .party :582-613, GetStorageMon :1342,
+    -- DecodeTempMon :887, SetTempPartyMonData :960) appends to the party and clears only the box slot's pointer
+    -- byte and its Banks bit. It never frees the pokedb entry: those bytes, the name-MSB checksum and the
+    -- allocation flag stay, and NewStoragePointer (:392) reuses the entry later. This executor follows that
+    -- exactly, box half first, so a reset in between leaves the mon in BOTH places (recoverable by re-running)
+    -- instead of in neither.
+    local function require_withdraw()
+        if type(io_) ~= "table" or type(io_.read_u8) ~= "function" then
+            refuse("withdraw is not composed: no live io for the option bytes")
+        end
+        if type(coords) ~= "table" or type(coords.sNewBox1) ~= "table" then
+            refuse("withdraw is not composed: no newbox coordinates for the box record")
+        end
+        BOX1 = coords.sNewBox1[1] * 0x2000 + coords.sNewBox1[2] - 0xA000
+        if type(STATS) ~= "table" or type(STATS.party_from_savemon) ~= "function" then
+            refuse("withdraw is not composed: polished_stats.lua is not loaded")
+        end
+        if type(BASE) ~= "table" or type(VARIANT) ~= "table" or type(MOVE_PP) ~= "table" then
+            refuse("withdraw is not composed: base_stats / variant_record / move_pp are all required")
+        end
     end
+    local NATURES_OPT, PERFECT_IVS_OPT, EV_OPTMASK = 0, 3, 0x0B
+    -- wInitialOptions 00:CFF6 / wInitialOptions2 00:CFF7 (constants/ram_constants.asm:101,104,125). WRAM0, so bank 0.
+    local OPT1, OPT2 = 0xCFF6, 0xCFF7
+    local function live_options()
+        for _, at in ipairs({OPT1, OPT2}) do
+            if io_.bank_valid(0, at, 1) ~= true then return nil, "options: WRAM0 is not mapped" end
+        end
+        local a, b = io_.read_u8(OPT1, "System Bus"), io_.read_u8(OPT2, "System Bus")
+        if not integer(a, 0, 255) or not integer(b, 0, 255) then
+            return nil, "options: wInitialOptions unreadable"
+        end
+        return {apply_evs = (b & EV_OPTMASK) ~= 0, natures_on = ((a >> NATURES_OPT) & 1) == 1,
+                perfect_ivs = ((a >> PERFECT_IVS_OPT) & 1) == 1}
+    end
+    -- sNewBox<n> flat CartRAM + the 0x21 record stride, and the Banks byte at +0x14 (NEWBOX §1.1)
+    local BOX1
+    local function record_flat(box) return BOX1 + 0x21 * (box - 1) end
+    local function hex_bytes(h, n, what)
+        local out = {}
+        if type(h) ~= "string" or #h ~= 2 * n then refuse(what .. " is not " .. n .. " bytes") end
+        for i = 1, n do out[i] = tonumber(h:sub(2 * i - 1, 2 * i), 16) end
+        return out
+    end
+    local function pad(out, n)
+        for i = #out + 1, n do out[i] = 0 end
+        if #out ~= n then refuse("name field is " .. #out .. " bytes, expected " .. n) end
+        return out
+    end
+
+    --- party_mon. true, note on success; nil, why on refusal. Never raises.
+    function self.withdraw(key)
+        local okr, result, note = pcall(function()
+            require_withdraw()
+            local boxes, why = scan()
+            if not boxes then refuse("box census incomplete: " .. tostring(why)) end
+            local party = party_block()
+            if party.count >= c.PARTY_LENGTH then refuse("party full (" .. party.count .. "/" .. c.PARTY_LENGTH .. ")") end
+            local found, box, hits = nil, nil, 0
+            for index = 1, c.NUM_BOXES do
+                for _, m in ipairs(boxes[index] or {}) do
+                    if m.key == key then
+                        hits = hits + 1
+                        found, box = m, index
+                    end
+                end
+            end
+            if hits > 1 then refuse("ambiguous duplicate boxed key") end
+            if not found then refuse("key not boxed") end
+            if find_key(party.mons, key) then refuse("key is already in the party") end
+            -- the 49-byte savemon, checksum re-proved here (the census already refuses Bad Eggs; a change between
+            -- the scan and now would be a torn image)
+            local entry = hex_bytes(found.raw_hex, 49, "box entry")
+            if not Boxes.verify(entry) then
+                refuse("box entry checksum mismatch (a Bad Egg is never withdrawn)")
+            end
+            local opts, owhy = live_options()
+            if not opts then refuse(owhy) end
+            local record, view, swhy = STATS.party_from_savemon(entry, {
+                apply_evs = opts.apply_evs, natures_on = opts.natures_on, perfect_ivs = opts.perfect_ivs,
+                base_stats = BASE, variant_record = VARIANT, move_pp = MOVE_PP})
+            if not record then refuse("stat rebuild refused: " .. tostring(swhy)) end
+            -- nickname 11 B (already decoded back to the party-side encoding), OT 8 name bytes + 3 EXTRA
+            -- (savemon bytes 30..32, which carry hyper training - bills_pc.asm:960 reads the mask from
+            -- wTempMonOT + PLAYER_NAME_LENGTH)
+            local nick = pad(hex_bytes(found.nickname_raw_hex, 11, "nickname"), 11)
+            local ot = {}
+            for i = 1, 8 do ot[i] = hex_bytes(found.ot_raw_hex, 8, "OT name")[i] end
+            for i = 1, 3 do ot[8 + i] = entry[29 + i] end
+            local target = party.count                       -- append: the engine only raises the count when the
+            local rec = record_flat(box)                     -- requested slot is past it
+            -- ── BOX HALF: the slot pointer byte and its Banks bit, nothing else ──
+            local slot = found.slot                          -- 0-based, as the census reports it
+            local bits_at = rec + 0x14 + (slot >> 3)
+            local bits = io_.read_u8(bits_at, "CartRAM")
+            if not integer(bits, 0, 255) then refuse("box Banks byte unreadable") end
+            local cleared = bits & ~(1 << (slot & 7)) & 0xFF
+            writes:arm("box_deposit")
+            local okb, werr = pcall(function()
+                writes:write_batch(writes, {
+                    {domain = "CartRAM", addr = rec + slot, bytes = {0}},
+                    {domain = "CartRAM", addr = bits_at, bytes = {cleared}},
+                })
+            end)
+            writes:disarm(writes)
+            if not okb then refuse("box half refused: " .. tostring(werr)) end
+            -- ── PARTY HALF: record, nickname, OT, and wPartyCount LAST ──
+            writes:arm("party_collection")
+            local okp, perr = pcall(function()
+                writes:write_batch(writes, {
+                    {domain = "System Bus", addr = block + mons_at + target * s.End, bytes = record},
+                    {domain = "System Bus", addr = block + ots_at + target * c.NAME_LENGTH, bytes = ot},
+                    {domain = "System Bus", addr = block + nicks_at + target * c.MON_NAME_LENGTH, bytes = nick},
+                    {domain = "System Bus", addr = block, bytes = {party.count + 1}},
+                })
+            end)
+            writes:disarm(writes)
+            if not okp then refuse("party half refused: " .. tostring(perr)) end
+            -- ── READ-BACK ──
+            local after = reads.read_party()
+            if not after then refuse("read-back refused: the party became unreadable") end
+            if after.count ~= party.count + 1 then
+                refuse("read-back refused: party count " .. party.count .. " -> " .. tostring(after.count))
+            end
+            local landed
+            for _, m in ipairs(after.mons) do
+                if m.key == key then landed = m end
+            end
+            if not landed then refuse("read-back refused: the withdrawn mon is not in the party") end
+            if landed.hp ~= view.hp or landed.status ~= 0 then
+                refuse("read-back refused: hp " .. tostring(landed.hp) .. "/" .. tostring(view.hp)
+                       .. " status " .. tostring(landed.status))
+            end
+            -- the box side: the slot is empty AND the pokedb entry is untouched (bytes + allocation flag)
+            local after_boxes, cwhy = scan()
+            if not after_boxes then
+                refuse("read-back refused: the census no longer completes (" .. tostring(cwhy) .. ")")
+            end
+            if find_key(after_boxes[box], key) then
+                refuse("read-back refused: box " .. box .. " still reads the mon")
+            end
+            if io_.read_u8(bits_at, "CartRAM") ~= cleared then
+                refuse("read-back refused: the Banks bit did not clear")
+            end
+            return true, {box = box, from_slot = slot + 1, slot = target, hp = view.hp, max_hp = view.max_hp,
+                          level = view.level, durability = "VOLATILE_UNTIL_NATIVE_SAVE"}
+        end)
+        if okr then return result, note end
+        return nil, tostring(result)
+    end
+
+    -- Not composed, refused by name rather than stubbed:
+    --  * memorialize targets the memorial box, and NEWBOX §6.2 leaves that choice an OPEN owner ruling.
     function self.memorialize()
         return nil, "Polished memorialize is not composed: the memorial box choice is an open owner ruling (NEWBOX 6.2)"
     end
