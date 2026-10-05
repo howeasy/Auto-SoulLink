@@ -525,6 +525,10 @@ function O.boxes(deps)
     -- allocation flag stay, and NewStoragePointer (:392) reuses the entry later. This executor follows that
     -- exactly, box half first, so a reset in between leaves the mon in BOTH places (recoverable by re-running)
     -- instead of in neither.
+    -- sNewBox<n> flat CartRAM + the 0x21 record stride, and the Banks byte at +0x14 (NEWBOX §1.1).
+    -- Declared BEFORE require_withdraw, which assigns it: as a later `local`, the assignment compiled
+    -- to a global and every withdraw raised inside record_flat (introduced in a0487e8bd).
+    local BOX1
     local function require_withdraw()
         if type(io_) ~= "table" or type(io_.read_u8) ~= "function" then
             refuse("withdraw is not composed: no live io for the option bytes")
@@ -555,7 +559,6 @@ function O.boxes(deps)
                 perfect_ivs = ((a >> PERFECT_IVS_OPT) & 1) == 1}
     end
     -- sNewBox<n> flat CartRAM + the 0x21 record stride, and the Banks byte at +0x14 (NEWBOX §1.1)
-    local BOX1
     local function record_flat(box) return BOX1 + 0x21 * (box - 1) end
     local function hex_bytes(h, n, what)
         local out = {}
