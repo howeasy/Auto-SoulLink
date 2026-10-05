@@ -57,7 +57,7 @@ do
     end
 end
 -- hard cap: a driver that never reaches its phases must still produce a RESULT line, not spin
-local FRAME_CAP = tonumber(os.getenv("POL_FRAME_CAP")) or 4500
+local FRAME_CAP = tonumber(os.getenv("POL_FRAME_CAP")) or 14000   -- must exceed the 8000-frame boot budget
 event.onframeend(function()
     if emu.framecount() > FRAME_CAP then
         L.check("driver reached its hard frame cap", false, "frame " .. emu.framecount() .. " cap " .. FRAME_CAP)
@@ -79,7 +79,16 @@ L.check("the composition has the overworld write path", P.overworld ~= nil and P
 L.check("the composition has the box executor", P.overworld ~= nil and P.overworld.boxes ~= nil)
 
 -- ── boot the fixture into the overworld ─────────────────────────────────────────────────────────
-local ok_ow, ow_why = L.to_overworld(24, 3, 60, 2500, "continue")
+-- group/number nil = "any map" (pol_lib.lua:106-113 tests `group == nil or ...`): the fixture is
+-- parked wherever the warp put it, and pinning ROUTE_29 (24,3) made the gate fail on a game that
+-- was already running the overworld. 8000 matches live.lua:133.
+-- L.to_overworld gates on L.ow_idle() -> L.recent("OWPlayerInput", 2), a HOOK hit, not a memory
+-- read (pol_lib.lua:103,112). Without these registrations ow_idle() is always false and the helper
+-- spins to its bound whatever the map -- the same two hooks control.lua:7 registers.
+for _, name in ipairs({"OWPlayerInput", "SetInitialOptions.joypad_loop"}) do L.hook(name) end
+
+local ok_ow, ow_why = L.to_overworld(nil, nil, 60, 8000, "continue")
+L.log(fmt("[writes] overworld: map %d:%d (warp fixture's own map)", L.rw("wMapGroup"), L.rw("wMapNumber")))
 if not ok_ow then
     local g = { map = L.rw("wMapStatus"), script = L.rw("wScriptRunning"), paused = L.rw("wGameLogicPaused"),
                 battle = L.rw("wBattleMode"), party = L.rw("wPartyCount"),
