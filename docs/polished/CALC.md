@@ -155,12 +155,17 @@ Listed because the calculator is offered for this cartridge and these are the wa
 None of them is hidden in the UI: the Manager's own `battle_calc` row carries a shortened version of
 this list.
 
-### 4.1 Critical hits are modelled as **x2**; Polished uses **x1.5**
+### 4.1 Critical hits: x1.5 (x2.25 Sniper), applied before the division
 
-`effect_commands.asm:4333-4343` multiplies by `3/2` (`9/4` with Sniper). The calculator applies
-`baseDamage *= 2` for every gen ≥ 3 (`mechanics/gen3.ts:416`), and the multiplier is hard-coded in
-the mechanics module. A critical hit therefore over-states damage by 33%. **Do not trust a crit
-number.** This cannot be fixed by data alone; it would need a mechanics module for Polished.
+`effect_commands.asm:4333-4343` multiplies the running product by `3/2` (`9/4` with Sniper), and
+that happens before `DamagePass3` (/defense, /50) and `DamagePass4` (+2). Gen 3's calculator does
+`(base + 2) * 2`. `usePolished(true)` therefore switches on `setGen3PolishedCrit`
+(`mechanics/gen3.ts`, `critProductADV`): the product is multiplied by 3/2 (9/4 for a `Sniper`
+attacker) ahead of the division, and the later x2 is skipped. Every other game keeps x2.
+Stat-stage handling on a crit (attacker's negative and defender's positive stages ignored,
+`effect_commands.asm:4180-4206`) already matches gen 3. Crit *chance* is not computed by the
+calculator (it is an input). Sniper only has an effect if an ability is supplied, which the adapter
+does not do (4.2). Gated by `tests/unit/test_gen_polished_calc.py` (needs node, no build).
 
 ### 4.2 Abilities are not applied
 

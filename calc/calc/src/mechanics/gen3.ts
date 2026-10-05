@@ -17,6 +17,35 @@ import {
   handleFixedDamageMoves,
 } from './util';
 
+// POLISHED-CRIT-BEGIN
+// Polished Crystal runs on this module (docs/polished/CALC.md) but its critical hit is not Gen 3's
+// x2 applied after the +2: effect_commands.asm:4333-4343 multiplies the running product by 3/2
+// (9/4 with Sniper) BEFORE the /defense, /50 and +2 passes (DamagePass3/4). Off by default; only
+// calc/src/calc/data/polished.js's usePolished() switches it on, so every other game stays x2.
+let polishedCrit = false;
+
+export function setGen3PolishedCrit(active: boolean): void {
+  polishedCrit = !!active;
+}
+
+export function critProductADV(product: number, sniper: boolean): number {
+  return Math.floor(sniper ? (product * 9) / 4 : (product * 3) / 2);
+}
+
+function baseDamageADV(
+  lv: number,
+  at: number,
+  bp: number,
+  df: number,
+  isCritical: boolean,
+  attacker: Pokemon
+) {
+  let product = Math.floor((2 * lv) / 5 + 2) * at * bp;
+  if (polishedCrit && isCritical) product = critProductADV(product, attacker.hasAbility('Sniper'));
+  return Math.floor(Math.floor(product / df) / 50);
+}
+// POLISHED-CRIT-END
+
 export function calculateADV(
   gen: Generation,
   attacker: Pokemon,
@@ -145,7 +174,7 @@ export function calculateADV(
   const df = calculateDefenseADV(gen, defender, move, desc, isCritical);
 
   const lv = attacker.level;
-  let baseDamage = Math.floor(Math.floor((Math.floor((2 * lv) / 5 + 2) * at * bp) / df) / 50);
+  let baseDamage = baseDamageADV(lv, at, bp, df, isCritical, attacker);
 
   baseDamage = calculateFinalModsADV(baseDamage, attacker, move, field, desc, isCritical);
 
@@ -173,9 +202,7 @@ export function calculateADV(
       const newAt = calculateAttackADV(gen, attacker, defender, move, desc, isCritical);
       let newBp = calculateBasePowerADV(attacker, defender, move, desc);
       newBp = calculateBPModsADV(attacker, move, desc, newBp);
-      let newBaseDmg = Math.floor(
-        Math.floor((Math.floor((2 * lv) / 5 + 2) * newAt * newBp) / df) / 50
-      );
+      let newBaseDmg = baseDamageADV(lv, newAt, newBp, df, isCritical, attacker);
       newBaseDmg = calculateFinalModsADV(newBaseDmg, attacker, move, field, desc, isCritical);
       newBaseDmg = Math.floor(newBaseDmg * typeEffectiveness);
 
@@ -413,7 +440,7 @@ function calculateFinalModsADV(
 
   baseDamage = (move.category === 'Physical' ? Math.max(1, baseDamage) : baseDamage) + 2;
   if (isCritical) {
-    baseDamage *= 2;
+    if (!polishedCrit) baseDamage *= 2; // Polished applied it before the division (baseDamageADV)
     desc.isCritical = true;
   }
 
