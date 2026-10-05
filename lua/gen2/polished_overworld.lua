@@ -544,7 +544,10 @@ function O.boxes(deps)
             refuse("withdraw is not composed: base_stats / variant_record / move_pp are all required")
         end
     end
-    local NATURES_OPT, PERFECT_IVS_OPT, EV_OPTMASK = 0, 3, 0x0B
+    -- NATURES_OPT bit 0, PERFECT_IVS_OPT bit 3 (constants/ram_constants.asm:101,104);
+    -- EV_OPTMASK EQU %11 = $03 (constants/ram_constants.asm:125) - NOT %1011: bit 3 of
+    -- wInitialOptions2 is the RTC option, so $0B would enable EVs on a save that has them off.
+    local NATURES_OPT, PERFECT_IVS_OPT, EV_OPTMASK = 0, 3, 0x03
     -- wInitialOptions 00:CFF6 / wInitialOptions2 00:CFF7 (constants/ram_constants.asm:101,104,125). WRAM0, so bank 0.
     local OPT1, OPT2 = 0xCFF6, 0xCFF7
     local function live_options()
