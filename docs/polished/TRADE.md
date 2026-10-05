@@ -1263,3 +1263,72 @@ engine-written during a hand-over — but **UNVERIFIED**: which of the two the t
 (the engine regenerates the personality word from DVs on load, and the overlay's snapshot window
 closes between the snapshot and the commit, so a rewrite landing in that window is the exact bug
 class T4 exists to catch).
+## 10.9 Live measurement of the DISPATCH-ENTRY window (S1, 2026-10-04): §10.3 CONFIRMED
+
+**This closes §10.6's first half.** Run 2 Stage B sampled at `SlinkDelayFrameBridge` ENTRY;
+`SlinkTradeDispatch` runs three frames further in, so the window the dispatcher reads had never
+been observed. Driver: `tools/polished_live/trade_probe.py` (new). Lane
+`F:/slink-work/lanes/pol-trade2/`, overlay `34942315BB3E62189A56DABBCB9CEF6DD3E9A9F5` (the CURRENT
+`data/polished/overlay_provenance.json`), fixture `polished_overlay_warp.SaveRAM`
+sha256 `75c7a5dc…`, EmuHawk PID 258200, killed and checked gone. Evidence
+`lanes/pol-trade2/explore_B/result.txt` sha256 `f92cb78ebf91d7aa728bc51ee3195a4fc7e2485c1e0305d6f44cb848fadd3ec6`,
+`stacks.json` sha256 `4d55371779278605b8ccaaa26419ffec625345d36f2c656358c3f5c50c48ac66`,
+`RESULT: PASS explore-B (0 checks failed) frame 1667`.
+
+**The frame depth is arithmetic, not a paste.** At bridge entry `sp = B`, `$0DAB` is at `B+0`; the
+bridge pushes `af`(bank) `hl` `bc` `af`(xor a) — 8 bytes — then `call SlinkService` costs 2 more
+(`B-10`); `SlinkService` runs straight-line today, and `call SlinkTradeDispatch` costs 2 more.
+**`dispatch sp == bridge sp - 12`**, i.e. `dispatch sp+12+k == bridge sp+k`, exactly §10.2's claim.
+
+Measured at the dispatch entry, from the dominant stack of each phase (hex):
+
+| phase | samples | sp+5 | sp+12-13 | sp+14-15 | sp+24-25 | sp+26-27 | verdict |
+|---|---|---|---|---|---|---|---|
+| `overworld` | 300 (297 same stack) | `25` | `ab 0d` | `c2 51` | `6b 51` | `e2 50` | **ACCEPT** |
+| `overworld_after` | 61 (1 distinct) | `25` | `ab 0d` | `c2 51` | `6b 51` | `e2 50` | **ACCEPT** |
+| `script` | 197 (129 distinct) | `24` | `ab 0d` | *varies* | *varies, 11 values* | *varies* | **REFUSE** on sp+5 |
+| `wait_friend` | 300 (298 same) | `0A` | `ab 0d` | `5f 4d` | `b5 62` | `5f 51` | **REFUSE** on sp+5 |
+| `after_wait` | 52 | `24` | `ab 0d` | *varies* | *varies* | *varies* | **REFUSE** on sp+5 |
+| `yesno` | 21 | `25` | `ab 0d` | *varies* | *varies* | *varies* | REFUSE on sp+14 |
+
+And every pinned constant re-derives from `data/polished/polished_slink.sym`, so the match is
+symbolic rather than coincidental:
+
+| predicted | derived from the sym | measured |
+|---|---|---|
+| sp+12-13 `DelayFrame + 3` | `00:0da8` + 3 | `ab 0d` ✓ |
+| sp+14-15 `NextOverworldFrame.gfx_done + 6` | `25:51bc` + 6 | `c2 51` ✓ |
+| sp+24-25 `HandleMap + $15` | `25:5156` + $15 | `6b 51` ✓ |
+| sp+26-27 `OverworldLoop.loop + 9` | `25:50d9` + 9 | `e2 50` ✓ |
+| sp+5 `hROMBank` | `BANK(NextOverworldFrame)` = `$25` | `25` ✓ |
+
+### Three corrections to §10.3, from the same data
+
+1. **§10.3's script-frame constant `$62B5` is real but NOT universal.** `ScriptEvents.loop + 9`
+   re-derives to `$62B5` (`25:62ac` + 9) and it is exactly what the `wait_friend` phase carries at
+   sp+24-25. But the `script` phase's dominant stack has `60` there and sp+24 **varies across 11
+   values** in 197 samples. `$62B5` is the *LinkTradeFarCall tail*, not "the" script fingerprint.
+   The refusal still holds — it is `sp+5` (`$24` ≠ `$25`) that rejects those frames — but a
+   dispatcher may not cite `$62B5` as the script discriminator.
+2. **`sp+5` is the load-bearing check, and it is stronger than §10.3 says.** Script frames run in
+   bank `$24`, the link wait in `$0A`, and only the idle overworld is in `$25`. Checking sp+5
+   first rejects three of the five measured phases on its own.
+3. **NEW HAZARD, not in §10.3: the `talk` phase can false-accept.** Its 6 samples (2 distinct) have
+   `sp+5 = $25` and, in the dominant 3, `sp+24-25 = $6B $51` — the accept values. That is the frame
+   on which the player's A press *starts* the receptionist script, before `wScriptRunning` is set.
+   A dispatcher that accepts on the stack alone would open the native prompt on the same frame the
+   player begins a talk. The port MUST keep `trade_dispatch.asm:34-54`'s engine-state refusals
+   (`wScriptMode`, `wBattleMode`, `wLinkMode`, `wGameLogicPaused`, `hInMenu`, `wMapStatus`,
+   `wPlayerStepFlags`, `wMapEventStatus`) — the stack fingerprint is a *pre-filter*, never the
+   whole gate. §10.7's `cp 0` for Polished's `hVBlank` mode selector matters for the same reason.
+
+### Noise positions confirmed unpinnable
+
+`sp+4` and `sp+8..9` (bridge-entry depth) vary between runs exactly as §10.4 says: the `overworld`
+phase alone shows 9 distinct bytes across the noise positions. `trade_probe.py` reports them and
+counts them as deliberately unpinned; the unit test must assert the six pinned positions and a
+flipped byte at any of them, never all 32.
+
+**NOT measured here:** the third population §10.6 asks for — a frame inside the service's own
+`SlinkTradeWaitFrame`, which needs `hROMBank = $7E`. It is unreachable until S2 lands the service;
+until then it is UNVERIFIED, not disproved.
