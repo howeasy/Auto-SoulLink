@@ -67,7 +67,7 @@ def mismatches(module, lua, species_rows, move_rows, variants):
         got = bytes(party[i] for i in range(1, 49))
         if got != want:
             bad += 1
-        elif view.max_hp != int.from_bytes(want[36:38], "little") or bool(view.is_egg) != mon["is_egg"]:
+        elif view.max_hp != int.from_bytes(want[36:38], "big") or bool(view.is_egg) != mon["is_egg"]:
             bad += 1
     return bad
 
@@ -77,6 +77,38 @@ def test_the_lua_twin_equals_the_python_codec_over_500_random_savemons(species_r
     assert mismatches(module, lua, species_rows, move_rows, variants) == 0
     # the 61 ceiling, spelled out
     assert module.max_pp(40, 3) == 61 == pc.max_pp(40, 3)
+
+
+LUA_STAT_KEYS = [("attack", "atk"), ("defense", "def"), ("speed", "spe"),
+                 ("special_attack", "spa"), ("special_defense", "spd")]
+
+
+def endianness_failures(module, lua, species_rows, move_rows, variants):
+    """Vectors where decode_party_mon (the existing big-endian reader) disagrees with the Lua twin's own view."""
+    bad = 0
+    for mon, flags in vectors(species_rows)[:120]:
+        party, view = module.party_from_savemon(lua.table_from(list(pc.encode_savemon(mon))),
+                                                options(lua, species_rows, move_rows, variants, flags))
+        got = pc.decode_party_mon(bytes(party[i] for i in range(1, 49)))
+        ok = got["max_hp"] == view.max_hp and got["hp"] == (0 if mon["is_egg"] else view.max_hp)
+        ok = ok and all(got["stats"][long] == view.stats[short] for long, short in LUA_STAT_KEYS)
+        bad += not ok
+    return bad
+
+
+def test_the_lua_party_bytes_decode_big_endian_to_the_view_values(species_rows, move_rows, variants):
+    lua, module = load()
+    assert endianness_failures(module, lua, species_rows, move_rows, variants) == 0
+
+
+@pytest.mark.parametrize("name,before,after", [
+    ("HP little", "p[35], p[36] = hp >> 8, hp & 255", "p[35], p[36] = hp & 255, hp >> 8"),
+    ("stats little", "stats[i] >> 8, stats[i] & 255", "stats[i] & 255, stats[i] >> 8"),
+])
+def test_the_endianness_check_goes_red_on_a_little_endian_twin(name, before, after, species_rows, move_rows, variants):
+    assert SOURCE.count(before) == 1
+    lua, module = load(SOURCE.replace(before, after))
+    assert endianness_failures(module, lua, species_rows, move_rows, variants) > 0, name
 
 
 def test_the_view_decodes_the_struct(species_rows, move_rows, variants):

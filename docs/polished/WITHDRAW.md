@@ -20,6 +20,7 @@ confirms it.
   `PP(22..25) HAPPINESS(26) PKRUS(27) CAUGHT(28..30) LEVEL(31) STATUS(32) skip(33) HP(34) MAXHP(36) STATS(38..47)`
   (`constants/pokemon_data_constants.asm`). The 3 `EXTRA` bytes are NOT in the 48-byte struct: they ride at the tail of the
   11-byte OT array (`wTempMonOT + PLAYER_NAME_LENGTH`), which also carries the hyper-training mask.
+  HP, MaxHP and the five stats are **big-endian** in the party struct (`CalcPkmnStats` stores `hMultiplicand + 1` first).
 * **[C] Stats.** `CalcPkmnStatC` reads three RAM options **at rebuild time**: `wInitialOptions` bit `NATURES_OPT`
   (clear => every stat neutral), `wInitialOptions` bit `PERFECT_IVS_OPT` (set => every stat DV 15, before hyper training),
   `wInitialOptions2 & EV_OPTMASK` (zero => EVs ignored). The write path must read the **live** values and pass them to
