@@ -285,9 +285,8 @@
     "why": "Not available yet."
    },
    "native_sounds": {
-    "always": false,
-    "ok": false,
-    "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."
+    "ok": true,
+    "why": ""
    },
    "overworld_presence": {
     "always": false,

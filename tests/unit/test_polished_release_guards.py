@@ -33,6 +33,17 @@ POLISHED_SLUG = "polished-crystal"
 POLISHED_FAMILY = "gen2_polished"
 
 
+
+# POL-SOUNDS: the ONE Polished capability that is no longer refused. Each entry says what made
+# it true and what still gates it, so adding a row to this list is a deliberate act, not a
+# blanket loosening of the guard below.
+POLISHED_GRANTED = {
+    "native_sounds": "patch/polished/src/slink_sfx.asm plays the shared semantic codes through "
+                     "Polished's own PlaySFX, from the DelayFrame service (POL-SOUNDS). Still "
+                     "gated on the SLink companion overlay: the clean cartridge advertises no "
+                     "SFX bit, so the host posts nothing.",
+}
+
 def _provenance() -> dict:
     return json.loads(PROVENANCE.read_text(encoding="utf-8"))
 
@@ -119,15 +130,17 @@ def _polished_option_rows() -> dict[str, dict]:
 def test_manager_every_polished_capability_stays_refused() -> None:
     """Guard: no capability may report `ok` for Polished while its blocker is open.
 
-    battle_calc is the ONE row deliberately allowed to report ok (flipped 2026-10-04 with
+    battle_calc is deliberately allowed to report ok (flipped 2026-10-04 with
     calc/src/calc/data/polished.js, tools/gen_polished_calc.py): the calculator runs its gen 3
     mechanics on Polished's own species/move/type data, and what that does NOT model is enumerated
-    in docs/polished/CALC.md §4 rather than hidden. explode_mode and rival_team_swap stay refused
-    because the writers are unwired modules (docs/polished/EXPLODE_RIVAL.md); native_sounds,
-    phone_calls and pc_trade_npc keep their own reasons.
+    in docs/polished/CALC.md section 4 rather than hidden. native_sounds is the other exception:
+    POL-SOUNDS shipped the overlay's own sound service, so it is asserted granted in
+    POLISHED_GRANTED instead. explode_mode and rival_team_swap stay refused because the writers
+    are unwired modules (docs/polished/EXPLODE_RIVAL.md); phone_calls and pc_trade_npc keep their
+    own reasons.
 
     RED CONTROL: in server/manager.py, change any remaining `"gen2_polished": {"ok": False, ...}`
-    to `"ok": True`, or flip battle_calc back to False.
+    to `"ok": True`, or flip battle_calc / native_sounds back to False (the grant checks fail).
     """
     rows = _polished_option_rows()
     assert rows, "expected server.manager.OPTION_SUPPORT to carry gen2_polished rows"
@@ -136,8 +149,20 @@ def test_manager_every_polished_capability_stays_refused() -> None:
     for option, entry in sorted(rows.items()):
         if option == "battle_calc":
             continue
+        if option in POLISHED_GRANTED:
+            assert entry["ok"] is True, f"{option} is listed as granted but is still refused"
+            continue
         assert entry["ok"] is False, f"{option} flipped to ok for Polished without its card"
         assert entry.get("why"), f"{option} must carry a reason while refused"
+    assert set(POLISHED_GRANTED) <= set(rows), "a granted option has no gen2_polished row"
+
+
+def test_the_polished_grant_set_is_exactly_native_sounds() -> None:
+    """The grant set is a ledger: it names what is true now, not what might become true."""
+    assert set(POLISHED_GRANTED) == {"native_sounds"}
+    for option, why in POLISHED_GRANTED.items():
+        assert "polished" in why.lower() and len(why) > 40, option
+
 
 
 def _manager_dicts() -> list[tuple[str, dict]]:

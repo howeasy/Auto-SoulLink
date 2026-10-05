@@ -21,6 +21,12 @@ same-size `call` operand rewrites in bank $24 (PHONE_HOOKS, each verified opcode
 
     python tools/build_polished_companion.py            # build + publish
     python tools/build_polished_companion.py --check    # build + verify, publish nothing
+
+Native notification sounds (POL-SOUNDS) add the reset-sound latch and the one foreground service
+(patch/polished/src/slink_sfx.asm, INCLUDEd from slink.asm): a same-size rewrite of SoftReset's
+`call DelayFrames` in home/init.asm, a ROM0[$0089] bridge in the same free gap as the DelayFrame
+bridge, and ~120 bytes of bank $7E after the core service. The overlay now advertises
+SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY.
 """
 from __future__ import annotations
 
@@ -76,6 +82,12 @@ POLISHED_EDITS = (
      "DelayFrame::\n; Wait for one frame\n"
      "\tcall SlinkDelayFrameBridge ; SLink overlay: the 7-byte lead-in moved into the bridge\n"
      "\tnop\n\tnop\n\tnop\n\tnop\n"),
+    # POL-SOUNDS: SoftReset's `call DelayFrames` (home/init.asm) becomes the reset-sound bridge --
+    # 3 bytes either way, C preserved, so InitSound/ClearPalettes are untouched and _Init's WRAM0
+    # clear still runs after. Same size class as the DelayFrame lead-in rewrite above.
+    ("home/init.asm",
+     "\tld c, 3\n\tcall DelayFrames\n\n\tjr Init\n",
+     "\tld c, 3\n\tcall SlinkResetSoundBridge ; SLink overlay: latch the SFX hold across the reset\n\n\tjr Init\n"),
     ("main.asm",
      "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n",
      "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n\n"
@@ -100,6 +112,11 @@ PHONE_HOOKS = (
     ("PokegearPhoneContactSubmenu", "CheckCanDeletePhoneNumber", "SlinkPhone_CanDelete"),
     ("PokegearPhone_MakePhoneCall", "GetMapPhoneService", "SlinkPhone_CallGate"),
 )
+# (routine holding the call, native callee, ROM0 bridge) -- the one home/init.asm call the overlay rewrites
+RESET_HOOKS = (
+    ("SoftReset", "DelayFrames", "SlinkResetSoundBridge"),
+)
+RESET_HOOK_WINDOW = 0x20  # SoftReset's four instructions before the hooked call
 PHONE_HOOK_WINDOW = 0x40  # each hooked call lies within this many bytes of its routine's label
 DELAY_NATIVE = bytes.fromhex("f044e0d7afe08f")  # ldh a,[rLY] / ldh [hDelayFrameLY],a / xor a / ldh [hVBlankOccurred],a
 HEADER_CHECKSUMS = range(0x14D, 0x150)          # rgbfix header + global checksum
@@ -152,16 +169,27 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
         raise RuntimeError("DelayFrame lead-in is not `call SlinkDelayFrameBridge` + 4 nop")
     if data[bridge:bridge + 7] != DELAY_NATIVE:
         raise RuntimeError("the bridge does not start with DelayFrame's native lead-in")
+    # Both ROM0 bridges live in the same free gap and link adjacently, so ONE changed run covers
+    # both: the allowed range is their union, and the union is proven $FF in the clean ROM.
+    reset_hi = new["SlinkResetSoundBridgeEnd"][1]
+    if new["SlinkResetSoundBridge"][1] != new["SlinkDelayFrameBridgeEnd"][1] \
+            or base[bridge:reset_hi] != b"\xff" * (reset_hi - bridge):
+        raise RuntimeError("the ROM0 bridges must sit adjacently in the free gap above the DelayFrame bridge")
     svc_bank, svc = new["SlinkService"]
     empty = base[_flat(SERVICE_BANK, 0x4000):_flat(SERVICE_BANK, 0x8000)] == b"\xff" * 0x4000
     if svc_bank != SERVICE_BANK or not empty:
         raise RuntimeError(f"service must link in bank ${SERVICE_BANK:02X}, which must be empty in the clean ROM")
+    sfx_lo, sfx_hi = new["SlinkSfxService"], new["SlinkSfxServiceEnd"]
+    if sfx_lo[0] != SERVICE_BANK or sfx_hi[0] != SERVICE_BANK \
+            or sfx_lo[1] < new["SlinkServiceEnd"][1] or sfx_hi[1] > 0x8000:
+        raise RuntimeError("the sound service must link in bank $7E, after the core service")
     allowed = [(delay, delay + 7, "DelayFrame lead-in"),
-               (bridge, new["SlinkDelayFrameBridgeEnd"][1], "ROM0 bridge"),
-               # The service and the Stage-2 panel are contiguous in the same wholly-empty bank,
-               # and diff_spans reports one run across both, so they are allowed as one span.
-               (_flat(svc_bank, svc), _flat(svc_bank, new["SlinkPanelEnd"][1]),
-                f"bank ${SERVICE_BANK:02X} service + panel"),
+               (bridge, reset_hi, "ROM0 delay + reset bridges"),
+               # The core service, the Stage-2 panel and the sound service are contiguous in the same
+               # wholly-empty bank, and diff_spans reports one run across them, so they are allowed
+               # as one span (the bank is proven $FF throughout in the clean ROM above).
+               (_flat(svc_bank, svc), _flat(svc_bank, max(new["SlinkPanelEnd"][1], sfx_hi[1])),
+                f"bank ${SERVICE_BANK:02X} service + panel + sound service"),
                (HEADER_CHECKSUMS.start, HEADER_CHECKSUMS.stop, "header checksums")]
     panel_bank, panel = new["SlinkPanel"]
     if panel_bank != SERVICE_BANK or panel < new["SlinkServiceEnd"][1]:
@@ -170,6 +198,7 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
     if new["SlinkPhone_CountSetBits"][0] != 0 or base[phone_lo:phone_hi] != b"\xff" * (phone_hi - phone_lo):
         raise RuntimeError("the phone bridge must link into ROM0 bytes the clean ROM leaves free ($FF)")
     allowed += [(phone_lo, phone_hi, "ROM0 phone bridge"), *phone_hook_spans(base, data, old, new)]
+    allowed += reset_hook_spans(base, data, old, new)
     report = []
     for start, end in diff_spans(base, data):
         owner = next((name for lo, hi, name in allowed if lo <= start and end <= hi), None)
@@ -189,6 +218,24 @@ def phone_hook_spans(base: bytes, data: bytes, old: dict, new: dict) -> list[tup
         start = _flat(bank, addr)
         want = b"\xcd" + old[native][1].to_bytes(2, "little")
         window = base[start:start + PHONE_HOOK_WINDOW]
+        if window.count(want) != 1:
+            raise RuntimeError(f"{routine}: expected exactly one `call {native}`, found {window.count(want)}")
+        at = start + window.index(want)
+        if data[at:at + 3] != b"\xcd" + new[bridge][1].to_bytes(2, "little"):
+            raise RuntimeError(f"{routine}: `call {native}` at {at:#07x} is not `call {bridge}`")
+        spans.append((at + 1, at + 3, f"{routine}: call {native} -> {bridge}"))
+    return spans
+
+def reset_hook_spans(base: bytes, data: bytes, old: dict, new: dict) -> list[tuple[int, int, str]]:
+    """Each RESET_HOOKS call is exactly one `call native` in the clean routine and now reads `call bridge`."""
+    spans = []
+    for routine, native, bridge in RESET_HOOKS:
+        bank, addr = old[routine]
+        if old[native][0] != 0 or new[bridge][0] != 0:
+            raise RuntimeError(f"{native} must be ROM0 and {bridge} must be ROM0")
+        start = _flat(bank, addr)
+        window = base[start:start + RESET_HOOK_WINDOW]
+        want = b"\xcd" + old[native][1].to_bytes(2, "little")
         if window.count(want) != 1:
             raise RuntimeError(f"{routine}: expected exactly one `call {native}`, found {window.count(want)}")
         at = start + window.index(want)
