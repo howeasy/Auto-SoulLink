@@ -724,7 +724,8 @@ end
 -- one source), never the vanilla 15-file pack, admission matrix or receipts. What it composes, and what it does not:
 --   reads   lua/gen2/polished.lua P.new; wire = P.wire (DDDDDD:OOOO:SSS:TT keys, 70-byte party blobs)
 --   panel   lua/gen2/panel.lua over profile.overlay (the same SLNK mailbox, ABI 3): only for companion_abi, the
---           server's companion evidence; the overlay advertises caps 0, so it never paints or plays a sound
+--           server's companion evidence; the overlay advertises PANEL | SFX | SFX_NOTIFY (caps $07), so the panel and the native sounds go through
+--           the one mailbox-narrowed permit (lua/gen2/polished_sounds.lua wraps the same binder)
 --   signals C-SITES: signals.lua S.new_polished registers ONE hook, capture_party (03:652B, the wild party catch), at
 --           DEV_OVERLAY evidence (no receipt: physical_firing OPEN); no other engine site, so no PC/evolution events
 --   safety  refuses every write kind, so writes/boxes/phone/trade/checkpoint/battle holds are all absent (nil)
@@ -792,6 +793,7 @@ local function compose_polished(deps, decision)
                                     read_storage_box=census.read_storage_box}, {__index=base})
         local hud = assert(deps.hud, "explicit hud required")
         local Panel, Permit = load("lua/gen2/panel.lua"), load("lua/write_permit.lua")
+        local Sounds = load("lua/gen2/polished_sounds.lua")
         -- The panel writes ONE thing on Polished: its own staged page inside the overlay's mailbox
         -- (docs/polished/PANEL.md Stage 2 -- the ROM renders the page with PrintText, so there are
         -- no tile writes at all). The permit is narrowed to exactly that span, and every other
@@ -802,7 +804,11 @@ local function compose_polished(deps, decision)
         local mailbox_end = assert(ov.ram.wSlinkMailboxEnd, "overlay.ram.wSlinkMailboxEnd required")
         assert(mailbox_end > mailbox, "overlay mailbox span is empty")
         local panel_writes = Panel.writes(io_, Permit, {base=mailbox, size=mailbox_end - mailbox})
-        local panel = assert(Panel.new(profile, charmap, io_, panel_writes, hud.sanitize or function(s) return s end))
+        -- Sounds (POL-SOUNDS) is the SAME binder (Panel.new) plus the profile's semantic-code -> native-id table
+        -- (profile.overlay.sfx.codes, required: it refuses a profile whose overlay has no sound service). A
+        -- sound request is one request byte (+7) posted under the panel's reason through THIS narrow mailbox
+        -- permit: there is no sound write kind, so nothing outside the mailbox span can be reached.
+        local panel = assert(Sounds.new(profile, charmap, io_, panel_writes, hud.sanitize or function(s) return s end))
         -- C-SITES (milestone B): ONE engine site, capture_party (signals.lua S.new_polished), under this DEV-GRADE
         -- admission only. A refused binder (anchor bytes differ, malformed pack) degrades to the inert binder: the
         -- client keeps its hello and party ticks, registers nothing, and says why once in the log.
