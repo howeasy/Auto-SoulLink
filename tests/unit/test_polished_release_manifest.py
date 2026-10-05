@@ -33,6 +33,7 @@ POLISHED = {
     "lua/gen2/polished_boxes.lua",
     "lua/gen2/polished_overworld.lua",
     "lua/gen2/polished_sounds.lua",
+    "lua/gen2/polished_stats.lua",
 }
 
 

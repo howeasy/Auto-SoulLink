@@ -168,6 +168,7 @@ _LUA_GEN2 = [
     "polished_boxes.lua",
     "polished_overworld.lua",  # C-WRITE: entry.lua compose_polished loads the predicate-hold writer by path
     "polished_sounds.lua",  # POL-SOUNDS: wraps panel.lua's binder; dofiles ../write_permit.lua and ../gb_panel.lua
+    "polished_stats.lua",  # POL-WDLUA: pure savemon->party reconstruction; a future composition loads it by path
 ]
 
 # lua/gen4/ — the rewritten Gen 4 client (HGSS + hg-engine). run.lua is what lua/slink.lua's Gen 4
