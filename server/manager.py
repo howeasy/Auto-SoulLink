@@ -215,7 +215,10 @@ OPTION_SUPPORT = {
                     "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
                     "gen1_purergb": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport pureRGB's retyped/rebalanced damage."},
                     "gen2_gsc": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 2 damage."},
-                    "gen2_polished": {"ok": False, "why": "The calculator has no Polished Crystal data (new species, forms and abilities)."},
+                    # Flipped 2026-10-04 with calc/src/calc/data/polished.js (tools/gen_polished_calc.py):
+                    # gen 3 mechanics on Polished's own dex. Known limits are enumerated in
+                    # docs/polished/CALC.md §4 rather than hidden here.
+                    "gen2_polished": {"ok": True, "why": "Gen 3 mechanics on Polished's own dex (species, moves, Fairy-era type chart). Abilities, held-item boosts and natures are not modelled - docs/polished/CALC.md."},
                     "gen3_frlge_rr": {"ok": True},
                     "gen3_exp": {"ok": True}},
     # `always`: the cartridge trades this way whether or not the switch is on -- the form

@@ -10731,6 +10731,30 @@ for (const species of SPECIES) {
   gen++;
 }
 
+// Gen 3's slot - used by calc/src/calc/data/polished.js's usePolished() to swap in Polished
+// Crystal's own dex at runtime (docs/polished/CALC.md). Polished runs the calc at gen 3 because
+// that is the mechanics generation it matches (modern stat formula, physical/special split,
+// natures, 85-100% damage roll); only the DATA is swapped, never the mechanics.
+//
+// Captured late on purpose, for VANILLA_GEN1_SPECIES's reason (a late capture is still safe here:
+// `ADV` is a module-level const that nothing reassigns, so by this point in module init it is
+// still the vanilla table - `extend(true, {}, GSC, ADV_PATCH)` copied it at line ~2682).
+const VANILLA_GEN3_SPECIES = ADV;
+
+export function setGen3Species(data: {[name: string]: SpeciesData} | null): void {
+  const next = data ?? VANILLA_GEN3_SPECIES;
+  SPECIES[3] = next;
+  // No gen save/restore like setGen1Species: by now the module-level `gen` loop counter has settled
+  // at its final value, so Specie takes its `gen >= 2` branch and reads bs.sa/bs.sd - which is
+  // exactly what a gen-3 species table wants.
+  const map: {[id: string]: Specie} = {};
+  for (const specie in next) {
+    const m = new Specie(specie, next[specie]);
+    map[m.id] = m;
+  }
+  SPECIES_BY_ID[3] = map;
+}
+
 // Gen 1's slot only - used by calc/calc/src/data/purergb.ts's useDex() to swap in pureRGB's own
 // species table (see docs/calc_multigen/PURERGB_MECHANICS.md) at runtime, and back out again.
 // SPECIES[1] alone can't just be reassigned from outside this module: Species#get/[Symbol.iterator]

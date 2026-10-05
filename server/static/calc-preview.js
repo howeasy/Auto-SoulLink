@@ -12,6 +12,7 @@ window.SLinkCalc = (function () {
     'calc/util.js', 'calc/stats.js', 'calc/data/species.js',
     'calc/data/types.js', 'calc/data/natures.js', 'calc/data/abilities.js',
     'calc/data/moves.js', 'calc/data/items.js', 'calc/data/index.js', 'calc/data/purergb.js',
+    'calc/data/polished.js',
     'calc/move.js', 'calc/pokemon.js', 'calc/field.js', 'calc/items.js',
     'calc/mechanics/util.js', 'calc/mechanics/gen789.js', 'calc/mechanics/gen56.js',
     'calc/mechanics/gen4.js', 'calc/mechanics/gen3.js', 'calc/mechanics/gen12.js',
@@ -156,6 +157,12 @@ window.SLinkCalc = (function () {
       if (typeof window.calc.useDex === 'function') {
         if (c.dex === 'purergb') window.calc.useDex('purergb');
         else if (c.gen === 1) window.calc.useDex('vanilla');
+      }
+      // Polished Crystal shares the calc's GEN 3 mechanics slot with vanilla FireRed/Emerald, so
+      // its data swap has its own entry point (calc/src/calc/data/polished.js). Re-asserted on
+      // every render, which is also what puts a vanilla gen 3 run back on its own tables.
+      if (typeof window.calc.usePolished === 'function') {
+        window.calc.usePolished(c.dex === 'polished');
       }
       var gen = window.calc.Generations.get(c.gen || 9);
 

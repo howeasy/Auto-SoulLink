@@ -267,9 +267,8 @@
   },
   "gen2_polished": {
    "battle_calc": {
-    "always": false,
-    "ok": false,
-    "why": "The calculator has no Polished Crystal data (new species, forms and abilities)."
+    "ok": true,
+    "why": "Gen 3 mechanics on Polished's own dex (species, moves, Fairy-era type chart). Abilities, held-item boosts and natures are not modelled - docs/polished/CALC.md."
    },
    "explode_mode": {
     "always": false,

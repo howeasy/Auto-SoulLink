@@ -183,6 +183,32 @@ def _form_label(row):
     label = row["form_const"].removesuffix("_FORM").removeprefix(row["species_const"] + "_")
     return label.replace("_", " ").title()
 
+# ROM display names the damage calculator spells differently. Kept byte-identical to
+# tools/gen_polished_calc.py's SPECIES_FIXUPS, which builds calc/src/calc/data/polished.js's
+# species keys from it: the two must agree or a species silently misses the calc's toID() lookup
+# and falls back to the vanilla gen 3 dex. tests/unit/test_gen_polished_calc.py asserts they agree.
+CALC_SPECIES_FIXUPS = {"Nidoran♀": "Nidoran-F", "Nidoran♂": "Nidoran-M"}
+
+# The calc's own stat ids -> the pack's base_stats keys.
+_STAT_KEYS = (("hp", "hp"), ("atk", "attack"), ("df", "defense"),
+              ("spa", "special_attack"), ("spd", "special_defense"), ("spe", "speed"))
+
+
+def _calc_species_name(name):
+    return CALC_SPECIES_FIXUPS.get(name, name)
+
+
+def _crystal_stat(base, dv, ev, level, *, hp=False):
+    """Polished's own stat arithmetic (engine/pokemon/mon_stats.asm CalcPkmnStatC, lines 763-836).
+
+    de = (base + DV) * 2 + 1 + floor(EV / 4);  stat = floor(de * level / 100) + STAT_MIN_NORMAL,
+    or + level + STAT_MIN_HP for HP (constants/battle_constants.asm:81-82). This is pokecrystal's
+    formula with EVs in the stat-exp slot -- NOT the modern 2*base + IV one the calc uses at gen 3,
+    which is why calc_stats() hands the engine IV = 2*DV + 1.
+    """
+    quotient = ((base + dv) * 2 + 1 + ev // 4) * level // 100
+    return quotient + level + 10 if hp else quotient + 5
+
 
 class Gen2PolishedAdapter(Gen2GSCAdapter):
     """Game facts only for Polished Crystal; constructing it cannot activate a runtime route."""
@@ -534,13 +560,72 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         return data
 
     def calc_name(self, kind, name):
-        return name   # no Polished calc name table
+        # Polished's display names are the calc's own English names for every shared concept, and
+        # every lookup here is toID()-keyed either way, so identity is the whole table.
+        return name
+
+    def calc_species(self, species_id):
+        """The calc's species key for an EFFECTIVE id (base.GamePresentationAdapter.calc_species).
+
+        A plain species is its pack name under CALC_SPECIES_FIXUPS; a variant form -- whose
+        effective id IS its BaseData record index -- is "<base>-<form label>", the key
+        tools/gen_polished_calc.py writes into calc/src/calc/data/polished.js. Both are re-spellings
+        of species_name(), never a second naming policy.
+        """
+        if type(species_id) is not int:
+            return super().calc_species(species_id)
+        record = self._variant_by_record.get(species_id)
+        if record is not None:
+            base = _calc_species_name(self._species[record["species"]]["name"])
+            return f"{base}-{_form_label(record).replace(' ', '-')}"
+        if species_id in self._species:
+            return _calc_species_name(self._species[species_id]["name"])
+        return super().calc_species(species_id)
 
     def calc_profile(self):
-        return None   # the calc has no Polished dex (new species, forms, abilities, physical/special split)
+        # Gen 3 MECHANICS on Polished's own data: a per-move physical/special split, natures and
+        # an 85-100% damage roll are exactly what calc/calc/src/mechanics/gen3.ts's calculateADV
+        # implements, and the damage pipeline ((((2*lv/5+2)*A*bp/D)/50)+2) is the one the engine
+        # runs (BattleCommand_damagecalc, DamagePass1..4). Data swap only, via calc.usePolished().
+        # No `sets`: Polished ships no trainer-setdex file, so the calc's Prep tab stays hidden
+        # (calc/src/js/slink_bridge.js _maybeLoadGameSets -> _supportsPrepTab). docs/polished/CALC.md.
+        return {"name": "Polished Crystal", "gen": 3, "dex": "polished"}
 
     def calc_stats(self, detail):
-        return None
+        """IVs (Polished's DVs, doubled -- see below) and EVs from the 70-byte party blob, in the
+        calculator's gen 3 shape.
+
+        Gen2GSCAdapter.calc_stats emits `dvs`/`stat_exp` because the GEN 2 stat formula wants them.
+        Polished's stat formula is pokecrystal's CalcPkmnStatC with EVs in the stat-exp slot
+        (engine/pokemon/mon_stats.asm:763-836): (base + DV) * 2 + 1 + floor(EV/4), times level,
+        over 100. The calc's gen 3 path is the same shape but halves the DV term, so the DV is
+        re-expressed as IV = 2*DV + 1 -- total over every DV (0 -> 1, 15 -> 31), still inside the
+        calc's 0..31 IV range, and exact rather than a fudge factor.
+        `stats` is that same arithmetic under a NEUTRAL nature, so the page can cross-check the
+        engine's result against it.
+
+        None when the client sent no blob -- the normal case for an ENEMY, because the Polished
+        client's foe_entry carries no blob_hex and the calc then uses its own defaults
+        (docs/polished/CALC.md §3).
+        """
+        blob_hex = detail.get("blob_hex")
+        if not blob_hex:
+            return None
+        try:
+            mon = polished_codec.decode_party_blob(bytes.fromhex(blob_hex))
+        except (ValueError, TypeError):
+            return None
+        level = detail.get("level", 0)
+        if not _integer(level, 1, 100):
+            return None
+        base = self._row(mon["species_id"], mon.get("form", 0))["base_stats"]
+        ivs, evs, stats = {}, {}, {}
+        for calc_key, pack_key in _STAT_KEYS:
+            ivs[calc_key] = 2 * mon["dvs"][pack_key] + 1
+            evs[calc_key] = mon["evs"][pack_key]
+            stats[calc_key] = _crystal_stat(base[pack_key], mon["dvs"][pack_key],
+                                            evs[calc_key], level, hp=calc_key == "hp")
+        return {"ivs": ivs, "evs": evs, "stats": stats}
 
     def supports_abilities(self):
         return False  # P3: the ability slot is personality bits 5-6, not in the key; names need the slot
