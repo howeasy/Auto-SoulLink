@@ -44,8 +44,16 @@ ROM_SIZE = 0x200000        # the image must span bank $7E, where the service lin
 DELAY = 0x00E0             # ROM0 lead-in rewritten to `call bridge` + 4 nop
 BRIDGE = 0x3000            # ROM0 bridge the call targets
 BRIDGE_END = 0x3100
+# POL-SOUNDS: the reset-sound bridge links ADJACENTLY above the DelayFrame bridge (verify_overlay
+# requires it, and proves the union $FF), so BRIDGE_END is its start.
+RESET_BRIDGE, RESET_BRIDGE_END = BRIDGE_END, 0x3200
 SVC = (0x7E, 0x4000)
 SVC_END = (0x7E, 0x4010)
+SFX = (0x7E, 0x4010)       # the sound service links right after the core service
+SFX_END = (0x7E, 0x4020)   # 16 bytes, exactly SERVICE_BYTES
+SOFT_RESET = (0x00, 0x0200)
+DELAY_FRAMES = (0x00, 0x0250)
+RESET_HOOK_AT = pc._flat(*SOFT_RESET) + 4
 # HEADER_CHECKSUMS is range(0x14D, 0x150) -- THREE bytes. A 4th byte assigned into that slice
 # would silently extend the bytearray and make every image a different length.
 HEADER_BYTES = bytes((0xDE, 0xAD, 0xBE))
@@ -60,16 +68,22 @@ PHONE_NATIVES = {n: ((0x00, 0x2500 + i) if n == "GetMapPhoneService" else (0x24,
 PHONE_BRIDGES = {b: (0x00, PHONE_LO + 8 * i) for i, (_r, _n, b) in enumerate(pc.PHONE_HOOKS)}
 PHONE_CALLS = [(pc._flat(*PHONE_ROUTINES[r]) + 4 + 8 * i, n, b) for i, (r, n, b) in enumerate(pc.PHONE_HOOKS)]
 
-CLEAN_SYMS = {"DelayFrame": (0x00, DELAY), "wPlayerPartyCount": (0x10, 0x5D00), **PHONE_ROUTINES, **PHONE_NATIVES}
+CLEAN_SYMS = {"DelayFrame": (0x00, DELAY), "wPlayerPartyCount": (0x10, 0x5D00), "SoftReset": SOFT_RESET,
+              "DelayFrames": DELAY_FRAMES, **PHONE_ROUTINES, **PHONE_NATIVES}
 OVERLAY_SYMS = {
     "DelayFrame": (0x00, DELAY),
     "wPlayerPartyCount": (0x10, 0x5D00),     # every clean symbol survives, unmoved
+    "SoftReset": SOFT_RESET, "DelayFrames": DELAY_FRAMES,
     **PHONE_ROUTINES, **PHONE_NATIVES, **PHONE_BRIDGES,
     "SlinkPhoneBridgeEnd": (0x00, PHONE_HI),
     "SlinkDelayFrameBridge": (0x00, BRIDGE),
     "SlinkDelayFrameBridgeEnd": (0x00, BRIDGE_END),
+    "SlinkResetSoundBridge": (0x00, RESET_BRIDGE),
+    "SlinkResetSoundBridgeEnd": (0x00, RESET_BRIDGE_END),
     "SlinkService": SVC,
     "SlinkServiceEnd": SVC_END,
+    "SlinkSfxService": SFX,
+    "SlinkSfxServiceEnd": SFX_END,
     "wSlinkMailbox": (0x00, pc.MAILBOX),
 }
 EMPTY_BANK = slice(pc._flat(pc.SERVICE_BANK, 0x4000), pc._flat(pc.SERVICE_BANK, 0x8000))
@@ -79,6 +93,8 @@ def clean_rom() -> bytes:
     """A ROM with a native DelayFrame lead-in and an EMPTY service bank $7E."""
     rom = bytearray(ROM_SIZE)
     rom[EMPTY_BANK] = b"\xff" * 0x4000
+    rom[BRIDGE:RESET_BRIDGE_END] = b"\xff" * (RESET_BRIDGE_END - BRIDGE)
+    rom[RESET_HOOK_AT:RESET_HOOK_AT + 3] = b"\xcd" + DELAY_FRAMES[1].to_bytes(2, "little")
     rom[DELAY:DELAY + 7] = pc.DELAY_NATIVE
     rom[PHONE_LO:PHONE_HI] = b"\xff" * (PHONE_HI - PHONE_LO)
     for at, native, _bridge in PHONE_CALLS:
@@ -91,6 +107,9 @@ def overlay_rom(base: bytes | None = None) -> bytes:
     rom = bytearray(clean_rom() if base is None else base)
     rom[DELAY:DELAY + 7] = b"\xcd" + BRIDGE.to_bytes(2, "little") + bytes(4)
     rom[BRIDGE:BRIDGE + 7] = pc.DELAY_NATIVE
+    rom[RESET_BRIDGE:RESET_BRIDGE_END] = b"\x22" * (RESET_BRIDGE_END - RESET_BRIDGE)
+    rom[RESET_HOOK_AT + 1:RESET_HOOK_AT + 3] = RESET_BRIDGE.to_bytes(2, "little")
+    rom[pc._flat(*SFX):pc._flat(*SFX_END)] = SERVICE_BYTES
     rom[pc._flat(*SVC):pc._flat(*SVC_END)] = SERVICE_BYTES
     rom[pc.HEADER_CHECKSUMS.start:pc.HEADER_CHECKSUMS.stop] = HEADER_BYTES
     rom[PHONE_LO:PHONE_HI] = b"\x11" * (PHONE_HI - PHONE_LO)
@@ -145,12 +164,14 @@ def test_a_diff_entirely_inside_the_allowed_spans_is_accepted():
     `unexpected change at`.
     """
     report = pc.verify_overlay(clean_rom(), overlay_rom(), CLEAN_SYMS, OVERLAY_SYMS)
-    assert len(report) == 4 + 1 + len(pc.PHONE_HOOKS), report
     joined = "\n".join(report)
     assert "DelayFrame lead-in" in joined
-    assert "ROM0 bridge" in joined
-    assert f"bank ${pc.SERVICE_BANK:02X} service" in joined
+    # both ROM0 bridges and both bank-$7E services are adjacent, so each is ONE changed run
+    assert "ROM0 delay + reset bridges" in joined
+    assert f"bank ${pc.SERVICE_BANK:02X} service + sound service" in joined
+    assert f"call DelayFrames -> SlinkResetSoundBridge" in joined
     assert "header checksums" in joined
+    assert len([line for line in report if "phone hook" not in line]) >= 5, report
 
 
 def test_the_report_labels_each_span_with_its_bank_and_width():
@@ -161,16 +182,17 @@ def test_the_report_labels_each_span_with_its_bank_and_width():
     """
     report = pc.verify_overlay(clean_rom(), overlay_rom(), CLEAN_SYMS, OVERLAY_SYMS)
     assert "bank $00 0x000e0-0x000e6 (  7 B) DelayFrame lead-in" in report
-    assert f"bank ${pc.SERVICE_BANK:02X} 0x1f8000-0x1f800f ( 16 B)" in "\n".join(report)
+    # the core service and the sound service are adjacent, so ONE run carries both
+    assert f"bank ${pc.SERVICE_BANK:02X} 0x1f8000-0x1f801f ( 32 B)" in "\n".join(report)
 
 
 @pytest.mark.parametrize("offset,label", [
     (DELAY - 1, "one byte before the lead-in"),
     (DELAY + 7, "one byte after the lead-in"),
     (BRIDGE - 1, "one byte before the ROM0 bridge"),
-    (BRIDGE_END, "one byte after the ROM0 bridge"),
+    (RESET_BRIDGE_END, "one byte after the ROM0 bridges"),
     (pc._flat(*SVC) - 1, "one byte before the service"),
-    (pc._flat(*SVC_END), "one byte after the service"),
+    (pc._flat(*SFX_END), "one byte after the sound service"),
     (pc.HEADER_CHECKSUMS.start - 1, "one byte before the header checksums"),
     (pc.HEADER_CHECKSUMS.stop, "one byte after the header checksums"),
     (0x04000, "far from every span"),
@@ -180,7 +202,7 @@ def test_one_byte_outside_any_allowed_span_raises(offset, label):
 
     ANCHOR FOR: changing the containment test at :143 from `lo <= start and end <= hi` to
     `lo <= start` (start-only). A span that merely BEGINS inside an allowance then runs past its
-    end, and the DELAY+7 / BRIDGE_END / SVC_END / HEADER_CHECKSUMS.stop cases go red.
+    end, and the DELAY+7 / RESET_BRIDGE_END / SFX_END / HEADER_CHECKSUMS.stop cases go red.
     """
     base = clean_rom()
     data = bytearray(overlay_rom())

@@ -8,8 +8,8 @@
     "commit": "3fa43192379df5c3e7b09a08e4d5d79af4f02f42",
     "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
     "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
-    "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
-    "build_provenance_sha256": "f376ca44f94d8e51c5e6b6a30af28694ce9e40845d245f06d1fccc0ee4e9db89",
+    "lock_sha256": "0585f64c2e5520b7c67798b7ea2f6b16d88440c09f90a2b1bf34f4fcaf59d717",
+    "build_provenance_sha256": "d590e33adf0d696f279bd1acda6981cc50374ff2d8eae4deb9dee7097ab757f4",
     "rgbds_version": "v1.0.3",
     "evidence_level": "SOURCE"
   },
@@ -22,11 +22,19 @@
   "companion_overlay_spans": [
     {
       "start": 112,
-      "end": 136
+      "end": 138
+    },
+    {
+      "start": 140,
+      "end": 153
     },
     {
       "start": 334,
-      "end": 334
+      "end": 335
+    },
+    {
+      "start": 362,
+      "end": 363
     },
     {
       "start": 3496,
@@ -66,7 +74,11 @@
     },
     {
       "start": 2064384,
-      "end": 2064456
+      "end": 2064463
+    },
+    {
+      "start": 2064465,
+      "end": 2064558
     }
   ],
   "titles": {

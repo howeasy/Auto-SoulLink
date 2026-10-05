@@ -1,6 +1,6 @@
 SUMMARY:
-	ROM0: 16152 bytes used / 232 free
-	ROMX: 2047397 bytes used / 16987 free in 126 banks
+	ROM0: 16169 bytes used / 215 free
+	ROMX: 2047499 bytes used / 16885 free in 126 banks
 	SRAM: 30936 bytes used / 1832 free in 4 banks
 	WRAM0: 3831 bytes used / 265 free
 	WRAMX: 24784 bytes used / 3888 free in 7 banks
@@ -24,12 +24,13 @@ ROM0 bank #0:
 	SECTION: $005b-$006d ($0013 bytes) ["High Home"]
 	EMPTY: $006e-$006f ($0002 bytes)
 	SECTION: $0070-$0088 ($0019 bytes) ["SLink DelayFrame Bridge"]
-	EMPTY: $0089-$00ff ($0077 bytes)
+	SECTION: $0089-$0099 ($0011 bytes) ["Slink Sound Reset"]
+	EMPTY: $009a-$00ff ($0066 bytes)
 	SECTION: $0100-$014f ($0050 bytes) ["Header"]
 	SECTION: $0150-$3f33 ($3de4 bytes) ["Home"]
 	SECTION: $3f34-$3f91 ($005e bytes) ["SLink Phone Bridge"]
 	EMPTY: $3f92-$3fff ($006e bytes)
-	TOTAL EMPTY: $00e8 bytes
+	TOTAL EMPTY: $00d7 bytes
 
 ROMX bank #1:
 	SECTION: $4000 ($0000 bytes) ["SoldierGroup"]
@@ -3860,9 +3861,10 @@ ROMX bank #125:
 	TOTAL EMPTY: $0294 bytes
 
 ROMX bank #126:
-	SECTION: $4000-$4048 ($0049 bytes) ["SLink Service"]
-	EMPTY: $4049-$7fff ($3fb7 bytes)
-	TOTAL EMPTY: $3fb7 bytes
+	SECTION: $4000-$404b ($004c bytes) ["SLink Service"]
+	SECTION: $404c-$40ae ($0063 bytes) ["Slink Sound Service"]
+	EMPTY: $40af-$7fff ($3f51 bytes)
+	TOTAL EMPTY: $3f51 bytes
 
 VRAM bank #0:
 	SECTION: $8000-$9fff ($2000 bytes) ["VRAM0"]

@@ -56,6 +56,15 @@ CONSTANTS = {
     "constants/item_data_constants.asm": ("MAX_ITEM_STACK", "MAX_ITEMS", "MAX_MEDICINE", "MAX_BALLS",
                                           "MAX_BERRIES"),
 }
+# POL-SOUNDS: the four native ids the overlay's sound service resolves the shared semantic codes
+# to (patch/polished/src/slink_sfx.asm .sounds). Read out of the pinned constants file, so a
+# renamed or renumbered SFX is a generator error rather than a wrong cue at runtime.
+CONSTANTS["constants/sfx_constants.asm"] = ("SFX_ITEM", "SFX_WRONG", "SFX_BUMP", "SFX_READ_TEXT_2")
+# semantic code (patch/gb/slink_abi.inc SLINK_SFX_*) -> the source constant that names its native id
+SFX_CODES = (("success", "SFX_ITEM"), ("failure", "SFX_WRONG"), ("boo", "SFX_BUMP"),
+             ("notify", "SFX_READ_TEXT_2"))
+# The overlay's own sound entry points, so the Lua client can name them instead of hardcoding.
+SFX_SYMBOLS = ("PlaySFX", "CheckSFX", "wMusicFade", "wCurSFX", "SlinkSfxService")
 # C-ROMTABLES (docs/polished/ROMTABLES.md): the encounter-table reader lua/gen2/rom.lua.
 CONSTANTS["constants/pokemon_constants.asm"] = ("NUM_SPECIES", "NUM_POKEMON")
 CONSTANTS["constants/map_data_constants.asm"] = ("FISHGROUP_SHORE", "NUM_FISHGROUPS")
@@ -211,6 +220,8 @@ def build() -> dict:
     constants.update({k: v for k, v in pack.parse_consts("constants/battle_constants.asm").items()
                       if k.startswith("BATTLETYPE_")})
 
+    constants.update({k: v for k, v in pack.parse_consts("constants/sfx_constants.asm").items()
+                      if k in {c for _n, c in SFX_CODES}})
     names = set(RAM) | {fields[i] for fields in POCKETS.values() for i in range(3)}
     names |= {f"w{side}{suffix}Level" for side in ("Player", "Enemy") for _, suffix in STAGES}
     patterns = (r"wPartyMon[1-6]\w*", r"wBattleMon\w*", r"wEnemyMon\w*", r"wRoamMon\d\w*", r"h\w+")
@@ -266,12 +277,24 @@ def build() -> dict:
         pockets[pocket] = {"count": count, "data": data, "capacity": capacity}
     for label, (measured, expected) in checks.items():
         require(measured == expected, f"{label}: sym geometry {measured} != source {expected}")
+    require(constants.get("SFX_ITEM") == 1 and constants.get("SFX_WRONG") == 0x19
+            and constants.get("SFX_BUMP") == 0x24 and constants.get("SFX_READ_TEXT_2") == 0x08,
+            f"sfx_constants.asm ids moved: {constants}")
 
     overlay = {"artifact": "polished_overlay", "base_sha1": clean["sha1"], "rom_sha1": out["sha1"],
                "md5": out["md5"], "sym": SYM.name, "sym_sha256": sym_sha, "abi": abi,
                "ram": {name: ram[name] for name in OVERLAY_RAM}}
     for name in OVERLAY_RAM:
         require(ram_bank[name] == 0, f"{name} outside WRAM0")
+    sfx = {name: constants[const] for name, const in SFX_CODES}
+    for name in SFX_SYMBOLS:
+        require(name in symbols, f"{SYM.name}: sound service symbol {name} missing")
+    require(symbols["PlaySFX"][0] == 0 and symbols["CheckSFX"][0] == 0, "PlaySFX/CheckSFX must be ROM0")
+    overlay["sfx"] = {"codes": sfx, "caps": ["SLINK_CAP_SFX", "SLINK_CAP_SFX_NOTIFY"],
+                     "entry": "jp SlinkSfxService (patch/polished/src/slink.asm, via SlinkDelayFrameBridge)",
+                     "play_sfx": list(symbols["PlaySFX"]), "check_sfx": list(symbols["CheckSFX"]),
+                     "music_fade": symbols["wMusicFade"][1], "cur_sfx": symbols["wCurSFX"][1],
+                     "service": list(symbols["SlinkSfxService"])}
     rom, rom_derived, layout = rom_tables(symbols, constants)
     source = pack.source_block()
     source.update({"artifact": ARTIFACT, "overlay_sha1": out["sha1"], "overlay_sym_sha256": sym_sha,

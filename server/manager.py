@@ -205,7 +205,7 @@ OPTION_SUPPORT = {
                       "gen1_rby": {"ok": True},
                       "gen1_purergb": {"ok": True},
                       "gen2_gsc": {"ok": True},
-                      "gen2_polished": {"ok": False, "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."},
+                      "gen2_polished": {"ok": True},   # POL-SOUNDS: the overlay's own sound service (patch/polished/src/slink_sfx.asm) plays the shared semantic codes through Polished's PlaySFX
                       "gen3_frlge_rr": {"ok": True},
                       "gen3_exp": {"ok": False, "why": "Needs a companion patch with a native sound path, and the Emerald Expansion has none."}},
     "phone_calls": {"all": False, "why": "Only Gen 2 has a Pokégear phone for the companion to ring.",

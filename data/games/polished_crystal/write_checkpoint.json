@@ -7,11 +7,19 @@
   "companion_overlay_spans": [
     {
       "start": 112,
-      "end": 136
+      "end": 138
+    },
+    {
+      "start": 140,
+      "end": 153
     },
     {
       "start": 334,
-      "end": 334
+      "end": 335
+    },
+    {
+      "start": 362,
+      "end": 363
     },
     {
       "start": 3496,
@@ -51,7 +59,11 @@
     },
     {
       "start": 2064384,
-      "end": 2064456
+      "end": 2064463
+    },
+    {
+      "start": 2064465,
+      "end": 2064558
     }
   ],
   "titles": {

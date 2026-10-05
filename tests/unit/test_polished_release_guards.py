@@ -33,6 +33,17 @@ POLISHED_SLUG = "polished-crystal"
 POLISHED_FAMILY = "gen2_polished"
 
 
+
+# POL-SOUNDS: the ONE Polished capability that is no longer refused. Each entry says what made
+# it true and what still gates it, so adding a row to this list is a deliberate act, not a
+# blanket loosening of the guard below.
+POLISHED_GRANTED = {
+    "native_sounds": "patch/polished/src/slink_sfx.asm plays the shared semantic codes through "
+                     "Polished's own PlaySFX, from the DelayFrame service (POL-SOUNDS). Still "
+                     "gated on the SLink companion overlay: the clean cartridge advertises no "
+                     "SFX bit, so the host posts nothing.",
+}
+
 def _provenance() -> dict:
     return json.loads(PROVENANCE.read_text(encoding="utf-8"))
 
@@ -122,17 +133,31 @@ def test_manager_every_polished_capability_stays_refused() -> None:
     Blocker flipped by: the per-card client work — explode and rival-swap are still
     refused because the writers are unwired modules (docs/polished/EXPLODE_RIVAL.md);
     the calculator is refused because it has no Polished species/forms/abilities data
-    (server/manager.py:220).
+    (server/manager.py:220). native_sounds is the one exception: POL-SOUNDS shipped the
+    overlay's own sound service, so it is asserted granted in POLISHED_GRANTED instead.
 
     RED CONTROL: in server/manager.py, change any `"gen2_polished": {"ok": False, ...}`
-    to `"ok": True`.
+    to `"ok": True` — this test fails on the new option. Conversely, flip
+    native_sounds back to `ok: False` and it fails on the grant set.
     """
     rows = _polished_option_rows()
     assert rows, "expected server.manager.OPTION_SUPPORT to carry gen2_polished rows"
     assert "explode_mode" in rows and "rival_team_swap" in rows
     for option, entry in sorted(rows.items()):
+        if option in POLISHED_GRANTED:
+            assert entry["ok"] is True, f"{option} is listed as granted but is still refused"
+            continue
         assert entry["ok"] is False, f"{option} flipped to ok for Polished without its card"
         assert entry.get("why"), f"{option} must carry a reason while refused"
+    assert set(POLISHED_GRANTED) <= set(rows), "a granted option has no gen2_polished row"
+
+
+def test_the_polished_grant_set_is_exactly_native_sounds() -> None:
+    """The grant set is a ledger: it names what is true now, not what might become true."""
+    assert set(POLISHED_GRANTED) == {"native_sounds"}
+    for option, why in POLISHED_GRANTED.items():
+        assert "polished" in why.lower() and len(why) > 40, option
+
 
 
 def _manager_dicts() -> list[tuple[str, dict]]:

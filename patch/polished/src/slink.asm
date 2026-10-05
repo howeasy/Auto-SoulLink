@@ -1,6 +1,5 @@
-; SLink companion overlay -- Polished Crystal v3.2.3 core (P5a): beacon, ABI version,
-; sampled frame counter. Port of patch/gen2/src/slink.asm; same ABI (patch/gb/slink_abi.inc),
-; caps 0 (no SFX/panel/phone/trade yet).
+; SLink companion overlay -- Polished Crystal v3.2.3 core + native notification sounds.
+; Port of patch/gen2/src/slink.asm; same ABI (patch/gb/slink_abi.inc), caps SFX (no panel/phone/trade).
 INCLUDE "engine/slink/slink_abi.inc"
 
 ; Bank $7E: wholly unused in the clean 3.2.3 ROM (data/polished/free_space.txt) and not named
@@ -70,7 +69,10 @@ SlinkService::
 	ld [hli], a
 	ld a, SLINK_ABI_VERSION
 	ld [hl], a
-	xor a ; core build: no capabilities
+	; SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY: the sound service below plays the shared semantic codes
+	; through the cartridge's own PlaySFX (patch/polished/src/slink_sfx.asm). The panel bit stays clear:
+	; this overlay paints no screen, and a Lua host must not read a granted bit as a licensed one.
+	ld a, SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
 	ld [wSlinkMailbox + SLINK_OFS_CAPS], a
 
 	; Sample the engine's own clock (VBlank's hVBlankCounter). Unsigned deltas lose whole
@@ -101,7 +103,10 @@ SlinkService::
 .remember
 	ld a, b
 	ld [SLINK_LAST_SAMPLE], a
-	ret
+	; One foreground service per DelayFrame, in the same order vanilla uses: the sound service
+	; preserves DE, so the bridge's contract is unchanged. `jp`, never `call`, to keep the depth
+	; bounded by the bridge.
+	jp SlinkSfxService
 SlinkServiceEnd::
 
 ; ---- Pokegear Phone card: one virtual SLink contact (docs/polished/PHONE_SLOT.md, Stage 1) ----
@@ -181,3 +186,8 @@ SlinkPhoneEntryText:
 	text "SLink is linked."
 	prompt
 SlinkPhoneBridgeEnd::
+
+; ---- native notification sounds: the reset-entry latch + the one foreground service ----------
+; Same ABI, same semantic codes, same private hold bytes as patch/gen2/src/sfx.asm; the native
+; facts (SFX ids, PlaySFX/CheckSFX, wMusicFade) are Polished's own and each is ASSERTed there.
+INCLUDE "engine/slink/slink_sfx.asm"
