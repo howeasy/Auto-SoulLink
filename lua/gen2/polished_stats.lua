@@ -95,8 +95,8 @@ function S.party_from_savemon(savemon, opts)
     p[32] = level
     -- status (33) and the unused byte (34) stay 0; HP = MaxHP, 0 for an egg
     local hp = is_egg and 0 or stats[1]
-    p[35], p[36] = hp & 255, hp >> 8
-    for i = 1, 6 do p[35 + 2 * i], p[36 + 2 * i] = stats[i] & 255, stats[i] >> 8 end
+    p[35], p[36] = hp >> 8, hp & 255     -- big-endian: high byte first
+    for i = 1, 6 do p[35 + 2 * i], p[36 + 2 * i] = stats[i] >> 8, stats[i] & 255 end
     return p, {species = species, form = form, level = level, is_egg = is_egg, hp = hp, max_hp = stats[1],
                stats = {hp = stats[1], atk = stats[2], def = stats[3], spe = stats[4], spa = stats[5], spd = stats[6]}}
 end
