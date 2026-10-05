@@ -129,7 +129,7 @@ def test_upr_wrote_data_only_and_the_capture_site_holds(made):
 
 # ── (c) every broken fact refuses, with a reason ─────────────────────────────
 
-BEACON_ONLY = [0x70 + 10, 0x14E, 0x1F8000 + 40]       # overlay bytes past the anchors: only the beacon covers them
+BEACON_ONLY = [0x70 + 10, 0x16A, 0x1F8000 + 40]  # overlay bytes past the anchors: only the beacon covers them. 0x14E (the GB global checksum) is MASKED out of the beacon since the title slice (a re-stamped version perturbs it); 0x16A is the main-menu hook operand, a hashed overlay byte
 
 
 @pytest.mark.parametrize("offset", BEACON_ONLY)

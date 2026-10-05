@@ -97,24 +97,12 @@ function P.beacon_matches(root, json, Admission, path, overlay_sha1, artifact)
     if beacon.schema ~= "polished-overlay-beacon-v1" or beacon.title ~= P.TITLE then
         return false, "overlay beacon schema/title mismatch"
     end
-    if type(beacon.source) ~= "table" or beacon.source.canonical_sha1 == nil
-       or type(beacon.source.version_slot) ~= "table" then
-        return false, "overlay beacon carries no canonical identity (version_slot / canonical_sha1)"
-    end
-    -- T8 ruling (2026-10-04, Gen 2 style): the gate pins the CANONICAL identity, not the stamped
-    -- one. The 20-byte version field and the GB global checksum it perturbs are masked out, so
-    -- re-stamping --version neither moves this check nor beacon.json. The mask is the SAME pair the
-    -- beacon excluded, so the hashed spans below and the masked bytes are disjoint by construction.
-    local masked = {}
-    for i = 0, artifact.size - 1 do masked[i + 1] = artifact.read_u8(i) end
-    -- Mask EXACTLY the ranges the build published (rom_identity's narrow mask keeps the "SoulLink "
-    -- prefix in the identity). Deriving them again here is how the two digests would drift.
-    for _, s in ipairs(beacon.source.canonical_spans) do
-        for i = s.offset, s.offset + s.length - 1 do masked[i + 1] = 0 end
-    end
-    if Admission.sha1(function(i) return masked[i + 1] end, artifact.size) ~= beacon.source.canonical_sha1 then
-        return false, "overlay is not the canonical build this beacon pins"
-    end
+    -- DESIGN NOTE (coordinator 2026-10-05): the title slice first compared a WHOLE-ROM canonical sha1 here. That is wrong
+    -- for the rand_overlay path (UPR rewrites bytes outside the overlay, so a randomized ROM can never hash to the
+    -- canonical build) and it refused every patched-hold-byte test. The beacon spans below already exclude the version
+    -- field and the global checksum (tools/gen_polished_beacon.py), so a re-stamped version never moves this check.
+    -- Whole-ROM canonical admission of an exact (non-randomized) cart is a SEPARATE step: the exact-sha1 mode above
+    -- still pins the stamped build; per-release version stamping at patch time must extend that mode, not this one.
     local offsets, last = {}, 0
     for _, span in ipairs(beacon.spans) do
         local offset, length = span.offset, span.length
