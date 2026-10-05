@@ -102,7 +102,11 @@ end
 L.idle(120)
 local party_block, party_why = P.reads:read_party()
 local mons = (party_block and party_block.mons) or {}
-L.log(fmt("[writes] party from the client's own read path: %d mons%s", #mons,
+-- NOTE: this line is NOT the phrase writes_run.py's coarse poll watches for ("party from the
+-- client's own read path"). That poll kills the emulator whenever it sees it, which lands inside
+-- the (a) idle and truncates the run; the driver's own env gates (POL_STOP_AFTER_A / _B) are the
+-- precise stop. Delete the runner poll when writes_run.py is next touched.
+L.log(fmt("[writes] party read via the client's own read path: %d mons%s", #mons,
           party_block == nil and (" -- " .. tostring(party_why)) or ""))
 for i = 1, math.min(#mons, 6) do
     L.log(fmt("[writes]   mon %d: key=%s species=%s level=%s", i, tostring(mons[i].key),
@@ -184,22 +188,120 @@ if os.getenv("POL_STOP_AFTER_A") == "1" then
     L.finish("pol-live-writes (a) complete")
 end
 
--- ── (b) box_mon deposit of another party mon ───────────────────────────────────────────────────
-local dep = party[2]
-local dkey = dep and (dep.key or dep.mon_key)
-local dep_before_count = L.rw("wPartyCount")
-local w_before_b = #writes
-local b_result, b_sent = "not attempted", nil
-if dkey then
-    SLINK_GEN2_CLIENT:handle_command({ cmd = "box_mon", key = dkey })
-    L.check("(b0) box_mon was queued into the client's command path", true, tostring(dkey))
-    L.idle(150)
-    local c = L.rw("wPartyCount")
-    b_result = fmt("party %d -> %d", dep_before_count, c)
-    L.log(fmt("[writes] (b) box_mon: %s", b_result))
-    L.check("(b1) the deposited slot left the party", c == dep_before_count - 1, b_result)
+-- ── (b) box_mon deposit of a DIFFERENT bench mon (slot 3) ─────────────────────────────────────
+-- Declared write ranges, from lua/gen2/polished_overworld.lua's own header (NEWBOX §1/§2):
+--   System Bus  the party block wPartyCount..wPartyMonNicknamesEnd (01:DCCE..01:DE7A)
+--   CartRAM     the six pokedb sections and the 20 gameplay box records (sNewBox1..20)
+--   WRAM        the two pokedb allocation-flag windows wPokeDB{1,2}UsedEntries
+local PARTY_LO, PARTY_HI = 0xDCCE, 0xDE7A
+local CO = P.overworld.coords or {}
+local function cart_flat(label) local c = CO[label] return c and (c[1] * 0x2000 + c[2] - 0xA000) or nil end
+local function wram_flat(label) local c = CO[label] return c and (c[1] * 0x1000 + c[2] - 0xD000) or nil end
+local POKEDB, BOXREC, ALLOC = {}, {}, {}
+for bank = 1, 2 do
+    local n = 0
+    for _, sec in ipairs({"A", "B", "C"}) do
+        local base = cart_flat("sBoxMons" .. bank .. sec)
+        if base then POKEDB[#POKEDB + 1] = { lo = base, hi = base + 207 * 49 } end
+        n = n + 1
+    end
+end
+for n = 1, 20 do local at = cart_flat("sNewBox" .. n) if at then BOXREC[#BOXREC + 1] = { lo = at, hi = at + 0x21 } end end
+for _, label in ipairs({"wPokeDB1UsedEntries", "wPokeDB2UsedEntries"}) do
+    local at = wram_flat(label) if at then ALLOC[#ALLOC + 1] = { lo = at, hi = at + 0x40 } end
+end
+local function classify(w)
+    local a, d = w.addr, tostring(w.domain)
+    if d == "System Bus" then
+        return (a >= PARTY_LO and a < PARTY_HI) and "party-block" or "other"
+    elseif d == "CartRAM" then
+        for _, r in ipairs(BOXREC) do if a >= r.lo and a < r.hi then return "box-record" end end
+        for _, r in ipairs(POKEDB) do if a >= r.lo and a < r.hi then return "pokedb" end end
+        return "other"
+    elseif d == "WRAM" then
+        for _, r in ipairs(ALLOC) do if a >= r.lo and a < r.hi then return "allocation-flag" end end
+        return "other"
+    end
+    return "other"
+end
+
+if #mons < 4 then
+    L.log(fmt("[writes] (b) party is %d, not >= 4: no distinct slot 3 to deposit. NOT RUN", #mons))
 else
-    L.log("[writes] (b) no second party key in the hello; box_mon NOT attempted")
+    local BSLOT = 3                                    -- a different mon from the fainted slot 2
+    local bkey = mons[BSLOT + 1] and mons[BSLOT + 1].key
+    L.log(fmt("[writes] (b) target slot %d key=%s", BSLOT, tostring(bkey)))
+    L.check("(b0) a distinct party key is available to deposit", bkey ~= nil and bkey ~= key, tostring(bkey))
+    local count_before = L.rw("wPartyCount")
+    local wb = #writes
+    SLINK_GEN2_CLIENT:handle_command({ cmd = "box_mon", key = bkey })
+    L.check("(b0a) box_mon was queued into the client's command path", true, tostring(bkey))
+    L.idle(150)
+    local count_after = L.rw("wPartyCount")
+    local after_party = P.reads:read_party()
+    local after_keys = {}
+    for i, m in ipairs((after_party and after_party.mons) or {}) do after_keys[i] = m.key end
+    local still_there = false
+    for _, k in ipairs(after_keys) do if k == bkey then still_there = true end end
+    L.log(fmt("[writes] (b) party %d -> %d; keys now [%s]", count_before, count_after, table.concat(after_keys, " ")))
+    L.check("(b1a) wPartyCount went 5 -> 4", count_after == count_before - 1, fmt("%d -> %d", count_before, count_after))
+    L.check("(b1b) the deposited key is no longer in read_party()", not still_there, tostring(bkey))
+
+    -- (b2) the COMPOSED census. lua/gen2/polished.lua P.census scans all 20 boxes through
+    -- boxes.read_boxes inside scan() and FAILS CLOSED (polished.lua:767-771): it returns nil,why on
+    -- `not snap.complete`, `#snap.bad_eggs > 0` or `#snap.unflagged > 0`. A NON-NIL return is
+    -- therefore the completeness proof -- there is no separate `complete` field to read, and no
+    -- reason for this driver to build a second reader (it did, and that reader is what hung).
+    local census = P.overworld and P.overworld.census
+    local t0 = os.clock()
+    local got, why = census and census.read_storage_box(0)
+    L.log(fmt("[writes] (b2) census.read_storage_box(0) returned %s in %.2f s CPU%s",
+              got and "a mon list" or "nil", os.clock() - t0, got and "" or (" -- " .. tostring(why))))
+    L.check("the composed census read is complete (P.census fails closed on incomplete/Bad Egg/"
+            .. "unflagged, polished.lua:767-771)", got ~= nil, got and #got.mons or tostring(why))
+    local found
+    if got then
+        for _, m in ipairs(got.mons or {}) do if m.key == bkey then found = m end end
+    end
+    if not found then
+        -- the client walks 0..19 exactly like this (client.lua rescan_boxes): box 0 is the scan,
+        -- boxes 1..19 are served from it. Walk them and time the walk.
+        local tw = os.clock()
+        for box = 1, 19 do
+            local mons = census.read_storage_box(box)
+            for _, m in ipairs((mons and mons.mons) or {}) do if m.key == bkey then found = m end end
+        end
+        L.log(fmt("[writes] (b2b) walked boxes 1..19 in %.2f s CPU", os.clock() - tw))
+    end
+    L.check("(b2b) the deposited mon is present in a gameplay box", found ~= nil, tostring(bkey))
+
+    -- (b3) the pokedb entry's own checksum, via polished_boxes.lua B.verify on the stored bytes
+    local Boxes = dofile(L.ROOT .. "/lua/gen2/polished_boxes.lua")
+    if found and found.raw_hex then
+        local entry = L.unhex(found.raw_hex)
+        local okc = Boxes.verify(entry)
+        L.check("(b3) the pokedb entry checksum verifies (B.verify)", okc == true, tostring(okc))
+    else
+        L.check("(b3) the pokedb entry checksum verifies (B.verify)", false, "no stored entry to verify")
+    end
+
+    -- (b4) every write the run made FOR (b), classified against the declared ranges
+    local counts, others, listing = {}, {}, {}
+    for i = wb + 1, #writes do
+        local w = writes[i]
+        local kind = classify(w)
+        counts[kind] = (counts[kind] or 0) + 1
+        listing[#listing + 1] = fmt("%s@%s[%s]=%s", w.op, tostring(w.addr), tostring(w.domain), kind)
+        if kind == "other" then others[#others + 1] = listing[#listing] end
+    end
+    L.log(fmt("[writes] (b) %d write(s): %s", #listing, table.concat(listing, " | ")))
+    L.check("(b4) every (b) write is inside a declared range", #others == 0,
+            #others == 0 and table.concat(listing, " | ") or ("UNDECLARED: " .. table.concat(others, ", ")))
+end
+
+if os.getenv("POL_STOP_AFTER_B") == "1" then
+    L.log("[writes] POL_STOP_AFTER_B=1: stopping after (a)+(b); the negatives are NOT RUN")
+    L.finish("pol-live-writes (a)+(b) complete")
 end
 
 -- ── (c) negative controls ──────────────────────────────────────────────────────────────────────

@@ -122,7 +122,8 @@ def main() -> int:
     pid = None
     try:
         text, pid = harness.launch("tools/polished_live/writes.lua", run,
-                                   {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port)}, 300,
+                                   {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port)},
+                                   300,
                                    poll=stop_at_overworld)
     except RuntimeError as exc:
         if "stop-at-overworld" not in str(exc):
