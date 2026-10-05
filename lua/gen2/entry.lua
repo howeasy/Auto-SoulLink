@@ -865,7 +865,7 @@ local function compose_polished(deps, decision)
         -- hands the client p.battle_hold (hooked as SLink-gen2-battle-hold) and writes.sym. Qualification stays
         -- DEV_OVERLAY_PREDICATE_HOLD; p.battle_bench and p.rival_swap are deliberately NOT composed (see that header).
         local explode = load("lua/gen2/polished_explode.lua").new({root=root, profile=profile, io=io_, Permit=Permit,
-            overworld=writes, overworld_hold=checkpoint, log=deps.log})
+            overworld=writes, overworld_hold=checkpoint, reads=reads, log=deps.log})
         -- mail item ids (items.json is the generator's pack; the refusal needs ItemIsMail's FIRST_MAIL threshold)
         local items = load_json(json, root .. "/data/games/polished_crystal/items.json")
         assert(items.schema == "polished-items-v1" and type(items.source) == "table"
@@ -878,7 +878,7 @@ local function compose_polished(deps, decision)
         local client = load("lua/gen2/client.lua").new({
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
             writes=explode.writes, boxes=boxes, safety=explode.safety, battle_hold=explode.battle_hold,
-            battle_release_poll=true,
+            battle_release_poll=true, battle_hold_entry=explode.entry, battle_species_matches=explode.species_matches,
             -- the hold site the client hooks (io.on_bus_exec -> at_checkpoint -> run_deferred)
             checkpoint_pc=Overworld.HOLD.pc,
             -- C-WRITE round 2: with no contest_mask in the Polished pack a KO during the Bug Catching Contest
@@ -902,7 +902,7 @@ local function compose_polished(deps, decision)
                 -- the overworld write path, under its own key: `checkpoint` stays nil because no PC hold is
                 -- composed (there is no Polished checkpoint PC to hold at; see C-WRITE above)
                 overworld={checkpoint=checkpoint, writes=writes, boxes=boxes, census=census, coords=coords},
-                battle={checkpoint=explode.checkpoint, writes=explode.writes, hold=explode.battle_hold},
+                battle={checkpoint=explode.checkpoint, writes=explode.writes, hold=explode.battle_hold, entry=explode.entry},
                 production_admitted=false, artifact_kind=decision.kind, runtime_rom_sha1=decision.rom_sha1,
                 runtime_started=false, qualification="DEV_OVERLAY_SHA1"}
     end)

@@ -29,6 +29,7 @@ rival write on a running Polished ROM. The path stays DEV_OVERLAY_PREDICATE_HOLD
 from __future__ import annotations
 
 import json
+import random
 from pathlib import Path
 
 import pytest
@@ -145,7 +146,8 @@ def test_the_facade_coordinates_are_the_sym():
 HARNESS_HOOKS = HARNESS.replace(
     "function io.on_bus_exec(fn, addr, name) log.hooks[#log.hooks + 1] = name return #log.hooks end",
     "function io.on_bus_exec(fn, addr, name) log.hooks[#log.hooks + 1] = name\n"
-    "        log.hook_at = log.hook_at or {} log.hook_at[name] = addr return #log.hooks end")
+    "        log.hook_at = log.hook_at or {} log.hook_at[name] = addr\n"
+    "        log.hook_fn = log.hook_fn or {} log.hook_fn[name] = fn return #log.hooks end")
 assert HARNESS_HOOKS != HARNESS
 
 OVERRIDE = """
@@ -195,7 +197,10 @@ def enter_battle(rig, mons, *, mode=1, slot=0, move=2, action=0, hold=True):
     rig.put("wCurBattleMon", slot)
     rig.put("wCurMoveNum", move)
     rig.put("wBattlePlayerAction", action)
-    rig.put("wBattleMonSpecies", mons[slot]["species_id"] & 0xFF)
+    record = pc.encode_party_mon(mons[slot])
+    rig.put("wBattleMonSpecies", record[0])               # the record's own Species byte (+0) ...
+    rig.put("wBattleMonForm", record[21])                 # ... and its Form byte (+21: EXTSPECIES bit, form)
+    rig.put("wBattleMonLevel", mons[slot]["level"])
     for i in range(4):
         rig.put("wBattleMonMoves", 0x20 + i, i)
         rig.put("wBattleMonPP", 0xC0 | (5 + i), i)
@@ -216,6 +221,12 @@ def order(rig, cmd, mons, slot=0, **extra):
 
 
 def at_hold(rig):
+    """The CPU reaches 0f:416A: the registered exec callback runs (token entered, at_battle_hold, token cleared)."""
+    rig.log["hook_fn"]["SLink-gen2-battle-hold"]()
+
+
+def at_hold_outside_the_hook(rig):
+    """at_battle_hold called directly: no exec callback, so no hook-entry token."""
     rig.client.at_battle_hold(rig.client)
 
 
@@ -229,13 +240,17 @@ def snapshot(rig, **fields):
     return rig.lua.table_from(base)
 
 
-def direct_explode(rig, slot=0, **fields):
-    """arm + explode through the facade, exactly as client.at_battle_hold does; (ok, why) and always disarmed."""
-    writes = rig.parts.battle.writes
+def direct_explode(rig, slot=0, hooked="explode", **fields):
+    """arm + explode through the facade, exactly as client.at_battle_hold does, inside the hook-entry token named by
+    `hooked` (None = outside any hook); (ok, why) and always disarmed, token always cleared."""
+    writes, entry = rig.parts.battle.writes, rig.parts.battle.entry
+    if hooked:
+        entry.enter(hooked)
     ok, why = lcall(rig, writes.arm, writes, "battle_hold")
     if ok:
         ok, why = lcall(rig, writes.explode_active_battler, writes, slot, snapshot(rig, **fields))
     writes.disarm(writes)
+    entry.leave()
     return ok, why
 
 
@@ -347,8 +362,10 @@ def test_a_backup_save_refuses():
 
 def test_an_unarmed_writer_and_a_linked_snapshot_refuse():
     rig, _ = ready()
-    writes = rig.parts.battle.writes
+    writes, entry = rig.parts.battle.writes, rig.parts.battle.entry
+    entry.enter("explode")
     ok, why = lcall(rig, writes.explode_active_battler, writes, 0, snapshot(rig))
+    entry.leave()
     assert ok is False and "not armed" in why and rig.writes() == []
     ok, why = direct_explode(rig, link_mode=1)                             # a lying snapshot: link_mode, not the byte
     assert ok is False and "linked or unknown battle context" in why and rig.writes() == []
@@ -433,7 +450,7 @@ def test_replace_rival_team_is_unsupported_and_the_blockers_are_pinned():
 def enemy_mons(lua, count=2):
     mons = []
     for i in range(count):
-        mon = live_mon(__import__("random").Random(900 + i), 150 + i, hp=200, ot="RIVAL", nick=f"FOE{i}")
+        mon = live_mon(random.Random(900 + i), 150 + i, hp=200, ot="RIVAL", nick=f"FOE{i}")
         mons.append(lua.table_from({
             "record": lua.table_from(list(pc.encode_party_mon(mon))),
             "ot": lua.table_from(list(pc.encode_text("RIVAL", 8) + bytes(3))),
@@ -441,13 +458,17 @@ def enemy_mons(lua, count=2):
     return mons
 
 
-def rival_write(rig, count, cur):
-    writes = rig.parts.battle.writes
+def rival_write(rig, count, cur, hooked="rival_gate"):
+    """arm + write_enemy_party inside the rival-gate token (what a future 0f:47DD hold sets); no client path sets it."""
+    writes, entry = rig.parts.battle.writes, rig.parts.battle.entry
+    if hooked:
+        entry.enter(hooked)
     ok, why = lcall(rig, writes.arm, writes, "rival_swap")
     if ok:
         ok, why = lcall(rig, writes.write_enemy_party, writes, rig.lua.table_from(enemy_mons(rig.lua, count)),
                         rig.lua.table_from({"mode": 2, "link_mode": 0, "cur_ot_mon": cur}))
     writes.disarm(writes)
+    entry.leave()
     return ok, why
 
 
@@ -526,10 +547,17 @@ def test_red_2_without_the_snapshot_stamp_every_write_refuses():
     at_hold(rig)
     assert not exploded(rig) and rig.writes() == [], "the stamp is not load-bearing"
     assert any("snapshot not taken at the battle_hold PC" in line for line in rig.lines())
-    rig = ready(overrides=mutant("polished_explode.lua", source))[0]
-    rig.put("wMirrorHerbPendingBoosts", 0)
-    ok, why = direct_explode(rig)                                          # and the rival write refuses the same way
-    assert ok is False and "snapshot not taken" in why
+    # the rival write refuses the same way: composed control first, then the mutant, same gate state
+    for source_ in (None, source):
+        rig, mons = ready(overrides=mutant("polished_explode.lua", source_) if source_ else None)
+        enter_battle(rig, mons, mode=2)
+        rig.put("wCurOTMon", 0)
+        rig.put("wCurPartyMon", 0)
+        ok, why = rival_write(rig, 2, 0)
+        if source_ is None:
+            assert ok is True, why
+        else:
+            assert ok is False and "snapshot not taken at the rival_swap PC" in why and rig.writes() == []
 
 
 DRIFT = ('{domain="System Bus", addr=at.wCurPlayerMove, bytes={x}},',
@@ -594,6 +622,13 @@ CLIENT = (LUA / "client.lua").read_text(encoding="utf-8")
 def test_red_7_without_the_release_poll_an_in_battle_death_never_lands():
     """Polished binds no battle_end signal, so only release_battle_writes hands a refused in-battle faint to the
     overworld checkpoint; with it disabled the death stays queued after the battle (a lost Soul Link death)."""
+    rig, mons = ready()                                                   # the same rig, unmutated: the positive control
+    order(rig, "force_faint", mons)
+    at_hold(rig)
+    rig.put("wBattleMode", 0)
+    rig.put("hROMBank", 0x25)
+    rig.frame(5)
+    assert rig.hp(0) == 0, "the composed path does not land the death after the battle"
     source = mutate(CLIENT, "if not p.battle_release_poll or #self.pending_battle_writes == 0 then return end",
                     "if true then return end")
     rig, mons = ready(overrides=mutant("client.lua", source))
@@ -603,3 +638,122 @@ def test_red_7_without_the_release_poll_an_in_battle_death_never_lands():
     rig.put("hROMBank", 0x25)
     rig.frame(5)
     assert rig.hp(0) == 300 and len(rig.client.pending_battle_writes) == 1, "the release poll is not load-bearing"
+
+
+KINDS_DRIFT = (('E.KIND_OF_REASON = {battle_hold = "explode", rival_swap = "rival"}',
+                'E.KIND_OF_REASON = {battle_hold = "rival", rival_swap = "rival"}'),
+               ('E.KIND_OF_OPERATION = {battle_explode = "explode", enemy_party = "rival"}',
+                'E.KIND_OF_OPERATION = {battle_explode = "rival", enemy_party = "rival"}'))
+
+
+def test_red_3b_a_facade_kind_drift_takes_an_explode_off_the_hold():
+    """The facade maps battle_hold / battle_explode onto the PC-hold kind. Drifted onto a frame kind (no hROMBank
+    requirement) the write lands with the CPU in the wrong bank; the composed mapping refuses."""
+    rig, _ = ready(hold=False)
+    ok, why = direct_explode(rig)
+    assert ok is False and "not at the BattleTurn hold" in why and not exploded(rig)
+    source = EXPLODE
+    for old, new in KINDS_DRIFT:
+        source = mutate(source, old, new)
+    rig, _ = ready(hold=False, overrides=mutant("polished_explode.lua", source))
+    ok, why = direct_explode(rig)
+    assert ok is True and exploded(rig), "the kind mapping is not load-bearing"
+
+
+# ── the hook-entry token ───────────────────────────────────────────────────────────────────────────────────
+
+def test_a_direct_facade_call_outside_the_hook_is_refused():
+    rig, mons = ready()
+    ok, why = direct_explode(rig, hooked=None)
+    assert ok is False and "not inside the explode hold hook" in why and rig.writes() == [] and not exploded(rig)
+    ok, why = direct_explode(rig, hooked="rival_gate")                    # a token for ANOTHER site does not count
+    assert ok is False and "not inside the explode hold hook" in why and rig.writes() == []
+    ok, why = rival_write(rig, 2, 0, hooked="explode")
+    assert ok is False and "not inside the rival_gate hold hook" in why and rig.writes() == []
+    # at_battle_hold called directly (no exec callback) writes nothing either
+    order(rig, "force_explode", mons)
+    at_hold_outside_the_hook(rig)
+    assert rig.writes() == [] and not exploded(rig)
+    assert any("not inside the explode hold hook" in line for line in rig.lines())
+    at_hold(rig)                                                           # the real callback lands it ...
+    assert exploded(rig)
+    rig.put("wCurPlayerMove", 0x22)
+    ok, why = direct_explode(rig, hooked=None)                             # ... and clears the token behind it
+    assert ok is False and "not inside" in why
+
+
+def test_red_8_without_the_token_check_a_direct_call_takes_the_write():
+    source = mutate(EXPLODE, 'assert(entered == site, "write refused: not inside the " .. site .. " hold hook")',
+                    "assert(true)")
+    rig, _ = ready(overrides=mutant("polished_explode.lua", source))
+    ok, why = direct_explode(rig, hooked=None)
+    assert ok is True and exploded(rig), "the hook-entry token is not load-bearing"
+
+
+# ── the species match: the EFFECTIVE id, not the raw byte ───────────────────────────────────────────────────
+
+VARIANT = (19, 2, 295)                           # profile.derived.variant_forms row: species, form, record index
+
+
+def species_party(kind):
+    mons = party()
+    if kind == "ext":                           # species 300: > 255, EXTSPECIES bit set in the Form byte
+        mon = live_mon(random.Random(4), 300, ot="KRIS", nick="BIG")
+        mon["form"] = 0
+    else:                                       # a regional variant: party record species 19 form 2 = effective 295
+        mon = live_mon(random.Random(3), VARIANT[0], ot="KRIS", nick="VAR")
+        mon["form"] = VARIANT[1]
+    mons[0] = mon
+    return mons
+
+
+@pytest.mark.parametrize("kind", ["ext", "variant"])
+def test_an_explode_lands_for_a_species_above_255_and_for_a_variant_form(kind):
+    mons = species_party(kind)
+    rig, mons = ready(mons)
+    effective = rig.lua.eval("function() return SLINK_PARTS.reads.read_party().mons[1].species_id end")()
+    assert effective == (300 if kind == "ext" else VARIANT[2])
+    assert effective > 255 and effective != rig.get("wBattleMonSpecies")   # the raw byte alone cannot name it
+    order(rig, "force_explode", mons)
+    at_hold(rig)
+    assert exploded(rig) and rig.get("wBattleMonMoves", 2) == EXPLOSION, f"{kind}: the explode did not land"
+
+
+@pytest.mark.parametrize("kind,wrong", [("ext", {"form": 0}), ("variant", {"form": 0})])
+def test_a_different_species_with_the_same_low_byte_does_not_land(kind, wrong):
+    """NEGATIVE CONTROL: the battle struct holds the party mon's LOW species byte but not its EXTSPECIES bit / variant
+    form, so its effective id is a different mon: the explode must stay queued and nothing is written."""
+    mons = species_party(kind)
+    rig, mons = ready(mons)
+    rig.put("wBattleMonForm", wrong["form"])
+    order(rig, "force_explode", mons)
+    at_hold(rig)
+    assert rig.writes() == [] and not exploded(rig) and len(rig.client.pending_battle_writes) == 1
+
+
+def test_red_9_the_raw_byte_compare_never_lands_a_wide_or_variant_species():
+    source = mutate(CLIENT, "if p.battle_species_matches then same = p.battle_species_matches(mon, species) == true end",
+                    "")
+    for kind in ("ext", "variant"):
+        rig, mons = ready(species_party(kind))
+        order(rig, "force_explode", mons)
+        at_hold(rig)
+        assert exploded(rig)                                               # the composed control lands
+        rig, mons = ready(species_party(kind), overrides=mutant("client.lua", source))
+        order(rig, "force_explode", mons)
+        at_hold(rig)
+        assert rig.writes() == [] and not exploded(rig), f"{kind}: the effective-species hook is not load-bearing"
+
+
+# ── the held-KO cue, once ───────────────────────────────────────────────────────────────────────────────────
+
+def test_an_in_battle_active_faint_says_held_once_and_refuses_once():
+    rig, mons = ready()
+    order(rig, "force_faint", mons)
+    assert sum("held for the checkpoint" in line for line in rig.lines()) == 1
+    for _ in range(4):
+        at_hold(rig)
+    assert sum("battle write refused" in line for line in rig.lines()) == 1, "one refusal line per queued command"
+    assert rig.hp(0) == 300 and len(rig.client.pending_battle_writes) == 1
+    order(rig, "force_faint", mons, slot=1)                               # a bench mon: no held cue
+    assert sum("held for the checkpoint" in line for line in rig.lines()) == 1
