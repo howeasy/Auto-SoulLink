@@ -24,7 +24,7 @@ for _, k in ipairs({"write_u8", "write_s8", "write_u16_le", "write_u16_be", "wri
     if fn ~= nil then
         memory[k] = function(...)
             local a = {...}
-            writes[#writes + 1] = { op = k, addr = a[1], v = a[2], frame = emu.framecount() }
+            writes[#writes + 1] = { op = k, addr = a[1], v = a[2], domain = a[3], frame = emu.framecount() }
             return fn(...)
         end
     end
@@ -96,18 +96,19 @@ if not ok_ow then
     L.log(fmt("[writes] CONTINUE did not reach the overworld after %d frames: %s", emu.framecount(), J.encode(g)))
     L.die("CONTINUE did not reach the overworld: " .. tostring(ow_why))
 end
--- No server is started: the card drives the CLIENT. Keys therefore come from the client's own
--- read path (parts.reads:read_party(true) + the wire key builder), not from a hello that would
--- need a TCP peer. A hello is still recorded if one arrives.
+-- No server is started: the card drives the CLIENT. Keys therefore come from the client's OWN read
+-- path -- polished.lua:509 `r.read_party()` takes no argument and returns {mons={{key=...}}}; this
+-- is the exact call shape tests/unit/test_polished_write_path.py uses (reads.read_party().mons[n].key).
 L.idle(120)
-local recorded = P.reads:read_party(true)
-local party = {}
-for i, mon in ipairs(recorded or {}) do
-    party[i] = { key = P.wire.mon_key(mon), species = mon.species, level = mon.level }
+local party_block, party_why = P.reads:read_party()
+local mons = (party_block and party_block.mons) or {}
+L.log(fmt("[writes] party from the client's own read path: %d mons%s", #mons,
+          party_block == nil and (" -- " .. tostring(party_why)) or ""))
+for i = 1, math.min(#mons, 6) do
+    L.log(fmt("[writes]   mon %d: key=%s species=%s level=%s", i, tostring(mons[i].key),
+              tostring(mons[i].species), tostring(mons[i].level)))
 end
-L.log(fmt("[writes] party from the client's own read path: %d mons [%s]", #party,
-          table.concat((function() local t = {} for i, m in ipairs(party) do t[i] = m.key end return t end)(), " ")))
-L.check("the save has a party of >= 2 (the card's precondition)", #party >= 2, #party)
+L.check("the save has a party of >= 2 (the card's precondition)", #mons >= 2, #mons)
 
 -- the gate bytes the write path predicates on (live.lua's own running test)
 local function gate()
@@ -116,26 +117,35 @@ local function gate()
 end
 local function running() local g = gate() return g.map == 2 and g.script == 0 and g.paused == 0 and g.link == 0 end
 
--- ── (a) force_faint on a NON-ACTIVE party slot ────────────────────────────────────────────────
--- In the overworld nothing is the active battler, so every party slot is a bench slot: this is
--- the client's land_bench_deaths path (client.lua:1653), NOT the in-battle path.
-local target = party[1]
-local key = target and (target.key or target.mon_key)
-L.log(fmt("[writes] target slot key=%s species=%s level=%s", tostring(key),
-          tostring(target and (target.species_id or target.species)), tostring(target and target.level)))
-L.check("a party key is available to queue", key ~= nil, tostring(key))
+-- ── (a) force_faint on a BENCH party slot ──────────────────────────────────────────────────────
+-- In the overworld nothing is the active battler, so every party slot is a bench slot: this is the
+-- client's land_bench_deaths path (client.lua:1653), NOT the in-battle path. Slot 2 (the card's
+-- target, NOT slot 0) is the third mon.
+--
+-- Record geometry, Polished's OWN (docs/polished/RAM.md; constants/pokemon_data_constants.asm):
+-- 48-byte stride, Status @ +32, current HP @ +34..35, MaxHP @ +36..37, HP/stats BIG-endian.
+-- wPartyMon1 and wPartyMons are the same address in the overlay .sym; wPartyMons is what
+-- harness.py's SYMBOLS exports, so it is what we address by.
+local SB_BASE = L.SYM.wPartyMons[2]          -- System Bus address of wPartyMon1
+local WRAM_BASE = L.woff("wPartyMons")        -- the same block in the WRAM domain
+local STRIDE, STATUS_OFF, HP_OFF, MAXHP_OFF = 48, 32, 34, 36
+L.log(fmt("[writes] party block: SystemBus $%04X / WRAM $%04X, stride %d, status +%d, HP +%d, MaxHP +%d",
+          SB_BASE, WRAM_BASE, STRIDE, STATUS_OFF, HP_OFF, MAXHP_OFF))
+local function be16(slot, off) return L.bus(SB_BASE + slot * STRIDE + off) * 256
+                                    + L.bus(SB_BASE + slot * STRIDE + off + 1) end
+local function status(slot) return L.bus(SB_BASE + slot * STRIDE + STATUS_OFF) end
 
-local HP = L.SYM.wPartyMons[2]
-local STATUS_OFF = 0x36 - 0x24          -- HP @ +0x24, Status @ +0x36 of the 48-byte record (polished profile)
-local status_off, hp_off = 0x36, 0x24
+local SLOT = 2                                   -- 0-based: the third mon, a bench mon
+local key = mons[SLOT + 1] and mons[SLOT + 1].key
+L.log(fmt("[writes] target slot %d key=%s", SLOT, tostring(key)))
+L.check("a party key is available to queue for the bench slot", key ~= nil, tostring(key))
+
 local before_count = L.rw("wPartyCount")
-local slot = 0
-local hp0 = L.woff("wPartyMons", slot * 48 + hp_off)
-local hp1 = L.woff("wPartyMons", slot * 48 + hp_off + 1)
-local st0 = L.woff("wPartyMons", slot * 48 + status_off)
-L.log(fmt("[writes] slot 0 before: HP %d/%d status $%02X party %d", hp0, hp1, st0, before_count))
-L.check("the target slot is alive before the faint (HP > 0 and status not fainted)",
-        hp0 > 0 or hp1 > 0, fmt("HP %d/%d status $%02X", hp0, hp1, st0))
+local hp_before, max_before, st_before = be16(SLOT, HP_OFF), be16(SLOT, MAXHP_OFF), status(SLOT)
+L.log(fmt("[writes] slot %d before: HP %d/%d status $%02X party %d", SLOT, hp_before, max_before,
+          st_before, before_count))
+L.check("the target slot is alive before the faint (HP > 0)", hp_before > 0,
+        fmt("HP %d/%d status $%02X", hp_before, max_before, st_before))
 
 local w_before = #writes
 local g = gate()
@@ -143,22 +153,35 @@ L.check("the overworld predicate is satisfied at queue time (no battle, no scrip
         running() and g.battle == 0, fmt("gate %s", J.encode(g)))
 SLINK_GEN2_CLIENT:handle_command({ cmd = "force_faint", key = key })
 L.check("force_faint was queued into the client's command path", true, "handle_command accepted it")
-L.idle(90)
-local hp1a = L.woff("wPartyMons", slot * 48 + hp_off)
-local hp1b = L.woff("wPartyMons", slot * 48 + hp_off + 1)
-local st1 = L.woff("wPartyMons", slot * 48 + status_off)
+L.idle(120)
+local hp_after, max_after, st_after = be16(SLOT, HP_OFF), be16(SLOT, MAXHP_OFF), status(SLOT)
 local after_count = L.rw("wPartyCount")
-L.log(fmt("[writes] slot 0 after: HP %d/%d status $%02X party %d", hp1a, hp1b, st1, after_count))
-L.check("(a1) the bench mon's HP bytes are 0/0", hp1a == 0 and hp1b == 0, fmt("%d/%d", hp1a, hp1b))
-L.check("(a2) the mon's status byte is 0 (not fainted/statused)", st1 == 0, fmt("$%02X", st1))
-L.check("(a3) the party count is unchanged", after_count == before_count,
-        fmt("%d -> %d", before_count, after_count))
-local n, seen, rows = write_report(w_before)
-L.log(fmt("[writes] (a) %d client write(s): %s", n, rows))
-L.check("(a4) the client wrote something at all", n > 0, n)
-for op, count in pairs(seen) do
-    L.check("(a5) every write is a byte write, no block/blob write", op:match("^write_u8") ~= nil
-            or op:match("^write_s8") ~= nil or op:match("^writebyte@") ~= nil, op .. " x" .. count)
+L.log(fmt("[writes] slot %d after: HP %d/%d status $%02X party %d", SLOT, hp_after, max_after, st_after,
+          after_count))
+L.check("(a1) the bench mon's HP bytes are 0/0 (big-endian pair)", hp_after == 0,
+        fmt("%d/%d (before %d/%d)", hp_after, L.bus(SB_BASE + SLOT * STRIDE + HP_OFF + 1), hp_before, max_before))
+L.check("(a2) the mon's status byte is 0", st_after == 0, fmt("$%02X (before $%02X)", st_after, st_before))
+L.check("(a3) the party count is unchanged", after_count == before_count, fmt("%d -> %d", before_count, after_count))
+
+-- every write this run made must lie inside the declared party-record block, in EITHER domain the
+-- tap may report (the client's io.write_u8 domain is logged with each write, never assumed).
+local n, outside, seen_addrs = 0, {}, {}
+for i = w_before + 1, #writes do
+    local w = writes[i]
+    n = n + 1
+    local a = w.addr
+    seen_addrs[#seen_addrs + 1] = fmt("%s@%s[%s]", w.op, tostring(a), tostring(w.domain))
+    local inside = (a >= SB_BASE and a < SB_BASE + 6 * STRIDE) or (a >= WRAM_BASE and a < WRAM_BASE + 6 * STRIDE)
+    if not inside then outside[#outside + 1] = seen_addrs[#seen_addrs] end
+end
+L.log(fmt("[writes] (a) %d client write(s): %s", n, table.concat(seen_addrs, " | ")))
+L.check("(a4) every write landed inside the declared party-record block", #outside == 0,
+        #outside == 0 and n .. " write(s), all in the party block" or table.concat(outside, ", "))
+L.check("(a4b) the client wrote something at all", n > 0, n)
+
+if os.getenv("POL_STOP_AFTER_A") == "1" then
+    L.log(fmt("[writes] POL_STOP_AFTER_A=1: stopping after (a); box_mon and the negatives are NOT RUN"))
+    L.finish("pol-live-writes (a) complete")
 end
 
 -- ── (b) box_mon deposit of another party mon ───────────────────────────────────────────────────
