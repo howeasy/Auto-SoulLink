@@ -136,20 +136,22 @@ def _stats_row(b):
                            b["special_attack"], b["special_defense"]])
 
 
-def mutant(rig, old, new):
-    """Build a mutated copy of the module with the SAME withdraw dependencies the composition injects."""
-    source = MODULE.replace(old, new, 1)
-    assert source != MODULE, f"the mutation did not apply: {old[:60]}"
+def build(rig, edits=(), io=None):
+    """A (possibly mutated) copy of the module with the SAME withdraw dependencies the composition injects.
+    `edits` = [(old, new)] source replacements (each must apply); `io` = an io the writes go through (FLAKY)."""
+    source = MODULE
+    for old, new in edits:
+        assert old != new and old in source, f"the mutation did not apply: {old[:70]}"
+        source = source.replace(old, new, 1)
     index = json.loads((REPO / "data/games/polished_crystal/species_index.json").read_text(encoding="utf-8"))
     moves = json.loads((REPO / "data/games/polished_crystal/moves.json").read_text(encoding="utf-8"))
     base, variants, pp = {}, {}, {}
+    stat_keys = ("hp", "attack", "defense", "speed", "special_attack", "special_defense")
     for sid, row in index["species"].items():
-        base[int(sid)] = rig.lua.table_from([row["base_stats"][k] for k in
-                                             ("hp", "attack", "defense", "speed", "special_attack", "special_defense")])
+        base[int(sid)] = rig.lua.table_from([row["base_stats"][k] for k in stat_keys])
     for row in index["forms"]:
         if row["kind"] == "variant" and row.get("base_stats"):
-            base[row["ext"]] = rig.lua.table_from([row["base_stats"][k] for k in
-                                                   ("hp", "attack", "defense", "speed", "special_attack", "special_defense")])
+            base[row["ext"]] = rig.lua.table_from([row["base_stats"][k] for k in stat_keys])
             variants[row["species"] * 32 + row["form"]] = row["ext"]
     for row in moves["moves"]:
         pp[row["id"]] = row["pp"]
@@ -157,7 +159,85 @@ def mutant(rig, old, new):
     rig.lua.globals().VARIANTS = rig.lua.table_from(variants)
     rig.lua.globals().MOVE_PPT = rig.lua.table_from(pp)
     loader = rig.lua.execute(RED.replace("ROOTDIR", json.dumps(ROOT)))
-    return loader(rig.parts, rig.io, source)
+    return loader(rig.parts, io if io is not None else rig.io, source)
+
+
+def mutant(rig, old, new, io=None):
+    return build(rig, [(old, new)], io)
+
+
+# An io whose write_u8 can lose the power after `budget` byte writes (a thrown error: an exception or a lifetime
+# loss mid-write), silently drop one CartRAM byte (`swallow`), or flip bit 0 of one byte on the wire (`tear`).
+# Everything else (reads, bank_valid, framecount) falls through to the rig io; writes still reach the rig io's log.
+FLAKY = """
+return function(real)
+    local io = setmetatable({flaky = {}}, {__index = real})
+    function io.write_u8(a, v, d)
+        local f = io.flaky
+        if f.budget ~= nil then
+            if f.budget <= 0 then error("injected loss", 0) end
+            f.budget = f.budget - 1
+        end
+        if f.swallow == a and d == "CartRAM" then return end
+        if f.tear == a and (d or "System Bus") == "System Bus" then v = v ~ 1 end
+        return real.write_u8(a, v, d)
+    end
+    return io
+end
+"""
+CLEAR = "function(t) for k in pairs(t) do t[k] = nil end end"
+
+
+def flaky_io(rig):
+    return rig.lua.execute(FLAKY)(rig.io)
+
+
+def snapshot(rig):
+    return dict(rig.mem.items()), rig.img.snap()
+
+
+def restore(rig, snap):
+    mem, img = snap
+    for k in list(rig.mem.keys()):
+        if k not in mem:
+            rig.mem[k] = None
+    for k, v in mem.items():
+        rig.mem[k] = v
+    for d, data in img.items():
+        rig.img.mem[d][:] = data
+    rig.lua.eval(CLEAR)(rig.log["writes"])
+
+
+def entries_byte(rig, box=1, slot=1):
+    return rig.img.mem["CartRAM"][box_flat(box) + slot - 1]
+
+
+def count_of_key(rig, key):
+    after, why = _pair(rig.parts.reads.read_party())
+    assert after is not None, why
+    return sum(1 for m in after.mons.values() if m["key"] == key)
+
+
+# the source lines the red controls edit (exact text of lua/gen2/polished_overworld.lua)
+ORDER = "            if append then append_to_party() end\n            remove_box_copy()\n"
+BOX_LAST_SPAN = '                        {domain = "CartRAM", addr = bits_at, bytes = {cleared}},\n'
+PARTY_LAST_SPAN = '                        {domain = "System Bus", addr = at_nick, bytes = nick},\n'
+COUNT_SPAN = '                        {domain = "System Bus", addr = block, bytes = {party.count + 1}},\n'
+FIRST_SPAN = ('                    writes:write_batch({\n'
+              '                        {domain = "System Bus", addr = at_rec, bytes = record},\n')
+BOX_NARROW = ('writes:arm("box_deposit", function(domain, addr, n)\n'
+              '                    return domain == "CartRAM" and n == 1 and (addr == entries_at or addr == bits_at)\n'
+              '                end)')
+PARTY_NARROW = ('writes:arm("party_collection", function(domain, addr, n)\n'
+                '                    return domain == "System Bus" and ((addr == at_rec and n == s.End) '
+                'or (addr == at_ot and n == c.NAME_LENGTH)\n'
+                '                           or (addr == at_nick and n == c.MON_NAME_LENGTH) '
+                'or (addr == block and n == 1))\n'
+                '                end)')
+BOX_FIRST = [(ORDER, "            remove_box_copy()\n            if append then append_to_party() end\n")]
+COUNT_FIRST = [(COUNT_SPAN + "                    })", "                    })"),
+               (FIRST_SPAN, FIRST_SPAN.replace("                    writes:write_batch({\n",
+                                               "                    writes:write_batch({\n" + COUNT_SPAN))]
 
 
 # ── the happy path ──────────────────────────────────────────────────────────────────────────────────────
@@ -206,7 +286,16 @@ def test_the_extra_bytes_ride_in_the_ot_array():
     assert tail == bytes(entry[29:32])
 
 
-def test_wpartycount_is_written_after_the_record():
+def count_is_last_and_box_after_party(writes):
+    """The party half is (record, OT, nickname, wPartyCount) and the box half comes after ALL of it."""
+    system = [i for i, w in enumerate(writes) if w["domain"] == "System Bus"]
+    cart = [i for i, w in enumerate(writes) if w["domain"] == "CartRAM"]
+    return (bool(system) and bool(cart) and writes[system[-1]]["addr"] == PARTY_COUNT
+            and [w["addr"] for w in writes if w["domain"] == "System Bus"].count(PARTY_COUNT) == 1
+            and min(cart) > max(system))
+
+
+def test_party_half_first_count_last_then_the_box_half():
     mons = party()
     mon = boxed_mon()
     rig = Rig(mons)
@@ -214,11 +303,129 @@ def test_wpartycount_is_written_after_the_record():
     boxed(rig, mon)
     done, why = _pair(withdraw(rig, key_of(mon)))
     assert done is True, why
-    system = [w["addr"] for w in rig.writes() if w["domain"] == "System Bus"]
-    count = [a for a in system if a == PARTY_COUNT]
-    record = [a for a in system if a == PARTY_MONS + 3 * 48]
-    assert count and record, "the count or the record span was never written"
-    assert system.index(PARTY_COUNT) > system.index(record[0]), "wPartyCount must be written LAST"
+    writes = rig.writes()
+    assert len(writes) == 48 + 11 + 11 + 1 + 2          # record, OT, nickname, count; Entries byte, Banks byte
+    assert [w["domain"] for w in writes] == ["System Bus"] * 71 + ["CartRAM"] * 2
+    assert [w["addr"] for w in writes][:48] == [PARTY_MONS + 3 * 48 + i for i in range(48)]
+    assert writes[70]["addr"] == PARTY_COUNT, "wPartyCount must be written LAST of the party half"
+    assert count_is_last_and_box_after_party(writes)
+    assert [w["addr"] for w in writes[71:]] == [box_flat(1), box_flat(1) + 0x14]
+
+
+def test_red_control_box_half_first_is_caught_by_the_order_check():
+    """RED: the two halves swapped in a copy of the module. The order predicate that passes the real run fails."""
+    mons = party()
+    mon = boxed_mon()
+    rig = Rig(mons)
+    options(rig)
+    boxed(rig, mon)
+    bad = build(rig, BOX_FIRST)
+    done, why = _pair(_lua_withdraw(rig.lua)(bad, key_of(mon)))
+    assert done is True, why                            # the mutant still withdraws, in the wrong order
+    assert not count_is_last_and_box_after_party(rig.writes())
+
+
+def test_red_control_writing_wpartycount_first():
+    """RED: the count is written before the record. The order predicate fails on the wire, AND a loss right after
+    the count leaves a count over a zeroed slot (the state WITHDRAW.md section 2 forbids); the real order never does."""
+    def run(edits):
+        rig = Rig(party())
+        options(rig)
+        mon = boxed_mon()
+        entry = boxed(rig, mon)
+        fio = flaky_io(rig)
+        ex = build(rig, edits, fio)
+        snap = snapshot(rig)
+        done, why = _pair(_lua_withdraw(rig.lua)(ex, key_of(mon)))
+        assert done is True, why
+        ordered = count_is_last_and_box_after_party(rig.writes())
+        restore(rig, snap)
+        fio.flaky.budget = 1                            # power loss after exactly one byte
+        done, _ = _pair(_lua_withdraw(rig.lua)(ex, key_of(mon)))
+        assert done is None
+        return ordered, rig.count(), record_bytes(rig, 3) == oracle(
+            entry, apply_evs=False, natures_on=False, perfect_ivs=False)
+
+    assert run([]) == (True, 3, False)                  # real: count untouched after one byte
+    ordered, count, landed = run(COUNT_FIRST)
+    assert not ordered
+    assert count == 4 and not landed, "count-first leaves a raised count over a zeroed slot"
+
+
+# ── power loss at every byte of the withdraw ─────────────────────────────────────────────────────────────────
+
+TOTAL = 48 + 11 + 11 + 1 + 2
+
+
+def sweep(edits=(), points=None, party_size=3):
+    """Cut the write stream after k bytes (an exception or lifetime loss), for each k. Returns one dict per cut:
+    where the mon lives afterwards, and what a clean retry leaves behind."""
+    mons = party(party_size)
+    mon = boxed_mon()
+    key = key_of(mon)
+    rig = Rig(mons)
+    options(rig)
+    entry = boxed(rig, mon)
+    want = oracle(entry, apply_evs=False, natures_on=False, perfect_ivs=False)
+    fio = flaky_io(rig)
+    ex = build(rig, edits, fio)
+    snap = snapshot(rig)
+    out = []
+    for k in (range(TOTAL) if points is None else points):
+        restore(rig, snap)
+        fio.flaky.budget = k
+        done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+        fio.flaky.budget = None
+        assert done is None and "injected loss" in why, (k, done, why)
+        slot = party_size
+        row = {"k": k,
+               "boxed": entries_byte(rig) != 0,
+               "partied": rig.count() == party_size + 1 and record_bytes(rig, slot) == want,
+               "pokedb_intact": bytes(rig.img.mem["CartRAM"][entry_flat(1, 7):entry_flat(1, 7) + 49]) == entry}
+        done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+        row.update(retry_done=done, retry_why=why, copies=count_of_key(rig, key), count=rig.count(),
+                   box_cleared_after_retry=entries_byte(rig) == 0)
+        out.append(row)
+    restore(rig, snap)
+    done, why = _pair(_lua_withdraw(rig.lua)(ex, key))       # the control: no loss, the sweep's own clean run
+    assert done is True, why
+    assert len(rig.writes()) == TOTAL
+    return out
+
+
+def test_power_loss_at_every_byte_never_leaves_the_mon_in_neither_place():
+    rows = sweep()
+    assert [r["k"] for r in rows] == list(range(TOTAL))
+    lost = [r["k"] for r in rows if not (r["boxed"] or r["partied"])]
+    assert lost == [], f"cut points that lost the mon: {lost}"
+    # before the count byte only the box holds it; from the count on, the party does too (or alone, once the
+    # Entries byte is erased)
+    assert all(r["boxed"] and not r["partied"] for r in rows if r["k"] < 71)
+    assert rows[71]["boxed"] and rows[71]["partied"]
+    assert rows[72]["partied"] and not rows[72]["boxed"]
+    assert all(r["pokedb_intact"] for r in rows)
+    # and a clean retry always leaves exactly ONE party copy (never a third, never none)
+    assert all(r["copies"] == 1 and r["count"] == 4 for r in rows), [r for r in rows if r["copies"] != 1]
+    assert all(r["retry_done"] is True and r["box_cleared_after_retry"] for r in rows if r["k"] <= 71), \
+        [(r["k"], r["retry_why"]) for r in rows if r["k"] <= 71 and r["retry_done"] is not True]
+
+
+def test_red_control_box_first_loses_the_mon_at_a_cut_point():
+    """RED: the halves swapped. The same sweep finds cut points with the mon in NEITHER place (the false
+    comment in the old source claimed both copies; Codex reproduced 72 of 73 lost)."""
+    rows = sweep(BOX_FIRST, points=[0, 1, 2, 3, 40, 71, 72])
+    lost = [r["k"] for r in rows if not (r["boxed"] or r["partied"])]
+    assert lost, "the box-first order must lose the mon at some cut point"
+    assert 2 in lost and 3 in lost
+
+
+def test_a_both_places_state_with_a_full_party_still_reconciles():
+    """The cut after the count byte with FIVE party mons: the party is now full (6/6) and the box still holds the
+    mon. The retry must reconcile (no append is needed), not refuse as party full."""
+    row = sweep(points=[71], party_size=5)[0]
+    assert row["boxed"] and row["partied"]
+    assert row["retry_done"] is True, row["retry_why"]
+    assert row["count"] == 6 and row["copies"] == 1 and row["box_cleared_after_retry"]
 
 
 # ── the three live options ────────────────────────────────────────────────────────────────────────────
@@ -406,86 +613,281 @@ def test_withdraw_then_deposit_round_trips_the_entry_bytes():
 
 # ── red controls: every brake, applied to a copy of the module ────────────────────────────────────────
 
-def test_red_control_skipping_the_status_and_hp_read_back():
-    """RED 1: the read-back on HP/status removed - a wrong HP is then reported as a successful withdraw."""
-    rig = Rig(party())
-    options(rig)
-    mon = boxed_mon()
-    boxed(rig, mon)
-    bad = mutant(rig, '{domain = "System Bus", addr = block + mons_at + target * s.End, bytes = record},',
-                 '{domain = "System Bus", addr = block + mons_at + target * s.End, bytes = record}, '
-                 '-- RED: no HP/status check')
-    done, why = _pair(_lua_withdraw(rig.lua)(bad, key_of(mon)))
-    assert done is True, why                       # the mutant succeeds where the real one refuses
-    real = Rig(party())
-    options(real)
-    real_mon = boxed_mon()
-    boxed(real, real_mon)
-    rig.mem[PARTY_MONS + 3 * 48 + 34] = 0x7F       # pretend a torn write: the real read-back must catch it
-    assert True                                    # (the byte above is inert without a torn-write harness)
+FLAG_AT = FLAG_FLAT[1]            # the WRAM allocation flag byte of pokedb bank 1 entries 1..8 (the fixture is entry 7)
+SPECIES_AT = entry_flat(1, 7)     # the first byte of the boxed pokedb entry (its species byte)
+
+
+def box_extra(domain, addr, value):
+    return [(BOX_LAST_SPAN, BOX_LAST_SPAN + f'                        {{domain = "{domain}", addr = {addr}, bytes = {{{value}}}}},\n')]
+
+
+def party_extra(addr, value):
+    return [(PARTY_LAST_SPAN,
+             PARTY_LAST_SPAN + f'                        {{domain = "System Bus", addr = {addr}, bytes = {{{value}}}}},\n')]
+
+
+@pytest.mark.parametrize("domain,addr,value,what", [
+    ("WRAM", FLAG_AT, 0, "the pokedb allocation flag"),
+    ("CartRAM", SPECIES_AT, 0xFF, "a pokedb species byte"),
+])
+def test_an_extra_box_write_is_refused_by_the_narrowed_box_permit(domain, addr, value, what):
+    """The box half may touch ONLY the Entries byte and its Banks byte. An injected extra write (the allocation
+    flag, a pokedb byte) is refused by the permit and nothing of that batch is emitted; with the permit narrowing
+    removed (RED) the same write lands - so the narrowing is the load-bearing brake."""
+    def run(edits):
+        rig = Rig(party())
+        options(rig)
+        mon = boxed_mon()
+        boxed(rig, mon)
+        before = rig.img.mem["WRAM" if domain == "WRAM" else "CartRAM"][addr]
+        ex = build(rig, edits)
+        done, why = _pair(_lua_withdraw(rig.lua)(ex, key_of(mon)))
+        return rig, done, why, before, rig.img.mem["WRAM" if domain == "WRAM" else "CartRAM"][addr]
+
+    rig, done, why, before, after = run([])                          # positive control: the real executor
+    assert done is True, why
+    assert after == before, f"the real executor changed {what}"
+    rig, done, why, before, after = run(box_extra(domain, addr, value))
+    assert done is None and "write refused" in why and "box half refused" in why, (done, why)
+    assert after == before, f"{what} was written despite the permit"
+    assert entries_byte(rig) == 7, "the refused batch must not have emitted its Entries byte"
+    assert rig.count() == 4, "the mon is in both places (the party half already landed and verified)"
+    wide = box_extra(domain, addr, value) + [(BOX_NARROW, 'writes:arm("box_deposit")')]
+    rig, done, why, before, after = run(wide)                        # RED: permit un-narrowed
+    assert done is True, why
+    assert after != before, f"RED: with the permit wide open {what} should have been overwritten"
+
+
+def test_an_extra_party_write_is_refused_by_the_narrowed_party_permit():
+    """The party half may touch ONLY slot `count`'s record, OT, nickname and the count byte. An extra write into
+    another live record (slot 0's species byte) used to be inside the whole-block permit."""
+    slot0 = PARTY_MONS
+
+    def run(edits):
+        rig = Rig(party())
+        options(rig)
+        mon = boxed_mon()
+        boxed(rig, mon)
+        before = rig.mem[slot0]
+        ex = build(rig, edits)
+        done, why = _pair(_lua_withdraw(rig.lua)(ex, key_of(mon)))
+        return rig, done, why, before, rig.mem[slot0]
+
+    rig, done, why, before, after = run([])
+    assert done is True, why
+    assert after == before
+    rig, done, why, before, after = run(party_extra(slot0, 0x01))
+    assert done is None and "write refused" in why and "party half refused" in why, (done, why)
+    assert after == before and rig.writes() == [], "a refused batch emits nothing"
+    assert rig.count() == 3 and entries_byte(rig) == 7, "nothing moved"
+    rig, done, why, before, after = run(party_extra(slot0, 0x01) + [(PARTY_NARROW, 'writes:arm("party_collection")')])
+    assert done is True, why                                         # RED: permit un-narrowed
+    assert after != before, "RED: the whole-block permit let the extra write corrupt another record"
 
 
 def test_red_control_clearing_the_pokedb_allocation_flag():
-    """RED 2: the free-list entry is released. The engine never does this; the flag is what NewStoragePointer scans."""
+    """RED: the free-list entry is released (the engine never does this; the flag is what NewStoragePointer scans).
+    Executed against the narrowed permit it is refused and the flag survives; the un-narrowed mutant clears it."""
     rig = Rig(party())
     options(rig)
     mon = boxed_mon()
     boxed(rig, mon)
-    before = rig.img.mem["WRAM"][FLAG_FLAT[1]]
+    before = rig.img.mem["WRAM"][FLAG_AT]
+    assert before & (1 << 6), "the fixture entry 7 must be allocated"
     done, why = _pair(withdraw(rig, key_of(mon)))
     assert done is True, why
-    assert rig.img.mem["WRAM"][FLAG_FLAT[1]] == before, "the executor must not touch the allocation flag"
-    bad = mutant(rig, '{domain = "CartRAM", addr = bits_at, bytes = {cleared}},',
-                 '{domain = "CartRAM", addr = bits_at, bytes = {cleared}},\n'
-                 '                    {domain = "WRAM", addr = flag_at, bytes = {0}},')
-    assert bad is not None
-
-
-def test_red_control_writing_wpartycount_first():
-    """RED 3: the count is written before the record - a reset in between leaves a count over a zeroed slot."""
+    assert rig.img.mem["WRAM"][FLAG_AT] == before, "the executor must not touch the allocation flag"
+    # the mutant: the flag-clearing write added to the box batch, permit narrowing intact -> REFUSED
     rig = Rig(party())
     options(rig)
-    mon = boxed_mon()
     boxed(rig, mon)
-    bad = mutant(rig, '{domain = "System Bus", addr = block, bytes = {party.count + 1}},',
-                 '{domain = "System Bus", addr = block, bytes = {party.count + 1}}, -- RED: count first')
-    done, why = _pair(_lua_withdraw(rig.lua)(bad, key_of(mon)))
+    done, why = _pair(_lua_withdraw(rig.lua)(build(rig, box_extra("WRAM", FLAG_AT, before & ~(1 << 6))), key_of(mon)))
+    assert done is None and "write refused" in why
+    assert rig.img.mem["WRAM"][FLAG_AT] == before
+    # the mutant with the narrowing also removed -> the flag is cleared (what the real permit prevents)
+    rig = Rig(party())
+    options(rig)
+    boxed(rig, mon)
+    edits = box_extra("WRAM", FLAG_AT, before & ~(1 << 6)) + [(BOX_NARROW, 'writes:arm("box_deposit")')]
+    done, why = _pair(_lua_withdraw(rig.lua)(build(rig, edits), key_of(mon)))
     assert done is True, why
-    assert bad is not None
+    assert rig.img.mem["WRAM"][FLAG_AT] == before & ~(1 << 6)
+
+
+# ── ambiguity, reconciliation, silent failures ─────────────────────────────────────────────────────────────
+
+def test_two_party_copies_refuse_by_name_before_any_write():
+    """find_key reports an ambiguous duplicate in the PARTY; the old code tested only its first return and
+    appended a THIRD copy while clearing the box."""
+    mon = boxed_mon()
+    rig = Rig(party(2) + [mon, mon])
+    options(rig)
+    boxed(rig, mon)
+    done, why = _pair(withdraw(rig, key_of(mon)))
+    assert done is None and why == "ambiguous duplicate key in the party", (done, why)
+    assert rig.writes() == [] and rig.count() == 4 and entries_byte(rig) == 7
+    # RED: ignore the party ambiguity -> a third copy is appended and the box copy is cleared
+    rig = Rig(party(2) + [mon, mon])
+    options(rig)
+    boxed(rig, mon)
+    bad = mutant(rig, 'if pwhy then refuse(pwhy .. " in the party") end', "-- RED: the ambiguity ignored")
+    done, why = _pair(_lua_withdraw(rig.lua)(bad, key_of(mon)))
+    assert rig.writes() != [] and rig.count() == 5, "RED: a third party copy was appended"
+    assert count_of_key(rig, key_of(mon)) == 3
+
+
+def both_places(rig, ex, fio, key):
+    """Drive the real executor into the state an interrupted withdraw leaves: the count byte landed, the box half
+    did not."""
+    fio.flaky.budget = 71
+    done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+    fio.flaky.budget = None
+    assert done is None and "injected loss" in why
+    assert entries_byte(rig) != 0 and count_of_key(rig, key) == 1, "fixture: the mon must be in BOTH places"
+
+
+def test_a_both_places_state_reconciles_by_removing_only_the_box_copy():
+    mons = party()
+    mon = boxed_mon()
+    key = key_of(mon)
+    rig = Rig(mons)
+    options(rig)
+    entry = boxed(rig, mon)
+    flag_before = rig.img.mem["WRAM"][FLAG_FLAT[1]]
+    fio = flaky_io(rig)
+    ex = build(rig, io=fio)
+    both_places(rig, ex, fio, key)
+    rig.lua.eval(CLEAR)(rig.log["writes"])
+    done, note = _pair(_lua_withdraw(rig.lua)(ex, key))
+    assert done is True, note
+    assert note["reconciled"] is True and note["message"] == "withdraw reconciled: removed the box copy"
+    assert {w["domain"] for w in rig.writes()} == {"CartRAM"}, "no party byte may be written on a reconcile"
+    assert [w["addr"] for w in rig.writes()] == [box_flat(1), box_flat(1) + 0x14]
+    assert rig.count() == 4 and count_of_key(rig, key) == 1 and entries_byte(rig) == 0
+    assert bytes(rig.img.mem["CartRAM"][entry_flat(1, 7):entry_flat(1, 7) + 49]) == entry
+    assert rig.img.mem["WRAM"][FLAG_FLAT[1]] == flag_before
+    # and a third call is the plain refusal: the mon is only in the party now
+    done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+    assert done is None and "not boxed" in why
+
+
+def test_reconcile_refuses_when_the_party_copy_differs_from_the_boxed_entry():
+    mon = boxed_mon()
+    key = key_of(mon)
+    rig = Rig(party())
+    options(rig)
+    boxed(rig, mon)
+    fio = flaky_io(rig)
+    ex = build(rig, io=fio)
+    both_places(rig, ex, fio, key)
+    rig.mem[PARTY_MONS + 3 * 48 + 35] = (rig.mem[PARTY_MONS + 3 * 48 + 35] or 0) ^ 0x10     # the copy was played with
+    rig.lua.eval(CLEAR)(rig.log["writes"])
+    done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+    assert done is None and "reconcile refused" in why, (done, why)
+    assert rig.writes() == [] and entries_byte(rig) == 7, "the box copy is kept"
+    # RED: without the equality check the box copy is removed under a party copy that no longer matches it
+    bad = build(rig, [("if not slot_is_want(praw, target) then", "if false then")], flaky_io(rig))
+    _pair(_lua_withdraw(rig.lua)(bad, key))
+    assert entries_byte(rig) == 0, "RED: the box copy was erased under a party copy that differs from it"
+
+
+def test_a_silently_failed_entries_erase_is_refused_then_reconciled():
+    """Codex finding 2: the Entries erase silently does nothing after the party append. The final read-back refuses
+    (the count is already raised); once the erase works, a retry reconciles instead of refusing as already-in-party."""
+    mon = boxed_mon()
+    key = key_of(mon)
+    rig = Rig(party())
+    options(rig)
+    boxed(rig, mon)
+    fio = flaky_io(rig)
+    ex = build(rig, io=fio)
+    fio.flaky.swallow = box_flat(1)
+    done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+    assert done is None and why == "read-back refused: box 1 still reads the mon", (done, why)
+    assert rig.count() == 4 and entries_byte(rig) == 7
+    fio.flaky.swallow = None
+    done, note = _pair(_lua_withdraw(rig.lua)(ex, key))
+    assert done is True and note["reconciled"] is True, (done, note)
+    assert rig.count() == 4 and entries_byte(rig) == 0 and count_of_key(rig, key) == 1
+    # RED: both erase read-backs removed -> the silent failure is reported as a success
+    rig = Rig(party())
+    options(rig)
+    boxed(rig, mon)
+    fio = flaky_io(rig)
+    fio.flaky.swallow = box_flat(1)
+    bad = build(rig, [("if find_key(after_boxes[box], key) then", "if false then"),
+                      ('if io_.read_u8(entries_at, "CartRAM") ~= 0 then', "if false then")], fio)
+    done, why = _pair(_lua_withdraw(rig.lua)(bad, key))
+    assert done is True and entries_byte(rig) == 7, "RED: reported withdrawn while the box still holds the mon"
+
+
+def test_a_torn_party_write_is_refused_before_the_box_half_runs():
+    """The appended slot is read back byte for byte BEFORE the box half. A bit flipped on the wire (HP low byte)
+    refuses with the box copy untouched; a retry then refuses to reconcile onto the torn copy."""
+    mon = boxed_mon()
+    key = key_of(mon)
+    rig = Rig(party())
+    options(rig)
+    boxed(rig, mon)
+    fio = flaky_io(rig)
+    ex = build(rig, io=fio)
+    fio.flaky.tear = PARTY_MONS + 3 * 48 + 35
+    done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+    assert done is None and "appended party slot differs" in why and "box copy is untouched" in why, (done, why)
+    assert entries_byte(rig) == 7 and all(w["domain"] == "System Bus" for w in rig.writes())
+    fio.flaky.tear = None
+    done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
+    assert done is None and "reconcile refused" in why and entries_byte(rig) == 7
+    # RED: the byte-for-byte read-back and the HP check removed -> the torn copy is accepted and the box erased
+    rig = Rig(party())
+    options(rig)
+    boxed(rig, mon)
+    fio = flaky_io(rig)
+    fio.flaky.tear = PARTY_MONS + 3 * 48 + 35
+    bad = build(rig, [("local function slot_is_want(raw, slot)\n",
+                       "local function slot_is_want(raw, slot)\n                return true\n"
+                       "            end\n            local function _unused(raw, slot)\n"),
+                      ("if landed.hp ~= view.hp or landed.status ~= 0 then", "if false then")], fio)
+    done, why = _pair(_lua_withdraw(rig.lua)(bad, key))
+    assert done is True, why
+    assert entries_byte(rig) == 0, "RED: the box copy was erased under a torn party copy"
 
 
 def test_red_control_dropping_the_party_full_refusal():
-    """RED 4: the full-party brake removed - a seventh record is written into a six-slot party."""
+    """RED: the full-party brake removed - the executor then tries a seventh record; the real one refuses first."""
     rig = Rig(party(6))
     options(rig)
     mon = boxed_mon()
     boxed(rig, mon)
     real_done, real_why = _pair(withdraw(rig, key_of(mon)))
     assert real_done is None and real_why.startswith("party full")
-    bad = mutant(rig, 'if party.count >= c.PARTY_LENGTH then refuse("party full ("',
-                 'if false then refuse("party full ("')
+    assert rig.writes() == [] and rig.count() == 6
+    bad = mutant(rig, 'if party.count >= c.PARTY_LENGTH then refuse("party full ("', 'if false then refuse("party full ("')
     done, why = _pair(_lua_withdraw(rig.lua)(bad, key_of(mon)))
-    # the real executor refused at the count; the mutant has no such brake, so whatever it
-    # did, the party count in the image never went past capacity
-    assert rig.count() <= 6
-    assert bad is not None
+    assert rig.count() <= 6, "no count past capacity may ever land"
+    assert rig.writes() != [] or done is None, "the mutant must at least attempt the write the real one refused"
+    assert not (done is True and rig.count() > 6)
+    assert why is None or "party full" not in str(why)
 
 
 def test_red_control_dropping_the_census_read_back():
-    """RED 5: the final census removed - a mon left readable in the box is still reported as withdrawn."""
+    """RED: see test_a_silently_failed_entries_erase_is_refused_then_reconciled (the census + Entries read-backs
+    removed there); here only the census check is removed and the Entries check still brakes."""
     rig = Rig(party())
     options(rig)
     mon = boxed_mon()
     boxed(rig, mon)
-    bad = mutant(rig, 'if find_key(after_boxes[box], key) then', 'if false then -- RED: no census read-back')
+    fio = flaky_io(rig)
+    fio.flaky.swallow = box_flat(1)
+    bad = build(rig, [("if find_key(after_boxes[box], key) then", "if false then")], fio)
     done, why = _pair(_lua_withdraw(rig.lua)(bad, key_of(mon)))
-    assert done is True, why
-    assert bad is not None
+    assert done is None and "Entries byte did not clear" in why
 
 
 def test_red_control_copying_the_stats_from_the_savemon():
-    """RED 6: the record is taken from the savemon instead of rebuilt. The savemon has no stat block, so the
-    written record is wrong - and the live option run proves the rebuild is the load-bearing part."""
+    """RED: the record is taken from the savemon instead of rebuilt (stat tail zeroed). The byte-for-byte read-back
+    of the appended slot refuses it before the box half, and the live option run proves the rebuild is the
+    load-bearing part."""
     mons = party()
     mon = boxed_mon()
     rig = Rig(mons)
@@ -497,15 +899,14 @@ def test_red_control_copying_the_stats_from_the_savemon():
     rig2 = Rig(mons)                      # the real withdraw above already moved the mon into the party
     options(rig2, perfect_ivs=True)
     boxed(rig2, mon)
-    bad = mutant(rig2, '{domain = "System Bus", addr = block + mons_at + target * s.End, bytes = record},',
-                 '{domain = "System Bus", addr = block + mons_at + target * s.End, bytes = '
+    bad = mutant(rig2, '{domain = "System Bus", addr = at_rec, bytes = record},',
+                 '{domain = "System Bus", addr = at_rec, bytes = '
                  '(function() local r = {0} for i = 1, 48 do r[i] = record[i] or 0 end '
                  'for i = 37, 48 do r[i] = 0 end return r end)()},')
     done, why = _pair(_lua_withdraw(rig2.lua)(bad, key_of(mon)))
-    # the executor's read-back covers HP/status, not the stat block, so the mutant's record still lands:
-    # what must hold is that the bytes on the wire are NOT the oracle's
-    assert done is not None, why
+    assert done is None and "appended party slot differs" in why, (done, why)
     assert record_bytes(rig2, 3) != oracle(entry, apply_evs=False, natures_on=False, perfect_ivs=True)
+    assert entries_byte(rig2) == 7, "the box copy is untouched when the party half is wrong"
 
 
 def test_red_control_reading_saved_options_instead_of_live():
