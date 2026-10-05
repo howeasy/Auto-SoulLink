@@ -595,6 +595,8 @@ function O.boxes(deps)
     -- exactly, but PARTY half first (count last), verified, THEN the box half: a failure or lifetime loss in
     -- between leaves the mon in BOTH places (a retry reconciles), never in neither. (The earlier box-first order
     -- left ZERO live copies on 72 of 73 injected failure points.)
+    -- Known limit: reconciliation matches by identity key plus byte equality, so two byte-identical INDEPENDENT mons
+    -- (one boxed, one in the party) collapse into one on a reconcile; the key cannot tell them apart.
     -- sNewBox<n> flat CartRAM + the 0x21 record stride, and the Banks byte at +0x14 (NEWBOX §1.1).
     -- Declared BEFORE require_withdraw, which assigns it: as a later `local`, the assignment compiled
     -- to a global and every withdraw raised inside record_flat (introduced in a0487e8bd).
@@ -715,13 +717,17 @@ function O.boxes(deps)
                 -- BOTH-PLACES state (an earlier withdraw died between its halves). Finish the box removal only if
                 -- the party copy is byte-for-byte what this withdraw would have appended.
                 target = pmon.slot
-                local _, praw = party_block()
+                local now, praw = party_block()
+                if target >= now.count then refuse("party changed during withdraw") end
                 if not slot_is_want(praw, target) then
                     refuse("withdraw reconcile refused: the party copy differs from the boxed entry (the box copy is kept)")
                 end
             end
             -- ── PARTY HALF: record, OT, nickname, wPartyCount LAST, permit = exactly those spans ──
             local function append_to_party()
+                -- the slot index was planned from an earlier read: prove the party did not move under it
+                local live = party_block()
+                if live.count ~= party.count then refuse("party changed during withdraw") end
                 local at_rec = block + mons_at + target * s.End
                 local at_ot = block + ots_at + target * c.NAME_LENGTH
                 local at_nick = block + nicks_at + target * c.MON_NAME_LENGTH
@@ -756,23 +762,40 @@ function O.boxes(deps)
                 end
             end
             -- ── BOX HALF: the slot pointer byte and its Banks bit, nothing else, permit = exactly those two ──
+            -- Two steps, each verified. The Entries byte goes first and ALONE: for a BANK-2 mon the Banks bit is what
+            -- selects the pokedb bank, so clearing it while a silently failed Entries write left a non-zero pointer
+            -- would redirect that pointer into bank 1 (an unallocated entry: the census then refuses everything and
+            -- a retry cannot reconcile). The Banks bit is only touched once the Entries byte is proved 0.
             local cleared
             local function remove_box_copy()
+                writes:arm("box_deposit", function(domain, addr, n)
+                    return domain == "CartRAM" and n == 1 and addr == entries_at
+                end)
+                local oke, eerr = pcall(function()
+                    writes:write_batch({{domain = "CartRAM", addr = entries_at, bytes = {0}}})
+                end)
+                writes:disarm()
+                if not oke then
+                    refuse("box half refused: " .. tostring(eerr) .. " (the mon is in the party AND the box; a retry reconciles)")
+                end
+                if io_.read_u8(entries_at, "CartRAM") ~= 0 then
+                    refuse("withdraw read-back refused: Entries byte not cleared (box untouched beyond that byte)")
+                end
                 local bits = io_.read_u8(bits_at, "CartRAM")
-                if not integer(bits, 0, 255) then refuse("box Banks byte unreadable (the mon is in the party AND the box)") end
+                if not integer(bits, 0, 255) then refuse("box Banks byte unreadable (the Entries byte is already clear)") end
                 cleared = bits & ~(1 << (slot & 7)) & 0xFF
                 writes:arm("box_deposit", function(domain, addr, n)
-                    return domain == "CartRAM" and n == 1 and (addr == entries_at or addr == bits_at)
+                    return domain == "CartRAM" and n == 1 and addr == bits_at
                 end)
                 local okb, werr = pcall(function()
-                    writes:write_batch({
-                        {domain = "CartRAM", addr = entries_at, bytes = {0}},
-                        {domain = "CartRAM", addr = bits_at, bytes = {cleared}},
-                    })
+                    writes:write_batch({{domain = "CartRAM", addr = bits_at, bytes = {cleared}}})
                 end)
                 writes:disarm()
                 if not okb then
-                    refuse("box half refused: " .. tostring(werr) .. " (the mon is in the party AND the box; a retry reconciles)")
+                    refuse("box half refused: " .. tostring(werr) .. " (the mon is in the party; the Entries byte is clear)")
+                end
+                if io_.read_u8(bits_at, "CartRAM") ~= cleared then
+                    refuse("withdraw read-back refused: Banks byte not cleared (the mon is in the party; the Entries byte is clear)")
                 end
             end
             if append then append_to_party() end
