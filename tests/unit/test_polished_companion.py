@@ -173,7 +173,7 @@ def test_a_diff_entirely_inside_the_allowed_spans_is_accepted():
     assert "DelayFrame lead-in" in joined
     # both ROM0 bridges and both bank-$7E services are adjacent, so each is ONE changed run
     assert "ROM0 delay + reset bridges" in joined
-    assert f"bank ${pc.SERVICE_BANK:02X} service + sound service" in joined
+    assert f"bank ${pc.SERVICE_BANK:02X} service + panel + sound service" in joined
     assert f"call DelayFrames -> SlinkResetSoundBridge" in joined
     assert "header checksums" in joined
     assert len([line for line in report if "phone hook" not in line]) >= 5, report

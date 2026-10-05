@@ -49,6 +49,7 @@ ATTRMAP = SYM["wAttrmap"][1]
 OFF_CAPS, OFF_STATE, OFF_PAGE, OFF_PAGES, OFF_COUNTER = 8, 9, 10, 11, 5
 CLOSED, AWAIT, STAGED = 0, 1, 2
 CAP_PANEL = 0x02
+CAPS_PANEL_SOUND = 0x07   # SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY: what the overlay stores
 BLANK = 0x7F
 PROFILE = json.loads((ROOTP / "data/games/polished_crystal/profile.json").read_text(encoding="utf-8"))
 PANEL = PROFILE["titles"]["polished"]["overlay"]["panel"]
@@ -174,18 +175,21 @@ def test_the_mailbox_is_whole_and_the_page_fits_inside_its_tail():
     assert TERM == 0x53
 
 
-def test_the_overlay_advertises_the_panel_and_nothing_else(roms):  # noqa: F811
-    """caps is SLINK_CAP_PANEL alone: a host that asks whether this cartridge plays sound, or
-    speaks the phone ABI, is told no. Red control (applied): OR in CAP_SFX in the service and the
-    two `caps_has` assertions below flip to true."""
-    lua, parts, io, _log, mem = _build(roms, _fresh())
+def test_the_overlay_advertises_panel_and_sound_and_nothing_else(roms):  # noqa: F811
+    """caps is SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY ($07): a host that speaks the
+    phone or trade ABI is told no (the shipped ROM's own caps immediate is pinned in
+    test_polished_sounds.py). Red control (applied): OR in CAP_PHONE in the service and the
+    `caps_has` assertion below, fed the same byte, flips to true."""
+    lua, parts, io, _log, mem = _build(roms, _fresh(caps=CAPS_PANEL_SOUND))
     _frame(parts, io, mem, 2, CLOSED)          # first observation: nothing has moved yet
     _frame(parts, io, mem, 3, CLOSED)          # the counter moved: the service is live
     panel = parts.panel
     assert panel.present(panel) is True
-    assert panel.caps_has(panel, 0x01) is False      # no SFX bit
+    assert panel.caps_has(panel, 0x01) is True       # SFX bit
+    assert panel.caps_has(panel, 0x04) is True       # SFX_NOTIFY bit
     assert panel.caps_has(panel, 0x08) is False      # no PHONE bit: the card is not an ABI surface
-    assert mem[MAILBOX + OFF_CAPS] == CAP_PANEL
+    assert panel.caps_has(panel, 0x10) is False      # no TRADE bit
+    assert mem[MAILBOX + OFF_CAPS] == CAPS_PANEL_SOUND
 
 
 # ── the host's half ───────────────────────────────────────────────────────────────────────

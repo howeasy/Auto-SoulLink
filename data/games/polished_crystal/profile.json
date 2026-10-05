@@ -10,9 +10,9 @@
     "generator": "tools/gen_polished_profile.py",
     "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
     "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
-    "overlay_provenance_sha256": "32d6606ac3c1abaf42c1ac3c75f7ec67f75d1087aad716759ed2958f69462cfc",
-    "overlay_sha1": "9c60bc8fb26ac13c52705b8086f8a5fb91d7bd93",
-    "overlay_sym_sha256": "a7c150b74ac8ba8c7ac4c062d100f6c6a1b0aaa776cfc66e02aaa2b4f12db9fd",
+    "overlay_provenance_sha256": "1085fbca8e02e513dc0209e017df511c1e3784a7728e261a9fba9363b7dd7231",
+    "overlay_sha1": "deebb1004d4f6123667d5d9e061ad0bf867ac021",
+    "overlay_sym_sha256": "7549711d7ccb5762b2f0d1fd11a32dffe60e369479374ed495bb00213c235dcf",
     "repo": "https://github.com/Rangi42/polishedcrystal",
     "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
     "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
@@ -93,6 +93,10 @@
         "NUM_WATERMON": 3,
         "PARTY_LENGTH": 6,
         "PLAYER_NAME_LENGTH": 8,
+        "SFX_BUMP": 36,
+        "SFX_ITEM": 1,
+        "SFX_READ_TEXT_2": 8,
+        "SFX_WRONG": 25,
         "SHINY_MASK": 128,
         "SPEED": 2,
         "SP_ATTACK": 3,
@@ -557,7 +561,7 @@
         "abi": 3,
         "artifact": "polished_overlay",
         "base_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
-        "md5": "56837a1e15f3d036bc8a2a4c58ef5734",
+        "md5": "44fc24e5e5be8acb3b33d3014e491f1a",
         "panel": {
           "base": 50733,
           "line_max": 16,
@@ -572,9 +576,36 @@
           "wSlinkPanelText": 50733,
           "wTilemap": 49568
         },
-        "rom_sha1": "9c60bc8fb26ac13c52705b8086f8a5fb91d7bd93",
+        "rom_sha1": "deebb1004d4f6123667d5d9e061ad0bf867ac021",
+        "sfx": {
+          "caps": [
+            "SLINK_CAP_SFX",
+            "SLINK_CAP_SFX_NOTIFY"
+          ],
+          "check_sfx": [
+            0,
+            15046
+          ],
+          "codes": {
+            "boo": 36,
+            "failure": 25,
+            "notify": 8,
+            "success": 1
+          },
+          "cur_sfx": 52415,
+          "entry": "jp SlinkSfxService (patch/polished/src/slink.asm, via SlinkDelayFrameBridge)",
+          "music_fade": 52402,
+          "play_sfx": [
+            0,
+            14781
+          ],
+          "service": [
+            126,
+            16600
+          ]
+        },
         "sym": "polished_slink.sym",
-        "sym_sha256": "a7c150b74ac8ba8c7ac4c062d100f6c6a1b0aaa776cfc66e02aaa2b4f12db9fd"
+        "sym_sha256": "7549711d7ccb5762b2f0d1fd11a32dffe60e369479374ed495bb00213c235dcf"
       },
       "ram": {
         "hAppendVWFText": 65511,

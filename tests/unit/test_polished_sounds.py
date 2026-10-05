@@ -43,8 +43,10 @@ ATTRMAP = OVERLAY["ram"]["wAttrmap"]
 OFF_CAPS, OFF_SFX, OFF_STATE, OFF_PAGE, OFF_PAGES, OFF_COUNTER = 8, 7, 9, 10, 11, 5
 CAP_SFX, CAP_SFX_NOTIFY = 0x01, 0x04
 SUCCESS, FAILURE, BOO, NOTIFY = 1, 2, 3, 4
-# The overlay now grants sound and nothing else: no panel bit, no phone, no trade.
 CAPS_SFX = CAP_SFX | CAP_SFX_NOTIFY
+# What the shipped overlay stores: sound AND the Phone-card panel (integrated build); no phone, no trade bit.
+CAP_PANEL = 0x02
+CAPS_ROM = CAP_PANEL | CAPS_SFX
 
 
 def _sym():
@@ -85,10 +87,10 @@ def _pair(value):
 
 # -- 1. the overlay image --------------------------------------------------------------------
 
-def test_the_overlay_advertises_sound_and_no_other_capability(overlay):
-    """The build's caps byte IS SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY: bit 0 and bit 2 set, bit 1
-    (panel) and bits 3/4 (phone/trade) clear. A host that reads bit 1 as licensed would paint over
-    a map this overlay never draws.
+def test_the_overlay_advertises_sound_and_panel_and_no_other_capability(overlay):
+    """The build's caps byte IS SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY: bits 0, 1 and
+    2 set, bits 3/4 (phone/trade) clear. A host that reads bit 3 or 4 as licensed would speak a
+    protocol this overlay does not serve.
 
     RED CONTROL (applied): restore `xor a` in patch/polished/src/slink.asm and the caps word
     reads $0000 -> fails.
@@ -103,7 +105,7 @@ def test_the_overlay_advertises_sound_and_no_other_capability(overlay):
     needle = bytes([0xEA, addr & 0xFF, addr >> 8])       # ld [nn],a
     assert window.count(needle) == 1, "the caps store must be unique in the service"
     at = window.index(needle)
-    assert window[at - 2:at] == bytes([0x3E, CAPS_SFX]), "caps must be the SFX + SFX_NOTIFY immediate"
+    assert window[at - 2:at] == bytes([0x3E, CAPS_ROM]), "caps must be the PANEL + SFX + SFX_NOTIFY immediate"
     assert window[at - 3] == 0x77, "the ABI byte is stored with `ld [hl],a` just before the caps pair"
 
 
@@ -167,7 +169,7 @@ def test_every_overlay_byte_the_sound_card_changed_is_in_an_intended_span(overla
     spans = B.verify_overlay(base, overlay, _symbols(clean / "polishedcrystal-3.2.3.sym"), dict(SYM))
     joined = "\n".join(spans)
     assert "ROM0 delay + reset bridges" in joined
-    assert "service + sound service" in joined
+    assert "service + panel + sound service" in joined
     assert "call DelayFrames -> SlinkResetSoundBridge" in joined, spans
     with pytest.raises(RuntimeError):
         # a byte outside every intended span must be refused, not absorbed
@@ -190,7 +192,7 @@ def test_the_profile_carries_the_native_id_table_and_the_service_facts():
     assert block["play_sfx"] == list(SYM["PlaySFX"]) == [0, 0x39BD]
     assert block["check_sfx"] == list(SYM["CheckSFX"]) == [0, 0x3AC6]
     assert block["music_fade"] == SYM["wMusicFade"][1] == 0xCCB2
-    assert block["service"] == list(SYM["SlinkSfxService"]) == [0x7E, 0x404C]
+    assert block["service"] == list(SYM["SlinkSfxService"]) == [0x7E, 0x40D8]
     assert P["constants"]["SFX_ITEM"] == 1 and P["constants"]["SFX_WRONG"] == 0x19
     assert P["constants"]["SFX_BUMP"] == 0x24 and P["constants"]["SFX_READ_TEXT_2"] == 0x08
 
@@ -403,8 +405,9 @@ def test_the_manager_offers_native_sounds_for_polished_and_only_for_that_row():
         if isinstance(entry, dict) and "ok" in entry:
             rows[option] = entry["ok"]
     assert rows["native_sounds"] is True
-    assert [o for o, ok in rows.items() if ok] == ["native_sounds"], rows
-    for option in ("explode_mode", "rival_team_swap", "battle_calc", "phone_calls"):
+    # battle_calc is the other granted row (flipped 2026-10-04 with the Polished calculator dataset)
+    assert sorted(o for o, ok in rows.items() if ok) == ["battle_calc", "native_sounds"], rows
+    for option in ("explode_mode", "rival_team_swap", "phone_calls"):
         assert rows[option] is False
     golden = json.loads((REPO / "tests/fixtures/manager_tables_pre_gen3_exp.json").read_text(encoding="utf-8"))
     assert golden["support"]["gen2_polished"]["native_sounds"] == {"ok": True, "why": ""}
