@@ -642,6 +642,9 @@
     exports.setGen3Species(active ? POLISHED_SPECIES : null);
     exports.setGen3Moves(active ? POLISHED_MOVES : null);
     exports.setGen3TypeChart(active ? POLISHED_TYPE_CHART : null);
+    // Crit is x1.5 (x2.25 Sniper) in Polished, x2 everywhere else (CALC.md 4.1). Guarded so an
+    // older mechanics build without the hook still loads.
+    if (typeof exports.setGen3PolishedCrit === 'function') exports.setGen3PolishedCrit(!!active);
     exports.polishedActive = !!active;
   };
   exports.POLISHED_SPECIES = POLISHED_SPECIES;

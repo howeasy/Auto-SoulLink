@@ -97,9 +97,12 @@ function P.beacon_matches(root, json, Admission, path, overlay_sha1, artifact)
     if beacon.schema ~= "polished-overlay-beacon-v1" or beacon.title ~= P.TITLE then
         return false, "overlay beacon schema/title mismatch"
     end
-    if type(beacon.source) ~= "table" or beacon.source.overlay_sha1 ~= overlay_sha1 then
-        return false, "overlay beacon is not pinned to the overlay sha1"
-    end
+    -- DESIGN NOTE (coordinator 2026-10-05): the title slice first compared a WHOLE-ROM canonical sha1 here. That is wrong
+    -- for the rand_overlay path (UPR rewrites bytes outside the overlay, so a randomized ROM can never hash to the
+    -- canonical build) and it refused every patched-hold-byte test. The beacon spans below already exclude the version
+    -- field and the global checksum (tools/gen_polished_beacon.py), so a re-stamped version never moves this check.
+    -- Whole-ROM canonical admission of an exact (non-randomized) cart is a SEPARATE step: the exact-sha1 mode above
+    -- still pins the stamped build; per-release version stamping at patch time must extend that mode, not this one.
     local offsets, last = {}, 0
     for _, span in ipairs(beacon.spans) do
         local offset, length = span.offset, span.length

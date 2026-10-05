@@ -62,6 +62,7 @@ SERVICE_BYTES = bytes(range(0x40, 0x50))     # 16 bytes, exactly the SVC..SVC_EN
 # The Phone card hooks (pc.PHONE_HOOKS): each routine holds one `call native` that the overlay
 # retargets to a ROM0 bridge inside PHONE_LO..PHONE_HI (free $FF in the clean image).
 PHONE_LO, PHONE_HI = 0x3F34, 0x3F92
+TITLE_END = 0x3FA0
 PHONE_ROUTINES = {r: (0x24, 0x4100 + 0x80 * i) for i, r in enumerate(dict.fromkeys(h[0] for h in pc.PHONE_HOOKS))}
 PHONE_NATIVES = {n: ((0x00, 0x2500 + i) if n == "GetMapPhoneService" else (0x24, 0x5000 + 0x10 * i))
                  for i, (_r, n, _b) in enumerate(pc.PHONE_HOOKS)}
@@ -89,6 +90,11 @@ OVERLAY_SYMS = {
     "SlinkPanelEnd": SVC_END,
     "SlinkSfxService": SFX,
     "SlinkSfxServiceEnd": SFX_END,
+    # TITLE-VERSION: the title bridge links in the same trailing ROM0 gap, adjacent above the phone bridges;
+    # the version field ends with the other bank-$7E blocks (zero extra bytes in this synthetic image).
+    "SlinkMainMenuLoopBridge": (0x00, PHONE_HI),
+    "SlinkMainMenuLoopBridgeEnd": (0x00, TITLE_END),
+    "SlinkVersionFieldEnd": SFX_END,
     "wSlinkMailbox": (0x00, pc.MAILBOX),
 }
 EMPTY_BANK = slice(pc._flat(pc.SERVICE_BANK, 0x4000), pc._flat(pc.SERVICE_BANK, 0x8000))
@@ -102,6 +108,8 @@ def clean_rom() -> bytes:
     rom[RESET_HOOK_AT:RESET_HOOK_AT + 3] = b"\xcd" + DELAY_FRAMES[1].to_bytes(2, "little")
     rom[DELAY:DELAY + 7] = pc.DELAY_NATIVE
     rom[PHONE_LO:PHONE_HI] = b"\xff" * (PHONE_HI - PHONE_LO)
+    rom[PHONE_HI:TITLE_END] = b"\xff" * (TITLE_END - PHONE_HI)
+    rom[pc.TITLE_HOOK_FLAT:pc.TITLE_HOOK_FLAT + 3] = b"\xcd\xed\x43"      # call MainMenu_PrintCurrentTimeAndDay
     for at, native, _bridge in PHONE_CALLS:
         rom[at:at + 3] = b"\xcd" + PHONE_NATIVES[native][1].to_bytes(2, "little")
     return bytes(rom)
@@ -118,6 +126,8 @@ def overlay_rom(base: bytes | None = None) -> bytes:
     rom[pc._flat(*SVC):pc._flat(*SVC_END)] = SERVICE_BYTES
     rom[pc.HEADER_CHECKSUMS.start:pc.HEADER_CHECKSUMS.stop] = HEADER_BYTES
     rom[PHONE_LO:PHONE_HI] = b"\x11" * (PHONE_HI - PHONE_LO)
+    rom[PHONE_HI:TITLE_END] = b"\x12" * (TITLE_END - PHONE_HI)
+    rom[pc.TITLE_HOOK_FLAT:pc.TITLE_HOOK_FLAT + 3] = b"\xcd" + PHONE_HI.to_bytes(2, "little")
     for at, _native, bridge in PHONE_CALLS:
         rom[at + 1:at + 3] = PHONE_BRIDGES[bridge][1].to_bytes(2, "little")
     return bytes(rom)
@@ -173,7 +183,7 @@ def test_a_diff_entirely_inside_the_allowed_spans_is_accepted():
     assert "DelayFrame lead-in" in joined
     # both ROM0 bridges and both bank-$7E services are adjacent, so each is ONE changed run
     assert "ROM0 delay + reset bridges" in joined
-    assert f"bank ${pc.SERVICE_BANK:02X} service + panel + sound service" in joined
+    assert f"bank ${pc.SERVICE_BANK:02X} service + panel + sound + version" in joined
     assert f"call DelayFrames -> SlinkResetSoundBridge" in joined
     assert "header checksums" in joined
     assert len([line for line in report if "phone hook" not in line]) >= 5, report

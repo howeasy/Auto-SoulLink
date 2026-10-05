@@ -488,3 +488,83 @@ def test_the_built_engine_with_polished_installed_matches_the_hand_computed_dama
     assert got["ratTypes"] == ["Normal"]
     assert got["dragonIntoFairy"] == 0
     assert got["vanillaBulbasaur"] == ["Grass", "Poison"], "usePolished(false) must restore vanilla"
+
+
+# --- critical hits (docs/polished/CALC.md 4.1) ----------------------------------------------------
+# No calc build needed: the pure part of mechanics/gen3.ts sits between two marker comments, is
+# type-stripped by node itself and evaluated here, so the numbers come from the real source.
+GEN3_TS = ROOT / "calc" / "calc" / "src" / "mechanics" / "gen3.ts"
+
+_CRIT_PROBE = r"""
+const fs = require('fs'), mod = require('module');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const block = src.split('// POLISHED-CRIT-BEGIN')[1].split('// POLISHED-CRIT-END')[0].replace(/\bexport /g, '');
+const js = mod.stripTypeScriptTypes(block);
+const api = new Function(js + '; return {set: setGen3PolishedCrit, crit: critProductADV, base: baseDamageADV};')();
+const sniper = { hasAbility: n => n === 'Sniper' }, plain = { hasAbility: () => false };
+const out = { defaultCrit: api.base(50, 69, 55, 69, true, plain) };
+api.set(true);
+out.polishedNoCrit = api.base(50, 69, 55, 69, false, plain);
+out.polishedCrit = api.base(50, 69, 55, 69, true, plain);
+out.polishedSniper = api.base(50, 69, 55, 69, true, sniper);
+out.table = [api.crit(100, false), api.crit(100, true), api.crit(1, false), api.crit(7, true)];
+api.set(false);
+out.afterOff = api.base(50, 69, 55, 69, true, plain);
+console.log(JSON.stringify(out));
+"""
+
+_POLISHED_JS_PROBE = r"""
+const fs = require('fs');
+const calls = [];
+const exp = { setGen3Species() {}, setGen3Moves() {}, setGen3TypeChart() {},
+              setGen3PolishedCrit(on) { calls.push(on); } };
+global.window = { exports: exp };
+new Function('window', fs.readFileSync(process.argv[1], 'utf8'))(global.window);
+exp.usePolished(true); exp.usePolished(false);
+console.log(JSON.stringify(calls));
+"""
+
+
+def _node(code: str, *args: str) -> dict:
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    done = subprocess.run([node, "-e", code, *args], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+@needs_source
+def test_polished_critical_hit_is_x1_5_before_the_division_and_gen3_stays_x2():
+    """Hand-computed from effect_commands.asm:4333-4343 + DamagePass3/4 for the L50 Bulbasaur
+    Acrobatics case of test_hand_computed_damage (product 22*55*69 = 83490):
+        crit      83490 * 3/2 = 125235 ; /69 = 1815 ; /50 = 36 ; (+2 = 38 on the cartridge)
+        Sniper    83490 * 9/4 = 187852 ; /69 = 2722 ; /50 = 54
+    The old gen 3 path was (24 + 2) * 2 = 52 for the same hit.
+    Red controls: restoring x2 for Polished makes `polishedCrit` 48 (and the ts-source assertions
+    below fail); a Gen 3 game (flag off, the default) must leave baseDamageADV untouched at 24
+    so that calculateFinalModsADV's own x2 stays the only crit multiplier."""
+    got = _node(_CRIT_PROBE, str(GEN3_TS))
+    assert got["defaultCrit"] == 24 and got["afterOff"] == 24, "flag off must not touch the product (Gen 3 x2 path)"
+    assert got["polishedNoCrit"] == 24
+    assert got["polishedCrit"] == 36 != 24 * 2, "Polished crit must be x1.5 pre-division, not x2"
+    assert got["polishedSniper"] == 54
+    assert got["table"] == [150, 225, 1, 15]          # floor(100*3/2), floor(100*9/4), floor(1.5), floor(15.75)
+
+
+def test_gen3_source_keeps_x2_unless_polished_and_calls_the_hook_twice():
+    """The wiring around the pure block: the post-+2 `*= 2` survives for every non-Polished game,
+    is skipped only under polishedCrit, and both damage sites (first hit + multi-hit repeat) use
+    baseDamageADV so neither can regress to a bare x2."""
+    ts = GEN3_TS.read_text(encoding="utf-8")
+    assert re.search(r"if \(isCritical\) \{\s*if \(!polishedCrit\) baseDamage \*= 2;", ts)
+    assert len(re.findall(r"baseDamageADV\(lv, \w+, \w+, df, isCritical, attacker\)", ts)) == 2
+    assert "Math.floor((2 * lv) / 5 + 2) * at * bp) / df" not in ts, "inline un-hooked formula crept back"
+
+
+def test_use_polished_toggles_the_crit_hook():
+    """polished.js (generated) must turn the hook on for Polished and off again for every other
+    game; tools/gen_polished_calc.py --check keeps the file in step with the generator."""
+    assert _node(_POLISHED_JS_PROBE, str(DATASET)) == [True, False]

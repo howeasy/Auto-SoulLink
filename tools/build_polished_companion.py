@@ -61,6 +61,8 @@ from build_polished_syms import (  # noqa: E402
 from slink_space import work_root  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "patch" / "tools"))
+import rom_identity  # noqa: E402  (version-masked canonical identity, T8 ruling)
 SRC_DIR = ROOT / "patch" / "polished" / "src"
 ABI = ROOT / "patch" / "gb" / "slink_abi.inc"
 OUT_DIR = ROOT / "data" / "polished"
@@ -88,6 +90,12 @@ POLISHED_EDITS = (
     ("home/init.asm",
      "\tld c, 3\n\tcall DelayFrames\n\n\tjr Init\n",
      "\tld c, 3\n\tcall SlinkResetSoundBridge ; SLink overlay: latch the SFX hold across the reset\n\n\tjr Init\n"),
+    # TITLE-VERSION: the 3-byte `call MainMenu_PrintCurrentTimeAndDay` inside
+    # MainMenuJoypadLoop's .loop (main_menu.asm:106-107, flat 0x483CD, bytes cd ed 43).
+    # The `.loop` anchor makes it unique -- the identical call at :11 is preceded by
+    # `ld [wWhichIndexSet], a`.
+    ("engine/menus/main_menu.asm", ".loop\n\tcall MainMenu_PrintCurrentTimeAndDay\n",
+     ".loop\n\tcall SlinkMainMenuLoopBridge ; SLink overlay: version line\n"),
     ("main.asm",
      "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n",
      "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n\n"
@@ -119,10 +127,11 @@ RESET_HOOKS = (
 RESET_HOOK_WINDOW = 0x20  # SoftReset's four instructions before the hooked call
 PHONE_HOOK_WINDOW = 0x40  # each hooked call lies within this many bytes of its routine's label
 DELAY_NATIVE = bytes.fromhex("f044e0d7afe08f")  # ldh a,[rLY] / ldh [hDelayFrameLY],a / xor a / ldh [hVBlankOccurred],a
-HEADER_CHECKSUMS = range(0x14D, 0x150)          # rgbfix header + global checksum
+HEADER_CHECKSUMS = range(0x14D, 0x150)
+TITLE_HOOK_FLAT = 0x483CD     # docs/polished/TITLE.md 8.4; ROM bytes `cd ed 43`          # rgbfix header + global checksum
 
 
-def apply_overlay(tree: pathlib.Path) -> list[str]:
+def apply_overlay(tree: pathlib.Path, version: str | None = None) -> list[str]:
     texts: dict[pathlib.Path, str] = {}
     for rel, old, new in POLISHED_EDITS:       # verify every anchor before any write; edits to one file chain
         path = tree / rel
@@ -130,6 +139,11 @@ def apply_overlay(tree: pathlib.Path) -> list[str]:
     dst = tree / "engine" / "slink"
     dst.mkdir(parents=True, exist_ok=True)
     files = sorted(SRC_DIR.glob("*.asm")) + [ABI]
+    if version is not None:
+        # the define patch/polished/src/version.asm INCLUDEs; same shape as the
+        # `DEF SLINK_BUILD_VERSION EQUS "..."` build_gen2_companion.py:431 emits
+        (dst / "slink_version.inc").write_text(f'DEF SLINK_BUILD_VERSION EQUS "{version}"\n',
+                                              encoding="utf-8", newline="\n")
     for src in files:
         (dst / src.name).write_bytes(src.read_bytes())
     for path, text in texts.items():
@@ -188,8 +202,9 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
                # The core service, the Stage-2 panel and the sound service are contiguous in the same
                # wholly-empty bank, and diff_spans reports one run across them, so they are allowed
                # as one span (the bank is proven $FF throughout in the clean ROM above).
-               (_flat(svc_bank, svc), _flat(svc_bank, max(new["SlinkPanelEnd"][1], sfx_hi[1])),
-                f"bank ${SERVICE_BANK:02X} service + panel + sound service"),
+               (_flat(svc_bank, svc), _flat(svc_bank, max(new["SlinkPanelEnd"][1],
+                                                sfx_hi[1], new["SlinkVersionFieldEnd"][1])),
+                f"bank ${SERVICE_BANK:02X} service + panel + sound + version"),
                (HEADER_CHECKSUMS.start, HEADER_CHECKSUMS.stop, "header checksums")]
     panel_bank, panel = new["SlinkPanel"]
     if panel_bank != SERVICE_BANK or panel < new["SlinkServiceEnd"][1]:
@@ -197,8 +212,22 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
     phone_lo, phone_hi = new["SlinkPhone_CountSetBits"][1], new["SlinkPhoneBridgeEnd"][1]
     if new["SlinkPhone_CountSetBits"][0] != 0 or base[phone_lo:phone_hi] != b"\xff" * (phone_hi - phone_lo):
         raise RuntimeError("the phone bridge must link into ROM0 bytes the clean ROM leaves free ($FF)")
-    allowed += [(phone_lo, phone_hi, "ROM0 phone bridge"), *phone_hook_spans(base, data, old, new)]
+    # The title bridge sits in the SAME trailing ROM0 gap as the phone bridge and may be adjacent to
+    # it, so diff_spans can report one run across both -- allow them as ONE span (two overlapping
+    # spans cannot contain a single run).
+    t_lo, t_hi = new["SlinkMainMenuLoopBridge"][1], new["SlinkMainMenuLoopBridgeEnd"][1]
+    if base[t_lo:t_hi] != b"\xff" * (t_hi - t_lo):
+        raise RuntimeError("the title bridge must link into ROM0 bytes the clean ROM leaves free ($FF)")
+    allowed += [(min(phone_lo, t_lo), max(phone_hi, t_hi), "ROM0 phone + title bridges"),
+                *phone_hook_spans(base, data, old, new)]
     allowed += reset_hook_spans(base, data, old, new)
+    # TITLE-VERSION: the 3-byte same-size hook on MainMenuJoypadLoop's .loop (main_menu.asm:107).
+    # Prove opcode + both operands first -- our own operand change trips "unexpected change" otherwise.
+    hook = TITLE_HOOK_FLAT
+    tgt = new["SlinkMainMenuLoopBridge"][1]
+    if base[hook:hook + 3] != b"\xcd\xed\x43" or data[hook:hook + 3] != b"\xcd" + tgt.to_bytes(2, "little"):
+        raise RuntimeError("the main-menu hook is not `call MainMenu_PrintCurrentTimeAndDay` -> `call SlinkMainMenuLoopBridge`")
+    allowed.append((hook, hook + 3, "main-menu version hook"))
     report = []
     for start, end in diff_spans(base, data):
         owner = next((name for lo, hi, name in allowed if lo <= start and end <= hi), None)
@@ -249,7 +278,8 @@ def moved_symbols(old: dict, new: dict) -> list[str]:
     return [f"{n}: {old[n]} -> {new.get(n)}" for n in old if new.get(n) != old[n]]
 
 
-def build(*, check: bool = False, rgbds_bin: pathlib.Path | None = None,
+def build(*, check: bool = False, version: str | None = None,
+          rgbds_bin: pathlib.Path | None = None,
           w64devkit_bin: pathlib.Path | None = None, repo_dir: pathlib.Path | None = None) -> int:
     lock = load_lock()
     spec = lock["outputs"]["polishedcrystal"]
@@ -273,7 +303,7 @@ def build(*, check: bool = False, rgbds_bin: pathlib.Path | None = None,
     # 2. overlay build on a fresh export of the same commit
     tree = cache / "companion-overlay"
     export_source(repo_dir or cache / "src", lock["source"]["commit"], tree)
-    applied = apply_overlay(tree)
+    applied = apply_overlay(tree, version)
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([str(rgbds_bin), str(devkit_bin), env.get("PATH", "")])
     cmd = [str(devkit_bin / _binary_name("make")), "-j4", *lock["make_args"], *lock["make_targets"]]
@@ -299,6 +329,17 @@ def build(*, check: bool = False, rgbds_bin: pathlib.Path | None = None,
             raise RuntimeError("UPS applied to the release ROM does not yield the overlay")
         release_check = "UPS applied to the release ROM yields the overlay sha1"
 
+    version_slot = rom_identity.slot_from_sym(
+        (tree / f"{stem}.sym").read_text(encoding="utf-8"), "SlinkVersionText")
+    canonical = rom_identity.canonical_sha1(data, [version_slot], gb=True)
+    # Publish the EXACT masked ranges so the Lua gate masks the same bytes. rom_identity's narrow
+    # mask keeps the "SoulLink " prefix IN the identity and only masks off+PREFIX..off+FIELD; a Lua
+    # that masked all 20 bytes would compute a different digest and refuse its own overlay.
+    canonical_spans = [{"offset": a, "length": b - a}
+                       for a, b in rom_identity._spans(len(data), [version_slot], True, True)]
+    print(f"[polished-companion] version field {version_slot}  canonical sha1 {canonical[:12]}  "
+          f"stamped sha1 {hashlib.sha1(data).hexdigest()[:12]}", file=sys.stderr)
+
     files = {UPS_PATH: ups,
              OUT_DIR / "polished_slink.sym": _lf((tree / f"{stem}.sym").read_bytes()),
              OUT_DIR / "polished_slink.map": _lf((tree / f"{stem}.map").read_bytes())}
@@ -319,6 +360,8 @@ def build(*, check: bool = False, rgbds_bin: pathlib.Path | None = None,
         },
         "command": " ".join(["make", "-j4", *lock["make_args"], *lock["make_targets"]]),
         "output": {**rom_facts(data), "identical_to_clean": data == base,
+                   "canonical_sha1": canonical,
+                   "version_slot": version_slot, "canonical_spans": canonical_spans,
                    "ups": {"file": UPS_PATH.relative_to(ROOT).as_posix(), "size": len(ups), "sha256": _sha256(ups)}},
         "symbols": {p.name: _sha256(b) for p, b in files.items() if p.parent == OUT_DIR},
     }
@@ -361,6 +404,8 @@ def main() -> int:
     ap.add_argument("--repo-dir", type=pathlib.Path, default=None)
     ap.add_argument("--rgbds-bin", type=pathlib.Path, default=None)
     ap.add_argument("--w64devkit-bin", type=pathlib.Path, default=None)
+    ap.add_argument("--version", default=None,
+                    help="stamp into the main-menu version line (20-byte fixed field)")
     ap.add_argument("--selfcheck", action="store_true", help="run the pure-function asserts only")
     args = ap.parse_args()
     if args.selfcheck:
@@ -369,7 +414,7 @@ def main() -> int:
         return 0
     try:
         return build(check=args.check, rgbds_bin=args.rgbds_bin, w64devkit_bin=args.w64devkit_bin,
-                     repo_dir=args.repo_dir)
+                     repo_dir=args.repo_dir, version=args.version)
     except RuntimeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
