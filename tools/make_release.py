@@ -166,6 +166,7 @@ _LUA_GEN2 = [
     # Polished Crystal (dev-grade overlay admission): entry.lua compose_polished loads these by path.
     "polished.lua",
     "polished_boxes.lua",
+    "polished_overworld.lua",  # C-WRITE: entry.lua compose_polished loads the predicate-hold writer by path
     "polished_sounds.lua",  # POL-SOUNDS: wraps panel.lua's binder; dofiles ../write_permit.lua and ../gb_panel.lua
 ]
 

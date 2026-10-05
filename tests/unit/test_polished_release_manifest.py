@@ -31,6 +31,7 @@ POLISHED = {
     "data/polished/overlay_provenance.json",
     "lua/gen2/polished.lua",
     "lua/gen2/polished_boxes.lua",
+    "lua/gen2/polished_overworld.lua",
     "lua/gen2/polished_sounds.lua",
 }
 

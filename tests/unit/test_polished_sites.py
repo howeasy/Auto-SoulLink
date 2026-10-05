@@ -136,7 +136,9 @@ def _new_mon(species=291):
 def test_exactly_one_hook_at_the_set_caught_data_farcall_never_the_routine_head(roms):
     _, parts, io, log = _rig(roms, _mons())
     hooks = _hooks(log)
-    assert [(h.name, h.addr) for h in hooks] == [(HOOK, SITE_PC)]
+    # C-WRITE r2: the WRITE hold is its own hook (25:51BF, the overworld frame wait), not an engine SITE - the
+    # engine-site set stays exactly one (capture_party); the hold registers nothing and writes nothing on its own.
+    assert [(h.name, h.addr) for h in hooks] == [(HOOK, SITE_PC), ("SLink-gen2-checkpoint", 0x51BF)]
     assert all(h.addr != HEAD_PC for h in hooks)
     st = parts.client.signals.status(parts.client.signals)
     assert list(st.registered_sites.values()) == ["capture_party"]
@@ -231,7 +233,8 @@ def test_a_specialized_or_scripted_catch_is_refused_not_guessed(roms, label, val
 
 def test_an_anchor_mismatch_registers_nothing_but_the_client_still_says_hello(roms):
     _, parts, io, log = _rig(roms, _mons(), override={SITE_FLAT: 0x00})
-    assert _hooks(log) == []
+    # the write hold still hooks (it is not an engine site and its bytes are untouched); no SIGNAL registers
+    assert [h.name for h in _hooks(log)] == ["SLink-gen2-checkpoint"]
     assert any("Polished engine sites refused" in line and "differ from the ROM" in line for line in log.lines.values())
     _run(io, parts.client, 20)
     assert [json.loads(line)["event"] for line in log.sent.values()].count("hello") == 1

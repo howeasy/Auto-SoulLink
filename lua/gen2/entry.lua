@@ -728,11 +728,20 @@ end
 --           the one mailbox-narrowed permit (lua/gen2/polished_sounds.lua wraps the same binder)
 --   signals C-SITES: signals.lua S.new_polished registers ONE hook, capture_party (03:652B, the wild party catch), at
 --           DEV_OVERLAY evidence (no receipt: physical_firing OPEN); no other engine site, so no PC/evolution events
---   safety  refuses every write kind, so writes/boxes/phone/trade/checkpoint/battle holds are all absent (nil)
---   pc_boxes the READ-ONLY newbox census (P.census over lua/gen2/polished_boxes.lua, C-BOX): a scan counts only with
---           a real save (sSaveVersion + sChecksum anchors) and all 20 boxes decoded, else pc_boxes stays [] with no
+--   safety  the OVERWORLD hold (lua/gen2/polished_overworld.lua): a live predicate hold (wMapStatus == HANDLE,
+--           no script, no pause, out of battle, no link, no backup save), never a PC hold - Polished has no
+--           checkpoint PC (write_checkpoint.json primary.execution_before is null) and none is invented here
+--   writes   the armed permit over the declared ranges: the party block, that record's Status/HP, and the
+--           newbox pokedb sections / gameplay box records / allocation flags. force_faint only, with a read-back
+--   boxes    the box_mon executor (lua/gen2/polished_overworld.lua O.boxes): a deposit into the lowest free
+--           non-memorial box, party compaction, and both halves verified by read-back. party_mon (savemon ->
+--           party stat/PP reconstruction) and memorialize (the memorial box is an open owner ruling) refuse by
+--           name. No box_mon is composed for a box_memorial (move_to_memorial): the box copy is a newbox entry.
+--   pc_boxes the newbox census (P.census over lua/gen2/polished_boxes.lua, C-BOX): a scan counts only with a real
+--           save (sSaveVersion + sChecksum anchors) and all 20 boxes decoded, else pc_boxes stays [] with no
 --           generation. NEWBOX 7's WRAM-domain mapping is still unexercised on a Polished save, so an unflagged
---           pointer, a Bad Egg or an all-zero image never reads as a (possibly empty) COMPLETE census. No box write.
+--           pointer, a Bad Egg or an all-zero image never reads as a (possibly empty) COMPLETE census - which is
+--           also what a deposit refuses on before it writes a byte.
 --   hello   p.hello_unheld: with no checkpoint PC to hold, the first hello waits only for a live game (party +
 --           player readable, not the title screen), not the OWPlayerInput checkpoint
 --   areas   data/games/polished_crystal/area_map.json (C-AREA, 605 maps): area_id/loc_name from (group, number); a pair
@@ -824,9 +833,52 @@ local function compose_polished(deps, decision)
             return {drain=function() return {} end, status=function() return {} end,
                     boundary=function() end, abandon=function() end, close=function() return true end}
         end
+        -- C-WRITE (card POL-WRITES): the OVERWORLD write path, composed here and nowhere else. Polished has
+        -- no checkpoint PC (write_checkpoint.json primary.execution_before is null), so the hold is the live
+        -- predicate set in lua/gen2/polished_overworld.lua (wMapStatus == HANDLE, no script, no pause, out of
+        -- battle, no link, no backup save) - NOT a CPU hold, and qualified DEV_OVERLAY_PREDICATE_HOLD.
+        local Overworld, Permit = load("lua/gen2/polished_overworld.lua"), load("lua/write_permit.lua")
+        local Boxes = load("lua/gen2/polished_boxes.lua")
+        local coords = P.newbox_coords()
+        -- the box writer's own reader over the same coordinates (the census keeps its own, read-only one)
+        local boxes_io = assert(Boxes.new(coords, io_, P.mon_key, decode_name))
+        local held, still = function() return io_.framecount() end, function(token) return token == io_.framecount() end
+        -- the hold SITE (25:51BF, `call z, DelayFrame` inside NextOverworldFrame): the client hooks it with
+        -- io.on_bus_exec and runs one deferred write synchronously inside that exec, exactly as the vanilla graph
+        -- does at OWPlayerInput. The predicate set below still has to hold at that instant; the site only decides
+        -- WHEN the client is asked.
+        local checkpoint = Overworld.checkpoint(profile, io_, deps.log, Overworld.HOLD)
+        local write_policy = {
+            authorize = function(operation)
+                return Overworld.KINDS[operation] == true and checkpoint:check(operation) == true
+            end,
+            pointer_stable = function() return true end, -- the party block and the pokedb windows are fixed WRAM/SRAM
+            lifetime = {capture = held, valid = still},
+            provenance = function() return {site = "lua/gen2/entry.lua compose_polished overworld",
+                                            evidence = "DEV_OVERLAY_PREDICATE_HOLD"} end,
+        }
+        local writes = Overworld.writes(profile, coords, io_, Permit, write_policy, checkpoint)
+        -- mail item ids (items.json is the generator's pack; the refusal needs ItemIsMail's FIRST_MAIL threshold)
+        local items = load_json(json, root .. "/data/games/polished_crystal/items.json")
+        assert(items.schema == "polished-items-v1" and type(items.source) == "table"
+               and items.source.lock_sha256 == wrapper.source.lock_sha256
+               and items.source.rom_sha1 == wrapper.source.rom_sha1, "pack source mismatch: items")
+        local mail = {}
+        for _, id in ipairs(items.mail_ids or {}) do mail[id] = true end
+        local boxes = Overworld.boxes({profile = profile, reads = reads, census = census, boxes = Boxes,
+                                       reader = boxes_io, writes = writes, mail = mail, log = deps.log})
         local client = load("lua/gen2/client.lua").new({
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
-            safety={check=function(kind) return false, "no Polished write receipt for " .. tostring(kind) end},
+            writes=writes, boxes=boxes,
+            safety={check=function(kind) return checkpoint:check(kind) end},
+            -- the hold site the client hooks (io.on_bus_exec -> at_checkpoint -> run_deferred)
+            checkpoint_pc=Overworld.HOLD.pc,
+            -- C-WRITE round 2: with no contest_mask in the Polished pack a KO during the Bug Catching Contest
+            -- found no party mon and was DROPPED ("key not in party", client.lua run_deferred) = a lost Soul Link
+            -- death. wStatusFlags2 bit 2 is STATUSFLAGS2_BUG_CONTEST_TIMER_F (constants/ram_constants.asm:255,
+            -- data/events/engine_flags.asm:37 engine_flag -> 1 << (index % 8) = $04); while it is set the client
+            -- holds the command instead of dropping it (client.lua contest_masked, ruling (a)).
+            contest_mask={bank=1, address=0xD7E4, bit=2},
             signals=signals, hello_unheld=true,
             -- no box-arrival event exists in this composition: re-arm the read-only census every 1800 frames (~30 s)
             -- and at each battle end (client.lua frame_end)
@@ -839,6 +891,9 @@ local function compose_polished(deps, decision)
         })
         return {pack="polished_crystal", title="polished", profile=profile, panel=panel, panel_writes=panel_writes,
                 data={profile=wrapper, charmap=charmap, evolutions=evolutions, area_map=area_map}, reads=reads, client=client,
+                -- the overworld write path, under its own key: `checkpoint` stays nil because no PC hold is
+                -- composed (there is no Polished checkpoint PC to hold at; see C-WRITE above)
+                overworld={checkpoint=checkpoint, writes=writes, boxes=boxes, census=census, coords=coords},
                 production_admitted=false, artifact_kind=decision.kind, runtime_rom_sha1=decision.rom_sha1,
                 runtime_started=false, qualification="DEV_OVERLAY_SHA1"}
     end)

@@ -113,10 +113,10 @@ has to replace it. `PROVIDED` means `lua/gen2/polished.lua` already does this an
 |---|---|---|---|---|
 | E1 | `writes.lua` `W.SYM` four literals: `wCurPlayerMove`, `wCurOTMon`, `wOTPartyCount`, `wOTPartyDataEnd` | `lua/gen2/writes.lua:37-41`, table at `docs/polished/RAM.md:37-51` | all four **moved**; profile has no `W.SYM` analogue | **MISSING** |
 | E2 | `writes.lua:94` derives `ot_species = ot_block + 1` as an enemy species list | RAM.md:52 | in Polished those 7 bytes are `wMirrorHerbPendingBoosts` — writing there **clobbers Mirror Herb state** | **MISSING, and hazardous** |
-| E3 | `checkpoint_pc` (the hooked PC for writes + hello readiness) | `lua/gen2/entry.lua:540`, consumed `lua/gen2/client.lua:1441-1446` | needs `view.checkpoint.primary.execution_before.pc`; Polished has no receipts | **MISSING** |
+| E3 | `checkpoint_pc` (the hooked PC for writes + hello readiness) | `lua/gen2/entry.lua:540`, consumed `lua/gen2/client.lua:1441-1446` | needs `view.checkpoint.primary.execution_before.pc`; Polished has no receipts | **STILL MISSING - and NOT invented**: card POL-WRITES composes a live *predicate* hold instead (`wMapStatus == MAPSTATUS_HANDLE`, no script, no pause, out of battle, no link, no backup save; `lua/gen2/polished_overworld.lua`), qualified `DEV_OVERLAY_PREDICATE_HOLD`. `parts.checkpoint` stays nil: there is no PC hold to compose |
 | E4 | `battle_hold` / `battle_bench` / `rival_swap` gates | `lua/gen2/entry.lua:543-549`, `lua/gen2/client.lua:1448-1450` | all three require receipts; with none, all three are `nil` and the hooks simply never arm | **SAFE BY OMISSION** |
 | E5 | `contest_mask` → `contest_masked()` | `lua/gen2/entry.lua:550`, `lua/gen2/client.lua:487-488` | needs `write_checkpoint.json:contest_mask`; without it, what does it default to? **UNVERIFIED** | **UNVERIFIED** |
-| E6 | `Boxes.executor` / `cart_gate` — every span re-proves a receipt kind | `lua/gen2/entry.lua:495-510` | no receipts ⇒ `covers()` false ⇒ every box write refuses **before a byte** | **SAFE BY OMISSION** |
+| E6 | `Boxes.executor` / `cart_gate` — every span re-proves a receipt kind | `lua/gen2/entry.lua:495-510` | no receipts ⇒ `covers()` false ⇒ every box write refuses **before a byte** | **COMPOSED (card POL-WRITES)**: `lua/gen2/polished_overworld.lua` O.writes (declared ranges, one reason each) + O.boxes (`box_mon` only). `party_mon` (savemon → party stat/PP reconstruction) and `memorialize` (the memorial box is an open owner ruling, NEWBOX §6.2) refuse by name |
 
 ### 1.F Engine sites / signals (the P5a catch-detection blocker)
 
@@ -197,7 +197,8 @@ Fields a Polished run must supply, with the reader that supplies them:
 | **catch / acquisition detection** | an engine-site pack: the client only settles a snapshot on a signalled frame, so a new monKey appears only if a site fires | `docs/gen2/gen2_engine_sites.md:1-3` (43 candidates *per pret title*, `physical_firing OPEN`); `lua/gen2/signals.lua` |
 | any battle write (`force_faint` in battle) | a `battle_faint` receipt + a hold site | RAM.md §1.2 (`wScriptRunning 01:D437` exists but is unbound) |
 | bench faint, rival swap, explode | `battle_bench` receipt | `entry.lua:543-549` |
-| box deposit / withdraw / memorialize | box receipts **and** a newbox writer | `docs/polished/NEWBOX.md:239-278` |
+| box **deposit** | **DONE (card POL-WRITES)**: the newbox writer over the same coordinates the census reads, both halves read back (`tests/unit/test_polished_write_path.py`) | `lua/gen2/polished_overworld.lua` |
+| box **withdraw** / memorialize | the savemon → `party_struct` direction (stats + PP reconstructed: `CalcPkmnStats` predef, `engine/pc/bills_pc.asm:923`) and the memorial-box ruling | `docs/polished/NEWBOX.md:239-278` |
 | hello **readiness** gating | `checkpoint_pc` | `entry.lua:540` |
 
 `docs/polished/HOOKS.md:349-352` still carries the Polished-specific unverified list (`$7E` linker acceptance, `$FF` lower
@@ -397,6 +398,49 @@ U2U3 messages=0
 `awaiting_save_field()` both **run** — they are table-constructor arguments at `lua/gen2/client.lua:1417-1418`,
 evaluated before `send`), and only then hits the pre-hello hold, because a fresh `HelloSession` is not `ready`.
 That is the pre-hello gate doing its job, not a swallow.
+
+### C-WRITE — the overworld write path (card POL-WRITES, 2026-10-04)
+
+`compose_polished` now composes `lua/gen2/polished_overworld.lua`: the hold, the armed writer and the `box_mon`
+executor. **No checkpoint PC is invented** — `write_checkpoint.json.titles.polished_crystal.primary.execution_before`
+is still null, so the hold is the live predicate set (HELLO_GATE §1), and `parts.checkpoint` stays nil while
+`parts.overworld` carries `{checkpoint, writes, boxes, census, coords}`.
+
+* `force_faint` writes the keyed record's Status (+32) to 0 and HP (+34..35) to 0 — byte for byte what the vanilla
+  writer does (`lua/gen2/writes.lua` `faint_party_slot`; a Gen 2 mon is fainted by HP 0) — and reads both bytes back.
+* `box_mon` runs the engine's own two halves in its own order (`UpdateStorageBoxMonFromTemp` then
+  `RemoveMonFromParty`, `engine/pc/bills_pc.asm:495-531,539-623`): the newbox entry first (so a reset between the
+  halves duplicates the mon and never loses it), then the party compaction, then a census read-back.
+* Every byte is inside a declared permit range: the party block, that record's Status/HP, the six pokedb sections,
+  the 20 **gameplay** box records and the two allocation-flag windows. `wMirrorHerbPendingBoosts` (01:d284) is
+  asserted disjoint and never appears in a range.
+* **The hold is a PC hold.** The site is `call z, DelayFrame` at **25:51BF**, inside `NextOverworldFrame`
+  (`engine/overworld/events.asm:114`, called from `:99`): the idle-overworld frame wait, reached once per frame after
+  `MapEvents` and `HandleMapObjects` and before the next frame's events. `compose_polished` hands the client that PC
+  (`checkpoint_pc`), the client hooks it with `io.on_bus_exec` and runs one deferred write **synchronously inside the
+  exec**, exactly as the vanilla graph does at `OWPlayerInput`; the predicate set must still hold at that instant, and
+  `hROMBank == $25` plus the executed ROM bytes `CC A8 0D` are re-read at check time. The instruction is unique in the
+  routine (verified over the executed overlay ROM in `tests/unit/test_polished_write_path.py`, which also re-derives
+  every address from the pinned `.sym`). Residual: a *script* runs inside `HandleMapObjects`/`MapEvents` before this
+  call in the same frame, so a script that starts and finishes within one frame is still not observable by
+  `wScriptRunning` — the hold narrows the window, it does not remove it.
+* **Mail is refused, not shifted.** `SwapPartyMons` also swaps `sPartyMon1Mail` (`DoMailSwap`,
+  `engine/pc/bills_pc.asm:289-297`, `MAIL_STRUCT_LENGTH = $2f` bytes per slot) and SLink never rewrites that SRAM
+  block, so a deposit refuses while the removed mon **or any later party slot** holds Mail (`ItemIsMail`,
+  `home/header.asm:114`: item >= FIRST_MAIL; the ids come from `items.json` `mail_ids`) — the vanilla rule
+  (`lua/gen2/boxes.lua` `no_mail_from`).
+* **The Bug Catching Contest is guarded.** With no `contest_mask` in the pack, a KO during the contest found no party
+  mon and was dropped (`client.lua` run_deferred) = a lost Soul Link death. `compose_polished` passes
+  `contest_mask = {wStatusFlags2, bit 2}` (`STATUSFLAGS2_BUG_CONTEST_TIMER_F`, `constants/ram_constants.asm:255`,
+  `data/events/engine_flags.asm:37` `engine_flag` -> `1 << (2 % 8)` = `$04`), so the command is **held** until the
+  contest returns, per ruling (a).
+* **The permit re-proves the hold on `arm`.** The box path writes through the permit directly, so
+  `writes:arm("box_deposit")` itself re-runs the predicate set instead of trusting the frame-count lifetime token.
+* **The server capability stays FALSE.** `Gen2PolishedAdapter.supports_box_mon()` returns False: the executor is
+  composed and proven, but advertising it quarantines a solo catch (`state.py:2786`) and the un-quarantine that follows
+  a link (`state.py:2896-2912`) is a `party_mon` this client refuses — `sync_retrieve_failed` re-boxes only a partner
+  whose key is still in `party_keys` (`state.py:617-643`), so both mons would sit boxed with no retry. The flag flips
+  when `withdraw()` is composed.
 
 ### U4 — `AREA_BATTLE_TYPES = {0,4,8}` does **NOT** match Polished. **Real bug.** SETTLED.
 `BATTLETYPE_*` are bare `const`s, so their values are their ordinal within the `const_def` block.

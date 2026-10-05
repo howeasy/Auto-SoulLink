@@ -1690,9 +1690,13 @@ function Client.new(p)
             rival_reply(r.pending.cmd, nil, "late_reply")
         end
     end
+    -- A rival window needs a writer that carries the W-4 SYM facts AND the rival_swap write kinds. A writer
+    -- composed for a game with neither (the Polished overworld writer: force_faint + box_mon only) announces
+    -- nothing here, exactly as a composition with no writer at all does.
     local function cur_ot_mon()
-        if not writes then return nil end -- no writer composed (Polished): no rival window to announce
-        local pt = writes.sym.wCurOTMon
+        local sym = writes and writes.sym
+        if not (type(sym) == "table" and type(sym.wCurOTMon) == "table") then return nil end
+        local pt = sym.wCurOTMon
         if io.bank_valid(pt[1], pt[2], 1) ~= true then return nil end
         return io.read_u8(pt[2], "System Bus")
     end
