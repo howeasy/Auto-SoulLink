@@ -1315,6 +1315,20 @@ end
 S.POLISHED_SITE, S.POLISHED_PHASE = "capture_party", "post_insert_post_nickname_copy"
 S.POLISHED_UNPROVEN = {"a live exec hit at the capture_party PC on a running cartridge",
     "the capture RAM-effect frame alignment (signals.lua qualified_sites live_capture: no non-synthetic run)"}
+-- POL-BATTLE: the battle sites the composed Polished client may bind, with the phase each carries in the
+-- generated pack. new_polished refuses an id that is not listed here, or a pack row whose phase differs, so a
+-- re-pinned site cannot be bound under a stale contract. Explode Mode's window is explode_hold (the
+-- `call DetermineMoveOrder` in BattleTurn); the Rival Team Swap gate is rival_swap_gate (SendInUserPkmn's
+-- enemy branch). battle_faint is an OBSERVATION boundary, not a write: polished_writes.lua has no faint
+-- writer, and BATTLE_FLOW 1.3 makes a party-record write at that boundary a write the copy-back erases.
+S.POLISHED_BATTLE_SITES = {
+    battle_faint = "before_party_copyback",
+    battle_end = "before_end_processing",
+    wild_ready = "after_enemy_load",
+    trainer_ready = "trainer_party_build_entry",
+    explode_hold = "before_turn_ordering",
+    rival_swap_gate = "enemy_party_ptr_selected",
+}
 function S.new_polished(options)
     local ok,result,why,failed = pcall(function()
         local o = options
@@ -1370,15 +1384,67 @@ function S.new_polished(options)
         local binding = assert(o.GB).new(io,{bus_domain="System Bus",rom_domain="ROM",bank_domain="System Bus",
             bank_address=assert(profile.ram.hROMBank),pc_register="PC",sp_register="SP"})
         local refusals, drops, refused = {}, {}, 0
-        local function process(prepared)
-            local context = binding:context(prepared.anchor)
-            if not context then return nil end -- another bank mapped at this PC: nothing stamped
-            local held = authority.capture()
-            assert(type(held) == "table" and type(held.operation) == "string" and held.operation ~= "",
-                   "operation identity malformed")
-            need(authority.valid(held) == true,"OPEN: held observation unavailable")
+        -- POL-BATTLE: the battle sites the composed client binds, opted into EXPLICITLY. capture_party stays the
+        -- only site registered by default (entry.lua composes without battle_sites and test_polished_sites.py
+        -- pins that); a caller that composes lua/gen2/polished_battle.lua names the ids it needs. Every id is
+        -- re-validated from the generated pack with capture_party's discipline -- RESOLVED CPU_INSTRUCTION,
+        -- SOURCE_CANDIDATE, physical_firing OPEN, runtime_enabled false, phase equal to the pack row, and a PC
+        -- PINNED BY BYTE SEQUENCE (find_hex == expected_hex) rather than a hand-typed offset. The hROMBank
+        -- guard and the PC/byte re-check at fire time are gb_hook_binding's, unchanged.
+        local battle_ids, battle_sites, registered_sites = {}, {}, {}
+        registered_sites[1] = {id=S.POLISHED_SITE}
+        for _, id in ipairs(o.battle_sites or {}) do
+            assert(type(id)=="string" and S.POLISHED_BATTLE_SITES[id] ~= nil,"unknown Polished battle site: "..tostring(id))
+            assert(battle_sites[id] == nil,"duplicate Polished battle site: "..id)
+            local row = type(data.sites) == "table" and data.sites[id]
+            assert(type(row) == "table",id..": absent from the generated Polished engine-site pack")
+            assert(row.status == "RESOLVED" and row.kind == "CPU_INSTRUCTION" and row.maturity == "SOURCE_CANDIDATE"
+                   and row.runtime_enabled == false and row.physical_firing == "OPEN"
+                   and row.phase == S.POLISHED_BATTLE_SITES[id],id..": re-pinned CPU source candidate required")
+            assert(type(row.find_hex) == "string" and type(row.expected_hex) == "string"
+                   and row.expected_hex == row.find_hex and #row.expected_hex % 2 == 0,
+                   id..": the PC must be pinned by byte sequence read out of the ROM")
+            assert(integer(row.bank,1,255) and integer(row.addr,0x4000,0x7FFF) and integer(row.rom_offset,0,0x7FFFFF)
+                   and integer(row.hex_len,1,32),id..": anchor required")
+            battle_ids[#battle_ids+1], battle_sites[id] = id, row
+            registered_sites[#registered_sites+1] = {id=id}
+        end
+        local WINDOWS = {explode_hold="battle_hold",rival_swap_gate="rival_swap"}
+        for id in pairs(WINDOWS) do
+            if battle_sites[id] ~= nil then
+                assert(callable(o.on_write_window),id..": an on_write_window callback is required for a write window")
+            end
+        end
+        local function wram(name, span)
+            local addr, bank = profile.ram[name], profile.ram_bank[name]
+            need(addr ~= nil and integer(bank,0,255),"OPEN: "..name.." is not in the generated Polished profile")
+            need(io.bank_valid(bank,addr,span or 1) == true,"OPEN: unmapped guard memory")
+            if span == nil then
+                local value = io.read_u8(addr,"System Bus")
+                assert(integer(value,0,255),"guard byte unavailable")
+                return value
+            end
+            local low = io.read_u8(addr,"System Bus")
+            local high = io.read_u8(addr+1,"System Bus")
+            assert(integer(low,0,255) and integer(high,0,255),"guard word unavailable")
+            return low + high * 256
+        end
+        local function batch(events, context, held)
+            return {kind="polished_dev_batch",events=events,context=context,generation=held.generation,
+                    operation=held.operation,evidence_level="DEV_OVERLAY",physical_status="OPEN",runtime_authorized=false}
+        end
+        -- The client's one observation seam (lua/gen2/client.lua on_observation) keys on site_id, so every
+        -- battle fact rides the same batch shape a vanilla observation uses.
+        local function observation(id, row, extra)
+            local event = {kind="observation",site_id=id,signal=row.signal,phase=row.phase,
+                           refused_acquisitions=refused,evidence_level="DEV_OVERLAY",physical_status="OPEN",
+                           runtime_authorized=false}
+            for key, value in pairs(extra or {}) do event[key] = value end
+            return event
+        end
+        local function capture_party(prepared, context, held)
             local party, pwhy = reads.read_party()
-            need(party,"OPEN: receiver snapshot unavailable: " .. tostring(pwhy))
+            need(party,"OPEN: receiver snapshot unavailable: "..tostring(pwhy))
             need(integer(party.count,1,6),"occupied receiver required")
             local slot = party.count-1 -- selector "last"
             local mon = copy(party.mons[slot+1])
@@ -1393,18 +1459,51 @@ function S.new_polished(options)
             need(type(row) == "table" and type(row.area_id) == "string" and row.area_id ~= "" and type(row.source) == "table"
                  and row.source.artifact == pack.source.artifact and row.source.commit == pack.source.commit,
                  "OPEN: source-qualified ordinary area unavailable")
-            need(authority.valid(held) == true,"held identity changed while sampling")
             local event = {kind="capture",site_id=S.POLISHED_SITE,acquisition="wild",area_id=row.area_id,destination="party",
                 slot=slot,mon=mon,classifications={},identity_scope="observed_destination_only",
                 global_identity_qualification="OPEN",evidence_level="DEV_OVERLAY",physical_status="OPEN",runtime_authorized=false}
-            return {kind="polished_dev_batch",events={event},context=context,generation=held.generation,operation=held.operation,
-                    evidence_level="DEV_OVERLAY",physical_status="OPEN",runtime_authorized=false}
+            return batch({event},context,held)
+        end
+        -- before_party_copyback: the battle struct is authoritative and the party record is stale (BATTLE_FLOW
+        -- 1.3), so the fact is read from the battle struct and stamped by the client, never from the party.
+        local function faint_boundary(prepared, context, held)
+            local mode = wram("wBattleMode")
+            need(mode == 1 or mode == 2,"OPEN: not in a battle at the copyback boundary")
+            local slot = wram("wCurBattleMon")
+            need(slot <= (assert(profile.constants).PARTY_LENGTH - 1),"OPEN: active battle slot out of range")
+            return batch({observation(prepared.id,battle_sites[prepared.id],
+                                     {battle={slot=slot,hp=wram("wBattleMonHP",2),max_hp=wram("wBattleMonMaxHP",2),
+                                              mode=mode,link_mode=wram("wLinkMode")}})},context,held)
+        end
+        -- A write window fires on EVERY turn / every send-out. Silence is the normal outcome: the wiring layer
+        -- answers nil when nothing is owed, and only a landed write is published.
+        local function write_window(prepared, context, held)
+            local outcome = o.on_write_window(prepared.id,context)
+            if outcome == nil then return nil end
+            assert(type(outcome) == "table" and outcome.ok == true and type(outcome.result) == "table",
+                   prepared.id..": a write-window outcome must be {ok=true, result={...}}")
+            assert(outcome.result.reason == WINDOWS[prepared.id],
+                   prepared.id..": a write may only land at its own declared gate")
+            return batch({observation(prepared.id,battle_sites[prepared.id],{write=outcome.result})},context,held)
+        end
+        local function process(prepared)
+            local context = binding:context(prepared.anchor)
+            if not context then return nil end -- another bank mapped at this PC: nothing stamped
+            local held = authority.capture()
+            assert(type(held) == "table" and type(held.operation) == "string" and held.operation ~= "",
+                   "operation identity malformed")
+            need(authority.valid(held) == true,"OPEN: held observation unavailable")
+            if prepared.id == S.POLISHED_SITE then return capture_party(prepared,context,held) end
+            if prepared.id == "battle_faint" then return faint_boundary(prepared,context,held) end
+            if WINDOWS[prepared.id] ~= nil then return write_window(prepared,context,held) end
+            return batch({observation(prepared.id,battle_sites[prepared.id])},context,held)
         end
         local service, message, fault = assert(o.Registry).new({owner=o.owner,max_pending=o.max_pending,
-            sites={{id=S.POLISHED_SITE}},
+            sites=registered_sites,
             validate=function(descriptor)
-                return {id=descriptor.id,anchor=binding:validate({id=descriptor.id,bank=site.bank,address=site.addr,
-                    capture_offset=0,rom_offset=site.rom_offset,expected_hex=site.expected_hex})}
+                local row = descriptor.id == S.POLISHED_SITE and site or assert(battle_sites[descriptor.id])
+                return {id=descriptor.id,anchor=binding:validate({id=descriptor.id,bank=row.bank,address=row.addr,
+                    capture_offset=0,rom_offset=row.rom_offset,expected_hex=row.expected_hex})}
             end,
             register=function(prepared,callback,name) return binding:register(prepared.anchor,callback,name) end,
             unregister=function(handle) return binding:unregister(handle) end,
@@ -1413,7 +1512,10 @@ function S.new_polished(options)
                 local done,value = pcall(process,prepared)
                 if done then return value end
                 if type(value) == "table" and type(value.refusal) == "string" then
-                    refusals[S.POLISHED_SITE], refused = value.refusal, refused+1
+                    refusals[prepared.id] = value.refusal
+                    -- only an ACQUISITION refusal counts against the encounter slot; a battle site that
+                    -- declines is a writer window that was not open, not a catch the engine lost
+                    if prepared.id == S.POLISHED_SITE then refused = refused+1 end
                     return nil
                 end
                 error(value,0)
@@ -1438,7 +1540,10 @@ function S.new_polished(options)
         function self:status()
             local status = service:status()
             status.runtime_authorized,status.physical_status,status.evidence_level = false,"OPEN","DEV_OVERLAY"
-            status.registered_sites,status.refusals,status.drops = {S.POLISHED_SITE},copy(refusals),copy(drops)
+            -- the same id list build() publishes, so a consumer reads it one way on either binder
+            local registered = {S.POLISHED_SITE}
+            for _, id in ipairs(battle_ids) do registered[#registered+1] = id end
+            status.registered_sites,status.refusals,status.drops = registered,copy(refusals),copy(drops)
             status.refused_acquisitions,status.pending_acquisitions = refused,0
             status.unproven = copy(S.POLISHED_UNPROVEN)
             return status
