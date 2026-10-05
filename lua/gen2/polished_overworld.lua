@@ -592,8 +592,9 @@ function O.boxes(deps)
     -- DecodeTempMon :887, SetTempPartyMonData :960) appends to the party and clears only the box slot's pointer
     -- byte and its Banks bit. It never frees the pokedb entry: those bytes, the name-MSB checksum and the
     -- allocation flag stay, and NewStoragePointer (:392) reuses the entry later. This executor follows that
-    -- exactly, box half first, so a reset in between leaves the mon in BOTH places (recoverable by re-running)
-    -- instead of in neither.
+    -- exactly, but PARTY half first (count last), verified, THEN the box half: a failure or lifetime loss in
+    -- between leaves the mon in BOTH places (a retry reconciles), never in neither. (The earlier box-first order
+    -- left ZERO live copies on 72 of 73 injected failure points.)
     -- sNewBox<n> flat CartRAM + the 0x21 record stride, and the Banks byte at +0x14 (NEWBOX §1.1).
     -- Declared BEFORE require_withdraw, which assigns it: as a later `local`, the assignment compiled
     -- to a global and every withdraw raised inside record_flat (introduced in a0487e8bd).
@@ -645,13 +646,16 @@ function O.boxes(deps)
     end
 
     --- party_mon. true, note on success; nil, why on refusal. Never raises.
+    --- Order (docs/polished/WITHDRAW.md section 2): the PARTY half first (record, OT, nickname, wPartyCount LAST), a
+    --- read-back of the appended slot, THEN the box half (Entries byte + Banks bit), then the final read-back. Any
+    --- failure between the halves leaves the mon in BOTH places, never in neither; withdraw() on that both-places
+    --- state removes the box copy idempotently (the party copy must equal the rebuilt record) instead of refusing.
     function self.withdraw(key)
         local okr, result, note = pcall(function()
             require_withdraw()
             local boxes, why = scan()
             if not boxes then refuse("box census incomplete: " .. tostring(why)) end
             local party = party_block()
-            if party.count >= c.PARTY_LENGTH then refuse("party full (" .. party.count .. "/" .. c.PARTY_LENGTH .. ")") end
             local found, box, hits = nil, nil, 0
             for index = 1, c.NUM_BOXES do
                 for _, m in ipairs(boxes[index] or {}) do
@@ -663,7 +667,9 @@ function O.boxes(deps)
             end
             if hits > 1 then refuse("ambiguous duplicate boxed key") end
             if not found then refuse("key not boxed") end
-            if find_key(party.mons, key) then refuse("key is already in the party") end
+            -- a second party match is an ambiguity, not "absent": refuse by name before any write
+            local pmon, pwhy = find_key(party.mons, key)
+            if pwhy then refuse(pwhy .. " in the party") end
             -- the 49-byte savemon, checksum re-proved here (the census already refuses Bad Eggs; a change between
             -- the scan and now would be a torn image)
             local entry = hex_bytes(found.raw_hex, 49, "box entry")
@@ -683,51 +689,102 @@ function O.boxes(deps)
             local ot = {}
             for i = 1, 8 do ot[i] = hex_bytes(found.ot_raw_hex, 8, "OT name")[i] end
             for i = 1, 3 do ot[8 + i] = entry[29 + i] end
-            local target = party.count                       -- append: the engine only raises the count when the
-            local rec = record_flat(box)                     -- requested slot is past it
-            -- ── BOX HALF: the slot pointer byte and its Banks bit, nothing else ──
+            -- what the party slot must hold: record 48 + OT 11 + nickname 11, the blob_of layout
+            local want = {}
+            for i = 1, #record do want[#want + 1] = record[i] end
+            for i = 1, #ot do want[#want + 1] = ot[i] end
+            for i = 1, #nick do want[#want + 1] = nick[i] end
+            if #want ~= STRIDE then refuse("rebuilt party slot is " .. #want .. " bytes, expected " .. STRIDE) end
+            local function slot_is_want(raw, slot)
+                local have = blob_of(raw, slot)
+                for i = 1, STRIDE do
+                    if have[i] ~= want[i] then return false end
+                end
+                return true
+            end
+            local rec = record_flat(box)
             local slot = found.slot                          -- 0-based, as the census reports it
+            local entries_at = rec + slot
             local bits_at = rec + 0x14 + (slot >> 3)
-            local bits = io_.read_u8(bits_at, "CartRAM")
-            if not integer(bits, 0, 255) then refuse("box Banks byte unreadable") end
-            local cleared = bits & ~(1 << (slot & 7)) & 0xFF
-            writes:arm("box_deposit")
-            local okb, werr = pcall(function()
-                writes:write_batch({
-                    {domain = "CartRAM", addr = rec + slot, bytes = {0}},
-                    {domain = "CartRAM", addr = bits_at, bytes = {cleared}},
-                })
-            end)
-            writes:disarm()
-            if not okb then refuse("box half refused: " .. tostring(werr)) end
-            -- ── PARTY HALF: record, nickname, OT, and wPartyCount LAST ──
-            writes:arm("party_collection")
-            local okp, perr = pcall(function()
-                writes:write_batch({
-                    {domain = "System Bus", addr = block + mons_at + target * s.End, bytes = record},
-                    {domain = "System Bus", addr = block + ots_at + target * c.NAME_LENGTH, bytes = ot},
-                    {domain = "System Bus", addr = block + nicks_at + target * c.MON_NAME_LENGTH, bytes = nick},
-                    {domain = "System Bus", addr = block, bytes = {party.count + 1}},
-                })
-            end)
-            writes:disarm()
-            if not okp then refuse("party half refused: " .. tostring(perr)) end
-            -- ── READ-BACK ──
-            local after = reads.read_party()
-            if not after then refuse("read-back refused: the party became unreadable") end
-            if after.count ~= party.count + 1 then
+            local append = pmon == nil
+            local target, expected = nil, party.count
+            if append then
+                if party.count >= c.PARTY_LENGTH then refuse("party full (" .. party.count .. "/" .. c.PARTY_LENGTH .. ")") end
+                target, expected = party.count, party.count + 1  -- append: the engine only raises the count past it
+            else
+                -- BOTH-PLACES state (an earlier withdraw died between its halves). Finish the box removal only if
+                -- the party copy is byte-for-byte what this withdraw would have appended.
+                target = pmon.slot
+                local _, praw = party_block()
+                if not slot_is_want(praw, target) then
+                    refuse("withdraw reconcile refused: the party copy differs from the boxed entry (the box copy is kept)")
+                end
+            end
+            -- ── PARTY HALF: record, OT, nickname, wPartyCount LAST, permit = exactly those spans ──
+            local function append_to_party()
+                local at_rec = block + mons_at + target * s.End
+                local at_ot = block + ots_at + target * c.NAME_LENGTH
+                local at_nick = block + nicks_at + target * c.MON_NAME_LENGTH
+                writes:arm("party_collection", function(domain, addr, n)
+                    return domain == "System Bus" and ((addr == at_rec and n == s.End) or (addr == at_ot and n == c.NAME_LENGTH)
+                           or (addr == at_nick and n == c.MON_NAME_LENGTH) or (addr == block and n == 1))
+                end)
+                local okp, perr = pcall(function()
+                    writes:write_batch({
+                        {domain = "System Bus", addr = at_rec, bytes = record},
+                        {domain = "System Bus", addr = at_ot, bytes = ot},
+                        {domain = "System Bus", addr = at_nick, bytes = nick},
+                        {domain = "System Bus", addr = block, bytes = {party.count + 1}},
+                    })
+                end)
+                writes:disarm()
+                if not okp then refuse("party half refused: " .. tostring(perr) .. " (the box copy is untouched)") end
+                -- READ-BACK 1: the appended slot is exactly what was built and the count rose by one
+                local after, araw = party_block()
+                if after.count ~= expected then
+                    refuse("read-back refused: party count " .. party.count .. " -> " .. tostring(after.count)
+                           .. " (the box copy is untouched)")
+                end
+                if not slot_is_want(araw, target) then
+                    refuse("read-back refused: the appended party slot differs from what was built (the box copy is untouched)")
+                end
+                local landed = find_key(after.mons, key)
+                if not landed then refuse("read-back refused: the withdrawn mon is not in the party (the box copy is untouched)") end
+                if landed.hp ~= view.hp or landed.status ~= 0 then
+                    refuse("read-back refused: hp " .. tostring(landed.hp) .. "/" .. tostring(view.hp)
+                           .. " status " .. tostring(landed.status) .. " (the box copy is untouched)")
+                end
+            end
+            -- ── BOX HALF: the slot pointer byte and its Banks bit, nothing else, permit = exactly those two ──
+            local cleared
+            local function remove_box_copy()
+                local bits = io_.read_u8(bits_at, "CartRAM")
+                if not integer(bits, 0, 255) then refuse("box Banks byte unreadable (the mon is in the party AND the box)") end
+                cleared = bits & ~(1 << (slot & 7)) & 0xFF
+                writes:arm("box_deposit", function(domain, addr, n)
+                    return domain == "CartRAM" and n == 1 and (addr == entries_at or addr == bits_at)
+                end)
+                local okb, werr = pcall(function()
+                    writes:write_batch({
+                        {domain = "CartRAM", addr = entries_at, bytes = {0}},
+                        {domain = "CartRAM", addr = bits_at, bytes = {cleared}},
+                    })
+                end)
+                writes:disarm()
+                if not okb then
+                    refuse("box half refused: " .. tostring(werr) .. " (the mon is in the party AND the box; a retry reconciles)")
+                end
+            end
+            if append then append_to_party() end
+            remove_box_copy()
+            -- ── FINAL READ-BACK: the box no longer reads the mon (slot empty, pokedb entry untouched), the party does ──
+            local after, araw = party_block()
+            if after.count ~= expected then
                 refuse("read-back refused: party count " .. party.count .. " -> " .. tostring(after.count))
             end
-            local landed
-            for _, m in ipairs(after.mons) do
-                if m.key == key then landed = m end
+            if not find_key(after.mons, key) or not slot_is_want(araw, target) then
+                refuse("read-back refused: the withdrawn mon is not in the party")
             end
-            if not landed then refuse("read-back refused: the withdrawn mon is not in the party") end
-            if landed.hp ~= view.hp or landed.status ~= 0 then
-                refuse("read-back refused: hp " .. tostring(landed.hp) .. "/" .. tostring(view.hp)
-                       .. " status " .. tostring(landed.status))
-            end
-            -- the box side: the slot is empty AND the pokedb entry is untouched (bytes + allocation flag)
             local after_boxes, cwhy = scan()
             if not after_boxes then
                 refuse("read-back refused: the census no longer completes (" .. tostring(cwhy) .. ")")
@@ -735,11 +792,14 @@ function O.boxes(deps)
             if find_key(after_boxes[box], key) then
                 refuse("read-back refused: box " .. box .. " still reads the mon")
             end
+            if io_.read_u8(entries_at, "CartRAM") ~= 0 then refuse("read-back refused: the Entries byte did not clear") end
             if io_.read_u8(bits_at, "CartRAM") ~= cleared then
                 refuse("read-back refused: the Banks bit did not clear")
             end
             return true, {box = box, from_slot = slot + 1, slot = target, hp = view.hp, max_hp = view.max_hp,
-                          level = view.level, durability = "VOLATILE_UNTIL_NATIVE_SAVE"}
+                          level = view.level, durability = "VOLATILE_UNTIL_NATIVE_SAVE",
+                          reconciled = (not append) or nil,
+                          message = (not append) and "withdraw reconciled: removed the box copy" or nil}
         end)
         if okr then return result, note end
         return nil, tostring(result)
