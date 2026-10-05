@@ -758,7 +758,7 @@ def _party_bytes(rig):
 
 def _drop_one_entry_byte(rig):
     """Make the CartRAM writer silently DROP one byte of the first pokedb entry (bank 1, entry 1) - the box half
-    lands everywhere else. Returns the dropped offset."""
+    lands everywhere else. Returns a function that restores the real writer."""
     at = entry_flat(1, 1) + 10
     real = rig.img.write
 
@@ -769,34 +769,97 @@ def _drop_one_entry_byte(rig):
         real(offset, value, domain)
 
     rig.img.write = write
-    return at
+
+    def restore():
+        rig.img.write = real
+
+    return restore
 
 
-def test_a_dropped_entry_byte_refuses_the_deposit_before_the_party_is_touched():
+def _published(rig):
+    """(allocation flag set, Entries pointer, Banks byte) of box 1 slot 1 / pokedb bank 1 entry 1."""
+    return (rig.img.mem["WRAM"][FLAG_FLAT[1]] & 1, rig.img.mem["CartRAM"][box_flat(1)],
+            rig.img.mem["CartRAM"][box_flat(1) + 0x14])
+
+
+def test_a_dropped_entry_byte_refuses_the_deposit_and_publishes_nothing():
+    """CODEX P1+P2: the entry is written and read back BEFORE the flag/pointer/Banks bit are published, so a dropped
+    entry byte leaves no referenced Bad Egg: the census stays complete and the next deposit goes through."""
     mons = party()
     rig = Rig(mons)
-    before = _party_bytes(rig)
-    _drop_one_entry_byte(rig)
+    before, published_before = _party_bytes(rig), _published(rig)
+    restore = _drop_one_entry_byte(rig)
     rig.send_command({"cmd": "box_mon", "key": key_of(mons[1])})
     reasons = [m["reason"] for m in rig.sent("box_mon_failed")]
-    assert len(reasons) == 1 and "read-back" in reasons[0], reasons
+    assert len(reasons) == 1 and "read-back" in reasons[0] and "nothing published" in reasons[0], reasons
     assert _party_bytes(rig) == before and rig.count() == 3
     assert not [w for w in rig.writes() if w["domain"] == "System Bus"], "the party was written"
+    assert _published(rig) == published_before == (0, 0, 0), "the flag, pointer or Banks bit was published"
+    boxes, why = rig.census_keys()
+    assert boxes is not None, why                              # the census still completes: no Bad Egg is referenced
+    restore()
+    rig.send_command({"cmd": "box_mon", "key": key_of(mons[2])})
+    assert [m["reason"] for m in rig.sent("box_mon_failed")] == reasons       # no new failure
+    assert rig.count() == 2
+    boxes, why = rig.census_keys()
+    assert boxes is not None and key_of(mons[2]) in boxes[1], why
+
+
+def test_red_control_publishing_before_the_entry_is_verified_leaves_a_referenced_bad_egg():
+    """RED: step 1's refusal removed -> the dropped byte is published anyway (flag + pointer set over a bad entry);
+    the later census read-back still refuses, but the Bad Egg stays referenced."""
+    mons = party()
+    rig = Rig(mons)
+    _drop_one_entry_byte(rig)
+    source = MODULE.replace("if bad1 then", "if false then")
+    assert source != MODULE
+    path = _mutant(rig, source)
+    rig.lua.globals().SLINK_PARTS = rig.parts
+    done, why = _pair(_deposit(rig.lua, path.boxes, 1))
+    assert done is None and "read-back" in why
+    assert _published(rig)[:2] == (1, 1), "step 1 is not load-bearing"
 
 
 def test_red_control_without_the_deposit_read_back_the_party_loses_the_mon():
-    """RED: the read-back refusal removed -> the same dropped byte lets the party half run (the later census
+    """RED: both read-back refusals removed -> the same dropped byte lets the party half run (the later census
     read-back catches it, but only after the original is gone from the party)."""
     mons = party()
     rig = Rig(mons)
     before = _party_bytes(rig)
     _drop_one_entry_byte(rig)
-    source = MODULE.replace('if bad then refuse("deposit read-back refused: " .. bad) end', "")
-    assert source != MODULE
+    source = MODULE.replace("if bad1 then", "if false then").replace(
+        'if bad then refuse("deposit read-back refused: " .. bad .. PUBLISHED) end', "")
+    assert source != MODULE and source.count("if false then") == MODULE.count("if false then") + 1
     path = _mutant(rig, source)
     rig.lua.globals().SLINK_PARTS = rig.parts
     _deposit(rig.lua, path.boxes, 1)
     assert _party_bytes(rig) != before, "the deposit read-back is not load-bearing"
+
+
+def test_a_deposit_keeps_the_neighbouring_banks_bits():
+    """The Banks byte holds 8 slots' bank bits. Slot 2's bit is pre-set (an empty slot's junk bit, or a pokedb-2
+    mon); publishing slot 1 must change ONLY slot 1's bit."""
+    mons = party()
+    rig = Rig(mons)
+    rig.img.mem["CartRAM"][box_flat(1) + 0x14] = 0b10101110
+    rig.send_command({"cmd": "box_mon", "key": key_of(mons[1])})
+    assert rig.count() == 2 and not rig.sent("box_mon_failed")
+    assert rig.img.mem["CartRAM"][box_flat(1) + 0x14] == 0b10101110      # slot 1 is bank 1 (bit 0 clear), rest intact
+
+
+def test_red_control_writing_the_whole_banks_byte_blindly_clobbers_the_neighbours():
+    """RED: bank_span writes a fresh byte holding only the target bit -> the neighbours are lost (and the deposit's
+    own neighbour check refuses it)."""
+    mons = party()
+    rig = Rig(mons)
+    rig.img.mem["CartRAM"][box_flat(1) + 0x14] = 0b10101110
+    unsafe = BOXES.replace("bytes = {d == 2 and (old | bit) or (old & ~bit & 0xFF)}", "bytes = {d == 2 and bit or 0}")
+    assert unsafe != BOXES
+    path = _mutant(rig, None, unsafe)
+    rig.lua.globals().SLINK_PARTS = rig.parts
+    done, why = _pair(_deposit(rig.lua, path.boxes, 1))
+    assert rig.img.mem["CartRAM"][box_flat(1) + 0x14] != 0b10101110, "the blind write is not red"
+    assert done is None and "neighbouring Banks bits" in why
 
 
 def test_the_party_count_is_the_last_write_of_a_deposit():

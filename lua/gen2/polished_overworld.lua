@@ -483,20 +483,43 @@ function O.boxes(deps)
                 end
             end
             if not box then refuse(refusal) end
-            -- The box half first (the engine's own order). A reset reloads the last save, so neither half persists
-            -- on its own; an exception or lifetime loss mid-write can leave a partial party until the next
-            -- save/reload (the count is written last to keep that window small). The read-back below proves the
-            -- box entry before the party is touched, so a dropped entry byte never publishes a Bad Egg while
-            -- the party original is removed.
+            -- The box half first, in TWO steps with a verification between them. A reset reloads the last save, so
+            -- neither half persists on its own; an exception or lifetime loss mid-write can leave a partial party
+            -- until the next save/reload (the count is written last to keep that window small).
+            --   step 1  stage_entry writes ONLY the sealed 49-byte entry, into an unallocated, unreferenced pokedb
+            --           entry; it is read back (checksum + byte equality) before anything is published. A failure
+            --           here publishes nothing: the bytes sit in a free entry the game cannot see.
+            --   step 2  publish_entry sets the allocation flag, the Banks bit and the Entries pointer, which are
+            --           read back below (and the neighbouring Banks bits must be unchanged) before the party is
+            --           touched, so a bad entry is never published and the party original never removed for it.
+            local blob = blob_of(raw, slot)
+            local want = Boxes.entry_from_party(blob)
             writes:arm("box_deposit")
-            local boxed, placed, bwhy = pcall(function() return reader.insert_mon(writes, box, blob_of(raw, slot)) end)
+            local staged_ok, staged, swhy = pcall(function() return reader.stage_entry(writes, box, blob) end)
             writes:disarm()
-            if not boxed then refuse("box write refused: " .. tostring(placed)) end
-            if not placed then refuse("box " .. box .. " refused the deposit: " .. tostring(bwhy)) end
+            if not staged_ok then refuse("box write refused: " .. tostring(staged)) end
+            if not staged then refuse("box " .. box .. " refused the deposit: " .. tostring(swhy)) end
+            do
+                local have, bad1 = reader.entry_bytes(staged.bank, staged.entry), nil
+                if not Boxes.verify(have) then bad1 = "entry checksum fails" end
+                for i = 1, #want do
+                    if have[i] ~= want[i] then bad1 = bad1 or "entry bytes differ from the sealed entry" end
+                end
+                if bad1 then
+                    refuse("deposit read-back refused: " .. bad1 .. " (nothing published: the entry is in an unallocated,"
+                           .. " unreferenced pokedb slot; party untouched)")
+                end
+            end
+            local banks_before = reader.banks_byte(box, staged.slot)
+            writes:arm("box_deposit")
+            local boxed, placed, bwhy = pcall(function() return reader.publish_entry(writes, staged) end)
+            writes:disarm()
+            local PUBLISHED = " (the entry may be partly published; party untouched)"
+            if not boxed then refuse("box publish refused: " .. tostring(placed) .. PUBLISHED) end
+            if not placed then refuse("box " .. box .. " refused the publish: " .. tostring(bwhy) .. PUBLISHED) end
             -- READ-BACK 0 (before the party half): the entry bytes (checksum + equality with what was sealed), the
             -- WRAM allocation flag, the Banks bit and the Entries pointer byte, re-read through the box reader's io.
             do
-                local want = Boxes.entry_from_party(blob_of(raw, slot))
                 local snap = reader.read_boxes("gameplay")
                 local function at(list)
                     for _, w in ipairs(list or {}) do
@@ -521,7 +544,11 @@ function O.boxes(deps)
                         end
                     end
                 end
-                if bad then refuse("deposit read-back refused: " .. bad) end
+                local mask = 1 << ((placed.slot - 1) & 7)
+                if not bad and ((banks_before ~ reader.banks_byte(box, placed.slot)) & ~mask & 0xFF) ~= 0 then
+                    bad = "neighbouring Banks bits changed"
+                end
+                if bad then refuse("deposit read-back refused: " .. bad .. PUBLISHED) end
             end
             writes:arm("party_collection")
             local dropped, dwhy = pcall(function() return writes:write_party_block(removed(raw, slot)) end)
