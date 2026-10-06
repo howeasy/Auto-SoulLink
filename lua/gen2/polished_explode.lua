@@ -22,9 +22,10 @@
 --   * snapshot.move_num: read from wCurMoveNum (the client does not carry it); polished_writes re-reads it.
 --   faint_party_slot -> the overworld writer (its own gate asserts reason "overworld" and snapshot.mode == 0, so a
 --   bench faint ARMED for a battle reason is refused there, by name: an in-battle faint is not composed).
---   faint_active_battler is REFUSED BY NAME. Vanilla also sets wBattlePlayerAction = USEITEM so the partner cannot
---   move after the death; the overworld writer does not reproduce that, so landing the HP write alone would let a
---   dead mon act.
+--   faint_active_battler (F1) additionally requires a keyed snapshot, actual PC/bank at the hold,
+--   USEMOVE, no pending/deferred switch and no Transform. It zeros both HP/status mirrors and
+--   publishes the player-first faint notification only if none exists. No action byte is changed.
+--   The shared client supplies no key yet (F2), so its unkeyed active-faint call still refuses.
 --
 -- THE BATTLE HOLD (polished_overworld.lua O.battle_checkpoint, kinds battle_faint / battle_bench / explode /
 -- rival): wBattleMode in {1,2}, wLinkMode == 0, wGameLogicPaused == 0, no backup save, and the site bytes
@@ -76,6 +77,14 @@ E.COORDS = {
     wOTPartyMonNicknames = {1, 0xD3ED}, wOTPartyDataEnd = {1, 0xD42F}, wCurOTMon = {0, 0xC4DD},
     wCurPartyMon = {1, 0xD10C},
 }
+-- F1 coordinates from polished_slink.sym, independently pinned by the plain-faint tests.
+-- Kept separate so existing explode-only coordinate consumers retain their 16-label ABI.
+E.FAINT_COORDS = {
+    wBattleMonStatus = {0, 0xC4B6}, wBattleMonHP = {0, 0xC4B8},
+    wPlayerSwitchTarget = {0, 0xC524}, wDeferredSwitch = {0, 0xC523},
+    wWhichMonFaintedFirst = {0, 0xC54F}, wPlayerSubStatus2 = {0, 0xC4E2},
+    wBattleMode = {1, 0xD233}, wLinkMode = {0, 0xCEC1}, hROMBank = {0, 0xFF87},
+}
 -- client.lua at_battle_hold reads these through p.battle_hold.write.targets ({bank, address})
 E.TARGETS = {wBattleMonSpecies = {bank = 0, address = 0xC4A5, width = 1},
              wBattlePlayerAction = {bank = 1, address = 0xD0F4, width = 1}}
@@ -83,6 +92,7 @@ E.TARGETS = {wBattleMonSpecies = {bank = 0, address = 0xC4A5, width = 1},
 E.KIND_OF_REASON = {battle_hold = "explode", rival_swap = "rival"}
 -- the polished_writes.lua authorize() operation -> the battle-hold kind
 E.KIND_OF_OPERATION = {battle_explode = "explode", enemy_party = "rival"}
+E.KIND_OF_OPERATION.battle_faint = "explode"
 -- the armed reason -> the hook-entry site the CPU must be inside
 E.SITE_OF_REASON = {battle_hold = "explode", rival_swap = "rival_gate"}
 
@@ -111,6 +121,7 @@ function E.new(deps)
     local O = modules.O or dofile(deps.root .. "/lua/gen2/polished_overworld.lua")
 
     local sym = copy(E.COORDS)
+    for label, row in pairs(E.FAINT_COORDS) do sym[label] = copy(row) end
     local explode_site, rival_site = O.BATTLE_SITES.explode, O.BATTLE_SITES.rival_gate
     local hold = {
         execution_before = {bank = explode_site.bank, pc = explode_site.pc, instruction = explode_site.instruction,
@@ -181,9 +192,32 @@ function E.new(deps)
         return writer:disarm()
     end
     function self:faint_party_slot(slot, snapshot) return overworld:faint_party_slot(slot, snapshot) end
-    function self:faint_active_battler()
-        error("an active-battler faint is not composed on Polished: vanilla also sets wBattlePlayerAction = USEITEM "
-              .. "so the mon cannot move after it dies, and this writer does not reproduce that", 0)
+    function self:faint_active_battler(slot, snapshot)
+        -- No pending-command bookkeeping here: F2 must supply the target key and retain
+        -- named preflight refusals. A post-write error explicitly reports partial state.
+        assert(type(snapshot) == "table" and type(snapshot.key) == "string" and #snapshot.key > 0,
+               "unkeyed active-battler faint is not composed on Polished: F2 must supply the target key; USEITEM is unsupported")
+        inside_hook("explode")
+        local snap = stamped(snapshot, hold.execution_before)
+        assert(type(snap.key) == "string" and #snap.key > 0, "active faint needs target key")
+        local party = reads.read_party()
+        assert(type(party) == "table" and type(party.mons) == "table", "active faint party unreadable")
+        local target, hits
+        hits = 0
+        for _, mon in ipairs(party.mons) do
+            if mon.key == snap.key then
+                hits = hits + 1
+                if mon.slot == slot then target = mon end
+            end
+        end
+        assert(hits == 1 and target ~= nil, "active faint target key changed or ambiguous")
+        assert(not target.is_egg, "active faint egg refused")
+        assert(species_matches(target), "active faint battle species mismatch")
+        assert(type(target.raw_hex) == "string" and #target.raw_hex == profile.structs.party.End * 2
+               and target.raw_hex:match("^%x+$"), "active faint party record unreadable")
+        snap.party_record = {}
+        for byte in target.raw_hex:gmatch("%x%x") do snap.party_record[#snap.party_record + 1] = tonumber(byte, 16) end
+        return writer:faint_active_battler(slot, snap)
     end
     function self:explode_active_battler(slot, snapshot)
         inside_hook("explode")

@@ -34,6 +34,9 @@ W.COORDS = {"wBattleMonMoves", "wBattleMonPP", "wCurPlayerMove", "wCurMoveNum", 
             "wBattlePlayerAction", "wPartyCount", "wPartyMons", "wOTPartyCount", "wMirrorHerbPendingBoosts",
             "wOTPartyMons", "wOTPartyMonOTs", "wOTPartyMonNicknames", "wOTPartyDataEnd", "wCurOTMon",
             "wCurPartyMon"}
+-- Optional until the F1 facade composes it; older explode/rival-only callers keep their contract.
+W.FAINT_COORDS = {"wBattleMonStatus", "wBattleMonHP", "wPlayerSwitchTarget", "wDeferredSwitch",
+                  "wWhichMonFaintedFirst", "wPlayerSubStatus2", "wBattleMode", "wLinkMode", "hROMBank"}
 
 local function integer(value, low, high)
     return type(value) == "number" and value % 1 == 0 and value >= low and value <= high
@@ -74,6 +77,16 @@ function W.new(profile, coords, io, Permit, policy, hold)
                "coords missing: " .. label)
         at[label], bank_of[label] = row[2], row[1]
     end
+    local faint_ready = true
+    for _, label in ipairs(W.FAINT_COORDS) do
+        local row = coords[label]
+        if row == nil then faint_ready = false
+        else
+            assert(type(row) == "table" and integer(row[1], 0, 7) and integer(row[2], 0xC000, 0xFFFF),
+                   "invalid faint coordinate: " .. label)
+            at[label], bank_of[label] = row[2], row[1]
+        end
+    end
     local P, N, NM = c.PARTY_LENGTH, c.NUM_MOVES, s.End
     -- wMirrorHerbPendingBoosts (wramx.asm:760-762) is the whole gap between the count and the records
     local herb, herb_end = at.wMirrorHerbPendingBoosts, at.wOTPartyMons
@@ -97,6 +110,16 @@ function W.new(profile, coords, io, Permit, policy, hold)
         local base = at.wPartyMons + slot * NM
         table.insert(ranges.battle_hold, {base + s.Moves, N, bank_of.wPartyMons})
         table.insert(ranges.battle_hold, {base + s.PP, N, bank_of.wPartyMons})
+        if faint_ready then
+            table.insert(ranges.battle_hold, {base + s.Status, 1, bank_of.wPartyMons})
+            table.insert(ranges.battle_hold, {base + s.HP, 2, bank_of.wPartyMons})
+        end
+    end
+    if faint_ready then
+        assert(s.Status == 32 and b.Status == 17 and b.HP == 19, "faint struct geometry disagrees")
+        table.insert(ranges.battle_hold, {at.wBattleMonStatus, 1, bank_of.wBattleMonStatus})
+        table.insert(ranges.battle_hold, {at.wBattleMonHP, 2, bank_of.wBattleMonHP})
+        table.insert(ranges.battle_hold, {at.wWhichMonFaintedFirst, 1, bank_of.wWhichMonFaintedFirst})
     end
     local function touches_herb(addr, n) return addr < herb_end and addr + n > herb end
     for reason, list in pairs(ranges) do
@@ -110,12 +133,17 @@ function W.new(profile, coords, io, Permit, policy, hold)
         end
     end
 
+    local faint_window
+    local function in_faint_window(addr, n)
+        if not faint_window then return true end
+        return faint_window[addr] == n
+    end
     local gate = Permit.new({
         write_u8 = io.write_u8,
         domains = {
             ["System Bus"] = {
                 bounds = function(addr, n, reason)
-                    return not touches_herb(addr, n) and declared(reason, addr, n) ~= nil
+                    return not touches_herb(addr, n) and declared(reason, addr, n) ~= nil and in_faint_window(addr, n)
                 end,
                 mapped = function(addr, n, reason)
                     local r = declared(reason, addr, n)
@@ -159,6 +187,98 @@ function W.new(profile, coords, io, Permit, policy, hold)
     end
     local function authorized(operation, request)
         assert(policy.authorize(operation, request, gate.armed) == true, "write ownership refused")
+    end
+
+    -- F1 only: no action/switch cancellation. snapshot.key/party_record were bound to a
+    -- fresh keyed read by the facade. Six HP/status bytes, optional order notification last.
+    function self:faint_active_battler(slot, snapshot)
+        return gate:guard(function()
+            assert(faint_ready, "active faint coordinates not composed")
+            common("battle_hold", snapshot, hold.execution_before)
+            assert(type(io.register) == "function" and io.register("PC") == hold.execution_before.pc
+                   and read("hROMBank") == hold.execution_before.bank, "active faint outside PC/bank hold")
+            local mode = read("wBattleMode")
+            assert((mode == 1 or mode == c.TRAINER_BATTLE) and snapshot.mode == mode, "unsupported or stale battle mode")
+            assert(read("wLinkMode") == 0, "link battle refused")
+            assert(integer(slot, 0, P - 1) and integer(read("wPartyCount"), 1, P)
+                   and slot < read("wPartyCount"), "active faint slot invalid")
+            assert(snapshot.active_slot == slot and read("wCurBattleMon") == slot, "active faint target changed")
+            assert(snapshot.player_action == 0 and read("wBattlePlayerAction") == 0, "active faint needs USEMOVE")
+            assert(read("wPlayerSwitchTarget") == 0, "active faint pending player switch")
+            assert(read("wDeferredSwitch") == 0, "active faint deferred switch")
+            local sub = read("wPlayerSubStatus2")
+            assert((sub & 0x10) == 0, "active faint Transform refused")
+            assert(type(snapshot.key) == "string" and #snapshot.key > 0
+                   and type(snapshot.party_record) == "table" and #snapshot.party_record == NM,
+                   "active faint needs keyed party preimage")
+            local base = slot * NM
+            for i = 1, NM do
+                assert(read("wPartyMons", base + i - 1) == snapshot.party_record[i], "active faint party preimage changed")
+            end
+            assert((read("wPartyMons", base + s.Form) & c.IS_EGG_MASK) == 0, "active faint egg refused")
+            local order = read("wWhichMonFaintedFirst")
+            assert(integer(order, 0, 2), "active faint invalid faint order")
+            local spans = {
+                {domain="System Bus", addr=at.wBattleMonStatus, bytes={0}},
+                {domain="System Bus", addr=at.wPartyMons + base + s.Status, bytes={0}},
+                {domain="System Bus", addr=at.wPartyMons + base + s.HP, bytes={0, 0}},
+                {domain="System Bus", addr=at.wBattleMonHP, bytes={0, 0}},
+            }
+            local observed_at = {at.wBattleMonStatus, at.wPartyMons + base + s.Status,
+                at.wPartyMons + base + s.HP, at.wPartyMons + base + s.HP + 1,
+                at.wBattleMonHP, at.wBattleMonHP + 1, at.wWhichMonFaintedFirst}
+            local function observe()
+                local bytes, text = {}, {}
+                for i, a in ipairs(observed_at) do
+                    local ok, value = pcall(function()
+                        local row = declared("battle_hold", a, 1)
+                        assert(row and io.bank_valid(row[3], a, 1) == true, "unmapped")
+                        local v = io.read_u8(a, "System Bus")
+                        assert(integer(v, 0, 255), "unreadable")
+                        return v
+                    end)
+                    bytes[i] = ok and value or false
+                    text[i] = string.format("%04X=%s", a, ok and string.format("%02X", value) or "UNREADABLE")
+                end
+                return bytes, table.concat(text, ",")
+            end
+            local before, before_text = observe()
+            for _, v in ipairs(before) do assert(v ~= false, "active faint preimage unreadable") end
+            local zero = before[5] == 0 and before[6] == 0
+            assert((sub & 0x04) == 0 or zero, "active faint FAINTED flag with live HP")
+            authorized("battle_faint", {slot=slot, snapshot=snapshot})
+            if zero then
+                assert(before[1] == 0 and before[2] == 0 and before[3] == 0 and before[4] == 0,
+                       "active faint already-zero HP has unsettled mirror/status")
+                return true -- do not reset order or retrigger an already completed zero-HP write
+            end
+            if order == 0 then
+                spans[#spans + 1] = {domain="System Bus", addr=at.wWhichMonFaintedFirst, bytes={1}}
+            end
+            local log_start = #gate.log
+            -- Independent of the emitted descriptor list: an accidental extra move,
+            -- stat or other-slot span must fail preflight even within battle_hold.
+            faint_window = {[observed_at[1]]=1, [observed_at[2]]=1,
+                            [observed_at[3]]=2, [observed_at[5]]=2}
+            if order == 0 then faint_window[observed_at[7]] = 1 end
+            local ok, why = pcall(function()
+                gate:write_batch(spans) -- shared permit preflights ALL spans before first emission
+                local after = observe()
+                for i = 1, 6 do assert(after[i] == 0, "active faint HP/status read-back mismatch") end
+                assert(after[7] == (order == 0 and 1 or order), "active faint order read-back mismatch")
+            end)
+            faint_window = nil
+            if not ok then
+                local _, after_text = observe()
+                local attempted = false
+                for i = log_start + 1, #gate.log do
+                    if (gate.log[i].attempted or 0) > 0 then attempted = true end
+                end
+                error((attempted and "PARTIAL ACTIVE FAINT: " or "active faint write refused: ") .. tostring(why)
+                      .. "; before=" .. before_text .. "; observed=" .. after_text, 0)
+            end
+            return true
+        end)
     end
 
     -- snapshot = {link_mode, bank, pc, player_action, active_slot, move_num}, read at the battle hold.
