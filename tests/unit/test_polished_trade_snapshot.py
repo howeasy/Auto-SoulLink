@@ -890,7 +890,8 @@ def test_the_new_files_are_fixed_sections_in_bank_7e_included_last():
     assert "_GOLD" not in snap_src + val_src and "_SILVER" not in snap_src + val_src
     slink = (SRC / "slink.asm").read_text(encoding="utf-8")
     assert slink.index("trade_gate.asm") < slink.index("trade_snapshot.asm") < slink.index("trade_validate.asm")
-    assert slink.rstrip().endswith('INCLUDE "engine/slink/trade_validate.asm"')
+    assert slink.index("trade_validate.asm") < slink.index("trade_service.asm")      # the held service is included after them
+    assert slink.rstrip().endswith('INCLUDE "engine/slink/trade_service.asm"')
 
 
 def test_the_new_sections_do_not_overlap_the_gates(syms):

@@ -219,8 +219,9 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
                (_flat(svc_bank, svc), _flat(svc_bank, max(new["SlinkPanelEnd"][1],
                                                 sfx_hi[1], new["SlinkVersionFieldEnd"][1],
                                 new["SlinkTradeAllowedItemsEnd"][1], new["SlinkTradeGatesEnd"][1],
-                                new["SlinkTradeSnapshotEnd"][1], new["SlinkTradeValidateEnd"][1])),
-                f"bank ${SERVICE_BANK:02X} service + panel + sound + version + trade frame/items/gates/snapshot/validate"),
+                                new["SlinkTradeSnapshotEnd"][1], new["SlinkTradeValidateEnd"][1],
+                                new["SlinkTradeProposerServiceEnd"][1])),
+                f"bank ${SERVICE_BANK:02X} service + panel + sound + version + trade frame/items/gates/snapshot/validate/service"),
                (HEADER_CHECKSUMS.start, HEADER_CHECKSUMS.stop, "header checksums")]
     # TRADE slice 1: the inert frame + item-policy code links after the version field, in the same bank
     if any(new[n][0] != SERVICE_BANK or new[n][1] < new["SlinkVersionFieldEnd"][1] or new[n][1] > 0x8000
@@ -228,8 +229,9 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
                  "SlinkTradeWaitGate", "SlinkTradeTimeoutGate", "SlinkTradeEntry", "SlinkTradeGatesEnd",
                  "SlinkTradeSnapshot", "SlinkTradeValidateSnapshot", "SlinkTradeReleaseSnapshot", "SlinkTradeSnapshotEnd",
                  "SlinkTradeValidateRecord", "SlinkTradeValidateText", "SlinkTradeValidateIncoming",
-                 "SlinkTradeValidateIncomingStaged", "SlinkTradeValidateEnd")):
-        raise RuntimeError("the trade frame/item/gate/snapshot/validate code must link in bank $7E, after the version field")
+                 "SlinkTradeValidateIncomingStaged", "SlinkTradeValidateEnd",
+                 "SlinkTradeProposerService", "SlinkTradeProposerServiceEnd")):
+        raise RuntimeError("the trade frame/item/gate/snapshot/validate/service code must link in bank $7E, after the version field")
     panel_bank, panel = new["SlinkPanel"]
     if panel_bank != SERVICE_BANK or panel < new["SlinkServiceEnd"][1]:
         raise RuntimeError(f"the panel must link in bank ${SERVICE_BANK:02X} after the service")

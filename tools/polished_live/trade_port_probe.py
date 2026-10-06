@@ -28,7 +28,7 @@ RELEASE = Path("F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc")
 UPS = REPO / "patch/dist/SLink-Polished.ups"
 FIXTURE = Path("F:/slink-work/lanes/g2int-live/pol/fixture/polished_overlay_warp.SaveRAM")
 FIXTURE_SHA256_PREFIX = "75c7a5dc"
-OVERLAY_SHA1 = "26ed4a41c5901ae6dcae49ec0929a034d1f40219"
+OVERLAY_SHA1 = "b7c841514008a5043d846e164a4d4ce4e713a18a"
 CASES = ("special-entry", "battle", "decline", "clean")
 
 # Symbols the Lua driver needs beyond harness.SYMBOLS (all from data/polished/polished_slink.sym).

@@ -54,11 +54,11 @@ SlinkTradeGatesCodeEnd::
 
 ASSERT @ <= $4480, "the gates overran their $4400-$447F slot"
 
-; STUB: the real service port (next card) replaces this section's body. Until then a trade request
-; just reports "not linked" (hScriptVar = 0) before the gate ends the script.
+; The entry is a 4-byte trampoline (3-byte jp + nop, the old stub's footprint) to the held PROPOSER-ONLY
+; service in trade_service.asm (commit disabled). The gate still `call`s it, and the service returns with
+; `ret` after balancing its own stack frame.
 SECTION "SLink Trade Entry", ROMX[$4480], BANK[SLINK_SERVICE_BANK]
 SlinkTradeEntry::
-	xor a
-	ldh [hScriptVar], a
-	ret
+	jp SlinkTradeProposerService
+	nop
 SlinkTradeGatesEnd::

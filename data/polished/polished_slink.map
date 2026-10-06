@@ -1,6 +1,6 @@
 SUMMARY:
 	ROM0: 16174 bytes used / 210 free
-	ROMX: 2048432 bytes used / 15952 free in 126 banks
+	ROMX: 2049182 bytes used / 15202 free in 126 banks
 	SRAM: 30936 bytes used / 1832 free in 4 banks
 	WRAM0: 3831 bytes used / 265 free
 	WRAMX: 24784 bytes used / 3888 free in 7 banks
@@ -3879,8 +3879,10 @@ ROMX bank #126:
 	SECTION: $4500-$45aa ($00ab bytes) ["SLink Trade Snapshot"]
 	EMPTY: $45ab-$45ff ($0055 bytes)
 	SECTION: $4600-$4695 ($0096 bytes) ["SLink Trade Validate"]
-	EMPTY: $4696-$7fff ($396a bytes)
-	TOTAL EMPTY: $3bac bytes
+	EMPTY: $4696-$49ff ($036a bytes)
+	SECTION: $4a00-$4ced ($02ee bytes) ["SLink Trade Service"]
+	EMPTY: $4cee-$7fff ($3312 bytes)
+	TOTAL EMPTY: $38be bytes
 
 VRAM bank #0:
 	SECTION: $8000-$9fff ($2000 bytes) ["VRAM0"]

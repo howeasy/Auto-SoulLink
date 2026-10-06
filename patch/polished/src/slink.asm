@@ -224,3 +224,6 @@ INCLUDE "engine/slink/trade_gate.asm"
 ; calls them until the held service.
 INCLUDE "engine/slink/trade_snapshot.asm"
 INCLUDE "engine/slink/trade_validate.asm"
+
+; TRADE card C1a: the held PROPOSER-ONLY service (commit disabled), behind the SlinkTradeEntry trampoline.
+INCLUDE "engine/slink/trade_service.asm"

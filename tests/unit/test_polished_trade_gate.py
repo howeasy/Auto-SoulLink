@@ -95,10 +95,15 @@ class Fault(Exception):
 
 
 class Machine:
-    """The opcodes the gates and the stub use. Unknown opcodes fail closed."""
+    """The opcodes the gates use. Unknown opcodes fail closed.
 
-    def __init__(self, rom: bytes, bank: int = 0x7E):
-        self.rom, self.bank = rom, bank
+    `entry` is the address of SlinkTradeEntry: a `call` to it is modelled as a bare return, because the held
+    proposer service behind it is exercised by tests/unit/test_polished_trade_service.py, not by this gate rig.
+    """
+
+    def __init__(self, rom: bytes, bank: int = 0x7E, entry: int | None = None):
+        self.rom, self.bank, self.entry = rom, bank, entry
+        self.entry_calls = 0
         self.ram: dict[int, int] = {}
         self.a, self.z, self.farjp = 0, False, None
         self.stack: list[int] = []
@@ -135,7 +140,11 @@ class Machine:
                 self.ram[0xFF00 + n1] = self.a
                 addr += 2
             elif op == 0xCD:          # call nn (same bank)
-                self.run(n1 | self.read(addr + 2) << 8)
+                target = n1 | self.read(addr + 2) << 8
+                if target == self.entry:
+                    self.entry_calls += 1
+                else:
+                    self.run(target)
                 addr += 3
             elif op == 0xC9:          # ret
                 return
@@ -150,8 +159,9 @@ class Machine:
                 raise Fault(f"unmodelled opcode {op:#04x} at {addr:#06x}")
 
 
-def run_gate(rom: bytes, entry: tuple[int, int], room: int, preset: dict | None = None) -> Machine:
-    m = Machine(rom)
+def run_gate(rom: bytes, entry: tuple[int, int], room: int, preset: dict | None = None,
+             service_entry: int | None = None) -> Machine:
+    m = Machine(rom, entry=service_entry)
     m.ram[ROOM_ADDR] = room
     m.ram.update(preset or {})
     m.run(entry[1])
@@ -163,18 +173,20 @@ def observe(rom: bytes, new: dict, clean: dict) -> list[str]:
     bad = []
     wait, tmo = new["SlinkTradeWaitGate"], new["SlinkTradeTimeoutGate"]
     sentinel = {H_SCRIPT_VAR: 0x5A, H_SCRIPT_BANK: 0x11, H_SCRIPT_POS: 0x22, H_SCRIPT_POS + 1: 0x33}
-    m = run_gate(rom, wait, TRADE_ROOM, sentinel)
-    if m.ram[H_SCRIPT_VAR] != 1 or m.farjp is not None:
+    svc = new["SlinkTradeEntry"][1]
+    m = run_gate(rom, wait, TRADE_ROOM, sentinel, svc)
+    if m.ram[H_SCRIPT_VAR] != 1 or m.farjp is not None or m.entry_calls:
         bad.append(f"trade wait: hScriptVar={m.ram[H_SCRIPT_VAR]:#x} farjp={m.farjp}")
-    m = run_gate(rom, tmo, TRADE_ROOM, sentinel)
+    m = run_gate(rom, tmo, TRADE_ROOM, sentinel, svc)
     got = (m.ram[H_SCRIPT_BANK], m.ram[H_SCRIPT_POS], m.ram[H_SCRIPT_POS + 1])
-    if got != (0x2D, 0x95, 0x75) or m.farjp is not None or m.ram[H_SCRIPT_VAR] != 0:
-        bad.append(f"trade timeout: bank/pos {got}, var={m.ram[H_SCRIPT_VAR]:#x} farjp={m.farjp}")
+    # the trade timeout gate calls the service entry exactly once and itself writes only the script cursor
+    if got != (0x2D, 0x95, 0x75) or m.farjp is not None or m.ram[H_SCRIPT_VAR] != 0x5A or m.entry_calls != 1:
+        bad.append(f"trade timeout: bank/pos {got}, var={m.ram[H_SCRIPT_VAR]:#x} farjp={m.farjp} entry={m.entry_calls}")
     for room in (0, BATTLE_ROOM, 3):
         for name, entry, native in (("wait", wait, "Special_WaitForLinkedFriend"),
                                     ("timeout", tmo, "Special_CheckLinkTimeout")):
-            m = run_gate(rom, entry, room, sentinel)
-            if m.farjp != clean[native] or any(m.ram[a] != v for a, v in sentinel.items()):
+            m = run_gate(rom, entry, room, sentinel, svc)
+            if m.entry_calls or m.farjp != clean[native] or any(m.ram[a] != v for a, v in sentinel.items()):
                 bad.append(f"room {room} {name}: farjp={m.farjp} (want {clean[native]}) ram={m.ram}")
     return bad
 
@@ -220,7 +232,7 @@ def test_the_trade_gate_is_not_reached_through_other_rooms(rom, syms):
     """Every non-trade room value is native: the discriminator is equality with LINK_TRADECENTER - 1."""
     clean, new = syms
     for room in range(0, 256):
-        m = run_gate(rom[1], new["SlinkTradeWaitGate"], room)
+        m = run_gate(rom[1], new["SlinkTradeWaitGate"], room, None, new["SlinkTradeEntry"][1])
         assert (m.farjp is None) == (room == TRADE_ROOM), room
 
 

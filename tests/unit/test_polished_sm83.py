@@ -1012,8 +1012,10 @@ def nsyms():
     return _symbols(OVERLAY_SYM)
 
 
-def _gate_new(rom, clean, entry, room, preset, mode):
+def _gate_new(rom, clean, entry, room, preset, mode, service_entry):
     m = S.SM83(rom, 0x7E, mbc="mbc3", farcall=mode, hrombank=HROMBANK)
+    # SlinkTradeEntry is the held proposer service now: it is a bare return here (tests/unit/test_polished_trade_service.py)
+    m.trap(service_entry, lambda mm: None, bank=0x7E)
     m.poke(HROMBANK, 0x7E)
     m.poke(GATE.ROOM_ADDR, room)
     for a, v in preset.items():
@@ -1033,13 +1035,13 @@ def test_the_gates_agree_with_the_old_machine_in_both_farcall_modes_for_rooms_0_
     for gate in ("SlinkTradeWaitGate", "SlinkTradeTimeoutGate"):
         entry = nsyms[gate]
         for room in range(256):
-            old = GATE.run_gate(built, entry, room, sentinel)
+            old = GATE.run_gate(built, entry, room, sentinel, nsyms["SlinkTradeEntry"][1])
             want_seen = [old.farjp] if old.farjp else []
             want_ram = (old.ram.get(GATE.H_SCRIPT_VAR, 0), old.ram.get(GATE.H_SCRIPT_BANK, 0),
                         bytes([old.ram.get(GATE.H_SCRIPT_POS, 0), old.ram.get(GATE.H_SCRIPT_POS + 1, 0)]))
             outs = {}
             for mode in ("model", "native"):
-                seen, ram, r = _gate_new(built, csyms, entry, room, sentinel, mode)
+                seen, ram, r = _gate_new(built, csyms, entry, room, sentinel, mode, nsyms["SlinkTradeEntry"][1])
                 outs[mode] = (seen, ram, r.stack_used)
                 if (seen, ram) != (want_seen, want_ram):
                     bad.append((gate, room, mode, seen, ram, "old:", want_seen, want_ram))
@@ -1057,11 +1059,11 @@ def test_the_gates_agree_with_the_old_machine_in_both_farcall_modes_for_rooms_0_
     assert bad == []
     # what the gates promise (hand-stated, not from the old machine): trade room 1 answers inline, everything
     # else tail-jumps to the original special, at a stack budget of sentinel + one farjp
-    seen, ram, r = _gate_new(built, csyms, nsyms["SlinkTradeWaitGate"], 1, sentinel, "model")
+    seen, ram, r = _gate_new(built, csyms, nsyms["SlinkTradeWaitGate"], 1, sentinel, "model", nsyms["SlinkTradeEntry"][1])
     assert seen == [] and ram[0] == 1 and r.stack_used == 2
-    seen, ram, r = _gate_new(built, csyms, nsyms["SlinkTradeTimeoutGate"], 1, sentinel, "model")
-    assert seen == [] and ram == (0, 0x2D, bytes([0x95, 0x75]))
-    seen, ram, r = _gate_new(built, csyms, nsyms["SlinkTradeWaitGate"], 2, sentinel, "model")
+    seen, ram, r = _gate_new(built, csyms, nsyms["SlinkTradeTimeoutGate"], 1, sentinel, "model", nsyms["SlinkTradeEntry"][1])
+    assert seen == [] and ram == (0x5A, 0x2D, bytes([0x95, 0x75]))     # hScriptVar untouched: only the cursor is redirected
+    seen, ram, r = _gate_new(built, csyms, nsyms["SlinkTradeWaitGate"], 2, sentinel, "model", nsyms["SlinkTradeEntry"][1])
     assert seen == [csyms["Special_WaitForLinkedFriend"]] and r.stack_used == 2 + 2 + S.FARCALL_EXTRA_DEPTH
     assert farjps == 2 * 255 * 2 and runs == 1024
     DIFF["gates"] = runs

@@ -10,9 +10,9 @@
     "generator": "tools/gen_polished_profile.py",
     "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
     "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
-    "overlay_provenance_sha256": "eef149b90a88f83734c6ac76e50c3d135d435d40ba4989c0960912ae855108ae",
-    "overlay_sha1": "26ed4a41c5901ae6dcae49ec0929a034d1f40219",
-    "overlay_sym_sha256": "21b60e110b329d15655b91c6356e9d1d35083957d0c1ee47c600f8d2f1635085",
+    "overlay_provenance_sha256": "a432f2fdff02feafdaa562f3b805dae70e3f86ed39d414a4afc891052a97da0b",
+    "overlay_sha1": "b7c841514008a5043d846e164a4d4ce4e713a18a",
+    "overlay_sym_sha256": "2dbe561f3f987a02c1f222de32768a7169f189014eac738d8cdc53c091b56ec0",
     "repo": "https://github.com/Rangi42/polishedcrystal",
     "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
     "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
@@ -561,7 +561,7 @@
         "abi": 3,
         "artifact": "polished_overlay",
         "base_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
-        "md5": "d95362b1a8c138d628f38850ce701379",
+        "md5": "1fe45710623d39ea3e9f3471997d8cd0",
         "panel": {
           "base": 50733,
           "line_max": 16,
@@ -576,7 +576,7 @@
           "wSlinkPanelText": 50733,
           "wTilemap": 49568
         },
-        "rom_sha1": "26ed4a41c5901ae6dcae49ec0929a034d1f40219",
+        "rom_sha1": "b7c841514008a5043d846e164a4d4ce4e713a18a",
         "sfx": {
           "caps": [
             "SLINK_CAP_SFX",
@@ -605,7 +605,7 @@
           ]
         },
         "sym": "polished_slink.sym",
-        "sym_sha256": "21b60e110b329d15655b91c6356e9d1d35083957d0c1ee47c600f8d2f1635085"
+        "sym_sha256": "2dbe561f3f987a02c1f222de32768a7169f189014eac738d8cdc53c091b56ec0"
       },
       "ram": {
         "hAppendVWFText": 65511,
