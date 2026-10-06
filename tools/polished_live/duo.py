@@ -2,6 +2,7 @@
 """Card C8: two-instance Polished Crystal SMOKE (hello + party census + 20-box census + one reconnect, ZERO writes).
 
     python tools/polished_live/duo.py          # ends `RESULT: PASS polished-duo-smoke` or `RESULT: FAIL ...`
+    python tools/polished_live/duo.py --fixture-a A.SaveRAM --fixture-b B.SaveRAM --distinct-identities
 
 Two EmuHawk (players a and b) boot the integrated overlay (patch/dist/SLink-Polished.ups on the pinned release,
 sha1 97628616...) under private dirs F:/slink-work/lanes/pol-duo/run/{a,b}/ (own ROM copy, SaveRAM copy, config,
@@ -10,13 +11,21 @@ Evidence is read from the SERVER (the wire transcript `--wire-log`, /api/status,
 the Lua driver (duo.lua) only supplies the client's own hello line and a zero-write tap. Then b's own EmuHawk PID is
 killed and relaunched on the same private SaveRAM: a must stay connected, b must be re-admitted with an identical census.
 
-DISCLOSURE: both sides boot copies of ONE saved identity (the SYNTH warp fixture), so this proves hello + census
-only; a trade needs two distinct played identities, which do not exist yet.
+DISCLOSURE: by default both sides boot copies of ONE saved identity (the SYNTH warp fixture), so this proves hello +
+census only. With --distinct-identities each side boots ITS OWN fixture (--fixture-a / --fixture-b, env POL_FIXTURE_A /
+POL_FIXTURE_B, falling back to POL_FIXTURE), the run refuses to start unless the two saves are two different trainers
+(different bytes, player ID, name and disjoint party mon keys, read from the SaveRAM bytes), and the evaluator requires
+each side's server-reported party keys / trainer / OT id to equal what ITS fixture's bytes decode to, no identity_error,
+and both identities unchanged across b's reconnect. The second save is a SYNTH identity derivative (O-33, derive_save.py),
+not independently played. Identity is read from the wire hello (ot_id, trainer_name, party) and /api/status
+(players.<p>.trainer_name, .party_keys, .identity_error).
 Only PIDs this script starts are ever killed (taskkill /T /F /PID); never an image-name kill.
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -31,8 +40,8 @@ REPO = Path(__file__).resolve().parents[2]
 LANE = Path(os.environ.get("POL_DUO_LANE", "F:/slink-work/lanes/pol-duo"))
 RELEASE = Path("F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc")
 UPS = REPO / "patch/dist/SLink-Polished.ups"
-FIXTURE = Path(os.environ.get("POL_FIXTURE", "F:/slink-work/lanes/g2int-live/pol/fixture/polished_overlay_warp.SaveRAM"))
-FIXTURE_SHA256_PREFIX = "75c7a5dc"
+DEFAULT_FIXTURE = "F:/slink-work/lanes/g2int-live/pol/fixture/polished_overlay_warp.SaveRAM"
+HERE = Path(__file__).resolve().parent
 INTEGRATED_SHA1 = "26ed4a41c5901ae6dcae49ec0929a034d1f40219"
 ROM_NAME = "pol_overlay.gbc"            # BizHawk names the save from the file stem, '_' -> ' '
 SAVE_NAME = "pol overlay.SaveRAM"
@@ -65,6 +74,72 @@ def side_env(paths: dict, role: str, host: str, port: int) -> dict:
     return {"SLINK_ROOT": str(REPO).replace("\\", "/"), "POL_OUT": paths["result"], "POL_RUN": paths["run"],
             "POL_SYMS": paths["run"] + "/syms.json", "SLINK_HOST": host, "SLINK_PORT": str(port),
             "SLINK_PLAYER": role, "DUO_ROLE": role}
+
+
+# ── per-side fixtures + identity (pure; the identity layout is derive_save.py's, never duplicated) ──────
+class FixtureError(ValueError):
+    """A fixture is not a SaveRAM this driver can read an identity from."""
+
+
+def _derive_save():
+    mod = sys.modules.get("polished_derive_save")
+    if mod is None:
+        spec = importlib.util.spec_from_file_location("polished_derive_save", HERE / "derive_save.py")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["polished_derive_save"] = mod
+        spec.loader.exec_module(mod)
+    return mod
+
+
+def resolve_fixtures(fixture_a=None, fixture_b=None, env=None) -> tuple[Path, Path]:
+    """CLI flag > POL_FIXTURE_A / POL_FIXTURE_B > POL_FIXTURE (the default for BOTH sides) > the default fixture."""
+    env = os.environ if env is None else env
+    common = env.get("POL_FIXTURE") or DEFAULT_FIXTURE
+    return (Path(fixture_a or env.get("POL_FIXTURE_A") or common), Path(fixture_b or env.get("POL_FIXTURE_B") or common))
+
+
+def fixture_identity(data: bytes) -> dict:
+    """The trainer a SaveRAM image belongs to, decoded from its bytes with derive_save's layout + the repo codec:
+    sha256 (and its recorded 8-char prefix), player id, player name, and the party mon keys in slot order. Main and
+    backup copy must agree; a wrong-size/marker/checksum image raises FixtureError (never guesses)."""
+    ds = _derive_save()
+    problems = ds._layout_problems(data) + (ds._checksum_problems(data) if len(data) == ds.SAVE_SIZE else [])
+    if problems:
+        raise FixtureError("; ".join(problems))
+    per_copy = {}
+    for c in ds.ALL_COPIES:
+        ident = ds._identity(data, c)
+        keys = [ds.pc.key(ds._mon(data, c, s)) for s in range(ds.party_count(data, c))]
+        per_copy[c.name] = (ident["id"], ident["name"], keys)
+    if per_copy["main"] != per_copy["backup"]:
+        raise FixtureError(f"main and backup copies disagree on identity/party: {per_copy}")
+    player_id, name, keys = per_copy["main"]
+    sha = hashlib.sha256(bytes(data)).hexdigest()
+    return {"sha256": sha, "prefix": sha[:8], "player_id": player_id, "name": name, "keys": keys}
+
+
+def distinct_refusals(a: dict, b: dict) -> list[str]:
+    """Why --distinct-identities must refuse to start (empty = two different trainers). a/b = fixture_identity()."""
+    out = []
+    if a["sha256"] == b["sha256"]:
+        out.append("fixtures_byte_identical")
+    if a["player_id"] == b["player_id"]:
+        out.append("player_id_shared")
+    if a["name"] == b["name"]:
+        out.append("player_name_shared")
+    if set(a["keys"]) & set(b["keys"]):
+        out.append("party_keys_overlap")
+    return out
+
+
+def stage_side(paths: dict, rom: bytes, fixture: Path) -> str:
+    """Give ONE side its own ROM copy and its own SaveRAM copy of ITS fixture; returns the copy's sha256 (must equal the
+    fixture's: the side boots exactly the bytes whose identity the evaluator will expect)."""
+    for k in ("rom", "saveram"):
+        Path(paths[k]).parent.mkdir(parents=True, exist_ok=True)
+    Path(paths["rom"]).write_bytes(rom)
+    shutil.copyfile(fixture, paths["saveram"])
+    return hashlib.sha256(Path(paths["saveram"]).read_bytes()).hexdigest()
 
 
 def parse_wire(records: list) -> dict:
@@ -118,7 +193,9 @@ def hello_view(rec: dict | None, k: int, role: str, log: dict, status_player: di
             "pc_boxes": None if boxes is None else sorted(f"{e.get('box')}:{e.get('key')}" for e in boxes),
             "server_party_keys": list(status_player.get("party_keys") or []),
             "server_pc_boxes_n": len(status_player.get("pc_boxes") or []),
-            "ot_id": msg.get("ot_id"), "trainer_name": msg.get("trainer_name")}
+            "ot_id": msg.get("ot_id"), "trainer_name": msg.get("trainer_name"),
+            "server_trainer_name": status_player.get("trainer_name"),
+            "identity_error": status_player.get("identity_error") or ""}
 
 
 def _hello_reasons(tag: str, h: dict | None, staged: str) -> list[str]:
@@ -183,6 +260,77 @@ def evaluate(sides: dict, staged_sha1: str) -> tuple[bool, list[str]]:
     return not reasons, reasons
 
 
+def _identity_reasons(tag: str, h: dict, own: dict, other: dict) -> list[str]:
+    """One hello's identity against the fixture ITS side booted (own) and the other side's (other)."""
+    out = []
+    if h.get("identity_error"):
+        out.append(f"{tag}:identity_error_present")
+    keys = sorted(h.get("party_keys") or [])
+    if keys and keys == sorted(other["keys"]) and keys != sorted(own["keys"]):
+        out.append(f"{tag}:booted_other_fixture")
+    else:
+        if keys != sorted(own["keys"]):
+            out.append(f"{tag}:party_keys_not_from_fixture")
+        if h.get("ot_id") != own["player_id"]:
+            out.append(f"{tag}:ot_id_not_from_fixture")
+        if h.get("trainer_name") != own["name"]:
+            out.append(f"{tag}:trainer_name_not_from_fixture")
+    if h.get("server_trainer_name") != h.get("trainer_name"):
+        out.append(f"{tag}:server_trainer_name_differs")
+    return out
+
+
+def evaluate_identities(sides: dict, expected: dict) -> list[str]:
+    """The distinct-identities requirements on top of `evaluate`. expected = {"a": fixture_identity, "b": ...}. A side whose
+    hello is missing is left to `evaluate` (hello_missing); everything else has its own reason code, fail closed."""
+    if sorted(expected) != ["a", "b"] or sorted(sides) != ["a", "b"]:
+        return ["identity:expected_missing"]
+    out: list[str] = []
+    if set(expected["a"]["keys"]) & set(expected["b"]["keys"]) or expected["a"]["player_id"] == expected["b"]["player_id"]:
+        out.append("identity:expected_fixtures_not_distinct")
+    seen = {}
+    for role, other in (("a", "b"), ("b", "a")):
+        s = sides[role]
+        h = s.get("hello")
+        if not h or not h.get("seen"):
+            continue
+        seen[role] = h
+        out += _identity_reasons(role, h, expected[role], expected[other])
+        rc = s.get("reconnect")
+        if rc is not None and rc.get("seen"):
+            out += _identity_reasons(f"{role}/reconnect", rc, expected[role], expected[other])
+            if (h.get("ot_id"), h.get("trainer_name")) != (rc.get("ot_id"), rc.get("trainer_name")):
+                out.append(f"{role}:identity_changed_after_reconnect")
+        elif rc is None:                      # the side that stayed up: its identity must be untouched by the peer's reconnect
+            fin = s.get("final")
+            if not fin:
+                out.append(f"{role}:final_identity_missing")
+            else:
+                if fin.get("identity_error"):
+                    out.append(f"{role}:final_identity_error_present")
+                if sorted(fin.get("party_keys") or []) != sorted(h.get("party_keys") or []) or \
+                        fin.get("trainer_name") != h.get("trainer_name"):
+                    out.append(f"{role}:identity_changed_while_peer_reconnected")
+    if len(seen) == 2:
+        ka, kb = set(seen["a"].get("party_keys") or []), set(seen["b"].get("party_keys") or [])
+        if ka and ka == kb:
+            out.append("identity:party_keys_identical")
+        elif ka & kb:
+            out.append("identity:party_keys_overlap")
+        if seen["a"].get("trainer_name") and seen["a"].get("trainer_name") == seen["b"].get("trainer_name"):
+            out.append("identity:trainer_name_shared")
+        if seen["a"].get("ot_id") is not None and seen["a"].get("ot_id") == seen["b"].get("ot_id"):
+            out.append("identity:ot_id_shared")
+    return out
+
+
+def evaluate_distinct(sides: dict, staged_sha1: str, expected: dict) -> tuple[bool, list[str]]:
+    """`evaluate` (hello/census/reconnect/zero-writes/isolation) plus the two-identity requirements."""
+    _, reasons = evaluate(sides, staged_sha1)
+    reasons = reasons + evaluate_identities(sides, expected)
+    return not reasons, reasons
+
+
 # ── live runner ────────────────────────────────────────────────────────────────────────────────────
 def kill_pid(proc: subprocess.Popen, label: str) -> None:
     if proc.poll() is None:
@@ -217,7 +365,34 @@ def exit_marker(result: Path, role: str) -> bool:
     return result.is_file() and f"RESULT: PASS duo-side-{role}" in result.read_text(encoding="utf-8", errors="replace")
 
 
-def main() -> int:
+def parse_args(argv=None) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Two-instance Polished Crystal smoke (hello + census + reconnect, zero writes)")
+    ap.add_argument("--fixture-a", help="SaveRAM for side a (env POL_FIXTURE_A; default POL_FIXTURE, then the warp fixture)")
+    ap.add_argument("--fixture-b", help="SaveRAM for side b (env POL_FIXTURE_B; default POL_FIXTURE, then the warp fixture)")
+    ap.add_argument("--distinct-identities", action="store_true",
+                    help="require two genuinely distinct trainers: refuse identical fixtures, check each side against ITS fixture")
+    return ap.parse_args(argv)
+
+
+def plan_fixtures(args, env=None) -> tuple[dict, dict]:
+    """Per-side fixture paths and their identities, decoded from the files themselves. In --distinct-identities mode this
+    REFUSES (SystemExit) unless the two saves are two different trainers: nothing is staged or launched before it."""
+    fixtures = dict(zip(("a", "b"), resolve_fixtures(args.fixture_a, args.fixture_b, env), strict=True))
+    try:
+        ident = {r: fixture_identity(fixtures[r].read_bytes()) for r in ("a", "b")}
+    except (OSError, FixtureError) as exc:
+        raise SystemExit(f"fixture unreadable as a Polished SaveRAM: {exc}") from exc
+    if args.distinct_identities:
+        refused = distinct_refusals(ident["a"], ident["b"])
+        if refused:
+            raise SystemExit(f"--distinct-identities refused: {refused} (a {fixtures['a']} {ident['a']['prefix']}, "
+                             f"b {fixtures['b']} {ident['b']['prefix']})")
+    return fixtures, ident
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    fixtures, ident = plan_fixtures(args)
     sys.path[:0] = [str(REPO / "tools"), str(REPO)]
     import harness  # sym_table, free_port (reused unchanged)
     from gen1_playthrough import BIZHAWK_CONFIG, EMUHAWK, write_run_config
@@ -229,10 +404,6 @@ def main() -> int:
     sha1 = hashlib.sha1(rom).hexdigest()
     if sha1 != INTEGRATED_SHA1:
         raise SystemExit(f"staged overlay sha1 {sha1} != integrated overlay {INTEGRATED_SHA1}")
-    fixture_sha = hashlib.sha256(FIXTURE.read_bytes()).hexdigest()
-    if not fixture_sha.startswith(FIXTURE_SHA256_PREFIX):
-        raise SystemExit(f"fixture sha256 {fixture_sha} does not start {FIXTURE_SHA256_PREFIX}: {FIXTURE}")
-
     run = LANE / "run"
     if run.exists():
         shutil.rmtree(run)
@@ -241,15 +412,17 @@ def main() -> int:
     (srv_dir / "rom_contract.json").write_text(json.dumps(contract_for(sha1)), encoding="utf-8")
     syms = json.dumps(harness.sym_table())
     base_paths = {r: side_paths(run, r) for r in ("a", "b")}
-    for p in base_paths.values():     # own ROM copy + own SaveRAM copy + own config per side
-        for k in ("rom", "saveram"):
-            Path(p[k]).parent.mkdir(parents=True, exist_ok=True)
-        Path(p["rom"]).write_bytes(rom)
-        shutil.copyfile(FIXTURE, p["saveram"])
+    for r, p in base_paths.items():     # own ROM copy + own SaveRAM copy of ITS fixture + own config per side
+        if stage_side(p, rom, fixtures[r]) != ident[r]["sha256"]:
+            raise SystemExit(f"side {r}: private SaveRAM copy differs from its fixture {fixtures[r]}")
         write_run_config(BIZHAWK_CONFIG, p["config"], saveram_dir=p["sram_dir"], purergb=True)
         if max(len(p["saveram"]), len(p["result"])) >= 200:
             raise SystemExit("lane path too long for BizHawk SaveRAM")
-    print(f"[duo] staged overlay sha1 {sha1}; fixture sha256 {fixture_sha}; lane {run}", flush=True)
+    print(f"[duo] staged overlay sha1 {sha1}; mode {'distinct-identities' if args.distinct_identities else 'single-fixture smoke'}; "
+          f"lane {run}", flush=True)
+    for r in ("a", "b"):
+        print(f"[duo] fixture {r}: {fixtures[r]} sha256 {ident[r]['sha256']} (prefix {ident[r]['prefix']}) player "
+              f"{ident[r]['name']!r} id {ident[r]['player_id']} expected party keys {ident[r]['keys']}", flush=True)
 
     port, http = harness.free_port(), harness.free_port()
     srv_log = open(run / "server.log", "w", encoding="utf-8")  # noqa: SIM115 - closed in finally
@@ -332,7 +505,14 @@ def main() -> int:
                            + (client_line(Path(final_p["result"]), "DUO_FINAL") or {}).get("panel_writes", 0),
                            "commands": w["commands"], "exit_marker": exit_marker(Path(final_p["result"]), role),
                            "client_hello_line": client_line(Path(final_p["result"]), "DUO_CLIENT")}
-        ok, reasons = evaluate(sides, sha1)
+            if role == "a":      # the side that stayed up: its server-side identity AFTER b's reconnect
+                fa = view2["status"]["players"]["a"]
+                sides["a"]["final"] = {"trainer_name": fa.get("trainer_name"), "party_keys": list(fa.get("party_keys") or []),
+                                       "identity_error": fa.get("identity_error") or ""}
+        if args.distinct_identities:
+            ok, reasons = evaluate_distinct(sides, sha1, ident)
+        else:
+            ok, reasons = evaluate(sides, sha1)
         notes.append(f"b SaveRAM sha256 before kill {b_before[:16]} after kill {b_after[:16]} (unchanged: {b_before == b_after})")
     except Exception as exc:  # noqa: BLE001 - any harness failure is a FAIL with the reason, never a silent pass
         reasons = [f"driver_error: {exc}"]
@@ -351,15 +531,27 @@ def main() -> int:
                       f"kind={h.get('artifact_kind')} rom_sha1={h.get('rom_sha1')}\n[duo]     party {h.get('party_count')} "
                       f"keys {h.get('party_keys')} (server party_keys {h.get('server_party_keys')})\n[duo]     box census "
                       f"generation {h.get('pc_boxes_generation')} client entries {len(h.get('pc_boxes') or [])} server "
-                      f"stored {h.get('server_pc_boxes_n')} ot {h.get('ot_id')} name {h.get('trainer_name')}", flush=True)
+                      f"stored {h.get('server_pc_boxes_n')}\n[duo]     identity: ot {h.get('ot_id')} "
+                      f"name {h.get('trainer_name')} server status trainer_name {h.get('server_trainer_name')} identity_error {h.get('identity_error')!r}", flush=True)
+        if s.get("final"):
+            print(f"[duo]   status after b reconnected: {s['final']}", flush=True)
         print(f"[duo]   continuous={s['continuous']} client_writes={s['client_writes']} server_commands={s['commands']} "
               f"exit_marker={s['exit_marker']}", flush=True)
     for n in notes:
         print(f"[duo] {n}", flush=True)
-    print(f"[duo] server data dir {srv_dir}; wire {wire_dir}; staged ROM sha1 {sha1}; both sides share ONE saved identity "
-          f"(fixture {fixture_sha[:8]}): hello + census smoke only, no trade possible", flush=True)
-    (run / "evidence.json").write_text(json.dumps({"ok": ok, "reasons": reasons, "sides": sides, "notes": notes}, indent=1,
-                                                  default=str), encoding="utf-8")
+    if args.distinct_identities:
+        disclosure = (f"fixtures a {ident['a']['prefix']} ({ident['a']['name']}, id {ident['a']['player_id']}) and b "
+                      f"{ident['b']['prefix']} ({ident['b']['name']}, id {ident['b']['player_id']}): SYNTH identity derivative "
+                      f"(O-33), not independently played; two distinct identities admitted, hello + census + reconnect only, "
+                      f"no trade exercised")
+    else:
+        disclosure = (f"both sides share ONE saved identity (fixture {ident['a']['prefix']}): hello + census smoke only, "
+                      f"no trade possible")
+    print(f"[duo] server data dir {srv_dir}; wire {wire_dir}; staged ROM sha1 {sha1}; {disclosure}", flush=True)
+    (run / "evidence.json").write_text(json.dumps(
+        {"ok": ok, "reasons": reasons, "mode": "distinct-identities" if args.distinct_identities else "single-fixture",
+         "fixtures": {r: {"path": str(fixtures[r]), **ident[r]} for r in ("a", "b")}, "disclosure": disclosure,
+         "sides": sides, "notes": notes}, indent=1, default=str), encoding="utf-8")
     print(f"RESULT: {'PASS' if ok else 'FAIL'} polished-duo-smoke" + ("" if ok else f" -- {reasons}"), flush=True)
     return 0 if ok else 1
 
