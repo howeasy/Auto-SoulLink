@@ -119,6 +119,15 @@ Two real causes of the round-2 abort, both mine, both now fixed:
 was ever published: the host was never asked until the player pressed, and every page cost two
 presses. Now:
 
+**Current-source correction (2026-10-06).** The Round 3 run below remains historical evidence from
+2026-10-04 on overlay `48d6ec699b9267c5b0d2d348fc57b7bf7140c630`; the bullets that follow describe that
+build, and their line numbers and `SlinkPanelScript` are stale. In the current `patch/polished/src/panel.asm`
+the fallback (`SlinkPanelFallback`, line 149) ends in `done` (line 152); on the staged path both mailbox
+rows are `@`-terminated and painted by separate `rst PlaceString` calls (lines 65-73); `SlinkPanelScript` no
+longer exists (`tests/unit/test_polished_panel.py` line 157 asserts its absence); and both the staged and the
+timeout path reach `.WaitForButton` (call at line 88, routine at line 132). This correction does not
+re-qualify the panel: DEV evidence only.
+
 * `SlinkPanelFallback` ends in `done` — `panel.asm:125`, so `AWAIT` is the first thing the panel
   waits on.
 * `SlinkPanelScript` ends in `<PROMPT>` — `panel.asm:136` — the staged page is what waits for the

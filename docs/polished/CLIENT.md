@@ -116,10 +116,10 @@ has to replace it. `PROVIDED` means `lua/gen2/polished.lua` already does this an
 |---|---|---|---|---|
 | E1 | `writes.lua` `W.SYM` four literals: `wCurPlayerMove`, `wCurOTMon`, `wOTPartyCount`, `wOTPartyDataEnd` | `lua/gen2/writes.lua:37-41`, table at `docs/polished/RAM.md:37-51` | all four **moved**; profile has no `W.SYM` analogue | **MISSING** |
 | E2 | `writes.lua:94` derives `ot_species = ot_block + 1` as an enemy species list | RAM.md:52 | in Polished those 7 bytes are `wMirrorHerbPendingBoosts` — writing there **clobbers Mirror Herb state** | **MISSING, and hazardous** |
-| E3 | `checkpoint_pc` (the hooked PC for writes + hello readiness) | `lua/gen2/entry.lua:540`, consumed `lua/gen2/client.lua:1441-1446` | needs `view.checkpoint.primary.execution_before.pc`; Polished has no receipts | **STILL MISSING - and NOT invented**: card POL-WRITES composes a live *predicate* hold instead (`wMapStatus == MAPSTATUS_HANDLE`, no script, no pause, out of battle, no link, no backup save; `lua/gen2/polished_overworld.lua`), qualified `DEV_OVERLAY_PREDICATE_HOLD`. `parts.checkpoint` stays nil: there is no PC hold to compose |
+| E3 | `checkpoint_pc` (the hooked PC for writes + hello readiness) | `lua/gen2/entry.lua:540`, consumed `lua/gen2/client.lua:1441-1446` | needs `view.checkpoint.primary.execution_before.pc`; Polished has no receipts | **COMPOSED (correction 2026-10-06; this row first read "STILL MISSING")**: `checkpoint_pc=Overworld.HOLD.pc` (`lua/gen2/entry.lua` ~846-850, 923-924) dispatches deferred writes at 25:51BF (the `call z, DelayFrame` inside `NextOverworldFrame`) when the live overworld predicates hold (`wMapStatus == MAPSTATUS_HANDLE`, no script, no pause, out of battle, no link, no backup save; `lua/gen2/polished_overworld.lua`). This synchronous hook is not a CPU hold and not a PHYSICAL receipt; qualification stays `DEV_OVERLAY_PREDICATE_HOLD`. The returned checkpoint is `parts.overworld.checkpoint`; the top-level `parts.checkpoint` stays nil. A PC checkpoint receipt is still not invented |
 | E4 | `battle_hold` / `battle_bench` / `rival_swap` gates | `lua/gen2/entry.lua:543-549`, `lua/gen2/client.lua:1448-1450` | all three require receipts; with none, all three are `nil` and the hooks simply never arm | **SAFE BY OMISSION** |
 | E5 | `contest_mask` → `contest_masked()` | `lua/gen2/entry.lua:550`, `lua/gen2/client.lua:487-488` | needs `write_checkpoint.json:contest_mask`; without it, what does it default to? **UNVERIFIED** | **UNVERIFIED** |
-| E6 | `Boxes.executor` / `cart_gate` — every span re-proves a receipt kind | `lua/gen2/entry.lua:495-510` | no receipts ⇒ `covers()` false ⇒ every box write refuses **before a byte** | **COMPOSED (card POL-WRITES)**: `lua/gen2/polished_overworld.lua` O.writes (declared ranges, one reason each) + O.boxes (`box_mon` only). `party_mon` (savemon → party stat/PP reconstruction) and `memorialize` (the memorial box is an open owner ruling, NEWBOX §6.2) refuse by name |
+| E6 | `Boxes.executor` / `cart_gate` — every span re-proves a receipt kind | `lua/gen2/entry.lua:495-510` | no receipts ⇒ `covers()` false ⇒ every box write refuses **before a byte** | **COMPOSED (card POL-WRITES; corrected 2026-10-06, the first version said `box_mon` only and `party_mon` refused by name)**: `lua/gen2/polished_overworld.lua` O.writes (declared ranges, one reason each) + O.boxes + O.client_boxes (`lua/gen2/entry.lua` ~909-912). Deposit (`box_mon`) and withdraw (`party_mon`, savemon to party stat/PP reconstruction in `lua/gen2/polished_stats.lua`) are composed. `memorialize` STILL REFUSES (`polished_overworld.lua` ~854-855) pending the owner memorial-box ruling (NEWBOX §6.2); the memorial helper `move_to_memorial` exists in `lua/gen2/polished_boxes.lua`. Composition is DEV evidence, not PHYSICAL qualification |
 
 ### 1.F Engine sites / signals (the P5a catch-detection blocker)
 
@@ -1010,20 +1010,26 @@ Appended, not substituted: the rows above stay as written and are corrected here
 section rewrites an earlier line. Source of truth is the committed code at `cd89c370`
 (`cd89c370` C-BOX, `c3d10da9` C-AREA, `d8d75628` milestone A).
 
+**Correction note (2026-10-06).** This section began as a historical snapshot at `cd89c370` (C-BOX
+`cd89c370`, C-AREA `c3d10da9`, milestone A `d8d75628`). The inline corrections below distinguish that
+snapshot from the current implementation (`lua/gen2/entry.lua` at the integration tip) and DEV evidence
+from PHYSICAL qualification. The "Commit" column names the commit that first landed a card; it does not
+date later composed features (capture site, overworld hold, deposit, withdraw, explode, rival facade).
+
 ### 5.1 Card status
 
 | Card | Status | Commit | Proved by | UNPROVEN without a cartridge |
 |---|---|---|---|---|
 | **C-PACK** | **DONE-tested** | `d8d75628` | `tests/unit/test_polished_client.py` (`test_the_hello_carries_the_party_and_the_companion_evidence`) | That the three pack files agree with the *live* overlay on a real save; proven only against the built overlay image and a synthetic WRAM image |
-| **C-SIGNALS** | **DONE-tested** | `d8d75628` | `test_polished_client.py::test_the_production_signals_gate_refuses_polished`, plus the re-labelled binder cases `test_the_polished_title_binds_only_with_its_key_builder`, `test_the_box_change_bound_is_the_profile_num_boxes`, `test_the_area_battle_types_are_the_profile_set` | That any Polished engine site actually fires at runtime — no site is registered, so nothing has ever been observed |
-| **C-COMPOSE** | **DONE-tested** (DEV-GRADE only) | `d8d75628` | `test_polished_client.py` (compose, hello capture, `test_the_real_server_admits_the_captured_hello`, `test_no_hook_and_no_write_on_the_whole_path`, `test_the_clean_release_and_a_random_rom_get_no_client`) | **Everything live.** `production_admitted` is hardcoded `false` and qualification `DEV_OVERLAY_SHA1`; no `PHYSICAL_RECEIPTED` exists. The hello is admitted against a **synthetic** WRAM image, never a real save |
+| **C-SIGNALS** | **DONE-tested** | `d8d75628` | `test_polished_client.py::test_the_production_signals_gate_refuses_polished`, plus the re-labelled binder cases `test_the_polished_title_binds_only_with_its_key_builder`, `test_the_box_change_bound_is_the_profile_num_boxes`, `test_the_area_battle_types_are_the_profile_set` | Snapshot text, `cd89c370` (superseded, kept for the record): "no site is registered, so nothing has ever been observed". **Correction 2026-10-06:** the production signals gate still refuses Polished (`test_the_production_signals_gate_refuses_polished`), while the separate DEV-qualified `Signals.new_polished` binder is composed (`lua/gen2/entry.lua` ~828-830). The capture site has since been observed on a DEV run (2026-10-04, `LIVE_RESULTS.md` Stage 2, see C-SITES). That evidence does not close PHYSICAL qualification |
+| **C-COMPOSE** | **IMPLEMENTED and DEV-qualified**, not production-admitted (this row first read "DONE-tested (DEV-GRADE only)", `d8d75628`) | `d8d75628` (first landing) | `test_polished_client.py` (compose, hello capture, `test_the_real_server_admits_the_captured_hello`, `test_no_hook_and_no_write_on_the_whole_path`, `test_the_clean_release_and_a_random_rom_get_no_client`), `test_polished_write_path.py`, `test_polished_withdraw_path.py` | **Correction 2026-10-06** (snapshot text "Everything live ... hello admitted against a synthetic WRAM image" is superseded). The client now composes `force_faint`, deposit, withdraw, explode and a rival facade (`lua/gen2/entry.lua` ~836-868, 909-949). Rival writes remain gated by an explicit class set (`deps.rival_classes`) and a required CPU site. `production_admitted=false` and qualification `DEV_OVERLAY_SHA1` remain; no `PHYSICAL_RECEIPTED` exists. Hello admission was observed live on 2026-10-04 on the SYNTH save fixture and overlay `29ea04c24a46d9210c899355fe752f32d2880de8` (`LIVE_RESULTS.md` Stage 1): DEV evidence, not a current PHYSICAL receipt |
 | **C-AREA** | **DONE-tested** | `c3d10da9` | `tests/unit/test_polished_area_map.py` | That Polished's map-group/number values and landmark constants match on a running cartridge |
 | **C-BOX** | **DONE-tested** (read-only) | `cd89c370` | `tests/unit/test_polished_boxes_census.py` | That the CartRAM→WRAM flag mapping is right on a real save. **A wrong flag mapping reads every slot as empty — a complete but wrong census**, and no synthetic image can catch that |
-| **C-SITES** | **OPEN** | — | — | Needs `engine_signals.json` promoted from `SOURCE_CANDIDATE` to a receipted pack; nothing is registered today |
+| **C-SITES** | **MODEL-TESTED, HISTORICALLY LIVE-RUN; PHYSICAL qualification OPEN** (snapshot `cd89c370` said OPEN, nothing registered; corrected 2026-10-06, see 5.4) | — | `test_polished_sites.py`; `LIVE_RESULTS.md` Stage 2 | The `capture_party` site at 03:652B (flat 0xE52B) is composed. PHYSICAL qualification: the binder reports `physical_status` OPEN and `runtime_authorized` false, and `engine_signals.json` is not a receipted pack |
 | **C-KEY** | **DONE-tested** | `d8d75628` | `test_polished_client.py` (9-bit species `291` planted, `pc.key` round trip against the server's `decode_party_blob`) | Nothing structural — but see 5.2(a): the *key format* was correct while the *foundation string* sent alongside it was not |
 | **C-ROMTABLES** | **DONE-unproven-live** | `d8d75628` | `tests/unit/test_gen2_polished_adapter.py`, `test_gen2_rand_data.py` | The R4 scan decodes a provisioned ROM's tables, but no wildcard encounter, gift or static has been resolved from a **running** cart |
 | **battle_faint` / `battle_bench` / rival swap** | **OPEN** | — | — | Need receipts that do not exist |
-| **any box write** (deposit/withdraw/memorialize) | **OPEN** | — | — | Needs NEWBOX 6.2/6.3 **and** a box write receipt |
+| **any box write** (deposit/withdraw/memorialize) | **OPEN** at the snapshot; **corrected 2026-10-06: deposit and withdraw COMPOSED (DEV), memorialize still refuses** | — | `test_polished_write_path.py`, `test_polished_withdraw_path.py` | Deposit (`box_mon`) and withdraw (`party_mon`) are composed through `Overworld.writes` / `Overworld.boxes` / `Overworld.client_boxes` (`lua/gen2/entry.lua` ~909-912). Memorialize refuses pending the owner memorial-box ruling (NEWBOX 6.2; helper `move_to_memorial` exists in `polished_boxes.lua`). No PHYSICAL box write receipt exists |
 | **phone** | **OPEN** | — | — | `wUnusedMapBuffer` absent; needs a `$C633` staging span |
 | **trade** | **OPEN** | — | — | `profile.overlay` has no `trade` block |
 | **SFX / panel** | **OPEN** | — | — | Needs a later overlay milestone (caps != 0). `P.writes` is composed and live; the only brake is the ROM-advertised caps byte |
@@ -1050,8 +1056,11 @@ SUPERSEDED.**
   `read_boxes`, and its `read_current_box_num` returns **`-1`** (`:656`), not a box number. That `-1`
   was the latent blocker: `client.lua`'s rescan walks boxes `0..19` and the vanilla path reads a
   *current box number*; composing a census that reports `-1` would have to be refused or special-cased
-  at every consumer. **UNVERIFIED:** I did not trace whether the composed client special-cases `-1`
+  at every consumer. **UNVERIFIED (snapshot):** I did not trace whether the composed client special-cases `-1`
   or simply never asks, because no box writer is composed.
+  **Superseded 2026-10-06:** the current composition supplies `Overworld.client_boxes(Overworld.boxes(...))`
+  and periodic census rescans (`rescan_every=1800`; `lua/gen2/entry.lua` ~909-912, 932-945). That does
+  not establish how every `-1` consumer behaves.
 * Consequence for the doc: the C-BOX premise *"a box is a slot array of 32-byte records"* is already
   marked falsified in the card; what was NOT anticipated is the **wire-shape** change.
 
@@ -1066,7 +1075,8 @@ existed).
 
 1. **C-BOX flag mapping** — the only finding that could make a "tested" row *silently wrong*: a bad
    CartRAM/WRAM flag decode yields a **complete but empty** census, and no synthetic image can catch it.
-2. **C-SITES** — nothing has ever fired on a cart.
+2. **C-SITES** — snapshot text: "nothing has ever fired on a cart". **Corrected 2026-10-06:** the capture
+   site fired on a DEV run (2026-10-04, `LIVE_RESULTS.md` Stage 2); PHYSICAL qualification stays OPEN.
 3. **C-AREA** — 605 maps/146 areas are generated from static data; no live area transition was observed.
 4. **The two hardening findings** from the `d8d75628` review remain open and are *not* closed by any of
    the three commits above: the composed `P.writes` panel writer (`lua/gen2/panel.lua:66`, whose
@@ -1076,9 +1086,20 @@ existed).
 
 ### 5.4 C-SITES update (coordinator, after commit of Signals.new_polished)
 
-C-SITES is now **DONE-unproven-live**: the composed client registers one hook, `capture_party` at 03:652B,
+C-SITES was **DONE-unproven-live** at that point: the composed client registers one hook, `capture_party` at 03:652B,
 and a replayed wild party catch emits `capture` that the real server takes into `pending_captures`
 (`tests/unit/test_polished_sites.py`, 10 tests with red controls). Unproven without a cartridge: that the
 exec hook fires at 0xE52B as an instruction start with hROMBank 3, and the frame alignment of the party
 write (the capture RAM-effect stays OPEN by design). Box catches, roamers, scripted/grotto and contest catches
 emit nothing (fail closed). The milestone-A "no hook anywhere" assertions now allow exactly this one hook.
+
+**Correction (2026-10-06): the status is MODEL-TESTED, HISTORICALLY LIVE-RUN, PHYSICAL qualification OPEN.**
+The "unproven without a cartridge" sentence above is historical. `capture_party` at 03:652B (flat 0xE52B) is
+composed, and `LIVE_RESULTS.md` Stage 2 records a DEV run on 2026-10-04 with overlay
+`29ea04c24a46d9210c899355fe752f32d2880de8`: the bank 3 / PC 652B hit at frame 5334, with `wPartyCount` already 6
+and the copied species already present, then the client `capture` and the server `pending_captures` entry.
+The end-of-frame poll labelled 5335 is the same frame window (the poll runs after `frameadvance`); the same
+numbers appear in `RC_TRACKER.md`. The binder still reports `physical_status` OPEN and `runtime_authorized`
+false. Unsupported acquisition paths (box catches, roamers, scripted/grotto, contest) stay fail-closed. The
+composed-client no-command test now permits three hooks (`capture_party`, the overworld checkpoint and the
+battle hold) instead of exactly one.

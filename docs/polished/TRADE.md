@@ -5,7 +5,7 @@ receptionist trade (built for vanilla pokecrystal/GSC) onto Polished Crystal v3.
 identical, what changed, and what needs new design.
 
 Sources: `patch/gen2/src/trade_*.asm`, `patch/gen2/src/slink.asm`, `patch/gb/slink_abi.inc`,
-`lua/gen2/trade.lua`, `docs/polished/HOOKS.md` §2 row 12/13/18 and §3.5, and the pinned Polished
+`lua/gen2/trade_overlay.lua`, `docs/polished/HOOKS.md` §2 row 12/13/18 and §3.5, and the pinned Polished
 source at `F:/slink-work/cache/polished/src`. `docs/polished/HOOKS.md` §3.5 already carries most of
 the symbol-level delta; this card adds the **flow order**, the **lease payload question**, the
 **party-replacement model**, and the **edit list**.

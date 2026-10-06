@@ -1,6 +1,11 @@
 # PHONE-SLOT — the SLink entry inside the Pokégear Phone card, as a native-looking contact
 
-**Design doc only.** Owner ruling 2026-10-04: *"the SLink entry lives INSIDE the POKEGEAR's PHONE
+**Design AND implementation record (correction 2026-10-06; this line first read "Design doc only").** The
+design below has been implemented: the `SlinkPhone_*` bridges live in `patch/polished/src/slink.asm`
+(`SlinkPhone_CountSetBits`, `_CheckCellNum`, `_CallerName`, `_CanDelete`, `_CallGate`), the hook rewrites
+that route the vanilla Phone code to them are in `tools/build_polished_companion.py`, and the Call gate opens
+`SlinkPanel`. Implementation and DEV runs (`LIVE_RESULTS.md` "Phone card SLink contact, Stage 1") do not
+establish PHYSICAL qualification. Owner ruling 2026-10-04: *"the SLink entry lives INSIDE the POKEGEAR's PHONE
 CARD as a native-looking contact; must feel vanilla."* This supersedes the card-slot idea in
 `POKEGEAR_SLOT.md`, whose coordinator note already recorded that a 5th card is **not** viable (the
 icon black bar is only 8 columns wide, so a column-8 icon needs the bar widened).
