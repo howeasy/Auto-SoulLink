@@ -124,3 +124,6 @@ Both flags stay **False**. Live (a)(b)(d) PASS proves memory effects of one mon 
 9. **Reset durability:** the 73-cut withdraw sweep is in-memory; there is no deposit byte-cut sweep and no emulator reset/native-save scenario.
 10. **Explode:** bench targets and item/switch fallbacks refuse (`polished_explode.lua:183-186`); the five-byte move replacement is tested, the forced death outcome (Damp, action prevention) is not; live battle negatives (c) NOT RUN.
 11. **Evidence is for a past overlay:** the live PASS names `6e43f8d9`; the current overlay differs. Re-run on the frozen cut.
+
+### Status of the box-command gaps (2026-10-06 evening)
+Closed in code on `claude/gen2-integration`: gap 1 and 2 (withdraw ack, `party full` retry: `O.client_boxes`, commit 4bda8793d, composed-client tests with unwrapped controls); gap 7 egg/mail executor guards (withdraw now refuses a boxed egg and a boxed mail holder; deposit egg/mail refusals pinned: commit 647ffe59f). Added: rival team swap source writer composed and REFUSING by default (verified rollback, raw-species domain; the client hook at 0f:47DD, live PC semantics and the rival class set are open). Open: gaps 3 (three-outcome contract, owner go), 4 (memorialize), 5 (parity decision), 6 (allocation rollover: lane in flight), 8-11. `supports_box_mon` and `supports_explode_mode` stay False.
