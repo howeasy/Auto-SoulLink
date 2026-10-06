@@ -863,7 +863,7 @@ local function compose_polished(deps, decision)
         -- party), with a sibling BATTLE hold (polished_overworld.lua O.battle_checkpoint: wBattleMode in {1,2}, no
         -- link, no pause, no backup save, hROMBank 0x0F + the 0f:416A bytes re-read for the explode hold). It also
         -- hands the client p.battle_hold (hooked as SLink-gen2-battle-hold) and writes.sym. Qualification stays
-        -- DEV_OVERLAY_PREDICATE_HOLD; p.battle_bench and p.rival_swap are deliberately NOT composed (see that header).
+        -- DEV_OVERLAY_PREDICATE_HOLD; p.battle_bench is deliberately NOT composed; p.rival_swap is composed below and refuses.
         local explode = load("lua/gen2/polished_explode.lua").new({root=root, profile=profile, io=io_, Permit=Permit,
             overworld=writes, overworld_hold=checkpoint, reads=reads, log=deps.log})
         -- mail item ids (items.json is the generator's pack; the refusal needs ItemIsMail's FIRST_MAIL threshold)
@@ -910,9 +910,15 @@ local function compose_polished(deps, decision)
                                        reader = boxes_io, writes = writes, mail = mail, log = deps.log,
                                        io = io_, coords = coords, stats = Stats, base_stats = base_stats,
                                        variant_record = variant_record, move_pp = move_pp})
+        -- W-4 rival team swap (docs/polished/EXPLODE_RIVAL.md "Implemented (2026-10-06)"): the client gets the facade with
+        -- rival_swap routed to polished_rival.lua, which also supplies the blob constants the profile lacks. It REFUSES
+        -- until deps.rival_classes (an OWNER decision) names a class AND the CPU is at 0f:47DD, which no client hook reaches.
+        local rival = load("lua/gen2/polished_rival.lua").new({profile=profile, io=io_, Permit=Permit,
+            facade=explode.writes, checkpoint=explode.checkpoint, hold=explode.battle_hold, coords=explode.sym,
+            species_known=function(id) return base_stats[id] ~= nil end, rival_classes=deps.rival_classes, log=deps.log})
         local client = load("lua/gen2/client.lua").new({
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
-            writes=explode.writes, boxes=boxes, safety=explode.safety, battle_hold=explode.battle_hold,
+            writes=rival.writes, rival_swap=true, boxes=boxes, safety=explode.safety, battle_hold=explode.battle_hold,
             battle_release_poll=true, battle_hold_entry=explode.entry, battle_species_matches=explode.species_matches,
             -- the hold site the client hooks (io.on_bus_exec -> at_checkpoint -> run_deferred)
             checkpoint_pc=Overworld.HOLD.pc,
@@ -937,7 +943,8 @@ local function compose_polished(deps, decision)
                 -- the overworld write path, under its own key: `checkpoint` stays nil because no PC hold is
                 -- composed (there is no Polished checkpoint PC to hold at; see C-WRITE above)
                 overworld={checkpoint=checkpoint, writes=writes, boxes=boxes, census=census, coords=coords},
-                battle={checkpoint=explode.checkpoint, writes=explode.writes, hold=explode.battle_hold, entry=explode.entry},
+                battle={checkpoint=explode.checkpoint, writes=explode.writes, hold=explode.battle_hold, entry=explode.entry,
+                        rival=rival},
                 production_admitted=false, artifact_kind=decision.kind, runtime_rom_sha1=decision.rom_sha1,
                 runtime_started=false, qualification="DEV_OVERLAY_SHA1"}
     end)

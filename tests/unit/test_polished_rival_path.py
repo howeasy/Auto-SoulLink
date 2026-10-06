@@ -1,0 +1,484 @@
+"""Card POL-RIVAL: the Polished Rival Team Swap (W-4) SOURCE-level writer, lua/gen2/polished_rival.lua, composed by
+compose_polished (lua/gen2/entry.lua) and REFUSING by default.
+
+Same rig as test_polished_explode_path.py (the REAL overlay ROM, a System Bus image laid out from
+data/polished/polished_slink.sym, the composed frame-driven client), plus: an io whose PC register and write sink the
+test controls (a write can be dropped to prove the read-back), and deps.rival_classes injected at build time.
+
+Proved here (model only; no cartridge):
+  * the write list: records, OTs, nicknames, then wOTPartyCount LAST, every byte read back; nothing at 01:D284
+  * the permit is narrowed to exactly the ranges the count needs (R.ranges), on top of the whole-block bounds
+  * every refusal writes ZERO bytes: wrong PC / bank, not a trainer battle, a paused/save/link context, count 0 or 7,
+    unknown species, an egg, an incomplete command, a stale trainer / stale wCurOTMon, no HP on the mon sent out, a
+    class outside the (owner-chosen) rival set, an EMPTY rival set (the default), an unarmed writer
+  * a read-back mismatch is refused and the saved originals are restored (the count is never changed by a failed array)
+  * through the composed client the swap is refused by default and from the frame-end poll (PC never at 0f:47DD there)
+  * mutants of the real module, each shown RED against a named test (docstring of each)
+
+NOT proved: that the CPU ever reaches 0f:47DD while a client hook asks (no such hook exists), that BizHawk's PC register
+reads the instruction's own address inside an exec callback, the closing edge (0f:480d), and which trainer classes are
+rivals (OWNER DECISION: the classes used here are test inputs, not a ruling).
+"""
+from __future__ import annotations
+
+import json
+import random
+
+import pytest
+
+from server.adapters import polished_codec as pc
+from tests.unit.test_polished_boxes import Image
+from tests.unit.test_polished_client import _entry, _pair
+from tests.unit.test_polished_explode_path import (
+    FRAME_BANK,
+    HARNESS_HOOKS,
+    LUA,
+    OVERRIDE,
+    ROOT,
+    SITES,
+    BattleRig,
+    addr,
+    enter_battle,
+    lupa,
+    mutate,
+    overlay,
+)
+from tests.unit.test_polished_write_path import SYM, live_mon, party, seal_save, sysbus
+
+RECORD, NAME, NICK = 48, 11, 11
+RIVAL_PC = SITES["rival_gate"][0]                      # 0x47DD
+RIVAL_CLASS, RIVAL_ID = 0x1B, 3                         # a TEST input: which classes are rivals is an OWNER decision
+SENTINEL, HERB = 0xEE, 0x5A
+COUNT, MONS, OTS, NICKS, END, HERB_AT = (addr("wOTPartyCount"), addr("wOTPartyMons"), addr("wOTPartyMonOTs"),
+                                         addr("wOTPartyMonNicknames"), addr("wOTPartyDataEnd"),
+                                         addr("wMirrorHerbPendingBoosts"))
+RIVAL = (LUA / "polished_rival.lua").read_text(encoding="utf-8")
+
+CONTROL = """
+return function(io, mem, log, st)
+    local original = io.write_u8
+    io.register = function() return st.pc end
+    io.write_u8 = function(a, v, d)
+        if d ~= nil and d ~= "System Bus" then return original(a, v, d) end
+        log.writes[#log.writes + 1] = {addr = a, domain = "System Bus", value = v}
+        if st.drop[a] then return end
+        mem[a] = v
+    end
+end
+"""
+
+
+class RivalRig(BattleRig):
+    """BattleRig with deps.rival_classes at build time, a settable PC register and a write sink that can drop a byte."""
+
+    def __init__(self, mons, classes=(RIVAL_CLASS,), pc_=RIVAL_PC, overrides=None):
+        self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+        self.mem = self.lua.table_from(sysbus(mons))
+        self.img = seal_save(Image())
+        deps, self.io, self.log = self.lua.execute(HARNESS_HOOKS.replace("ROOTDIR", json.dumps(ROOT)))(
+            overlay()[1], self.mem, self.img)
+        deps["rival_classes"] = self.lua.table_from(list(classes))
+        if overrides:
+            self.lua.globals().SLINK_OVERRIDES = self.lua.table_from(overrides)
+            self.lua.execute(OVERRIDE)
+        self.state = self.lua.table_from({"pc": pc_, "drop": self.lua.table_from({})})
+        self.parts, why = _pair(_entry(self.lua).build(deps))
+        assert why is None, why
+        self.client = self.parts.client
+        self.lua.globals().SLINK_PARTS = self.parts
+        self.lua.execute(CONTROL)(self.io, self.mem, self.log, self.state)
+        self.client.start(self.client)
+        self.rival = self.parts.battle.rival
+
+    def drop(self, address):
+        self.state["drop"][address] = True
+
+    def set_pc(self, value):
+        self.state["pc"] = value
+
+    def fill_enemy(self):
+        """An OLD enemy party image: count 3, every record/OT/nick byte a sentinel, the Mirror Herb byte a marker."""
+        self.mem[COUNT] = 3
+        self.mem[HERB_AT] = HERB
+        for a in range(MONS, END):
+            self.mem[a] = SENTINEL
+
+    def block(self):
+        return {a: (self.mem[a] or 0) for a in [COUNT, HERB_AT, *range(MONS, END)]}
+
+
+def py_party(count, hp=200, base=150):
+    out = []
+    for i in range(count):
+        mon = live_mon(random.Random(900 + i), base + i, hp=hp, ot="RIVAL", nick=f"FOE{i}")
+        out.append({"record": list(pc.encode_party_mon(mon)), "ot": list(pc.encode_text("RIVAL", 8) + bytes(3)),
+                    "nick": list(pc.encode_text(f"FOE{i}", 11))})
+    return out
+
+
+def to_lua(lua, mons):
+    return lua.table_from([lua.table_from({k: lua.table_from(v) for k, v in m.items()}) for m in mons])
+
+
+def lcall(rig, fn, *args):
+    return _pair(rig.lua.eval("function(f, ...) return pcall(f, ...) end")(fn, *args))
+
+
+_SHARED = []
+
+
+def ready(count_in_ram=0, *, classes=(RIVAL_CLASS,), cur=0, pc_=RIVAL_PC, overrides=None, mode=2, fresh=False):
+    """A rig at the real gate state. A build costs ~10 s, so the unmutated rig is built once and RESET per call
+    (classes, PC, dropped bytes, write log, battle bytes); mutants and client tests build their own (fresh=True)."""
+    mons = party()
+    if overrides or fresh:
+        rig = RivalRig(mons, classes=classes, pc_=pc_, overrides=overrides)
+        assert rig.arm_writes(), "the client never enabled its writes"
+    else:
+        if not _SHARED:
+            _SHARED.append(RivalRig(mons))
+            assert _SHARED[0].arm_writes(), "the client never enabled its writes"
+        rig = _SHARED[0]
+        rig.rival.writes.disarm(rig.rival.writes)
+        rig.lua.eval("function(l) for k in pairs(l.writes) do l.writes[k] = nil end end")(rig.log)
+        rig.state["drop"] = rig.lua.table_from({})
+        rig.set_pc(pc_)
+        rig.rival.set_classes(rig.rival, rig.lua.table_from(list(classes)))
+        for label in ("wLinkMode", "wGameLogicPaused"):
+            rig.put(label, 0)
+    enter_battle(rig, mons, mode=mode)
+    rig.put("wOtherTrainerClass", RIVAL_CLASS)
+    rig.put("wOtherTrainerID", RIVAL_ID)
+    rig.put("wCurOTMon", cur)
+    rig.put("wCurPartyMon", cur)
+    rig.fill_enemy()
+    return rig
+
+
+def swap(rig, mons=None, *, cur=0, arm=True, link=0, **ctx):
+    """arm + write_enemy_party through the composed facade, as client.rival_tick does; (ok, why); always disarmed."""
+    mons = py_party(2) if mons is None else mons
+    writes = rig.rival.writes
+    ok, why = (lcall(rig, writes.arm, writes, "rival_swap") if arm else (True, None))
+    if ok:
+        table = rig.lua.table_from({"link_mode": link, "cur_ot_mon": cur, **ctx})
+        ok, why = lcall(rig, writes.write_enemy_party, writes, to_lua(rig.lua, mons), table)
+    writes.disarm(writes)
+    return ok, why
+
+
+def refused(rig, why_part, mons=None, **kwargs):
+    before = rig.block()
+    ok, why = swap(rig, mons, **kwargs)
+    assert ok is False and why_part in why, why
+    assert rig.writes() == [] and rig.block() == before and rig.mem[HERB_AT] == HERB
+    assert rig.rival.writes.armed is None
+
+
+# ── the happy path: exact bytes, exact order ────────────────────────────────────────────────────────────────
+
+def test_the_swap_writes_the_exact_bytes_in_order_with_the_count_last():
+    rig = ready()
+    mons = py_party(2)
+    ok, why = swap(rig, mons)
+    assert ok is True, why
+    want_records = [b for m in mons for b in m["record"]]
+    want_ots = [b for m in mons for b in m["ot"]]
+    want_nicks = [b for m in mons for b in m["nick"]]
+    assert [rig.mem[MONS + i] for i in range(2 * RECORD)] == want_records
+    assert [rig.mem[OTS + i] for i in range(2 * NAME)] == want_ots
+    assert [rig.mem[NICKS + i] for i in range(2 * NICK)] == want_nicks
+    assert rig.mem[COUNT] == 2 and rig.mem[HERB_AT] == HERB
+    # nothing past the narrowed ranges moved: mon 3.. of each array keeps the old image
+    assert all(rig.mem[MONS + i] == SENTINEL for i in range(2 * RECORD, 6 * RECORD))
+    assert all(rig.mem[OTS + i] == SENTINEL for i in range(2 * NAME, 6 * NAME))
+    assert all(rig.mem[NICKS + i] == SENTINEL for i in range(2 * NICK, 6 * NICK))
+    log = rig.writes()
+    order = [w["addr"] for w in log]
+    assert len(log) == 2 * (RECORD + NAME + NICK) + 1
+    assert order[:2 * RECORD] == list(range(MONS, MONS + 2 * RECORD))                     # 1. records
+    assert order[2 * RECORD:2 * RECORD + 2 * NAME] == list(range(OTS, OTS + 2 * NAME))    # 2. OTs
+    assert order[2 * RECORD + 2 * NAME:-1] == list(range(NICKS, NICKS + 2 * NICK))        # 3. nicknames
+    assert order[-1] == COUNT and log[-1]["value"] == 2, "wOTPartyCount must be written LAST"
+    assert HERB_AT not in order and all(w["domain"] == "System Bus" for w in log)
+    assert rig.rival.writes.armed is None
+
+
+def test_the_swap_lands_for_one_to_six_mons_and_never_touches_the_herb_byte():
+    for count in (1, 3, 6):
+        rig = ready()
+        ok, why = swap(rig, py_party(count))
+        assert ok is True, (count, why)
+        assert rig.mem[COUNT] == count and rig.mem[HERB_AT] == HERB
+        assert HERB_AT not in [w["addr"] for w in rig.writes()]
+
+
+def test_the_ranges_are_exactly_what_the_count_needs_and_never_the_herb_gap():
+    rig = ready()
+    for count in range(1, 7):
+        got = [tuple(r.values()) for r in rig.rival.ranges(count).values()]
+        assert got == [(MONS, count * RECORD), (OTS, count * NAME), (NICKS, count * NICK), (COUNT, 1)]
+        assert all(not (a < addr("wOTPartyMons") and a + n > HERB_AT) for a, n in got)
+
+
+# ── every refusal writes zero bytes ─────────────────────────────────────────────────────────────────────────
+
+def test_a_wrong_pc_or_bank_refuses():
+    refused(ready(pc_=RIVAL_PC + 3), "not at the SendInUserPkmn rival gate")      # mid-instruction
+    refused(ready(pc_=0x416A), "not at the SendInUserPkmn rival gate")            # the explode hold, not this one
+    refused(ready(pc_=0), "not at the SendInUserPkmn rival gate")                 # a frame end: where the client polls
+    rig = ready()
+    rig.put("hROMBank", 0x25)
+    refused(rig, "hROMBank $25")
+
+
+def test_a_wild_battle_and_a_paused_or_linked_context_refuse():
+    refused(ready(mode=1), "not a trainer battle")
+    rig = ready()
+    rig.put("wBattleMode", 0)
+    refused(rig, "not in a battle")
+    rig = ready()
+    rig.put("wGameLogicPaused", 1)
+    refused(rig, "native save running")                                            # writes paused
+    rig = ready()
+    rig.put("wLinkMode", 1)
+    refused(rig, "link cable active")
+    refused(ready(), "linked or unknown battle context", link=1)
+
+
+def test_an_empty_rival_set_refuses_and_a_foreign_class_refuses():
+    refused(ready(classes=()), "no rival trainer classes configured")             # the DEFAULT: an owner decision
+    refused(ready(classes=(0x1C,)), "is not a configured rival class")
+    rig = ready(classes=())
+    rig.rival.set_classes(rig.rival, rig.lua.table_from([RIVAL_CLASS]))          # the later-config path
+    ok, why = swap(rig)
+    assert ok is True, why
+
+
+@pytest.mark.parametrize("count,part", [(0, "enemy party count"), (7, "enemy party count")])
+def test_a_count_outside_one_to_six_refuses(count, part):
+    refused(ready(), part, py_party(count) if count else [])
+
+
+def test_a_party_the_engine_could_not_send_out_refuses():
+    refused(ready(), "outside the new party", cur=2)                              # wCurOTMon beyond the NEW count
+    rig = ready(cur=2)
+    refused(rig, "outside the new party", py_party(2), cur=2)
+    mons = py_party(2)
+    mons[0]["record"][34] = mons[0]["record"][35] = 0                              # HP 0 on the mon sent out next
+    refused(ready(), "has no HP", mons)
+
+
+def test_unknown_species_and_an_egg_refuse():
+    mons = py_party(2)
+    mons[1]["record"][0] = 0                                                       # no species
+    refused(ready(), "unknown species", mons)
+    mons = py_party(2)
+    mons[1]["record"][0], mons[1]["record"][21] = 0xFF, mons[1]["record"][21] | 0x20      # 9-bit species 511
+    refused(ready(), "unknown species 511", mons)
+    mons = py_party(2)
+    mons[0]["record"][21] |= 0x40                                                  # IS_EGG
+    refused(ready(), "an egg cannot battle", mons)
+    mons = py_party(2)
+    mons[0]["record"][31] = 101                                                    # level
+    refused(ready(), "level out of range", mons)
+
+
+@pytest.mark.parametrize("break_it,part", [
+    (lambda m: m[0]["record"].pop(), "record must be 48 bytes"),
+    (lambda m: m[1]["ot"].pop(), "ot must be 11 bytes"),
+    (lambda m: m[1].pop("nick"), "nick must be 11 bytes"),
+    (lambda m: m[0]["record"].__setitem__(5, 300), "byte out of range"),
+])
+def test_an_incomplete_command_refuses(break_it, part):
+    mons = py_party(2)
+    break_it(mons)
+    refused(ready(), part, mons)
+
+
+def test_a_stale_battle_refuses():
+    refused(ready(), "stale battle", trainer_id=RIVAL_CLASS * 256 + RIVAL_ID + 1)   # another fight of the same class
+    refused(ready(), "stale battle", trainer_id=0x1C00 + RIVAL_ID)
+    rig = ready()
+    ok, why = swap(rig, trainer_id=RIVAL_CLASS * 256 + RIVAL_ID)                   # the fight it was announced for lands
+    assert ok is True, why
+    rig = ready()
+    rig.put("wCurOTMon", 1)                                                        # the byte moved on: ctx says 0
+    refused(rig, "stale snapshot")
+    rig = ready()
+    rig.put("wCurPartyMon", 1)
+    refused(rig, "stale snapshot")
+
+
+def test_an_unarmed_writer_refuses():
+    refused(ready(), "not armed", arm=False)
+
+
+# ── the read-back ────────────────────────────────────────────────────────────────────────────────────────────
+
+def test_a_dropped_record_byte_is_refused_and_the_old_party_is_restored():
+    rig = ready()
+    before = rig.block()
+    rig.drop(MONS + 5)                                                             # the sink loses one record byte
+    ok, why = swap(rig, py_party(2))
+    assert ok is False and "read-back mismatch" in why and f"${MONS + 5:04X}" in why
+    assert rig.mem[COUNT] == 3, "a failed array must never change wOTPartyCount"
+    assert rig.block() == before, "the saved originals were not restored"
+    assert rig.rival.writes.armed is None
+
+
+def test_a_dropped_count_write_is_refused_and_the_arrays_are_restored():
+    rig = ready()
+    before = rig.block()
+    rig.drop(COUNT)
+    ok, why = swap(rig, py_party(2))
+    assert ok is False and "read-back mismatch" in why and f"${COUNT:04X}" in why
+    assert rig.block() == before, "the arrays were left half-replaced"
+
+
+# ── through the composed client ──────────────────────────────────────────────────────────────────────────────
+
+TID = RIVAL_CLASS * 256 + RIVAL_ID
+
+
+def client_swap(rig):
+    enter_battle(rig, party(), mode=2)
+    rig.put("wOtherTrainerClass", RIVAL_CLASS)
+    rig.put("wOtherTrainerID", RIVAL_ID)
+    rig.put("wCurOTMon", 0xFF)
+    rig.frame(3)                                                                   # announced
+    blobs = ["".join(f"{b:02x}" for b in m["record"] + m["ot"] + m["nick"]) for m in py_party(2)]
+    rig.client.handle_command(rig.client, rig.lua.table_from({"cmd": "replace_rival_team", "trainer_id": TID,
+                                                              "blobs_hex": rig.lua.table_from(blobs)}))
+    rig.frame(2)
+    return [m["error"] for m in rig.sent("rival_team_replaced")]
+
+
+def test_the_client_poll_cannot_land_the_swap_even_with_a_class_set_and_the_pc_forged():
+    """rival_tick polls at a frame end while wCurOTMon == 0xFF: the PC is not 0f:47DD there, and with the PC forged
+    the index 0xFF is outside the new party. Either way: refused, nothing written."""
+    rig = ready(pc_=0, fresh=True)
+    rig.fill_enemy()
+    before = rig.block()
+    errors = client_swap(rig)
+    assert len(errors) == 1 and "not at the SendInUserPkmn rival gate" in errors[0]
+    assert rig.block() == before and not [w for w in rig.writes() if MONS - 1 <= w["addr"] < END]
+    rig = ready(pc_=RIVAL_PC, fresh=True)
+    before = rig.block()
+    errors = client_swap(rig)
+    assert len(errors) == 1 and "outside the new party" in errors[0] and rig.block() == before
+
+
+def test_the_default_composition_carries_the_blob_constants_and_an_empty_rival_set():
+    rig = ready(classes=(), fresh=True)
+    c = rig.parts.profile.constants
+    assert (c.PARTYMON_STRUCT_LENGTH, c.MON_HP, c.MON_SPECIES) == (48, 34, 0)
+    errors = client_swap(rig)
+    assert len(errors) == 1 and "no rival trainer classes configured" in errors[0]
+
+
+def test_the_constants_are_derived_from_the_party_struct_not_invented():
+    profile = json.loads((LUA.parent.parent / "data/games/polished_crystal/profile.json").read_text(encoding="utf-8"))
+    party_struct = profile["titles"]["polished"]["structs"]["party"]
+    sym_party = SYM["wPartyMons"]
+    assert (party_struct["End"], party_struct["HP"], party_struct["Species"]) == (48, 34, 0)
+    assert SYM["wPartyMonOTs"][1] - sym_party[1] == 6 * 48 and SYM["wOTPartyMonOTs"][1] - SYM["wOTPartyMons"][1] == 6 * 48
+    assert FRAME_BANK == 0x0F
+
+
+# ── MUTANTS: each brake removed from the REAL module, same rig, same image ──────────────────────────────────
+
+def mutant(source):
+    return {"lua/gen2/polished_rival.lua": source}
+
+
+def swap_blocks(source):
+    a = "pcall(function() gate:write_batch(p.arrays); verify(p.arrays) end)"
+    b = "pcall(function() gate:write_batch(p.last); verify(p.last) end)"
+    assert source.count(a) == 1 and source.count(b) == 1
+    return source.replace(a, "@@").replace(b, a).replace("@@", b)
+
+
+def lands_in_order(rig):
+    ok, why = swap(rig, py_party(2))
+    return ok is True and rig.writes()[-1]["addr"] == COUNT
+
+
+def test_mutant_1_count_first_is_caught_by_the_write_order():
+    assert lands_in_order(ready())                                                 # the composed control
+    rig = ready(overrides=mutant(swap_blocks(RIVAL)))
+    assert not lands_in_order(rig), "the count-last order is not load-bearing"
+
+
+def test_mutant_2_a_count_write_that_reaches_d284_is_refused_by_the_permit():
+    source = mutate(RIVAL, "last = {{domain = \"System Bus\", addr = list[4][1], bytes = {count}}}}",
+                    "last = {{domain = \"System Bus\", addr = list[4][1], bytes = {count, 0}}}}")
+    rig = ready(overrides=mutant(source))
+    ok, why = swap(rig, py_party(2))
+    assert ok is False and "write refused" in why, "a D284 write was not refused"
+    assert rig.mem[HERB_AT] == HERB and rig.mem[COUNT] == 3                        # restored: the count never moved
+    assert ready() and lands_in_order(ready())                                     # the control lands
+
+
+def test_mutant_3_without_the_pc_gate_a_wrong_pc_lands():
+    source = mutate(RIVAL, "assert(bank == site.bank and pc == site.pc, string.format(",
+                    "assert(true or (bank == site.bank and pc == site.pc), string.format(")
+    rig = ready(pc_=0, overrides=mutant(source))
+    ok, why = swap(rig)
+    assert ok is True and rig.mem[COUNT] == 2, "the PC gate is not load-bearing"
+    rig = ready(pc_=0)
+    assert swap(rig)[0] is False                                                   # the composed control refuses
+
+
+def test_mutant_4_without_the_array_read_back_a_dropped_byte_goes_unnoticed():
+    source = mutate(RIVAL, "gate:write_batch(p.arrays); verify(p.arrays) end)", "gate:write_batch(p.arrays) end)")
+    rig = ready(overrides=mutant(source))
+    rig.drop(MONS + 5)
+    ok, why = swap(rig, py_party(2))
+    assert ok is True and rig.mem[MONS + 5] == SENTINEL, "the array read-back is not load-bearing"
+
+
+def test_mutant_4b_without_the_count_read_back_a_dropped_count_goes_unnoticed():
+    source = mutate(RIVAL, "gate:write_batch(p.last); verify(p.last) end)", "gate:write_batch(p.last) end)")
+    rig = ready(overrides=mutant(source))
+    rig.drop(COUNT)
+    ok, why = swap(rig, py_party(2))
+    assert ok is True and rig.mem[COUNT] == 3, "the count read-back is not load-bearing"
+
+
+WIDEN = ("return {{at.wOTPartyMons, count * NM}, {at.wOTPartyMonOTs, count * NAME},\n"
+         "                {at.wOTPartyMonNicknames, count * NICK}, {at.wOTPartyCount, 1}}",
+         "return {{at.wOTPartyMons, P * NM}, {at.wOTPartyMonOTs, P * NAME},\n"
+         "                {at.wOTPartyMonNicknames, P * NICK}, {at.wOTPartyCount, 1}}")
+DRIFT = ("{domain = \"System Bus\", addr = list[3][1], bytes = nicks}",
+         "{domain = \"System Bus\", addr = list[3][1], bytes = (function() local t = {} for i = 1, #nicks do t[i] = "
+         "nicks[i] end for i = 1, NICK do t[#t + 1] = 0 end return t end)()}")
+
+
+def test_mutant_5_widened_permits_are_caught_by_the_exact_ranges():
+    rig = ready(overrides=mutant(mutate(RIVAL, *WIDEN)))
+    got = [tuple(r.values()) for r in rig.rival.ranges(2).values()]
+    assert got != [(MONS, 2 * RECORD), (OTS, 2 * NAME), (NICKS, 2 * NICK), (COUNT, 1)], \
+        "the narrowed ranges are not load-bearing"
+
+
+def test_mutant_5b_a_drifted_write_is_stopped_only_by_the_narrowed_permit():
+    drifted = mutate(RIVAL, *DRIFT)
+    rig = ready(overrides=mutant(drifted))
+    before = rig.block()
+    ok, why = swap(rig, py_party(2))                                               # narrowed: the extra 11 bytes refuse
+    assert ok is False and "outside the rival_swap window" in why and rig.writes() == [] and rig.block() == before
+    rig = ready(overrides=mutant(mutate(drifted, *WIDEN)))                         # drifted AND widened
+    ok, why = swap(rig, py_party(2))
+    assert ok is True and rig.mem[NICKS + 2 * NICK] == 0, "the narrowed allow is not load-bearing"
+
+
+def test_mutant_6_a_vanilla_species_list_write_is_refused_by_the_bounds():
+    source = mutate(RIVAL, "arrays = {{domain = \"System Bus\", addr = list[1][1], bytes = records},",
+                    "arrays = {{domain = \"System Bus\", addr = at.wOTPartyCount + 1, bytes = {records[1], 0xFF}},\n"
+                    "                          {domain = \"System Bus\", addr = list[1][1], bytes = records},")
+    rig = ready(overrides=mutant(source))
+    before = rig.block()
+    ok, why = swap(rig, py_party(2))
+    assert ok is False and "write refused" in why and rig.writes() == [] and rig.block() == before
+    assert rig.mem[HERB_AT] == HERB
