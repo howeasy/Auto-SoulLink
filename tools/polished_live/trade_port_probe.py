@@ -81,10 +81,18 @@ def _zero(trace, kind, label, why):
         why.append(f"{label} executed {n}x, expected zero")
 
 
+def _complete(trace, why) -> None:
+    """The absence checks (no room entry, no original routine) are only as good as the interpreter trace: a recorder
+    that stopped logging at its cap must FAIL the case, never silently shorten the observation window."""
+    if any(e.get("kind") == "gsb_overflow" for e in trace):
+        why.append("interpreter trace overflowed the recorder cap: the absence checks are incomplete")
+
+
 def evaluate_positive(trace) -> tuple[bool, list[str]]:
     """The TRADE.md s13 positive oracle for the trade receptionist. Returns (ok, failure reasons)."""
     why: list[str] = []
     chain: list[tuple[str, dict]] = []
+    _complete(trace, why)
 
     wg = _once(trace, "wait_gate", "wait gate entry", why)
     if wg:
@@ -174,8 +182,14 @@ def evaluate_positive(trace) -> tuple[bool, list[str]]:
             if fin.get(key) != 0:
                 why.append(f"{name} {fin.get(key)} != 0 after the script")
     m0, m1 = _once(trace, "move_start", "move start", why), _once(trace, "move_end", "move end", why)
-    if m0 and m1 and (m0.get("x"), m0.get("y")) == (m1.get("x"), m1.get("y")):
-        why.append(f"player did not move after the script (stayed at ({m0.get('x')},{m0.get('y')}))")
+    if m0 and m1:
+        coords = [m.get(k) for m in (m0, m1) for k in ("x", "y")]
+        if any(not isinstance(c, int) for c in coords):
+            why.append("player movement events carry no coordinates")
+        elif (m0["x"], m0["y"]) == (m1["x"], m1["y"]):
+            why.append(f"player did not move after the script (stayed at ({m0.get('x')},{m0.get('y')}))")
+        # the movement is the LAST thing observed: after the final state, start before end
+        chain.extend([("move start", m0), ("move end", m1)])
     _zero(trace, "orig_wait", "original Special_WaitForLinkedFriend", why)
     _zero(trace, "orig_timeout", "original Special_CheckLinkTimeout", why)
     _zero(trace, "perform_link_checks", "PerformLinkChecks", why)
@@ -191,6 +205,7 @@ def evaluate_positive(trace) -> tuple[bool, list[str]]:
 def evaluate_battle(trace) -> tuple[bool, list[str]]:
     """Control (a): the battle receptionist (room 2) reaches the ORIGINAL wait and finishes inside its budget."""
     why: list[str] = []
+    _complete(trace, why)
     wg = _once(trace, "wait_gate", "wait gate entry", why)
     if wg:
         if wg.get("room") != 2:
@@ -207,6 +222,8 @@ def evaluate_battle(trace) -> tuple[bool, list[str]]:
             why.append(f"original wait took {span} frames > {ORIG_WAIT_BUDGET} (timeout)")
         if span < 60:
             why.append(f"original wait took only {span} frames (suspiciously short)")
+        if od["ord"] <= ow["ord"]:
+            why.append("original wait completion is not after its entry")
     for kind, label in (("timeout_gate", "timeout gate"), ("stub", "SlinkTradeEntry stub"),
                         ("orig_timeout", "original Special_CheckLinkTimeout"), ("try_quicksave", "Special_TryQuickSave"),
                         ("perform_link_checks", "PerformLinkChecks")):
@@ -220,6 +237,7 @@ def evaluate_battle(trace) -> tuple[bool, list[str]]:
 def evaluate_decline(trace) -> tuple[bool, list[str]]:
     """Control (b): B at the must-save prompt -> .DidNotSave -> WaitForOtherPlayerToExit, no quick-save/timeout/stub."""
     why: list[str] = []
+    _complete(trace, why)
     wg = _once(trace, "wait_gate", "wait gate entry", why)
     if wg and wg.get("room") != 1:
         why.append(f"wait gate wChosenCableClubRoom {wg.get('room')} != 1")
@@ -232,6 +250,8 @@ def evaluate_decline(trace) -> tuple[bool, list[str]]:
     dns = [e for e in trace if e.get("kind") == "gsb" and _cur(e) == DID_NOT_SAVE]
     if len(dns) != 1:
         why.append(f".DidNotSave (24:7689) read {len(dns)} times, expected once")
+    elif len(ans) == 1 and ans[0]["ord"] >= dns[0]["ord"]:
+        why.append("the B answer was not recorded BEFORE .DidNotSave (it cannot be the cause)")
     ex = _once(trace, "wait_exit", "WaitForOtherPlayerToExit", why)
     if ex and dns and ex["ord"] <= dns[0]["ord"]:
         why.append("WaitForOtherPlayerToExit did not follow .DidNotSave")
@@ -249,9 +269,17 @@ def evaluate_clean(trace) -> tuple[bool, list[str]]:
     """Control (c): on the clean ROM the original wait runs, and the positive oracle must REJECT for missing
     gate/stub/redirect events. Returns (ok, notes); ok means the oracle correctly rejected."""
     why: list[str] = []
+    _complete(trace, why)
     ow, od = _once(trace, "orig_wait", "original wait entry", why), _once(trace, "orig_wait_done", "original wait .done", why)
-    if ow and od and od["frame"] - ow["frame"] > ORIG_WAIT_BUDGET:
-        why.append(f"original wait took {od['frame'] - ow['frame']} frames > {ORIG_WAIT_BUDGET}")
+    if ow and od:
+        span = od["frame"] - ow["frame"]
+        if span > ORIG_WAIT_BUDGET:
+            why.append(f"original wait took {span} frames > {ORIG_WAIT_BUDGET}")
+        if span < 60 or od["ord"] <= ow["ord"]:
+            why.append(f"original wait ran {span} frames / completion not after entry (suspiciously short)")
+    fin = _once(trace, "final", "final state snapshot", why)
+    if fin and fin.get("running") != 0:
+        why.append(f"wScriptRunning {fin.get('running')} != 0 at the end")
     for kind, label in (("wait_gate", "wait gate"), ("timeout_gate", "timeout gate"), ("stub", "stub")):
         _zero(trace, kind, label, why)
     ok_pos, reasons = evaluate_positive(trace)

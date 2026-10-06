@@ -49,7 +49,7 @@ def good_trace():
 
 
 def clean_trace():
-    return _number([
+    t = _number([
         _ev("gsb", spos=0x7616),
         _ev("orig_wait", bank=0x0A),
         _ev("orig_wait_done", bank=0x0A),
@@ -57,6 +57,8 @@ def clean_trace():
         _ev("move_start", running=0, x=5, y=3),
         _ev("move_end", running=0, x=5, y=4),
     ])
+    t[2]["frame"] = t[1]["frame"] + 513                  # the measured native wait on the clean ROM
+    return t
 
 
 def _without(trace, kind):
@@ -117,6 +119,12 @@ DEFECTS = [
      "PerformLinkChecks executed"),
     ("room entry read", lambda t: _inject(t, _ev("gsb", spos=0x770E), "endtext"), "link room entry"),
     ("events out of order", lambda t: _number([t[i] for i in (0, 2, 1) + tuple(range(3, len(t)))]), "out of order"),
+    # review cx-0028e245: a recorder overflow must fail, the movement must come LAST and carry coordinates
+    ("interpreter trace overflowed", lambda t: _inject(t, _ev("gsb_overflow"), "endtext"), "overflowed the recorder cap"),
+    ("movement before the final state", lambda t: _number([t[i] for i in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 11)]),
+     "out of order"),
+    ("movement events reversed", lambda t: _number(t[:-2] + [t[-1], t[-2]]), "out of order"),
+    ("movement without coordinates", lambda t: _mut(t, "move_end", x=None, y=None), "carry no coordinates"),
 ]
 
 
@@ -194,3 +202,35 @@ def test_decline_control():
     assert not ok and any("answered with B" in r for r in why)
     ok, why = P.evaluate_decline(_without(_decline_trace(), "wait_exit"))
     assert not ok and any("WaitForOtherPlayerToExit" in r for r in why)
+
+
+# ── review cx-0028e245: the control oracles were too permissive ─────────────────────────────────────────────
+
+def test_clean_control_needs_a_real_original_wait_and_a_settled_final_state():
+    assert P.evaluate_clean(clean_trace())[0]
+    ok, why = P.evaluate_clean(_mut(clean_trace(), "orig_wait_done", frame=100 + 20 + 3))     # 3 frames: not a real wait
+    assert not ok and any("suspiciously short" in r for r in why)
+    ok, why = P.evaluate_clean(_without(clean_trace(), "final"))
+    assert not ok and any("final state snapshot" in r for r in why)
+    ok, why = P.evaluate_clean(_mut(clean_trace(), "final", running=1))
+    assert not ok and any("wScriptRunning 1" in r for r in why)
+    ok, why = P.evaluate_clean(_inject(clean_trace(), _ev("gsb_overflow"), "final"))
+    assert not ok and any("overflowed" in r for r in why)
+
+
+def test_decline_control_needs_the_b_answer_before_did_not_save():
+    t = _decline_trace()
+    late = _number([t[i] for i in (0, 1, 2, 4, 3, 5, 6)])                                     # the B annotation AFTER .DidNotSave
+    ok, why = P.evaluate_decline(late)
+    assert not ok and any("BEFORE .DidNotSave" in r for r in why)
+    ok, why = P.evaluate_decline(_inject(_decline_trace(), _ev("gsb_overflow"), "final"))
+    assert not ok and any("overflowed" in r for r in why)
+
+
+def test_battle_control_needs_the_completion_after_the_entry_and_no_overflow():
+    t = _battle_trace()
+    swapped = _number([t[0], t[1], t[3], t[2], t[4]])                                         # done before entry
+    ok, why = P.evaluate_battle(swapped)
+    assert not ok and any("not after its entry" in r or "before the gate" in r or "suspiciously" in r for r in why)
+    ok, why = P.evaluate_battle(_inject(_battle_trace(), _ev("gsb_overflow"), "final"))
+    assert not ok and any("overflowed" in r for r in why)

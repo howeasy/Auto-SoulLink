@@ -60,7 +60,7 @@ local function snap(kind, extra)
 end
 local function rec(kind) return function(matched) if matched then snap(kind) end end end
 
-local gsb_n, reached_7616, reached_7689 = 0, false, false
+local gsb_n, reached_7616, reached_7689, gsb_overflowed = 0, false, false, false
 local function install()
     L.hook("SlinkTradeWaitGate", rec("wait_gate"))
     L.hook("SlinkTradeTimeoutGate", rec("timeout_gate"))
@@ -81,7 +81,10 @@ local function install()
     -- the interpreter: GetScriptByte entry = the cursor about to be read (the redirect target is script DATA)
     L.hook("GetScriptByte", function(matched)
         if not matched then return end
-        if gsb_n >= 400 then return end
+        if gsb_n >= 4000 then
+            if not gsb_overflowed then gsb_overflowed = true snap("gsb_overflow") end   -- explicit: the oracle FAILS on it
+            return
+        end
         gsb_n = gsb_n + 1
         local e = snap("gsb")
         if e.sbank == 0x24 and e.spos == 0x7616 then reached_7616 = true end
