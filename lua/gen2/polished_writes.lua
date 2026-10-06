@@ -250,7 +250,12 @@ function W.new(profile, coords, io, Permit, policy, hold)
             if zero then
                 assert(before[1] == 0 and before[2] == 0 and before[3] == 0 and before[4] == 0,
                        "active faint already-zero HP has unsettled mirror/status")
-                return true -- do not reset order or retrigger an already completed zero-HP write
+                if order ~= 0 or (sub & 0x04) ~= 0 then
+                    return true -- pending notification or native FAINTED: never retrigger
+                end
+                -- HP alone is not a native faint witness. A lost final notification
+                -- leaves this exact image; repair ONLY the order byte, not the mirrors.
+                spans = {}
             end
             if order == 0 then
                 spans[#spans + 1] = {domain="System Bus", addr=at.wWhichMonFaintedFirst, bytes={1}}
@@ -258,8 +263,11 @@ function W.new(profile, coords, io, Permit, policy, hold)
             local log_start = #gate.log
             -- Independent of the emitted descriptor list: an accidental extra move,
             -- stat or other-slot span must fail preflight even within battle_hold.
-            faint_window = {[observed_at[1]]=1, [observed_at[2]]=1,
-                            [observed_at[3]]=2, [observed_at[5]]=2}
+            faint_window = {}
+            if not zero then
+                faint_window = {[observed_at[1]]=1, [observed_at[2]]=1,
+                                [observed_at[3]]=2, [observed_at[5]]=2}
+            end
             if order == 0 then faint_window[observed_at[7]] = 1 end
             local ok, why = pcall(function()
                 gate:write_batch(spans) -- shared permit preflights ALL spans before first emission
