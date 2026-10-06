@@ -101,8 +101,12 @@ def _lua_withdraw(lua):
 
 
 def withdraw(rig, key):
-    """The COMPOSED executor, called from inside Lua so the key is a real Lua string."""
-    return _lua_withdraw(rig.lua)(rig.overworld().boxes, key)
+    """The COMPOSED executor, called from inside Lua so the key is a real Lua string. compose_polished hands the
+    CLIENT an adapter around it (O.client_boxes: bare `true`, `party full`); these tests pin the EXECUTOR's own
+    return shape, so they reach through the adapter's __index (tests/unit/test_polished_box_contract.py covers it)."""
+    boxes = rig.overworld().boxes
+    raw = rig.lua.eval("function(t) local m = getmetatable(t) return m and m.__index or t end")(boxes)
+    return _lua_withdraw(rig.lua)(raw, key)
 
 
 # a mutant loader that keeps the withdraw dependencies (the shared one in test_polished_write_path.py predates them)

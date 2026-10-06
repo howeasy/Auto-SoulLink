@@ -967,4 +967,32 @@ function O.battle_checkpoint(profile, io, log, sites)
     return self
 end
 
+--- The box executor as lua/gen2/client.lua run_box expects it. The client reads a party_mon success as
+--- `true, <settle note STRING>` and refuses with `party full` EXACTLY to take its deferred-retry path, but the
+--- executor reports `true, <metadata table>` and `party full (n/m)`: the table was concatenated into a log line
+--- BEFORE sync_retrieve_done (an error, so no ack and a stray unarmed settle) and a full party failed at once.
+--- Polished keeps no durable backing copy to settle (a reset reverts the party and the box halves together), so a
+--- success is a bare `true`. Everything else passes through unchanged (the executor's own return shape is pinned
+--- by its tests).
+function O.client_boxes(raw, log)
+    assert(type(raw) == "table" and type(raw.withdraw) == "function", "client_boxes needs the box executor")
+    local wrapped = setmetatable({}, {__index = raw})
+    function wrapped.withdraw(key, opts)
+        local done, why = raw.withdraw(key, opts)
+        if done then
+            if log and type(why) == "table" then
+                log("[SLink-gen2] party_mon " .. tostring(key) .. " withdrawn: " .. tostring(why.message or why.durability))
+            end
+            return true
+        end
+        why = tostring(why)
+        if why:sub(1, 10) == "party full" then
+            if log then log("[SLink-gen2] party_mon " .. tostring(key) .. ": " .. why) end
+            why = "party full"
+        end
+        return nil, why
+    end
+    return wrapped
+end
+
 return O
