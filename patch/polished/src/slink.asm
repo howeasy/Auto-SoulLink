@@ -219,3 +219,8 @@ INCLUDE "engine/slink/trade_items.asm"
 ; TRADE slice 2a: the two special gates that re-point SpecialsPointers entries 2 and 3 (builder edit),
 ; plus the stub SlinkTradeEntry. Trade requests skip the cable wait and end the script; battle is native.
 INCLUDE "engine/slink/trade_gate.asm"
+
+; TRADE card 2a: the outgoing 70-byte snapshot and the incoming-mon validity predicate. Inert -- nothing
+; calls them until the held service.
+INCLUDE "engine/slink/trade_snapshot.asm"
+INCLUDE "engine/slink/trade_validate.asm"
