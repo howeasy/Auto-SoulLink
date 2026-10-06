@@ -68,6 +68,38 @@ def test_control_the_raw_executor_shape_moves_the_mon_but_never_acks():
     assert rig.sent("sync_retrieve_done") == []                # ... and the server was never told (bug 1)
 
 
+def test_a_duplicate_party_mon_after_a_completed_withdraw_is_a_done_not_a_failure():
+    """Review cx-4beeb281 (HIGH): with no settle holding the key, a second party_mon for a mon that already moved
+    reached the executor again and refused `key not boxed`; the server treats that as a failed retrieval (drops the
+    rebuild key, re-boxes the PARTNER). The mon being in the party and in no box IS the withdraw's postcondition: a
+    repeat is a re-ack, never a second mutation and never a failure."""
+    rig, key = withdraw_scenario(3)
+    assert rig.count() == 4 and [m["key"] for m in rig.sent("sync_retrieve_done")] == [key]
+    writes_before = len(rig.writes())
+    rig.send_command({"cmd": "party_mon", "key": key})                    # the duplicate
+    assert rig.sent("sync_retrieve_failed") == [], rig.sent("sync_retrieve_failed")
+    assert [m["key"] for m in rig.sent("sync_retrieve_done")] == [key, key]    # re-acked
+    assert rig.count() == 4 and len(rig.writes()) == writes_before              # no second mutation
+
+
+def test_the_executor_itself_is_idempotent_on_an_already_withdrawn_key():
+    rig, key = withdraw_scenario(3)
+    boxes = rig.parts.overworld.boxes
+    raw = rig.lua.eval("function(t) return getmetatable(t).__index end")(boxes)
+    count, writes = rig.count(), len(rig.writes())
+    res = rig.lua.eval("function(b, k) return b.withdraw(k) end")(raw, key)
+    assert (res[0] if isinstance(res, tuple) else res) is True
+    assert rig.count() == count and len(rig.writes()) == writes
+
+
+def test_a_withdrawn_key_that_is_in_neither_place_still_refuses():
+    rig = Rig(party(3))
+    options(rig)
+    rig.send_command({"cmd": "party_mon", "key": "ABCDEF:1234:010:00"})
+    (failed,) = rig.sent("sync_retrieve_failed")
+    assert "not boxed" in failed["reason"]
+
+
 def test_a_full_party_retries_then_fails_with_the_client_reason():
     rig, key = withdraw_scenario(6)
     assert len(retry_lines(rig)) == 1                          # the deferred retry ran
