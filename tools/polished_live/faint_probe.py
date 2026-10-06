@@ -5,6 +5,9 @@ python tools/polished_live/faint_probe.py --setup played --fixture SAVE --route 
 Route: {"steps":[{"frames":120,"buttons":[]}, ...]}, native buttons from boot.
 PASS certifies complete recording/order with a qualified pre-copy hit, NOT that
 a faint/whiteout occurred, nor that the F1 writer is qualified. No client/server.
+Wrong-bank samples are bounded to 16/site with full callback accounting; protected
+rows keep their own cap. SaveRAM accepts exactly 32 KiB, optionally a 22-byte RTC
+footer; all fixture bytes are preserved for provenance and staging.
 """
 
 from __future__ import annotations
@@ -157,6 +160,102 @@ def integer(value, low, high):
     return type(value) is int and low <= value <= high
 
 
+def validate_hook_counts(trace, final, sites) -> list[str]:
+    """Validate full callback totals against protected rows and bounded bank samples.
+
+    Totals beyond the first 16 wrong-bank rows are aggregate claims, not an
+    independently reconstructed callback log. ROM0 ignores the bank shadow.
+    """
+    bad = []
+    limit = 16
+    maximum = 2**53 - 1
+    if not isinstance(final, dict) or not isinstance(trace, list):
+        return ["MALFORMED: callback accounting requires trace and final objects"]
+    if (
+        type(final.get("wrong_bank_sample_limit")) is not int
+        or final["wrong_bank_sample_limit"] != limit
+    ):
+        bad.append("MALFORMED: wrong_bank_sample_limit must be 16")
+    counters = final.get("hook_counts")
+    if not isinstance(counters, dict) or set(counters) != set(sites):
+        return bad + ["MALFORMED: hook_counts must contain exactly the registered sites"]
+    observed = {
+        name: {"qualified": 0, "wrong_pc": 0, "wrong_banks": Counter()}
+        for name in sites
+    }
+    for row in trace:
+        if not isinstance(row, dict):
+            bad.append("MALFORMED: hook row must be an object")
+            continue
+        name = row.get("hook_site", row.get("kind"))
+        if not isinstance(name, str):
+            bad.append("MALFORMED: hook site must be text")
+            continue
+        if name not in sites:
+            if "hook_site" in row:
+                bad.append(f"MALFORMED: unknown hook site {name!r}")
+            continue
+        site = sites[name]
+        if (
+            not integer(row.get("bank"), 0, 255)
+            or not integer(row.get("pc"), 0, 65535)
+            or type(row.get("hook_addr")) is not int
+            or row["hook_addr"] != site["addr"]
+        ):
+            bad.append(f"MALFORMED: {name} hook coordinates")
+            continue
+        matched = site["addr"] < 0x4000 or row["bank"] == site["bank"]
+        qualified = matched and row["pc"] == site["addr"]
+        if row.get("matched") is not matched or row.get("qualified") is not qualified:
+            bad.append(f"MALFORMED: {name} hook qualification")
+        if qualified:
+            observed[name]["qualified"] += 1
+        elif matched:
+            observed[name]["wrong_pc"] += 1
+        else:
+            observed[name]["wrong_banks"][str(row["bank"])] += 1
+    for name, counter in counters.items():
+        if not isinstance(counter, dict) or any(
+            not integer(counter.get(field), 0, maximum)
+            for field in ("total", "qualified", "wrong_pc", "wrong_bank_samples")
+        ):
+            bad.append(f"MALFORMED: {name} callback counters")
+            continue
+        banks = counter.get("wrong_banks")
+        # Accept exactly empty [] from synthetic Lua codecs; nonempty arrays are malformed.
+        if isinstance(banks, list) and not banks:
+            banks = {}
+        if not isinstance(banks, dict) or any(
+            not isinstance(bank, str)
+            or not 1 <= len(bank) <= 3
+            or not bank.isascii()
+            or not bank.isdecimal()
+            or str(int(bank)) != bank
+            or not 0 <= int(bank) <= 255
+            or not integer(count, 1, maximum)
+            for bank, count in banks.items()
+        ):
+            bad.append(f"MALFORMED: {name} wrong_banks")
+            continue
+        wrong = sum(banks.values())
+        if sites[name]["addr"] < 0x4000 and wrong:
+            bad.append(f"MALFORMED: {name} ROM0 cannot have wrong-bank callbacks")
+        if str(sites[name]["bank"]) in banks:
+            bad.append(f"MALFORMED: {name} expected bank cannot be a wrong bank")
+        retained = observed[name]
+        samples = sum(retained["wrong_banks"].values())
+        if (
+            counter["total"] != counter["qualified"] + counter["wrong_pc"] + wrong
+            or counter["qualified"] != retained["qualified"]
+            or counter["wrong_pc"] != retained["wrong_pc"]
+            or any(count > banks.get(bank, 0) for bank, count in retained["wrong_banks"].items())
+            or samples != min(limit, wrong)
+            or counter["wrong_bank_samples"] != samples
+        ):
+            bad.append(f"MALFORMED: {name} callback accounting disagrees with retained rows")
+    return bad
+
+
 def evaluate(trace, config):
     """Return (named verdict, diagnostics). Incomplete/corrupt evidence outranks findings.
 
@@ -176,12 +275,13 @@ def evaluate(trace, config):
     final = trace[-1]
     if final.get("kind") != "final" or final.get("completed") is not True:
         bad.append("INCOMPLETE: unique completed final event required")
+    bad.extend(validate_hook_counts(trace, final, contract["sites"]))
     for field in ("guest_writes", "cpu_changes", "overflows", "driver_errors"):
         if type(final.get(field)) is not int or final[field] != 0:
             bad.append(f"INCOMPLETE: final {field} not zero")
     if final.get("elapsed") != config["frames"] or type(final.get("elapsed")) is not int:
         bad.append("INCOMPLETE: frame budget not completed")
-    hits, counts, last_frame, pre_hits, active = 0, Counter(), -1, 0, None
+    protected, last_frame, pre_hits, active = 0, -1, 0, None
     for ordinal, row in enumerate(trace, 1):
         if type(row.get("ord")) is not int or row["ord"] != ordinal:
             bad.append(f"ORDINAL: row {ordinal} missing/reordered")
@@ -201,8 +301,6 @@ def evaluate(trace, config):
         if kind not in contract["sites"]:
             bad.append(f"RECORDING: {kind!r}")  # includes overflow, mutation and driver errors
             continue
-        hits += 1
-        counts[kind] += 1
         site = contract["sites"][kind]
         if row.get("hook_addr") != site["addr"] or type(row.get("hook_addr")) is not int:
             bad.append(f"HOOK: {kind} address mismatch")
@@ -236,8 +334,10 @@ def evaluate(trace, config):
             valid = False
         if not valid:
             continue
-        matched = row["bank"] == site["bank"]
+        matched = site["addr"] < 0x4000 or row["bank"] == site["bank"]
         qualified = matched and row["pc"] == site["addr"]
+        if matched:
+            protected += 1
         if row.get("matched") is not matched or row.get("qualified") is not qualified:
             bad.append(f"QUALIFICATION: {kind} forged flag")
         slot_valid = 1 <= row["count"] <= contract["party_capacity"] and row["slot"] < row["count"]
@@ -306,15 +406,24 @@ def evaluate(trace, config):
                     )
     if active and active["stage"] != "copy_return":
         order_errors.append("ORDER_VIOLATION: recording ended inside ResolveFaints pass")
+    hook_counts = final.get("hook_counts")
+    totals = (
+        {name: counter["total"] for name, counter in hook_counts.items()}
+        if isinstance(hook_counts, dict)
+        and set(hook_counts) == set(contract["sites"])
+        and all(isinstance(counter, dict) and integer(counter.get("total"), 0, 2**53)
+                for counter in hook_counts.values())
+        else {}
+    )
     if (
         type(final.get("hook_hits")) is not int
-        or final["hook_hits"] != hits
+        or final["hook_hits"] != sum(totals.values())
         or not isinstance(final.get("counts"), dict)
         or any(type(v) is not int for v in final.get("counts", {}).values())
-        or final.get("counts") != {k: counts[k] for k in contract["sites"]}
-        or hits >= config["trace_cap"]
+        or final.get("counts") != totals
+        or protected >= config["trace_cap"]
     ):
-        bad.append("CENSORED: counters/cap disagree with recorded rows")
+        bad.append("CENSORED: counters/protected cap disagree with callback accounting")
     if (
         integer(trace[0].get("frame"), 0, 2**53)
         and integer(final.get("frame"), 0, 2**53)
@@ -358,7 +467,8 @@ def parse_args(argv=None):
 
     try:
         args.fixture_bytes = args.fixture.read_bytes()
-        if len(args.fixture_bytes) != 32768:
+        # Preserve native SaveRAM verbatim, including BizHawk's optional 22-byte RTC footer.
+        if len(args.fixture_bytes) not in (32768, 32790):
             raise ValueError("native Polished SaveRAM must be 32768 bytes")
         args.steps = parse_route(args.route, args.frames)
     except (OSError, ValueError) as exc:

@@ -1,4 +1,4 @@
-"""D3 synthetic dispatcher measurements: no emulator; Lua 5.5 compile-only, no execution."""
+"""D3 synthetic measurements and mocked Lua recording; no emulator or live cartridge."""
 from __future__ import annotations
 
 import copy
@@ -52,11 +52,35 @@ def hit(phase="idle", kind="dispatch", mismatch=False, **fields):
     return row
 
 
+def callback_counts(events):
+    counts = {
+        kind: {"total": 0, "qualified": 0, "wrong_pc": 0, "wrong_banks": {}, "wrong_bank_samples": 0}
+        for kind in ("dispatch", "prompt")
+    }
+    for row in events:
+        kind = row.get("kind")
+        if kind not in counts:
+            continue
+        count = counts[kind]
+        count["total"] += 1
+        addr = P.DISPATCH if kind == "dispatch" else P.PROMPT
+        if row.get("bank") != P.BANK:
+            key = str(row["bank"])
+            count["wrong_banks"][key] = count["wrong_banks"].get(key, 0) + 1
+            count["wrong_bank_samples"] += 1
+        elif row.get("pc") != addr:
+            count["wrong_pc"] += 1
+        else:
+            count["qualified"] += 1
+    return counts
+
+
 def complete(events):
     rows = copy.deepcopy(events)
+    counters = callback_counts(rows)
     rows.append({"kind": "final", "completed": True, "guest_writes": 0, "cpu_changes": 0,
-                 "prompt_hits": sum(e.get("kind") == "prompt" and e.get("qualified") is True for e in rows),
-                 "dispatch_hits": sum(e.get("kind") == "dispatch" and e.get("qualified") is True for e in rows),
+                 "driver_errors": 0, "overflows": 0, "wrong_bank_sample_limit": 16, "hook_counts": counters,
+                 "prompt_hits": counters["prompt"]["qualified"], "dispatch_hits": counters["dispatch"]["qualified"],
                  "phase_frames": dict.fromkeys(P.REQUIRED_PHASES, 10), "elapsed": 40})
     for i, e in enumerate(rows, 1):
         e.update(ord=i, frame=100 + i)
@@ -101,15 +125,13 @@ def test_zero_qualified_hits_are_open_not_pass(events):
 
 
 def test_wrong_bank_negative_is_not_counted_as_acceptance():
-    trace = good_trace()
-    trace.insert(-1, hit("npc_talk", bank=0x25, matched=False, qualified=False))
+    trace = complete([*good_trace()[:-1], hit("npc_talk", bank=0x25, matched=False, qualified=False)])
     assert P.evaluate(trace, PINS) == (True, [])
     assert sum(r["count"] for r in P.distribution(trace)) == 5
 
 
 def test_mislabeled_bank_match_fails():
-    trace = good_trace()
-    trace.insert(-1, hit(bank=0x25))
+    trace = complete([*good_trace()[:-1], hit(bank=0x25)])
     ok, reasons = P.evaluate(trace, PINS)
     assert not ok
     assert P.verdict(reasons) == "FAIL"
@@ -117,8 +139,7 @@ def test_mislabeled_bank_match_fails():
 
 
 def test_next_instruction_pc_is_not_dispatch_entry_measurement():
-    trace = good_trace()
-    trace.insert(-1, hit(pc=P.DISPATCH + 2, qualified=False))
+    trace = complete([*good_trace()[:-1], hit(pc=P.DISPATCH + 2, qualified=False)])
     ok, reasons = P.evaluate(trace, PINS)
     assert not ok
     assert any(r.startswith("CALLBACK_PC:") for r in reasons)
@@ -146,8 +167,7 @@ def test_prompt_path_must_not_execute_without_published_lease():
     ("in_menu", 1), ("vblank", 1), ("map_status", 0), ("step_flags", 0x20), ("map_event_status", 1),
 ], ids=["svbk", "script", "battle", "link", "paused", "menu", "vblank", "map", "midstep", "events"])
 def test_each_engine_guard_refuses_negative_context(field, value):
-    trace = good_trace()
-    trace.insert(-1, hit("npc_talk", **{field: value}))
+    trace = complete([*good_trace()[:-1], hit("npc_talk", **{field: value})])
     assert P.evaluate(trace, PINS) == (True, [])
 
 
@@ -364,3 +384,168 @@ def test_lua55_compiles_without_running_driver():
     source = (REPO / "tools/polished_live/dispatch_probe.lua").read_text(encoding="utf-8")
     ok, error = load(source)
     assert ok, error
+
+
+def run_mocked_driver(*, encoder_fault="", trace_cap=5, floating_banks=False):
+    """Run the actual recorder/encoder against 14,000 wrong-bank exec callbacks."""
+    from lupa.lua55 import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().CODEC = lua.execute((REPO / "lua/json_codec.lua").read_text(encoding="utf-8"))
+    lua.globals().CONFIG_JSON = json.dumps({
+        "contract": P.derive_contract(symbols()), "trace_cap": trace_cap, "frames": 4,
+        "steps": [{"phase": phase, "frames": 1, "buttons": []}
+                  for phase in ("idle", "walking", "start_menu", "npc_talk")],
+    })
+    lua.globals().SYMS_JSON = json.dumps(symbols())
+    lua.globals().ENCODER_FAULT = encoder_fault
+    lua.globals().FLOATING_BANKS = floating_banks
+    lua.execute(r'''
+        local frame, bank, pc, sp = 0, 0x25, 0, 0xc0d2
+        local hooks, stack = {}, {}
+        local config = CODEC.decode(CONFIG_JSON)
+        local syms = CODEC.decode(SYMS_JSON)
+        for i = 0, 27 do stack[sp + i] = 0 end
+        for _, pin in ipairs(config.contract.pins) do stack[sp + pin.offset] = pin.value end
+        local fields = {}
+        for name, symbol in pairs(config.contract.fields) do fields[syms[symbol][2]] = name end
+        local function bus(addr)
+            if addr == config.contract.rombank_addr then return FLOATING_BANKS and bank + 0.0 or bank end
+            if addr == config.contract.svbk_addr then return 1 end
+            if stack[addr] ~= nil then return stack[addr] end
+            local field = fields[addr]
+            if field == "map_status" then return 2 end
+            if field == "step_flags" then return frame == 2 and 0x20 or 0 end
+            if field == "in_menu" then return frame == 3 and 1 or 0 end
+            if field == "script_mode" then return frame == 4 and 1 or 0 end
+            return 0
+        end
+        L = {json=CODEC, RUN="mock", SYM=syms, bus=bus}
+        L.slurp = function() return CONFIG_JSON end
+        L.hex = function(bytes)
+            local parts = {}
+            for i, byte in ipairs(bytes) do parts[i] = string.format("%02x", byte) end
+            return table.concat(parts)
+        end
+        L.hook_at = function(name, _, _, fn) hooks[name] = fn end
+        L.unhook = function(name) hooks[name] = nil end
+        L.frame = function()
+            frame = frame + 1
+            if frame == 1 then
+                for i = 1, 7000 do
+                    bank = 0x25 + i % 2
+                    pc = config.contract.dispatch_addr
+                    hooks.dispatch_probe_entry(false)
+                    pc = config.contract.prompt_addr
+                    hooks.dispatch_probe_prompt(false)
+                end
+            end
+            bank, pc = config.contract.bank, config.contract.dispatch_addr
+            hooks.dispatch_probe_entry(true)
+        end
+        L.check = function(_, passed) CHECK_PASSED = passed end
+        L.finish = function(tag)
+            FINISHED = tag
+            HOOKS_CLOSED = next(hooks) == nil
+        end
+        if ENCODER_FAULT ~= "" then
+            CODEC.encode = function()
+                if ENCODER_FAULT == "nil" then return nil, 'nil "fault"\n\\tail' end
+                error('throw "fault"\n\\tail', 0)
+            end
+        end
+        dofile = function() return L end
+        os = {getenv=function(name) return name end}
+        memory = {}
+        emu = {framecount=function() return frame end,
+               getregister=function(name) return name == "PC" and pc or sp end}
+        client = {speedmode=function() end}
+        io = {open=function()
+            return {write=function(_, value)
+                assert(type(value) == "string", "file write requires a string")
+                TRACE_JSON = value
+            end, close=function() end}
+        end}
+    ''')
+    lua.execute((REPO / "tools/polished_live/dispatch_probe.lua").read_text(encoding="utf-8"))
+    return json.loads(lua.globals().TRACE_JSON), lua.globals().CHECK_PASSED, lua.globals().FINISHED, lua.globals().HOOKS_CLOSED
+
+
+def test_14000_wrong_bank_callbacks_preserve_bounded_samples_and_full_qualified_rows():
+    trace, passed, finished, closed = run_mocked_driver()
+    assert passed and finished == "dispatch-probe recording" and closed
+    wrong = [row for row in trace if row.get("bank") in (0x25, 0x26)]
+    assert len(wrong) == 32
+    assert {kind: sum(row["kind"] == kind for row in wrong) for kind in ("dispatch", "prompt")} == {
+        "dispatch": 16, "prompt": 16,
+    }
+    qualified = [row for row in trace if row.get("qualified") is True]
+    assert [row["phase"] for row in qualified] == ["idle", "walking", "start_menu", "npc_talk"]
+    assert all(row["stack"] == image() for row in qualified)
+    assert trace[-1]["hook_counts"] == {
+        "dispatch": {"total": 7004, "qualified": 4, "wrong_pc": 0,
+                     "wrong_banks": {"37": 3500, "38": 3500}, "wrong_bank_samples": 16},
+        "prompt": {"total": 7000, "qualified": 0, "wrong_pc": 0,
+                   "wrong_banks": {"37": 3500, "38": 3500}, "wrong_bank_samples": 16},
+    }
+    assert P.evaluate(trace, PINS) == (True, [])
+    assert P.distribution(trace) == [
+        {"phase": row["phase"], "sp": row["sp"], "stack": image(), "count": 1} for row in qualified
+    ]
+
+
+@pytest.mark.parametrize("encoder_fault", ["nil", "throw"])
+def test_encoder_failure_writes_readable_counter_fallback_and_finishes(encoder_fault):
+    trace, passed, finished, closed = run_mocked_driver(encoder_fault=encoder_fault)
+    assert not passed and finished == "dispatch-probe recording" and closed
+    assert [row["kind"] for row in trace] == ["driver_error", "final"]
+    assert "fault" in trace[0]["error"] and "\n\\tail" in trace[0]["error"]
+    assert trace[-1]["completed"] is False and trace[-1]["driver_errors"] == 1
+    assert trace[-1]["hook_counts"]["dispatch"]["total"] == 7004
+    assert trace[-1]["hook_counts"]["prompt"]["wrong_banks"] == {"37": 3500, "38": 3500}
+    ok, reasons = P.evaluate(trace, PINS)
+    assert not ok and any(row.startswith("DRIVER_ERROR:") for row in reasons)
+
+
+@pytest.mark.parametrize("field", ["total", "qualified", "wrong_pc", "wrong_bank_samples"])
+def test_overstated_compressed_counts_fail_malformed(field):
+    trace, _, _, _ = run_mocked_driver()
+    trace[-1]["hook_counts"]["dispatch"][field] += 1
+    ok, reasons = P.evaluate(trace, PINS)
+    assert not ok and any(row.startswith("MALFORMED:") for row in reasons)
+
+
+def test_missing_and_overstated_wrong_bank_counts_fail_malformed():
+    trace, _, _, _ = run_mocked_driver()
+    for missing in (True, False):
+        changed = copy.deepcopy(trace)
+        if missing:
+            del changed[-1]["hook_counts"]["dispatch"]["wrong_banks"]["38"]
+        else:
+            changed[-1]["hook_counts"]["dispatch"]["wrong_banks"]["38"] += 1
+        ok, reasons = P.evaluate(changed, PINS)
+        assert not ok and any(row.startswith("MALFORMED:") for row in reasons)
+
+
+def test_missing_counter_envelope_is_not_legacy_success():
+    trace = good_trace()
+    del trace[-1]["hook_counts"]
+    ok, reasons = P.evaluate(trace, PINS)
+    assert not ok and any(row.startswith("MALFORMED:") for row in reasons)
+
+
+def test_protected_capacity_boundary_still_fails_after_wrong_bank_compression():
+    trace, passed, finished, closed = run_mocked_driver(trace_cap=4)
+    assert not passed and finished == "dispatch-probe recording" and closed
+    assert trace[-1]["overflows"] == 1
+    assert sum(row.get("qualified") is True for row in trace) == 4
+    ok, reasons = P.evaluate(trace, PINS)
+    assert not ok and any(row.startswith("OVERFLOW:") for row in reasons)
+
+
+def test_integral_float_rom_bank_bridge_still_emits_canonical_decimal_count_keys():
+    trace, passed, _, _ = run_mocked_driver(floating_banks=True)
+    assert passed
+    assert trace[-1]["hook_counts"]["dispatch"]["wrong_banks"] == {"37": 3500, "38": 3500}
+    assert trace[-1]["hook_counts"]["prompt"]["wrong_banks"] == {"37": 3500, "38": 3500}
+    assert P.evaluate(trace, PINS) == (True, [])

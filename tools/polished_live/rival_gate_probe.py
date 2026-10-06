@@ -39,9 +39,9 @@ HOOKS = {"gate": GATE, "next": NEXT, "last": LAST}
 def evaluate(trace) -> tuple[bool, list[str]]:
     """PASS requires a complete, uncensored recording and at least one qualified gate hit.
 
-    Wrong-bank System Bus callbacks are retained but never count as gate hits. A
-    matched=True row with the wrong bank is corrupt evidence, not a qualified hit.
-    Native engine writes are expected; guest_write means a Lua probe write attempt.
+    Wrong-bank callbacks retain only their first 16 rows per site; mandatory totals
+    account for every callback without consuming protected trace capacity.
+    Wrong-PC rows retain full diagnostics and never count as qualified hits.
     """
     why: list[str] = []
     if not isinstance(trace, list) or any(not isinstance(e, dict) for e in trace):
@@ -51,6 +51,22 @@ def evaluate(trace) -> tuple[bool, list[str]]:
         why.append("INCOMPLETE_TRACE: missing unique completed final event at end")
     elif finals[0].get("guest_writes") != 0 or finals[0].get("cpu_changes") != 0:
         why.append("PROBE_MUTATION: final write/register-change counters are not zero")
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from tools.polished_live.faint_probe import validate_hook_counts
+
+    final = finals[0] if len(finals) == 1 else {}
+    why.extend(validate_hook_counts(trace, final, {
+        name: {"bank": BANK, "addr": addr} for name, addr in HOOKS.items()
+    }))
+    counts = final.get("hook_counts")
+    if isinstance(counts, dict) and set(counts) == set(HOOKS):
+        totals = [v.get("total") if isinstance(v, dict) else None for v in counts.values()]
+        if (type(final.get("hook_hits")) is not int or any(type(v) is not int for v in totals)
+                or final["hook_hits"] != sum(totals)):
+            why.append("MALFORMED_TRACE: hook_hits must equal all callback totals")
+    if final.get("driver_errors", 0) != 0:
+        why.append("DRIVER_ERROR: final driver error counter is not zero")
     qualified_gates = []
     for e in trace:
         kind = e.get("kind")
@@ -69,7 +85,8 @@ def evaluate(trace) -> tuple[bool, list[str]]:
         if matched is not True or bank != BANK:
             continue
         if kind == "gate":
-            qualified_gates.append(e)
+            if e.get("qualified") is True:
+                qualified_gates.append(e)
             if e.get("pc") != GATE:
                 code = "PC_IS_NEXT_INSTRUCTION" if e.get("pc") == NEXT else "PC_OTHER"
                 pc = e.get("pc")
@@ -83,6 +100,8 @@ def evaluate(trace) -> tuple[bool, list[str]]:
                 why.append(f"NOT_TRAINER_BATTLE: wBattleMode={e.get('mode')!r} != 2")
         elif kind == "next" and e.get("pc") != NEXT:
             why.append(f"NEXT_PC_MISMATCH: 0f:47E0 callback observed PC={e.get('pc')!r}")
+        elif kind == "last" and e.get("pc") != LAST:
+            why.append(f"LAST_PC_MISMATCH: 0f:480D callback observed PC={e.get('pc')!r}")
         site = e.get("site_bytes")
         try:
             observed_bytes = bytes.fromhex(site) if isinstance(site, str) else b""
@@ -91,7 +110,7 @@ def evaluate(trace) -> tuple[bool, list[str]]:
         if len(observed_bytes) != 6 or observed_bytes[:3] != PINNED_BYTES:
             why.append(f"SITE_BYTES_MISMATCH: gate ROM bytes={site!r}, expected six bytes beginning 218bd2")
     if not qualified_gates:
-        why.append("NO_GATE_HIT: OPEN; no bank-qualified 0f:47DD callback (not a PASS)")
+        why.append("NO_GATE_HIT: OPEN; no bank-and-PC-qualified 0f:47DD callback (not a PASS)")
     return not why, why
 
 
@@ -133,7 +152,7 @@ def parse_args(argv=None):
     ap.add_argument("--fixture", type=Path, required=True, help="native SaveRAM, copied unchanged")
     ap.add_argument("--route", type=Path, help="timed native input from emulator boot; optional for idle observation")
     ap.add_argument("--frames", type=int, default=12000, help="total observation frames, including route")
-    ap.add_argument("--trace-cap", type=int, default=4096, help="maximum hook rows; overflow fails the oracle")
+    ap.add_argument("--trace-cap", type=int, default=4096, help="maximum bank-matched hook rows; overflow fails the oracle")
     ap.add_argument("--timeout", type=int, default=600, help="wall-clock deadline in seconds")
     args = ap.parse_args(argv)
     for name in ("frames", "trace_cap", "timeout"):

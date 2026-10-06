@@ -103,6 +103,8 @@ def evaluate(trace, pins=None) -> tuple[bool, list[str]]:
 
     Recompute Lua booleans from raw stack/guard bytes. Never trust a supplied stack_match
     alone, and never let wrong-bank rows supply the positive sample or negative finding.
+    Wrong-bank callbacks retain at most 16 samples per site; final aggregate counters
+    account for compressed callbacks without making them positive measurements.
     """
     if pins is None:
         pins = derive_contract(read_symbols(SYMBOLS))["pins"]
@@ -114,14 +116,36 @@ def evaluate(trace, pins=None) -> tuple[bool, list[str]]:
         why.append("INCOMPLETE: missing unique completed final event at end")
     else:
         final = finals[0]
-        if final.get("guest_writes") != 0 or final.get("cpu_changes") != 0:
-            why.append("PROBE_MUTATION: write/register-change counters must be zero")
+        if (type(final.get("guest_writes")) is not int or final["guest_writes"] != 0
+                or type(final.get("cpu_changes")) is not int or final["cpu_changes"] != 0):
+            why.append("PROBE_MUTATION: write/register-change counters must be integer zero")
+        if any(type(final.get(k)) is not int or final[k] != 0 for k in ("driver_errors", "overflows")):
+            why.append("MALFORMED: driver-error/overflow counters must be integer zero")
         if type(final.get("prompt_hits")) is not int or final["prompt_hits"] != 0:
             why.append(f"PROMPT_ENTRY: expected zero accept-path entries, got {final.get('prompt_hits')!r}")
         phase_frames = final.get("phase_frames")
         if (not isinstance(phase_frames, dict)
                 or any(type(phase_frames.get(p)) is not int or phase_frames[p] <= 0 for p in REQUIRED_PHASES)):
             why.append("INCOMPLETE_PHASES: idle, walking, start_menu and npc_talk must each have played frames")
+    if len(finals) == 1:
+        if str(REPO) not in sys.path:
+            sys.path.insert(0, str(REPO))
+        from tools.polished_live.faint_probe import validate_hook_counts
+
+        final = finals[0]
+        why.extend(validate_hook_counts(trace, final, {
+            "dispatch": {"bank": BANK, "addr": DISPATCH},
+            "prompt": {"bank": BANK, "addr": PROMPT},
+        }))
+        counters = final.get("hook_counts")
+        if isinstance(counters, dict):
+            for kind in ("dispatch", "prompt"):
+                counts = counters.get(kind)
+                if isinstance(counts, dict) and (
+                    type(final.get(kind + "_hits")) is not int
+                    or final[kind + "_hits"] != counts.get("qualified")
+                ):
+                    why.append(f"MALFORMED: {kind}_hits disagrees with qualified aggregate")
     for e in trace:
         kind = e.get("kind")
         if kind in ("overflow", "guest_write", "cpu_change", "driver_error"):

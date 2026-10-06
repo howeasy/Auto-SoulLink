@@ -1,7 +1,7 @@
 """Synthetic consumer-visible service traces; no emulator, server or SLink client.
 
 Six positive cases, independently corrupted publications/ownership/restoration,
-runner pure parts, and Lua 5.5 compilation without executing the driver.
+runner pure parts, and actual Lua mock callbacks/serialization (no live emulator).
 """
 from __future__ import annotations
 
@@ -16,6 +16,36 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("trade_service_probe", ROOT / "tools/polished_live/trade_service_probe.py")
 P = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(P)
+
+SITES = {name: {"bank": 0x7E, "addr": 0x4500 + i * 16} for i, name in enumerate(P.HOOKS)}
+SITES["SlinkTradeEntry"] = {"bank": 0x7E, "addr": 0x4480}
+SITES["GetScriptByte"] = {"bank": 0x25, "addr": 0x4100}
+SITES["Script_endtext"] = {"bank": 0x25, "addr": 0x4200}
+SITES["service_return"] = {"bank": 0x7E, "addr": 0x4680}
+
+
+def attach_accounting(trace):
+    counts = {name: {"total": 0, "qualified": 0, "wrong_pc": 0, "wrong_banks": {},
+                     "wrong_bank_samples": 0} for name in SITES}
+    for e in trace:
+        name = e.get("hook_site")
+        if name not in counts:
+            continue
+        c = counts[name]
+        c["total"] += 1
+        if not e["matched"]:
+            key = str(e["bank"])
+            c["wrong_banks"][key] = c["wrong_banks"].get(key, 0) + 1
+            c["wrong_bank_samples"] += 1
+        elif e["qualified"]:
+            c["qualified"] += 1
+        else:
+            c["wrong_pc"] += 1
+    for e in trace:
+        if e["kind"] in ("final", "complete"):
+            e.update(hook_sites=copy.deepcopy(SITES), hook_counts=copy.deepcopy(counts),
+                     wrong_bank_sample_limit=16, completed=True, driver_errors=0)
+    return trace
 
 
 class Trace:
@@ -41,6 +71,13 @@ class Trace:
              "count": 5, "party_sum": "01234567", "ot_tail_sum": "89abcdef",
              "own0_sum": self.own0, "ot0_sum": self.ot0, "ot1_sum": self.ot1,
              "lease": self.lease.copy(), "sbank": 0x24, "spos": 0x762C, "x": 5, "y": 3}
+        if kind in P.HOOK_KINDS:
+            name = P.HOOK_KINDS[kind]
+            site = SITES[name]
+            e.update(hook_site=name, hook_addr=site["addr"], pc=site["addr"], bank=site["bank"],
+                     matched=True, qualified=True)
+        if kind == "service_entry":
+            e.update(return_addr=SITES["service_return"]["addr"], return_bank=SITES["service_return"]["bank"])
         e.update(fields)
         self.events.append(e)
         return e
@@ -165,7 +202,7 @@ def good_trace(case):
                 if case == "apply-done1":
                     t.done()
     t.close()
-    return t.events
+    return attach_accounting(t.events)
 
 
 def mutate(trace, kind, **fields):
@@ -414,3 +451,316 @@ def test_lua55_loads_driver_without_running_it():
     compile_only = lua.eval("function(source) local f, why = load(source, '@trade_service_probe.lua'); return f ~= nil, why end")
     ok, why = compile_only((ROOT / "tools/polished_live/trade_service_probe.lua").read_text(encoding="utf-8"))
     assert ok, why
+
+
+@pytest.mark.parametrize("field,value", [
+    ("total", 2), ("qualified", 2), ("wrong_pc", 1), ("wrong_banks", {"9": 1}),
+    ("wrong_bank_samples", 1), ("total", True),
+])
+def test_missing_or_overstated_hook_counter_fails(field, value):
+    trace = good_trace("cancel-menu")
+    for e in trace:
+        if e["kind"] in ("final", "complete"):
+            e["hook_counts"]["SlinkTradeEntry"][field] = value
+    assert not P.evaluate("cancel-menu", trace)[0]
+    for e in trace:
+        if e["kind"] in ("final", "complete"):
+            del e["hook_counts"]["SlinkTradeEntry"][field]
+    assert not P.evaluate("cancel-menu", trace)[0]
+
+
+def test_hook_sites_checked_against_symbols_and_observed_continuation():
+    trace = good_trace("cancel-menu")
+    symbols = {name: [site["bank"], site["addr"]] for name, site in SITES.items()}
+    assert P.evaluate("cancel-menu", trace, symbols)[0]
+    symbols["GetScriptByte"][1] += 1
+    assert not P.evaluate("cancel-menu", trace, symbols)[0]
+    for e in trace:
+        if e["kind"] in ("final", "complete"):
+            e["hook_sites"]["service_return"]["addr"] += 1
+    assert not P.evaluate("cancel-menu", trace)[0]
+
+
+def test_bad_pc_sample_does_not_satisfy_native_lifecycle():
+    trace = good_trace("cancel-menu")
+    entry = next(e for e in trace if e["kind"] == "service_entry")
+    entry.update(kind="wrong_pc", pc=entry["pc"] + 1, qualified=False)
+    attach_accounting(trace)
+    ok, reasons = P.evaluate("cancel-menu", trace)
+    assert not ok
+    assert any("service_entry: expected exactly once" in reason for reason in reasons)
+    assert any("wrong_pc" in reason for reason in reasons)
+
+
+def mock_driver(encoder="good", case="cancel-menu", rom0=False):
+    """Run the actual driver in a paused Lua coroutine; invoke its registered CPU callbacks."""
+    from lupa.lua55 import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().mock_case = case
+    lua.execute(r'''
+        callbacks, frame_end, writes, exited = {}, nil, {}, false
+        current_bank, current_pc, current_sp, current_frame = 0x7e, 0x4480, 0xc0ce, 100
+        captured_trace = nil
+        script_bank, script_pos = 0, 0
+        local names = {
+            "SlinkTradeEntry", "SlinkTradeClose", "SlinkTradeCheckHeader", "Script_endtext",
+            "GetScriptByte", "SelectTradeOrDayCareMon", "YesNoBox", "NoYesBox",
+            "Special_TryQuickSave", "SlinkTradeTimeoutGate", "OWPlayerInput",
+            "SetInitialOptions.joypad_loop", "wSlinkMailbox", "hVBlank", "hScriptBank",
+            "hScriptPos", "hMapEntryMethod"
+        }
+        L = {SYM={}, hits={}, hit={}, ids={}, RUN="mock", failures=0, json={}}
+        for i, name in ipairs(names) do L.SYM[name] = {0x7e, 0x4500 + i * 16} end
+        L.SYM.SlinkTradeEntry = {0x7e, 0x4480}
+        L.SYM.GetScriptByte = {0x25, 0x4100}
+        L.rombank = function() return current_bank end
+        L.bus = function(a)
+            if a == current_sp then return 0x80 end
+            if a == current_sp + 1 then return 0x46 end
+            if a == L.SYM.hScriptBank[2] then return script_bank end
+            if a == L.SYM.hScriptPos[2] then return script_pos & 0xff end
+            if a == L.SYM.hScriptPos[2] + 1 then return script_pos >> 8 end
+            return 0
+        end
+        L.rw = function(name)
+            if name == "wMapWidth" then return 8 end
+            if name == "wMapHeight" then return 4 end
+            if name == "wXCoord" then return 5 end
+            if name == "wYCoord" then return 3 end
+            return 0
+        end
+        L.wbytes = function(_, _, n) local t = {} for i = 1, n do t[i] = 0 end return t end
+        L.ww, L.log, L.idle = function() end, function() end, function() end
+        L.to_overworld, L.ow_idle = function() return true end, function() return true end
+        L.check = function(_, ok) if not ok then L.failures = L.failures + 1 end end
+        L.finish = function() exited = true error("mock-finished", 0) end
+        L.frame = function() coroutine.yield("frame") end
+        L.pulse = L.frame
+        client = {speedmode=function() end}
+        emu = {framecount=function() return current_frame end,
+               getregister=function(name)
+                   if name == "PC" then return current_pc end
+                   if name == "SP" then return current_sp end
+               end}
+        event = {
+            on_bus_exec=function(fn, _, name) callbacks[name:sub(5)] = fn return name end,
+            on_bus_write=function() end,
+            onframeend=function(fn) frame_end = fn end
+        }
+        memory = {write_u8=function() end}
+        os.getenv = function(name)
+            if name == "SLINK_ROOT" then return "mock-root" end
+            if name == "POL_CASE" then return mock_case end
+            if name == "POL_FRAME_CAP" then return "12000" end
+        end
+        local lease = {OFF_LEASE=0, LEASE_SIZE=16, new=function() return {} end}
+        dofile = function(path) if path:find("pol_lib", 1, true) then return L else return lease end end
+        io.open = function()
+            return {write=function(_, text) assert(type(text) == "string") writes[#writes+1] = text end,
+                    close=function() end}
+        end
+        L.json.encode = function(trace)
+            captured_trace = trace
+            return primary_encode(trace)
+        end
+    ''')
+    def convert(value):
+        from lupa.lua55 import lua_type
+
+        if lua_type(value) != "table":
+            return value
+        keys = list(value.keys())
+        if keys and all(type(k) is int for k in keys) and sorted(keys) == list(range(1, len(keys) + 1)):
+            return [convert(value[i]) for i in range(1, len(keys) + 1)]
+        return {str(k): convert(value[k]) for k in keys}
+
+    if encoder == "good":
+        lua.globals().primary_encode = lambda trace: json.dumps(convert(trace))
+    elif encoder == "nil":
+        lua.execute("primary_encode = function() return nil, 'encoder unavailable' end")
+    else:
+        lua.execute('primary_encode = function() error(\'bad "encoder"\\nthrow\') end')
+    if rom0:
+        lua.execute("L.SYM.OWPlayerInput = {0, 0x1234}")
+    source = (ROOT / "tools/polished_live/trade_service_probe.lua").read_text(encoding="utf-8")
+    lua.globals().driver_source = source
+    lua.execute('thread = coroutine.create(assert(load(driver_source, "@trade_service_probe.lua")))')
+    assert lua.eval("coroutine.resume(thread)") == (True, "frame")
+    return lua, convert
+
+
+def fire(lua, name, bank=None, pc=None):
+    site = lua.globals().L.SYM[name]
+    lua.globals().current_bank = site[1] if bank is None else bank
+    lua.globals().current_pc = site[2] if pc is None else pc
+    lua.globals().callbacks[name]()
+
+
+def stop_driver(lua):
+    lua.globals().current_frame = 12001
+    lua.execute("stop_ok, stop_reason = pcall(frame_end)")
+    assert lua.globals().exited
+    assert not lua.globals().stop_ok
+    return json.loads(lua.globals().writes[1])
+
+
+def test_actual_lua_bounds_wrong_bank_samples_per_site_and_keeps_qualified_evidence():
+    from tools.polished_live.faint_probe import validate_hook_counts
+
+    lua, _ = mock_driver()
+    for name in ("GetScriptByte", "SlinkTradeEntry"):
+        for i in range(7001):
+            fire(lua, name, bank=8 + i % 2)
+        fire(lua, name)
+    # The native entry installed its dynamic continuation; it gets the same bounded accounting.
+    for i in range(7001):
+        lua.globals().current_bank = 8 + i % 2
+        lua.globals().current_pc = 0x4680
+        lua.globals().callbacks.service_return()
+    lua.globals().current_bank = 0x7E
+    lua.globals().current_pc = 0x4680
+    lua.globals().callbacks.service_return()
+    trace = stop_driver(lua)
+    final = next(e for e in trace if e["kind"] == "final")
+    for name, kind in (("GetScriptByte", "gsb"), ("SlinkTradeEntry", "service_entry"),
+                       ("service_return", "service_return")):
+        counts = final["hook_counts"][name]
+        assert counts == {"total": 7002, "qualified": 1, "wrong_pc": 0,
+                          "wrong_banks": {"8": 3501, "9": 3500}, "wrong_bank_samples": 16}
+        assert sum(e.get("hook_site") == name and e["kind"] == "wrong_bank" for e in trace) == 16
+        rows = [e for e in trace if e["kind"] == kind]
+        assert len(rows) == 1 and rows[0]["qualified"] is True
+        assert "party_sum" in rows[0] and len(rows[0]["lease"]) == 16
+    assert not validate_hook_counts(trace, final, final["hook_sites"])
+
+
+@pytest.mark.parametrize("encoder", ["nil", "throw"])
+def test_actual_lua_encoder_failure_writes_readable_minimal_trace_and_finishes(encoder):
+    lua, _ = mock_driver(encoder)
+    for _ in range(7001):
+        fire(lua, "GetScriptByte", bank=9)
+    fire(lua, "GetScriptByte")
+    trace = stop_driver(lua)
+    assert trace[0]["kind"] == "driver_error"
+    final = trace[-1]
+    assert final["kind"] == "final" and final["completed"] is False
+    assert final["driver_errors"] == 2  # deadline + serializer failure
+    assert final["hook_counts"]["GetScriptByte"]["total"] == 7002
+    assert final["hook_counts"]["GetScriptByte"]["wrong_bank_samples"] == 16
+    assert not P.evaluate("cancel-menu", trace)[0]
+
+
+def test_actual_lua_wrong_pc_never_enters_native_service():
+    lua, _ = mock_driver()
+    fire(lua, "SlinkTradeEntry", pc=0x4481)
+    assert lua.globals().callbacks.service_return is None
+    trace = stop_driver(lua)
+    row = next(e for e in trace if e["kind"] == "wrong_pc")
+    assert row["matched"] is True and row["qualified"] is False
+    assert "party_sum" in row and not any(e["kind"] == "service_entry" for e in trace)
+
+
+def test_actual_lua_wrong_bank_does_not_consume_gsb_protected_capacity():
+    lua, _ = mock_driver()
+    for _ in range(7001):
+        fire(lua, "GetScriptByte", bank=9)
+    for _ in range(4000):
+        fire(lua, "GetScriptByte")
+    fire(lua, "GetScriptByte", pc=0x4101)
+    trace = stop_driver(lua)
+    assert sum(e["kind"] == "gsb" for e in trace) == 4000
+    assert sum(e["kind"] == "gsb_overflow" for e in trace) == 1
+    final = next(e for e in trace if e["kind"] == "final")
+    assert final["hook_counts"]["GetScriptByte"]["wrong_pc"] == 1
+    assert final["completed"] is False
+
+
+@pytest.mark.parametrize("case", P.CASES)
+def test_compressed_wrong_bank_claims_keep_native_and_byte_staging_proof(case):
+    trace = good_trace(case)
+    samples = []
+    for name, site in SITES.items():
+        for _ in range(16):
+            e = copy.deepcopy(trace[0])
+            e.update(kind="wrong_bank", hook_site=name, hook_addr=site["addr"], pc=site["addr"],
+                     bank=9, matched=False, qualified=False)
+            samples.append(e)
+        for e in trace:
+            if e["kind"] in ("final", "complete"):
+                counts = e["hook_counts"][name]
+                counts["total"] += 7001
+                counts["wrong_banks"] = {"9": 7001}
+                counts["wrong_bank_samples"] = 16
+    trace[1:1] = samples
+    renumber(trace)
+    ok, reasons = P.evaluate(case, trace)
+    assert ok, reasons
+
+
+def test_actual_lua_rom0_matches_any_bank_shadow_but_still_checks_pc():
+    lua, _ = mock_driver(rom0=True)
+    fire(lua, "OWPlayerInput", bank=9)
+    fire(lua, "OWPlayerInput", bank=8, pc=0x1235)
+    trace = stop_driver(lua)
+    final = next(e for e in trace if e["kind"] == "final")
+    assert final["hook_counts"]["OWPlayerInput"] == {
+        "total": 2, "qualified": 1, "wrong_pc": 1, "wrong_banks": {}, "wrong_bank_samples": 0,
+    }
+    assert sum(e["kind"] == "OWPlayerInput" for e in trace) == 1
+    assert sum(e["kind"] == "wrong_pc" for e in trace) == 1
+
+
+@pytest.mark.parametrize("encoder", ["nil", "throw"])
+def test_actual_lua_completed_dump_encoder_failure_also_finishes(encoder):
+    lua, _ = mock_driver(encoder, case="query-timeout")
+    fire(lua, "YesNoBox")
+    fire(lua, "YesNoBox")
+    fire(lua, "Special_TryQuickSave")
+    lua.globals().script_bank = 0x24
+    lua.globals().script_pos = 0x7616
+    fire(lua, "GetScriptByte")
+    fire(lua, "SlinkTradeEntry")
+    lua.globals().current_bank = 0x7E
+    lua.globals().current_pc = 0x4680
+    lua.globals().callbacks.service_return()
+    for _ in range(100):
+        lua.eval("coroutine.resume(thread)")
+        if lua.globals().exited:
+            break
+    assert lua.globals().exited
+    trace = json.loads(lua.globals().writes[1])
+    final = trace[-1]
+    assert final["completed"] is False and final["driver_errors"] == 1
+    assert final["hook_counts"]["SlinkTradeEntry"]["qualified"] == 1
+    assert final["hook_counts"]["service_return"]["qualified"] == 1
+    assert trace[0]["kind"] == "driver_error"
+    assert not P.evaluate("query-timeout", trace)[0]
+
+
+def test_actual_lua_gsb_bad_pc_keeps_full_diagnostics_and_consumes_capacity():
+    lua, _ = mock_driver()
+    fire(lua, "GetScriptByte", pc=0x4101)
+    for _ in range(3999):
+        fire(lua, "GetScriptByte")
+    fire(lua, "GetScriptByte")
+    trace = stop_driver(lua)
+    wrong = [e for e in trace if e["kind"] == "wrong_pc"]
+    assert len(wrong) == 1 and wrong[0]["hook_site"] == "GetScriptByte"
+    assert wrong[0]["matched"] is True and wrong[0]["qualified"] is False
+    assert "party_sum" in wrong[0] and len(wrong[0]["lease"]) == 16
+    assert sum(e["kind"] == "gsb" for e in trace) == 3999
+    assert sum(e["kind"] == "gsb_overflow" for e in trace) == 1
+
+
+def test_actual_lua_callback_snapshot_failure_records_driver_error_and_finishes():
+    lua, _ = mock_driver()
+    lua.execute('L.wbytes = function() error("unreadable snapshot") end')
+    lua.execute('callback_ok, callback_reason = pcall(callbacks.SlinkTradeEntry)')
+    assert lua.globals().exited and not lua.globals().callback_ok
+    trace = json.loads(lua.globals().writes[1])
+    assert any(e["kind"] == "driver_error" for e in trace)
+    final = next(e for e in trace if e["kind"] == "final")
+    assert final["completed"] is False and final["driver_errors"] == 2
+    assert final["hook_counts"]["SlinkTradeEntry"]["total"] == 1
+    assert not P.evaluate("cancel-menu", trace)[0]

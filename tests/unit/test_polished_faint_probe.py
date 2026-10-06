@@ -1,4 +1,4 @@
-"""F3 authoring evidence: synthetic oracle/runner tests and Lua 5.5 compile ONLY."""
+"""F3 authoring evidence: synthetic oracle/runner tests and mocked Lua execution only."""
 
 from __future__ import annotations
 
@@ -107,6 +107,26 @@ def envelope(config, rows):
         }
     ] + copy.deepcopy(rows)
     counts = Counter(r["kind"] for r in rows if r["kind"] in P.SITES)
+    hook_counts = {}
+    for name, site in config["contract"]["sites"].items():
+        retained = [row for row in rows if row.get("kind") == name]
+        qualified = wrong_pc = 0
+        wrong_banks = Counter()
+        for row in retained:
+            matched = site["addr"] < 0x4000 or row["bank"] == site["bank"]
+            if not matched:
+                wrong_banks[str(row["bank"])] += 1
+            elif row["pc"] == site["addr"]:
+                qualified += 1
+            else:
+                wrong_pc += 1
+        hook_counts[name] = {
+            "total": len(retained),
+            "qualified": qualified,
+            "wrong_pc": wrong_pc,
+            "wrong_banks": dict(wrong_banks),
+            "wrong_bank_samples": sum(wrong_banks.values()),
+        }
     trace.append(
         {
             "kind": "final",
@@ -115,6 +135,8 @@ def envelope(config, rows):
             "elapsed": config["frames"],
             "hook_hits": sum(counts.values()),
             "counts": {k: counts[k] for k in P.SITES},
+            "hook_counts": hook_counts,
+            "wrong_bank_sample_limit": 16,
             "guest_writes": 0,
             "cpu_changes": 0,
             "overflows": 0,
@@ -426,14 +448,17 @@ def test_dry_run_has_no_staging_environment_or_process_side_effect(
     assert "harness" not in set(sys.modules) - before_modules
 
 
+@pytest.mark.parametrize("size", [32768, 32790], ids=["native", "rtc-footer"])
 @pytest.mark.parametrize(
     "case,ok",
     [("complete", True), ("truncated", False), ("launch-error", False)],
     ids=["runner-complete", "runner-truncated", "runner-exception"],
 )
-def test_runner_with_synthetic_launcher_only(tmp_path, monkeypatch, inputs, config, case, ok):
+def test_runner_with_synthetic_launcher_only(tmp_path, monkeypatch, inputs, config, case, ok, size):
     fixture = tmp_path / "played.SaveRAM"
-    fixture.write_bytes(bytes(32768))
+    fixture_bytes = bytes(range(256)) * 128 + (b"RTC-footer-preserved!!" if size == 32790 else b"")
+    assert len(fixture_bytes) == size
+    fixture.write_bytes(fixture_bytes)
     monkeypatch.setattr(P, "WORK", tmp_path / "lane")
     monkeypatch.setattr(
         P, "prepare", lambda: (inputs[1], config["contract"], copy.deepcopy(config["provenance"]))
@@ -532,3 +557,269 @@ def test_lua55_compile_only_and_no_literal_guest_addresses():
     assert 'name:match("^write")' in source and 'name == "setregister"' in source
     assert 'append("overflow"' in source and 'append("final"' in source
     assert "pcall(record, kind, site)" in source
+
+
+@pytest.mark.parametrize("size", [32768, 32790], ids=["native", "rtc-footer"])
+def test_parse_preserves_exact_native_fixture(tmp_path, size):
+    fixture = tmp_path / "native.SaveRAM"
+    raw = bytes(range(256)) * 128 + bytes(range(size - 32768))
+    fixture.write_bytes(raw)
+    args = P.parse_args(["--setup", "played", "--fixture", str(fixture)])
+    assert args.fixture_bytes == raw
+    assert fixture.read_bytes() == raw
+    assert P.digest(args.fixture_bytes) == P.digest(raw)
+
+
+@pytest.mark.parametrize("size", [0, 32767, 32769, 32789, 32791, 65536])
+def test_non_native_fixture_sizes_keep_exact_refusal(tmp_path, capsys, size):
+    fixture = tmp_path / "wrong.SaveRAM"
+    fixture.write_bytes(bytes(size))
+    with pytest.raises(SystemExit):
+        P.parse_args(["--setup", "played", "--fixture", str(fixture)])
+    assert capsys.readouterr().err.splitlines()[-1].endswith(
+        "error: native Polished SaveRAM must be 32768 bytes"
+    )
+
+
+@pytest.mark.parametrize(
+    "field", ["total", "qualified", "wrong_pc", "wrong_banks", "wrong_bank_samples"]
+)
+@pytest.mark.parametrize("mutation", ["missing", "overstated", "bool"])
+def test_each_callback_counter_is_mandatory_and_consistent(config, field, mutation):
+    trace = envelope(config, passes(config))
+    counter = trace[-1]["hook_counts"]["pre_copy"]
+    if mutation == "missing":
+        del counter[field]
+    elif mutation == "bool":
+        counter[field] = True
+    elif field == "wrong_banks":
+        counter[field] = {"37": 7000}
+    else:
+        counter[field] += 1
+    verdict, reasons = P.evaluate(trace, config)
+    assert verdict == "FAIL"
+    assert any(reason.startswith("MALFORMED:") for reason in reasons)
+
+
+@pytest.mark.parametrize("case", ["missing-map", "missing-site", "extra-site", "missing-limit", "bad-limit"])
+def test_hook_accounting_envelope_is_mandatory(config, case):
+    trace = envelope(config, passes(config))
+    final = trace[-1]
+    if case == "missing-map":
+        del final["hook_counts"]
+    elif case == "missing-site":
+        del final["hook_counts"]["lost"]
+    elif case == "extra-site":
+        final["hook_counts"]["unregistered"] = copy.deepcopy(final["hook_counts"]["lost"])
+    elif case == "missing-limit":
+        del final["wrong_bank_sample_limit"]
+    else:
+        final["wrong_bank_sample_limit"] = True
+    assert P.evaluate(trace, config)[0] == "FAIL"
+
+
+@pytest.mark.parametrize("banks", [{"037": 1}, {"37": True}, {"37": 0}, {"256": 1}, [1], {"9" * 5000: 1}])
+def test_wrong_bank_map_is_strict_without_crashing(config, banks):
+    trace = envelope(config, passes(config))
+    trace[-1]["hook_counts"]["lost"]["wrong_banks"] = banks
+    assert P.evaluate(trace, config)[0] == "FAIL"
+
+
+def test_shared_validator_accepts_empty_lua_maps_and_rom0_shadow(config):
+    site = {"fixed": {"bank": 0, "addr": 0x1234}}
+    row = {"kind": "wrong_pc", "hook_site": "fixed", "hook_addr": 0x1234,
+           "pc": 0x1235, "bank": 37, "matched": True, "qualified": False}
+    final = {"wrong_bank_sample_limit": 16, "hook_counts": {
+        "fixed": {"total": 1, "qualified": 0, "wrong_pc": 1,
+                  "wrong_banks": [], "wrong_bank_samples": 0}
+    }}
+    assert P.validate_hook_counts([row], final, site) == []
+    row.update(pc=0x1234, qualified=True)
+    final["hook_counts"]["fixed"].update(qualified=1, wrong_pc=0)
+    assert P.validate_hook_counts([row], final, site) == []
+
+
+def run_mocked_faint_lua(config, *, encoder="normal", wrong_pc=False, driver_failure=False):
+    """Execute the actual driver with deterministic emulator/transport substitutes."""
+    lua55 = pytest.importorskip("lupa.lua55")
+    lua = lua55.LuaRuntime(unpack_returned_tuples=True)
+
+    def to_lua(value):
+        if isinstance(value, dict):
+            return lua.table_from({key: to_lua(item) for key, item in value.items()})
+        if isinstance(value, list):
+            return lua.table_from([to_lua(item) for item in value])
+        return value
+
+    def from_lua(value):
+        if lua55.lua_type(value) != "table":
+            return value
+        keys = list(value.keys())
+        if not keys or set(keys) == set(range(1, len(keys) + 1)):
+            return [from_lua(value[index]) for index in range(1, len(keys) + 1)]
+        return {key: from_lua(value[key]) for key in keys}
+
+    lua.globals().CONFIG = to_lua(config)
+    lua.globals().ENCODER = encoder
+    lua.globals().WRONG_PC = wrong_pc
+    lua.globals().DRIVER_FAILURE = driver_failure
+    lua.globals().py_encode = lambda value: json.dumps(from_lua(value))
+    lua.execute(r'''
+        local callbacks, now, bank, pc = {}, 0, 15, 0
+        local ordered = {"resolve", "pre_copy", "copy_call", "copy_return", "faint", "lost"}
+        local values = {rombank=15, slot=0, count=2, battle_hp=0, battle_status=0,
+                        party_hp=0, party_status=0, order=0, substatus2=0, turn=0, mode=1}
+        local ram, rom = {}, {}
+        for field, where in pairs(CONFIG.contract.ram) do
+            ram[where.domain .. ":" .. where.offset] = field
+        end
+        for _, site in pairs(CONFIG.contract.sites) do
+            for i=1,#site.bytes,2 do
+                rom[site.rom_offset + (i-1)//2] = tonumber(site.bytes:sub(i,i+1),16)
+            end
+        end
+        memory = {read_u8=function(offset, domain)
+            if domain == "ROM" then return assert(rom[offset]) end
+            local field = ram[domain .. ":" .. offset]
+            if field == "rombank" then return bank end
+            if field then return values[field] end
+            return 10
+        end}
+        emu = {framecount=function() return now end,
+               getregister=function(name) return name == "PC" and pc or 49360 end,
+               getsystemid=function() return "GB" end}
+        client = {getversion=function() return "mock" end, speedmode=function() end}
+        event = {
+            on_bus_exec=function(fn, addr, name)
+                callbacks[name:sub(#"pol_faint_" + 1)] = fn
+                return name
+            end,
+            unregisterbyid=function() end
+        }
+        os.getenv=function() return "mock" end
+        io.open=function()
+            return {write=function(self, text) assert(type(text)=="string"); OUTPUT=text; return self end,
+                    close=function() end}
+        end
+        local L = {RUN="mock", json={decode=function() return CONFIG end}, slurp=function() return "" end}
+        L.json.encode=function(value)
+            if ENCODER == "nil" then return nil end
+            if ENCODER == "throw" then error("synthetic \"encoder\"\nfailed") end
+            return py_encode(value)
+        end
+        L.hex=function(bytes)
+            local result={}
+            for _, value in ipairs(bytes) do result[#result+1]=string.format("%02x",value) end
+            return table.concat(result)
+        end
+        L.frame=function()
+            now=now+1
+            for _, name in ipairs(ordered) do
+                local site=CONFIG.contract.sites[name]
+                pc=site.addr
+                for i=1,7001 do
+                    bank=i%2 == 1 and 37 or 38
+                    callbacks[name]()
+                end
+            end
+            bank=15
+            for i=1,4 do
+                local name=ordered[i]
+                pc=CONFIG.contract.sites[name].addr
+                if WRONG_PC and name=="pre_copy" then pc=pc+3 end
+                callbacks[name]()
+            end
+            if DRIVER_FAILURE then error("synthetic frame failure") end
+        end
+        L.check=function(_, ok) CHECK_OK=ok end
+        L.finish=function() FINISHED=true end
+        dofile=function() return L end
+    ''')
+    lua.execute((ROOT / "tools/polished_live/faint_probe.lua").read_text())
+    return json.loads(lua.globals().OUTPUT), lua.globals().FINISHED, lua.globals().CHECK_OK
+
+
+def test_actual_lua_wrong_bank_volume_preserves_qualified_diagnostics(config):
+    config.update(frames=1, trace_cap=5)
+    trace, finished, checked = run_mocked_faint_lua(config)
+    assert finished is True and checked is True
+    final = trace[-1]
+    assert final["hook_hits"] == 6 * 7001 + 4
+    assert final["wrong_bank_sample_limit"] == 16
+    for name, counter in final["hook_counts"].items():
+        rows = [row for row in trace if row["kind"] == name]
+        wrong = [row for row in rows if not row["matched"]]
+        assert len(wrong) == counter["wrong_bank_samples"] == 16
+        assert counter["wrong_banks"] == {"37": 3501, "38": 3500}
+        expected_qualified = int(name in ("resolve", "pre_copy", "copy_call", "copy_return"))
+        assert counter["qualified"] == expected_qualified
+        assert counter["wrong_pc"] == 0
+        assert counter["total"] == final["counts"][name] == 7001 + expected_qualified
+        if expected_qualified:
+            qualified = [row for row in rows if row["qualified"]]
+            assert qualified == [hit(config, name, frame=1, ord=qualified[0]["ord"])]
+    assert P.evaluate(trace, config)[0] == "PASS"
+    for field in ("qualified", "wrong_pc", "wrong_bank_samples"):
+        corrupted = copy.deepcopy(trace)
+        corrupted[-1]["hook_counts"]["pre_copy"][field] += 1
+        assert P.evaluate(corrupted, config)[0] == "FAIL"
+
+
+@pytest.mark.parametrize("encoder", ["nil", "throw"])
+def test_actual_lua_encoder_failure_has_independent_readable_final(config, encoder):
+    config.update(frames=1, trace_cap=5)
+    trace, finished, checked = run_mocked_faint_lua(config, encoder=encoder)
+    assert finished is True and checked is False
+    diagnostic, final = trace
+    assert diagnostic["kind"] == "driver_error"
+    assert "trace serialization failed" in diagnostic["error"]
+    if encoder == "throw":
+        assert 'synthetic "encoder"\nfailed' in diagnostic["error"]
+    assert final["kind"] == "final" and final["completed"] is False
+    assert final["driver_errors"] == 1
+    assert final["hook_hits"] == 6 * 7001 + 4
+    assert final["hook_counts"]["pre_copy"]["total"] == 7002
+    assert final["hook_counts"]["pre_copy"]["wrong_bank_samples"] == 16
+    assert final["hook_counts"]["pre_copy"]["wrong_banks"] == {"37": 3501, "38": 3500}
+    assert P.evaluate(trace, config)[0] == "FAIL"
+
+
+def test_actual_lua_wrong_pc_keeps_diagnostics_and_protected_boundary(config):
+    config.update(frames=1, trace_cap=5)
+    trace, finished, checked = run_mocked_faint_lua(config, wrong_pc=True)
+    assert finished is True and checked is True
+    wrong = next(row for row in trace if row["kind"] == "pre_copy" and row["matched"])
+    assert wrong["qualified"] is False and wrong["pc"] == wrong["hook_addr"] + 3
+    assert wrong["battle_hp"] == 10 and wrong["party_hp"] == 10
+    assert trace[-1]["hook_counts"]["pre_copy"]["wrong_pc"] == 1
+    assert P.evaluate(trace, config)[0] == "WRONG_PC"
+    config["trace_cap"] = 4
+    trace, finished, checked = run_mocked_faint_lua(config, wrong_pc=True)
+    assert finished is True and checked is False
+    assert trace[-1]["overflows"] == 1
+    assert any(row["kind"] == "overflow" for row in trace)
+    assert P.evaluate(trace, config)[0] == "FAIL"
+
+
+def test_actual_lua_driver_error_cannot_report_success(config):
+    config.update(frames=1, trace_cap=5)
+    trace, finished, checked = run_mocked_faint_lua(config, driver_failure=True)
+    assert finished is True and checked is False
+    assert trace[-1]["completed"] is False and trace[-1]["driver_errors"] == 1
+    assert any(row["kind"] == "driver_error" for row in trace)
+    assert trace[-1]["hook_hits"] == 6 * 7001 + 4
+    assert P.evaluate(trace, config)[0] == "FAIL"
+
+
+def test_retained_wrong_bank_samples_cannot_be_omitted_or_undeclared(config):
+    config.update(frames=1, trace_cap=5)
+    trace, _, _ = run_mocked_faint_lua(config)
+    missing = copy.deepcopy(trace)
+    sample = next(row for row in missing if row["kind"] == "resolve" and not row["matched"])
+    missing.remove(sample)
+    for ordinal, row in enumerate(missing, 1):
+        row["ord"] = ordinal
+    assert P.evaluate(missing, config)[0] == "FAIL"
+    undeclared = copy.deepcopy(trace)
+    undeclared[-1]["hook_counts"]["resolve"]["wrong_banks"] = {"38": 7001}
+    assert P.evaluate(undeclared, config)[0] == "FAIL"

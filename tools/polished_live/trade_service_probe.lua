@@ -3,6 +3,8 @@
 -- TEST HOST: QUERY/OFFER replies, and disclosed COPY-to-OT-slot-0 staging for APPLY.
 -- gb_trade_lease owns framing. Host writes occur ONLY in onframeend, never in a CPU hook.
 -- Oracle/runner: trade_service_probe.py. This driver does not claim a native trade commit.
+-- Every exec callback is counted; only the first 16 wrong-bank samples per site are retained.
+-- Bad-PC callbacks are diagnostic-only. Serialization failure uses independent minimal JSON and FAILS.
 local ROOT = assert(os.getenv("SLINK_ROOT"))
 local L = dofile(ROOT .. "/tools/polished_live/pol_lib.lua")
 local Lease = dofile(ROOT .. "/lua/gb_trade_lease.lua")
@@ -18,6 +20,9 @@ local shadow, entered, returned, entry_frame, slot = nil, false, false, nil, nil
 local query_answered, offer_answered, applied, released = false, false, false, false
 local gsb_n, overflow = 0, false
 local last_pump = -1
+local hook_counts, hook_sites, driver_errors = {}, {}, 0
+local WRONG_BANK_SAMPLE_LIMIT = 16
+local finished = false
 local BUDGET = CASE == "query-timeout" and 700 or 2400
 client.speedmode(400)
 
@@ -53,18 +58,118 @@ local function snap(kind, extra)
     trace[#trace + 1] = e
     return e
 end
-local function dump()
+-- Independent serializer for a minimal failure trace; never retries the primary encoder.
+local function quote(value)
+    return '"' .. tostring(value):gsub('[%z\1-\31\\"]', function(c)
+        if c == '\\' then return '\\\\' end
+        if c == '"' then return '\\"' end
+        return string.format('\\u%04x', string.byte(c))
+    end) .. '"'
+end
+local function tiny_json(value)
+    local kind = type(value)
+    if kind == "string" then return quote(value) end
+    if kind == "number" or kind == "boolean" then return tostring(value) end
+    if kind ~= "table" then return "null" end
+    local parts = {}
+    for key, item in pairs(value) do parts[#parts + 1] = quote(key) .. ":" .. tiny_json(item) end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+local function accounting(e, completed)
+    e.hook_counts, e.hook_sites = hook_counts, hook_sites
+    e.wrong_bank_sample_limit, e.driver_errors = WRONG_BANK_SAMPLE_LIMIT, driver_errors
+    e.completed = completed and driver_errors == 0 and not overflow
+    return e
+end
+local function dump(completed)
+    local final
+    for _, e in ipairs(trace) do
+        if e.kind == "final" or e.kind == "complete" then
+            accounting(e, completed)
+            if e.kind == "final" then final = e end
+        end
+    end
+    if not final then
+        local ok, snapshot = pcall(snap, "final")
+        if ok then final = accounting(snapshot, false)
+        else
+            driver_errors = driver_errors + 1
+            final = accounting({kind="final"}, false)
+            trace[#trace + 1] = {kind="driver_error", reason="final snapshot failed: " .. tostring(snapshot)}
+            trace[#trace + 1] = final
+        end
+    end
+    local ok, encoded = pcall(L.json.encode, trace)
+    if not ok or type(encoded) ~= "string" then
+        driver_errors = driver_errors + 1
+        local diagnostic = {kind="driver_error", reason="trace serialization failed: " .. tostring(encoded)}
+        trace[#trace + 1] = diagnostic
+        L.check(diagnostic.reason, false)
+        accounting(final, false)
+        encoded = "[" .. tiny_json(diagnostic) .. "," .. tiny_json({
+            kind="final", completed=false, driver_errors=driver_errors,
+            wrong_bank_sample_limit=WRONG_BANK_SAMPLE_LIMIT, hook_counts=hook_counts, hook_sites=hook_sites
+        }) .. "]"
+    end
     local f = assert(io.open(L.RUN .. "/trace.json", "w"))
-    f:write(L.json.encode(trace)) f:close()
+    f:write(encoded) f:close()
 end
 local function die(why)
-    snap("driver_error", {reason=why}) L.check(why, false) dump() L.finish("aborted")
+    if finished then error(why, 0) end
+    finished = true driver_errors = driver_errors + 1
+    local ok, snapshot_error = pcall(snap, "driver_error", {reason=tostring(why)})
+    if not ok then trace[#trace + 1] = {kind="driver_error", reason=tostring(snapshot_error)} end
+    L.check(tostring(why), false)
+    local dumped, dump_error = pcall(dump, false)
+    if not dumped then L.check("trace dump failed: " .. tostring(dump_error), false) end
+    L.finish("aborted")
+end
+local function hook_at(name, bank, addr, fn)
+    if hook_sites[name] then return end
+    hook_sites[name] = {bank=bank, addr=addr}
+    local counts = {total=0, qualified=0, wrong_pc=0, wrong_banks={}, wrong_bank_samples=0}
+    hook_counts[name] = counts
+    L.hits[name] = 0
+    L.ids[name] = event.on_bus_exec(function()
+        if finished then return end
+        local ok, why = pcall(function()
+            counts.total = counts.total + 1
+            local observed_bank, pc = L.rombank(), emu.getregister("PC")
+            local matched = addr < 0x4000 or observed_bank == bank
+            local metadata = {hook_site=name, hook_addr=addr, matched=matched, qualified=matched and pc == addr}
+            if not matched then
+                local key = string.format("%d", observed_bank)
+                counts.wrong_banks[key] = (counts.wrong_banks[key] or 0) + 1
+                if counts.wrong_bank_samples < WRONG_BANK_SAMPLE_LIMIT then
+                    counts.wrong_bank_samples = counts.wrong_bank_samples + 1
+                    snap("wrong_bank", metadata)
+                end
+                return
+            end
+            if pc ~= addr then
+                counts.wrong_pc = counts.wrong_pc + 1
+                if name == "GetScriptByte" then
+                    if gsb_n >= 4000 then
+                        if not overflow then overflow = true snap("gsb_overflow") end
+                        return
+                    end
+                    gsb_n = gsb_n + 1
+                end
+                snap("wrong_pc", metadata) return
+            end
+            counts.qualified = counts.qualified + 1
+            L.hit[name], L.hits[name] = emu.framecount(), counts.qualified
+            if fn then fn(metadata) else snap(name, metadata) end
+        end)
+        if not ok then die(why) end
+    end, addr, "pol_" .. name, "System Bus")
 end
 local function hook(name, fn)
-    if S[name] then L.hook(name, fn) else snap("missing_symbol", {symbol=name}) end
+    if S[name] then hook_at(name, S[name][1], S[name][2], fn)
+    else snap("missing_symbol", {symbol=name}) end
 end
 local function rec(kind)
-    return function(matched) if not matched then return end snap(kind) end
+    return function(metadata) snap(kind, metadata) end
 end
 
 -- Write observations retain the supplied bus value, not a timing-dependent read of the destination.
@@ -74,26 +179,28 @@ local function install()
     for off = 0, 15 do
         local offset = off
         event.on_bus_write(function(_, value)
-            if host_active then return end
-            if type(value) ~= "number" then
-                snap("instrumentation_error", {reason="bus write callback supplied no value"}) return
-            end
-            local before = copy(shadow)
-            shadow[offset + 1] = value & 0xFF
-            snap("rom_write", {offset=offset, value=value & 0xFF, before=before, lease=copy(shadow)})
+            if host_active or finished then return end
+            local ok, why = pcall(function()
+                if type(value) ~= "number" then
+                    snap("instrumentation_error", {reason="bus write callback supplied no value"}) return
+                end
+                local before = copy(shadow)
+                shadow[offset + 1] = value & 0xFF
+                snap("rom_write", {offset=offset, value=value & 0xFF, before=before, lease=copy(shadow)})
+            end)
+            if not ok then die(why) end
         end, base + offset, "pol_service_lease_" .. offset, "System Bus")
     end
-    hook("SlinkTradeEntry", function(matched)
-        if not matched then return end
+    hook("SlinkTradeEntry", function(metadata)
         entered, entry_frame = true, emu.framecount()
-        local e = snap("service_entry")
+        local e = snap("service_entry", metadata)
         local target = L.bus(e.sp) | (L.bus(e.sp + 1) << 8)
-        -- A CALL's continuation observes SP AFTER RET. Ret's entry SP is exactly raw SP - 2.
-        -- Record both; the oracle checks both relations rather than comparing unlike boundaries.
-        L.hook_at("service_return", e.bank, target, function(hit)
-            if not hit then return end
+        e.return_addr, e.return_bank = target, e.bank
+        -- A CALL continuation observes SP AFTER RET; retain the raw and RET-entry boundaries.
+        hook_at("service_return", e.bank, target, function(return_metadata)
             returned = true
-            snap("service_return", {ret_sp=emu.getregister("SP") - 2})
+            return_metadata.ret_sp = emu.getregister("SP") - 2
+            snap("service_return", return_metadata)
         end)
     end)
     hook("SlinkTradeClose", rec("close"))
@@ -104,13 +211,12 @@ local function install()
     hook("NoYesBox", rec("noyes"))
     hook("Special_TryQuickSave", rec("try_quicksave"))
     hook("SlinkTradeTimeoutGate", rec("timeout_gate"))
-    hook("GetScriptByte", function(matched)
-        if not matched then return end
+    hook("GetScriptByte", function(metadata)
         if gsb_n >= 4000 then
             if not overflow then overflow = true snap("gsb_overflow") end
             return
         end
-        gsb_n = gsb_n + 1 snap("gsb")
+        gsb_n = gsb_n + 1 snap("gsb", metadata)
     end)
 end
 
@@ -188,7 +294,7 @@ local function incoming()
     return {record=record, ot=ot, nick=nick, sender=sender}
 end
 -- Exactly one host pump per emulator frame, outside any instruction/bus callback.
-event.onframeend(function()
+local function pump()
     local frame = emu.framecount()
     if not enabled or frame == last_pump then return end
     last_pump = frame
@@ -230,10 +336,19 @@ event.onframeend(function()
         transaction("release", function() return binder:release(binder.expected[7]) end)
         released = true snap("release_published")
     end
+end
+event.onframeend(function()
+    if finished then return end
+    local ok, why = pcall(pump)
+    if not ok then
+        if finished then error(why, 0) end
+        die(why)
+    end
 end)
 
 -- SYNTH setup matches the existing entry/return probe, not a direct RAM teleport.
-for _, name in ipairs({"OWPlayerInput", "SetInitialOptions.joypad_loop"}) do L.hook(name) end
+local function run()
+for _, name in ipairs({"OWPlayerInput", "SetInitialOptions.joypad_loop"}) do hook(name) end
 if not L.to_overworld(24, 3, 60, 8000, "continue") then die("CONTINUE did not reach ROUTE_29") end
 local ev = L.rw("wEventFlags", 4)
 L.ww("wEventFlags", 4, ev | 0x02)
@@ -301,4 +416,10 @@ L.idle(40) snap("final") snap("move_start")
 local y0 = L.rw("wYCoord")
 for i = 1, 48 do L.frame({Down=true}) if i >= 8 and L.rw("wYCoord") ~= y0 then break end end
 L.idle(24) snap("move_end") snap("complete", {case=CASE})
-dump() L.finish("trade-service-probe " .. CASE)
+dump(true) finished = true L.finish("trade-service-probe " .. CASE)
+end
+local ok, why = pcall(run)
+if not ok then
+    if finished then error(why, 0) end
+    die(why)
+end
