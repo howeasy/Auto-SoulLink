@@ -18,7 +18,7 @@ encoded content + identity (never by key alone). **No HP is stored:** `entry_fro
 
 ## BOX-origin (a boxed key in boxes 1-19)
 REUSE the same `(bank, entry)`: no allocation, no re-encode, no flag change. Publish the destination Banks bit and Entries pointer in box 20, verify,
-THEN clear and verify the source. The helper `B.memorialize` does both in one batch, so a silently dropped destination write could be followed by the
+THEN clear and verify the source. The helper `move_to_memorial` (returned by `B.new` in `polished_boxes.lua`) does both in one batch, so a silently dropped destination write could be followed by the
 source delete: the executor must stage the destination read-back first. Already only in box 20 -> verified no-op success (even when box 20 is full);
 missing everywhere -> `nil, "key not in party or boxes"`; ambiguous -> refuse.
 

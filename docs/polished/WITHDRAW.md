@@ -1,7 +1,6 @@
 # Polished Crystal: `party_mon` withdraw (spec, 2026-10-04)
 
-**Status: reconstruction codec DONE (Python + Lua); write executor NOT built; `supports_box_mon()` stays False until the
-executor lands and a live run proves the census reads back complete.** Nothing here is a release claim.
+**Status (2026-10-06): reconstruction codec DONE (Python + Lua); the write executor is BUILT and COMPOSED (`O.boxes.withdraw`, hardened, idempotent; historical one-mon bank-1 live check (d) PASS on `6e43f8d9`); `supports_box_mon()` stays False pending the gaps in `RC_TRACKER.md` "Box-command gaps".** Nothing here is a release claim. (Sections 2-4 below are the original design; read them with that in mind.)
 
 Evidence tags: **[C]** read by the coordinator from the pinned source (`F:/slink-work/cache/polished/src`, v3.2.3);
 **[P]** derived by an OMP peer and cross-checked only for plausibility; treat as UNVERIFIED until a test or a live run
@@ -41,7 +40,7 @@ confirms it.
    reused by `NewStoragePointer` and compacted by `FlushStorageSystem` only on allocation failure.
 4. Do not touch the dex flags or `sPartyMon1Mail` (a withdraw appends without swapping).
 5. Reuse: `polished_boxes.lua` `gated`, `pointer/bank_byte/flag_byte`, `read_boxes`; `polished_overworld.lua` `O.checkpoint`,
-   `write_party_block`, the mail refusal. The existing `withdraw` stub refuses by name.
+   `write_party_block`, the mail refusal. (Historical: the old `withdraw` stub that refused by name has been replaced by the executor.)
 
 ## 3. Acceptance tests (to write with the executor; red control per line)
 
@@ -57,7 +56,7 @@ confirms it.
 ## 4. Open
 
 * RESOLVED (Codex fact-check cx-be6a1e40, 2026-10-05): cosmetic forms (Unown letters, Magikarp patterns, Pikachu/Pichu variants, Arbok markings; Arbok Johto is the default form 1) are only in the cosmetic table, so `GetBaseData` falls back to the plain species record (home/pokemon.asm:151-167, 466-527); only the 46 variant rows (records 292..337) select a different BaseData record. The repo's `variant_record[species*32+form]` rule matches the engine for all 289 defined species x 32 forms x gender/egg bits (36,992 source-model cases, 0 differences). Exceptions are only invalid species ids (0, 256, 511), which the codec refuses. TODO: add an engine-table-derived lookup test (the current oracle reuses `pc.effective_species`).
-* The write path is not composed; no live run exists. `supports_box_mon` must flip **with** the executor, never before.
+* SUPERSEDED: the executor is composed and has one historical live pass; `supports_box_mon` stays False until the box-command gaps in `RC_TRACKER.md` close (it must never flip before them).
 * Known limit (documented, not fixed): reconciliation of a both-places state matches by identity key plus byte equality of the rebuilt party record, so two byte-identical, independently caught mons (one boxed, one in the party) are indistinguishable and collapse into one when a reconcile removes the box copy.
 
 ## Idempotent withdraw (2026-10-06; review cx-4beeb281, cx-082b6600)

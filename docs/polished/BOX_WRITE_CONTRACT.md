@@ -62,7 +62,7 @@ WRAM mailbox byte cannot supply this. Native-save durability is separate from vo
 
 Order: **F** (last-healthy parity: keep count-only for this batch unless you say otherwise; never an indiscriminate healthy-survivor rule for burial) and
 **G** (box-20 RETRIEVAL policy incl. the non-dead quarantine relocation, `server/server.py:5299-5318`) are your rulings; then **C** executor egg/mail refusal
-tests (withdraw has NO egg/mail exclusion, `polished_overworld.lua:656-674`; deposit has) and **E** allocation-rollover tests (entries 167/168, 195/196,
+tests (DONE in `647ffe59f`: withdraw now refuses a boxed egg and a mail holder, and the deposit refusals are pinned) and **E** allocation-rollover tests (entries 167/168, 195/196,
 207, bank-1-full -> bank 2, both full, gameplay AND backup references) in parallel as test-first lanes; then **A** (this contract; author **D**'s composed
 deposit byte-cut + State round-trip test red FIRST as its falsifier) with ONE runtime writer; then **B** (memorialize, box-origin before party-origin) on the
 negotiated contract. Batch every production Lua/server fix into ONE frozen digest cut (tests and docs do not stale `CODE_DIGEST`); shared-code changes
