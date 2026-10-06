@@ -1166,7 +1166,11 @@ def test_snapshot_capture_and_validate_match_the_old_machine_for_every_count_and
 
 
 def test_the_differential_runs_were_non_trivial():
-    """Runs after the differentials above (file order); reported in the final summary of this suite."""
+    """A summary of the differentials above. It is ORDER-DEPENDENT by nature (the counters are filled by those tests in
+    this process), so it SKIPS rather than fails when run alone, with the ROM absent, or in another worker process
+    (review cx-02264cf6); each differential also asserts its own count where it runs."""
+    if not DIFF:
+        pytest.skip("the differential tests did not run in this process (selected alone, ROM absent or split across workers)")
     assert DIFF.get("gates") == 1024
     assert DIFF.get("validate_incoming", 0) >= 400
     assert DIFF.get("validate_staged", 0) >= 250
@@ -1249,3 +1253,53 @@ def test_each_interpreter_mutant_is_caught_by_its_named_tests(label, monkeypatch
             continue
         survivors.append(name)
     assert survivors == [], f"mutant survived: {label}"
+
+
+# ------------------------------------------------------------------ review cx-02264cf6 regressions
+
+def _prog(*code, at=0x100):
+    rom = bytearray(0x8000)
+    rom[at:at + len(code)] = bytes(code)
+    return bytes(rom)
+
+
+def test_a_stack_that_wraps_through_zero_still_reports_its_depth():
+    # PUSH BC / POP BC / RET with the entry SP at 0: sentinel FFFE -> push FFFC -> pop FFFE -> ret 0000
+    r = sm.SM83(_prog(0xC5, 0xC1, 0xC9), 1).call_routine(0x100, regs={}, sp=0)
+    assert r.sp_delta == 0 and r.stack_used == 4, (r.sp_delta, r.stack_used)
+    assert sm.SM83(_prog(0xC9), 1).call_routine(0x100, regs={}, sp=0).stack_used == 2
+
+
+def test_the_sentinel_is_installed_through_the_echo_mapping():
+    # entry SP in echo RAM: the sentinel must be where RET will read it
+    r = sm.SM83(_prog(0xC9), 1).call_routine(0x100, regs={}, sp=0xE102)
+    assert r.sp_delta == 0 and r.returned
+
+
+def test_an_over_pop_onto_sentinel_valued_caller_bytes_faults():
+    m = sm.SM83(_prog(0xC1, 0xC9), 1)          # POP BC (eats the real sentinel) / RET (eats the caller's bytes)
+    m.poke(0xD000, bytes([0xFE, 0xFE]))        # caller bytes equal to the sentinel value $FEFE
+    with pytest.raises(sm.Fault, match="past the entry frame"):
+        m.call_routine(0x100, regs={}, sp=0xD000)
+
+
+def test_the_over_pop_check_survives_stack_wraparound():
+    m = sm.SM83(_prog(0xC1, 0xC9), 1)       # entry SP 0: sentinel at $FFFE; POP BC wraps SP to 0; RET reads ROM $0000
+    with pytest.raises(sm.Fault, match="past the entry frame"):
+        m.call_routine(0x100, regs={}, sp=0)
+
+
+def test_farcall_returns_to_the_bank_in_hrombank_not_the_mapper_bank():
+    # home/farcall.asm: `ldh a, [hROMBank]` supplies the return bank. Mapper at bank 1, shadow says 3.
+    rom = bytearray(0x4000 * 4)
+    rom[0x100:0x108] = bytes([0x3E, 0x03, 0xE0, 0x87, 0xD7, 0x00, 0x40, 0x02])   # ld a,3 / ldh [$87],a / rst $10 / dw $4000 / db 2
+    rom[0x108] = 0xC9
+    rom[2 * 0x4000] = 0xC9                                                         # bank 2 $4000: RET
+    m = sm.SM83(bytes(rom), 1, farcall="model", hrombank=0xFF87)
+    r = m.call_routine(0x100, regs={}, sp=0xDFF0)
+    assert r.farcalls[0].from_bank == 3 and m.bank == 3
+    assert r.unmodelled_farcall_scratch is True
+
+
+def test_a_model_farcall_marks_its_result_as_not_memory_faithful_and_a_plain_run_does_not():
+    assert sm.SM83(_prog(0xC9), 1).call_routine(0x100, regs={}, sp=0xDFF0).unmodelled_farcall_scratch is False
