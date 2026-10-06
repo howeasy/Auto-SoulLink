@@ -790,10 +790,9 @@ matches the built symbol file:
 | `sCheckValue1` | `01:a007` | `01:a007` | agree |
 | `sChecksum` | `01:ad0d` | `01:ad0d` | agree |
 
-The §7 open-item table is still accurate: its entries (the `trade_dispatch.asm` stack
+The §7 open-item table is accurate EXCEPT as marked: its entries (the `trade_dispatch.asm` stack
 fingerprint, `OpenSRAM`'s enable path, `RemoveMonFromParty`'s box behaviour, the
-`wOTPartySpecies` replacements) are genuinely unmeasured at the time of writing (SUPERSEDED: the dispatch-entry fingerprint was measured in TRADE.md s10.9 and re-planned in s18; the service-internal population remains unmeasured) and are **not** superseded by any later
-document. `NEWBOX.md` supplies the SRAM layout HOOKS.md defers to; where the two overlap they agree.
+`wOTPartySpecies` replacements) are genuinely unmeasured at the time of writing and, with ONE exception, are **not** superseded by any later document: the dispatch-entry fingerprint was measured in TRADE.md s10.9 and re-planned in s18 (the service-internal population remains unmeasured). `NEWBOX.md` supplies the SRAM layout HOOKS.md defers to; where the two overlap they agree.
 
 **One finding is recorded elsewhere, not here:** `RAM.md:72` documents `wTextboxFlags` as
 `01:CFF4` in both the vanilla and Polished columns, but `polishedcrystal.sym:65521` places it at
