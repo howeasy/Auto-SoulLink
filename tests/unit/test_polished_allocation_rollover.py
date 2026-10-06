@@ -17,6 +17,11 @@ must make its matching scenario land somewhere else.
 """
 from __future__ import annotations
 
+import random
+from collections.abc import Callable
+from types import SimpleNamespace
+from typing import NamedTuple
+
 import pytest
 
 from server.adapters import polished_codec as pc
@@ -35,7 +40,9 @@ from tests.unit.test_polished_write_path import (
     entry_for,
     fill,
     key_of,
+    live_mon,
     party,
+    plant,
     seal_save,
 )
 
@@ -81,11 +88,20 @@ def flag_below(img, d, n):
         img.flag(d, e)
 
 
-def fresh(setup):
-    """A sealed save image + the three party mons, `setup(img)` applied, junk bit set in box 1 slot 1."""
+def fresh(setup, bit=1, junk_after=True, slot=SLOT):
+    """A sealed save image with `setup(img)` applied. The target slot's Banks bit is then forced to `bit` (an empty
+    slot's old bank bit is junk, §1.1: 1 must be CLEARED by a bank-1 landing, 0 must be SET by a bank-2 landing) and,
+    with junk_after, the bits of the EMPTY slots after it in the same Banks byte are set (a landing must change
+    only its own bit). Occupied slots' bits are left as `setup` made them."""
     img = seal_save(Image())
-    img.mem["CartRAM"][box_flat(1) + 0x14] = 0x01       # an empty slot's old bank bit is junk (§1.1): must be CLEARED
     setup(img)
+    at, k = box_flat(1) + 0x14 + (slot - 1) // 8, (slot - 1) % 8
+    value = (img.mem["CartRAM"][at] & ~(1 << k) & 0xFF) | (bit << k)
+    if junk_after:                                       # only EMPTY slots' bits: an occupied slot's bit is its bank
+        for j in range(k + 1, 8):
+            if (slot - 1) // 8 * 8 + j < 20 and img.mem["CartRAM"][box_flat(1) + (slot - 1) // 8 * 8 + j] == 0:
+                value |= 1 << j
+    img.mem["CartRAM"][at] = value
     return img
 
 
@@ -100,12 +116,12 @@ def expected_after(before, d, n, entry, box=1, slot=SLOT):
     return {"CartRAM": bytes(cart), "WRAM": bytes(wram)}
 
 
-def deposit(setup, boxes_source=None, via_client=False):
-    """Deposit party slot 1 over the image `setup` builds. -> (img, before, mons, ok, reason).
+def deposit(setup, boxes_source=None, via_client=False, **fresh_kw):
+    """Deposit party slot 1 over the image `setup` builds. -> (rig, img, before, mons, ok, reason).
     via_client: the composed client's box_mon command; otherwise the (possibly mutated) boxes module through
     the real overworld deposit()."""
     mons = party()
-    img = fresh(setup)
+    img = fresh(setup, **fresh_kw)
     before = img.snap()
     rig = Rig(mons, img=img)
     key = key_of(mons[1])
@@ -119,18 +135,77 @@ def deposit(setup, boxes_source=None, via_client=False):
     return rig, img, before, mons, done is True, why
 
 
-def lands_exactly(setup, d, n, boxes_source=None, via_client=False):
-    """True when the deposit succeeded AND the whole image equals the independently built expected image."""
-    rig, img, before, mons, ok, why = deposit(setup, boxes_source, via_client)
-    if not ok:
-        return False, f"refused: {why}"
-    entry = bytes(img.mem["CartRAM"][entry_flat(d, n):entry_flat(d, n) + SECTION_SIZE])
-    if entry != entry_for(mons[1]) or not pc.verify(entry):
-        return False, "entry bytes are not the sealed deposit entry"
-    if img.snap() != expected_after(before, d, n, entry):
-        diff = [(dom, i) for dom in before for i, (a, b) in enumerate(zip(before[dom], img.snap()[dom], strict=True)) if a != b]
-        return False, f"image differs from the expected one ({len(diff)} bytes changed: {diff[:4]}...)"
+def landed(img, slot=SLOT):
+    """(pokedb bank, entry) the gameplay record of box 1 `slot` points at, or None when the slot is empty."""
+    cart, rec = img.mem["CartRAM"], box_flat(1)
+    entry = cart[rec + slot - 1]
+    return (1 + ((cart[rec + 0x14 + (slot - 1) // 8] >> ((slot - 1) % 8)) & 1), entry) if entry else None
+
+
+def named_diff(actual, expected, d, n, slot):
+    """Which parts of the image differ from the expected one, by name."""
+    rec, names = box_flat(1), set()
+    for domain in actual:
+        for i, (a, b) in enumerate(zip(actual[domain], expected[domain], strict=True)):
+            if a == b:
+                continue
+            if domain == "WRAM" and FLAG_FLAT[d] <= i < FLAG_FLAT[d] + 26:
+                names.add("allocation flag")
+            elif domain == "WRAM":
+                names.add(f"stray WRAM[{i:#x}]")
+            elif i == rec + slot - 1:
+                names.add("Entries pointer")
+            elif i == rec + 0x14 + (slot - 1) // 8:
+                names.add("Banks byte")
+            elif entry_flat(d, n) <= i < entry_flat(d, n) + SECTION_SIZE:
+                names.add("entry bytes at the expected address")
+            else:
+                names.add(f"stray CartRAM[{i:#x}]")
+    return sorted(names)
+
+
+def run(setup, boxes_source=None, route="mutant", **fresh_kw):
+    """One deposit. route: "client" (composed box_mon command, real module), "mutant" (real overworld deposit()
+    over the given boxes source) or "module" (the boxes module's own insert_mon, no census in front of it)."""
+    slot = fresh_kw.get("slot", SLOT)
+    if route == "module":
+        img = fresh(setup, **fresh_kw)
+        before, entry = img.snap(), entry_for(party()[1])
+        e = Env(boxes_source)
+        result, why = _pair(e.boxes(img).insert_mon(e.permit(img), 1, e.table(entry)))
+        ok, why = result is not None, why
+    else:
+        rig, img, before, mons, ok, why = deposit(setup, boxes_source, route == "client", **fresh_kw)
+        entry = entry_for(mons[1])
+    return SimpleNamespace(ok=ok, why=why, img=img, before=before, entry=entry, slot=slot)
+
+
+def verdict(r, d, n):
+    """(True, "ok") only when the deposit succeeded and the WHOLE image equals the independently built expected
+    one; otherwise the specific property that failed."""
+    if not r.ok:
+        return False, f"refused: {r.why}"
+    if landed(r.img, r.slot) != (d, n):
+        got = landed(r.img, r.slot)
+        return False, f"landed at bank {got[0]} entry {got[1]}, expected bank {d} entry {n}" if got else "landed nowhere"
+    at = bytes(r.img.mem["CartRAM"][entry_flat(d, n):entry_flat(d, n) + SECTION_SIZE])
+    if at != r.entry or not pc.verify(at):
+        return False, "image differs: entry bytes absent at the expected address"
+    after = r.img.snap()
+    want = expected_after(r.before, d, n, r.entry, slot=r.slot)
+    if after != want:
+        return False, "image differs from the expected one at: " + ", ".join(named_diff(after, want, d, n, r.slot))
     return True, "ok"
+
+
+def lands_exactly(setup, d, n, boxes_source=None, via_client=False, **fresh_kw):
+    """True when the deposit succeeded AND the whole image equals the independently built expected image."""
+    r = run(setup, boxes_source, "client" if via_client and boxes_source is None else "mutant", **fresh_kw)
+    return verdict(r, d, n)
+
+
+def module_lands(setup, d, n, boxes_source=None, **fresh_kw):
+    return verdict(run(setup, boxes_source, "module", **fresh_kw), d, n)
 
 
 # ── scenarios (setup, expected (bank, entry)) ────────────────────────────────
@@ -172,15 +247,17 @@ def test_bank1_the_next_deposit_lands_exactly_at_the_first_free_entry(n):
     assert ok, (n, why)
 
 
+@pytest.mark.parametrize("bit", [0, 1])
 @pytest.mark.parametrize("n", BANK2_EDGES)
-def test_bank2_edges_land_exactly_with_the_banks_bit_set(n):
-    """(b) with n == 1: bank 1 completely flagged -> bank 2 entry 1, Banks bit SET, read back through the census."""
-    ok, why = lands_exactly(first_free(2, n), 2, n, via_client=True)
-    assert ok, (n, why)
+def test_bank2_edges_land_exactly_with_the_banks_bit_set(n, bit):
+    """(b) with n == 1: bank 1 completely flagged -> bank 2 entry 1, Banks bit SET whether the empty slot's old bit
+    was 0 or 1 (a mutant that leaves the bit as it was passes only the bit == 1 half), neighbours untouched."""
+    ok, why = lands_exactly(first_free(2, n), 2, n, via_client=True, bit=bit)
+    assert ok, (n, bit, why)
 
 
 def test_the_rollover_reads_back_through_the_census_as_bank_2():
-    rig, img, before, mons, ok, why = deposit(first_free(2, 1), via_client=True)
+    rig, img, before, mons, ok, why = deposit(first_free(2, 1), via_client=True, bit=0)
     assert ok, why
     boxes, cwhy = rig.census_keys()
     assert boxes is not None and key_of(mons[1]) in boxes[1], cwhy
@@ -200,10 +277,43 @@ def test_both_banks_fully_flagged_refuse_with_zero_writes():
     assert img.snap() == before and rig.writes() == [] and rig.count() == 3
 
 
-def test_one_entry_left_in_the_last_slot_of_bank_2_is_still_used_then_nothing():
-    """bank 1 full + bank 2 flagged 1..206: the deposit lands at bank 2 entry 207; repeat -> refuse."""
-    ok, why = lands_exactly(first_free(2, PER_BANK), 2, PER_BANK, via_client=True)
+def test_one_entry_left_in_the_last_slot_of_bank_2_is_used_then_the_next_deposit_refuses():
+    """bank 1 full + bank 2 flagged 1..206: the deposit lands at bank 2 entry 207; a SECOND deposit on the same rig
+    refuses 'native save required', changes nothing and issues no write."""
+    rig, img, before, mons, ok, why = deposit(first_free(2, PER_BANK), via_client=True, bit=0)
     assert ok, why
+    r = SimpleNamespace(ok=ok, why=why, img=img, before=before, entry=entry_for(mons[1]), slot=SLOT)
+    assert verdict(r, 2, PER_BANK) == (True, "ok")
+    after_first, writes_first = img.snap(), len(rig.writes())
+    rig.send_command({"cmd": "box_mon", "key": key_of(mons[2])})
+    reasons = [m["reason"] for m in rig.sent("box_mon_failed")]
+    assert len(reasons) == 1 and "no free pokedb entry: native save required" in reasons[0], reasons
+    assert img.snap() == after_first and len(rig.writes()) == writes_first and rig.count() == 2
+
+
+# ── a partially occupied target box: the first free slot is not slot 1 ──────
+
+def occupied(slots, d):
+    """Box 1 slots `slots` hold valid mons at pokedb bank d entries 1..len (flagged, both copies); a bank-2 run has
+    bank 1 fully flagged. The next deposit lands at entry len + 1 in the first slot NOT in `slots`."""
+    def setup(img):
+        if d == 2:
+            flag_all(img, 1)
+        for i, slot in enumerate(slots, start=1):
+            plant(img, 1, slot, d, i, entry_for(live_mon(random.Random(i), 30 + i)))
+    return setup
+
+
+PARTIAL = [([1, 2, 3, 4, 5], 6), ([1, 2, 3, 4, 5, 6, 7, 8], 9), ([1, 2, 4, 5], 3), (list(range(1, 20)), 20)]
+
+
+@pytest.mark.parametrize("bit", [0, 1])
+@pytest.mark.parametrize("d", [1, 2])
+@pytest.mark.parametrize(("slots", "slot"), PARTIAL)
+def test_the_first_free_slot_is_used_with_its_own_banks_bit(slots, slot, d, bit):
+    """Slot 9 is bit 0 of the SECOND Banks byte, slot 20 bit 3 of the third; the hole case lands in slot 3."""
+    ok, why = lands_exactly(occupied(slots, d), d, len(slots) + 1, via_client=True, bit=bit, slot=slot)
+    assert ok, (slots, slot, d, bit, why)
 
 
 # ── (d) referenced but unflagged: skipped, whichever copy refers ─────────────
@@ -213,19 +323,6 @@ def test_an_unflagged_entry_referenced_only_by_the_backup_copy_is_skipped(r):
     d, n = bank_after(r + 1)
     ok, why = lands_exactly(referenced_only("backup", r), d, n, via_client=True)
     assert ok, (r, why)
-
-
-def module_lands(setup, d, n, boxes_source=None):
-    """The boxes module's own insert_mon (no census in front of it) over the same scenario + exact-image check."""
-    img = fresh(setup)
-    before, entry = img.snap(), entry_for(party()[1])
-    e = Env(boxes_source)
-    result, why = _pair(e.boxes(img).insert_mon(e.permit(img), 1, e.table(entry)))
-    if result is None:
-        return False, f"refused: {why}"
-    if img.snap() != expected_after(before, d, n, entry):
-        return False, "image differs from the expected one"
-    return True, "ok"
 
 
 @pytest.mark.parametrize("r", [1, 167, 196, 207])
@@ -305,46 +402,98 @@ SCAN_FROM_1 = "for i = 1, B.ENTRIES_PER_BANK do\n                if not referenc
 BANK_LOOP = "for bank = 1, 2 do"
 BANKS_BIT = "bytes = {d == 2 and (old | bit) or (old & ~bit & 0xFF)}"
 SECTION_AB = '{{"A", 1, 167}, {"B", 168, 195}, {"C", 196, 207}}'
+FREE_SLOT = "for slot = 1, B.MONS_PER_BOX do if rd(CART, rec + slot - 1) == 0 then return slot end end"
 FLAG_BYTE = "return wflat[\"wPokeDB\" .. d .. \"UsedEntries\"] + ((e - 1) >> 3) end"
 
+class Mut(NamedTuple):
+    original: str
+    mutant: str
+    setup: Callable
+    at: tuple               # the (bank, entry) the real module lands at
+    expect: str             # the SPECIFIC failure the mutation must produce (a substring of verdict()'s reason)
+    kw: dict = {}
+    route: str = "mutant"
+    extra: Callable | None = None   # a further property of the damaged image
+
+
+def _overwrote(d, e):
+    return lambda r: r.img.entry(d, e) == r.entry
+
+
 MUTANTS = {
-    "ignore the backup copy": (BOTH_COPIES, 'for _, copy in ipairs({"gameplay"}) do', referenced_only("backup", 1), (1, 2)),
-    "ignore the flag": (FLAG_TEST, "if not referenced[bank][i] then", orphan(1), (1, 2)),
-    "ignore the flag at a section edge": (FLAG_TEST, "if not referenced[bank][i] then", first_free(1, 168), (1, 168)),
-    "scan starts at entry 2": (SCAN_FROM_1, SCAN_FROM_1.replace("i = 1,", "i = 2,"), first_free(1, 1), (1, 1)),
-    "scan only 206 entries per bank": (SCAN_FROM_1, SCAN_FROM_1.replace("B.ENTRIES_PER_BANK", "B.ENTRIES_PER_BANK - 1"),
-                                       first_free(1, PER_BANK), (1, PER_BANK)),
-    "bank 2 without the Banks bit": (BANKS_BIT, "bytes = {old & ~bit & 0xFF}", first_free(2, 1), (2, 1)),
-    "skip the bank-2 scan": (BANK_LOOP, "for bank = 1, 1 do", first_free(2, 1), (2, 1)),
-    "section A ends one early (entry 167 -> B)": (SECTION_AB, '{{"A", 1, 166}, {"B", 167, 195}, {"C", 196, 207}}',
-                                                   first_free(1, 167), (1, 167)),
-    "section B ends one late (entry 196 -> B)": (SECTION_AB, '{{"A", 1, 167}, {"B", 168, 196}, {"C", 197, 207}}',
-                                                  first_free(1, 196), (1, 196)),
-    "flag byte off by one (e >> 3)": (FLAG_BYTE, FLAG_BYTE.replace("((e - 1) >> 3)", "(e >> 3)"), first_free(1, 8), (1, 8)),
+    # lands at the backup-referenced entry 1 instead of skipping it
+    "ignore the backup copy": Mut(BOTH_COPIES, 'for _, copy in ipairs({"gameplay"}) do', referenced_only("backup", 1),
+                                  (1, 2), "landed at bank 1 entry 1"),
+    # lands at the gameplay-referenced (unflagged) entry 1 (insert_mon: no census in front of it)
+    "ignore the gameplay copy": Mut(BOTH_COPIES, 'for _, copy in ipairs({"backup"}) do', referenced_only("gameplay", 1),
+                                    (1, 2), "landed at bank 1 entry 1", route="module"),
+    # picks the flagged orphan; publish_entry refuses (no longer free), but stage_entry already overwrote the orphan
+    "ignore the flag": Mut(FLAG_TEST, "if not referenced[bank][i] then", orphan(1), (1, 2),
+                           "staged entry is no longer free", extra=_overwrote(1, 1)),
+    "ignore the flag at a section edge": Mut(FLAG_TEST, "if not referenced[bank][i] then", first_free(1, 168), (1, 168),
+                                             "staged entry is no longer free", extra=_overwrote(1, 1)),
+    "scan starts at entry 2": Mut(SCAN_FROM_1, SCAN_FROM_1.replace("i = 1,", "i = 2,"), first_free(1, 1), (1, 1),
+                                  "landed at bank 1 entry 2"),
+    # entry 207 is never considered, so bank 1 looks exhausted and the deposit rolls to bank 2 entry 1
+    "scan only 206 entries per bank": Mut(SCAN_FROM_1, SCAN_FROM_1.replace("B.ENTRIES_PER_BANK", "B.ENTRIES_PER_BANK - 1"),
+                                          first_free(1, PER_BANK), (1, PER_BANK), "landed at bank 2 entry 1"),
+    # initial bit 1: the span CLEARS it, so the pointer reads bank 1 (a zeroed entry) -> the deposit read-back refuses
+    "bank 2 clears the Banks bit": Mut(BANKS_BIT, "bytes = {old & ~bit & 0xFF}", first_free(2, 1), (2, 1),
+                                       "deposit read-back refused: entry checksum fails"),
+    # initial bit 0: leaving the bit as it was is only visible when it started clear (bit 1 would pass: see below)
+    "bank 2 leaves the Banks bit as it was": Mut(BANKS_BIT, "bytes = {d == 2 and old or (old & ~bit & 0xFF)}",
+                                                 first_free(2, 1), (2, 1),
+                                                 "deposit read-back refused: entry checksum fails", kw={"bit": 0}),
+    "skip the bank-2 scan": Mut(BANK_LOOP, "for bank = 1, 1 do", first_free(2, 1), (2, 1),
+                                "no free pokedb entry: native save required"),
+    # entry 167 is written at B's start instead of A's end: nothing at the expected address, the census sees a Bad Egg
+    "section A ends one early (entry 167 -> B)": Mut(
+        SECTION_AB, '{{"A", 1, 166}, {"B", 167, 195}, {"C", 196, 207}}', first_free(1, 167), (1, 167), "Bad Egg",
+        extra=lambda r: bytes(r.img.mem["CartRAM"][entry_flat(1, 167):entry_flat(1, 167) + SECTION_SIZE]) != r.entry),
+    # entry 196 maps past section B's declared end: the WRITE PERMIT's span guard refuses the batch, zero bytes land
+    "section B ends one late (entry 196 -> B)": Mut(
+        SECTION_AB, '{{"A", 1, 167}, {"B", 168, 196}, {"C", 197, 207}}', first_free(1, 196), (1, 196),
+        "interval outside domain bounds", extra=lambda r: r.img.snap() == r.before),
+    # the flag of entry 8 lands in byte 1: the census finds the pointer unflagged, and bit 7 of byte 0 stays clear
+    "flag byte off by one (e >> 3)": Mut(
+        FLAG_BYTE, FLAG_BYTE.replace("((e - 1) >> 3)", "(e >> 3)"), first_free(1, 8), (1, 8),
+        "referenced entry with a clear WRAM flag", extra=lambda r: r.img.mem["WRAM"][FLAG_FLAT[1]] >> 7 & 1 == 0),
+    # free_slot finds nothing past slot 1: a box with slots 1..5 taken reads as full
+    "free_slot returns 1 or nil": Mut(FREE_SLOT, "if rd(CART, rec) == 0 then return 1 end", occupied([1, 2, 3, 4, 5], 1),
+                                      (1, 6), "box full", kw={"slot": 6}),
+    # free_slot always answers 1: the occupied slot is detected by publish_entry before any pointer is written
+    "free_slot always returns 1": Mut(FREE_SLOT, "do return 1 end", occupied([1, 2, 3, 4, 5], 1), (1, 6),
+                                      "staged slot is no longer empty", kw={"slot": 6}),
 }
 
 
 @pytest.mark.parametrize("name", list(MUTANTS))
 def test_red_control_allocator_mutation(name):
-    original, mutant, setup, (d, n) = MUTANTS[name]
-    assert SOURCE.count(original) == 1, name
-    assert mutant != original
-    ok, why = lands_exactly(setup, d, n)                       # the real module over the same scenario: lands
-    assert ok, (name, "unmutated", why)
-    ok, why = lands_exactly(setup, d, n, SOURCE.replace(original, mutant))
-    assert not ok, f"{name}: the scenario does not catch this mutation"
+    m = MUTANTS[name]
+    assert SOURCE.count(m.original) == 1, name
+    assert m.mutant != m.original
+    assert verdict(run(m.setup, None, "module" if m.route == "module" else "client", **m.kw), *m.at) == (True, "ok"), name
+    r = run(m.setup, SOURCE.replace(m.original, m.mutant), m.route, **m.kw)
+    ok, why = verdict(r, *m.at)
+    assert not ok and m.expect in why, f"{name}: expected {m.expect!r}, got {why!r}"
+    if m.extra:
+        assert m.extra(r), f"{name}: the damaged image does not show the expected state"
 
 
-def test_red_control_allocator_ignores_the_gameplay_copy():
-    original, mutant = BOTH_COPIES, 'for _, copy in ipairs({"backup"}) do'
-    assert SOURCE.count(original) == 1
-    setup = referenced_only("gameplay", 1)
-    assert module_lands(setup, 1, 2)[0]
-    assert not module_lands(setup, 1, 2, SOURCE.replace(original, mutant))[0]
+def test_the_leaves_the_bit_mutant_passes_when_the_old_bit_was_already_set():
+    """WHY the bank-2 landings start from both bit values: with the junk bit pre-set to 1, 'leave it as it was' lands
+    exactly like the real module. Only the initial-0 run (above) can tell them apart."""
+    m = MUTANTS["bank 2 leaves the Banks bit as it was"]
+    source = SOURCE.replace(m.original, m.mutant)
+    assert verdict(run(m.setup, source, "mutant", bit=1), *m.at) == (True, "ok")
+    assert not verdict(run(m.setup, source, "mutant", bit=0), *m.at)[0]
 
 
-def test_red_control_exhaustion_must_refuse_not_clear_a_flag():
-    """A mutant that 'frees' a flagged entry when none is left would land; the real module refuses (c)."""
+def test_red_control_forced_reuse_of_a_flagged_entry_overwrites_it_before_publish_refuses():
+    """Both banks exhausted and the refusal replaced by 'use entry 1' (a forced reuse of a flagged entry). The real
+    module refuses in plan() and the image is untouched. The mutant is caught only by publish_entry's own 'staged
+    entry is no longer free' (the flag is set), and by then stage_entry has ALREADY overwritten exactly the 49 bytes
+    of bank 1 entry 1: no other byte changed, and those 49 now hold the deposit entry."""
     original = 'if not d then refuse("no free pokedb entry: native save required") end'
     assert SOURCE.count(original) == 1
     mutant = SOURCE.replace(original, "if not d then d, entry = 1, 1 end")
@@ -352,12 +501,15 @@ def test_red_control_exhaustion_must_refuse_not_clear_a_flag():
     def setup(img):
         flag_all(img, 1)
         flag_all(img, 2)
-    rig, img, before, mons, ok, why = deposit(setup, mutant)
-    # the control: this scenario can fail. publish_entry's own "no longer free" check refuses the publish, but the
-    # mutant's stage_entry has already overwritten the flagged entry's bytes: that is the damage the refusal prevents
-    assert not ok and "no longer free" in why and img.snap() != before
-    rig, img, before, mons, ok, why = deposit(setup)
-    assert not ok and "no free pokedb entry" in why and img.snap() == before
+    r = run(setup, mutant)
+    assert not r.ok and "staged entry is no longer free" in r.why, r.why
+    region = range(entry_flat(1, 1), entry_flat(1, 1) + SECTION_SIZE)
+    after = r.img.snap()
+    changed = [i for i, (a, b) in enumerate(zip(r.before["CartRAM"], after["CartRAM"], strict=True)) if a != b]
+    assert changed and set(changed) <= set(region), "only bank 1 entry 1 may differ"
+    assert bytes(after["CartRAM"][region.start:region.stop]) == r.entry and after["WRAM"] == r.before["WRAM"]
+    real = run(setup, None, "client")
+    assert not real.ok and "no free pokedb entry" in real.why and real.img.snap() == real.before
 
 
 def test_the_module_level_helpers_agree_with_the_composed_deposit():
