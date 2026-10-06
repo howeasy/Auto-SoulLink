@@ -700,3 +700,47 @@ Verdict: **PASS** (0 reasons). EmuHawk pid 34768, ended. Lane `F:/slink-work/lan
 | npc_talk (sign) | 204 | 204 | 0 | 0 | 0 |
 
 Idle and walking: every entry carried the nine pinned bytes (SP `$C0D2`; 15 distinct 28-byte images in idle, 17 in walking; only the non-pinned bytes vary). The commonest idle image (302 of 360) is `4c408300802522d186d68000ab0dc25100fe86d6444622d16b51e250`. Engine guards, not the stack, refused most walking entries: 75 had `wMapEventStatus` != 0 with the step flag set, 7 the step flag only, 12 `wScriptMode` = 3 (the first frame of a step); the 30 unclean idle entries are the frames just after a step with the step flag still set. Negatives: START menu and sign text both ran with `wScriptMode` = 1 (so the engine guard alone refuses), and the stack differs as well: SP `$C0B8`-`$C0D2` with pinned offsets 14, 15 and 24 always mismatched (5, 25, 26, 27 in most). Not measured: battle phase, any person NPC, the accept path (lease never published). SYNTH-fixture DEV evidence, not PHYSICAL.
+
+## F3 natural-faint probe, first live run (2026-10-06, SYNTH fixture, DEV)
+
+`tools/polished_live/faint_probe.py` (read-only recorder; branch `claude/pol-f3` merged with `claude/gen2-integration` at `f7ceb2c04`, 78 unit tests green) on overlay `aecedbb2` (provenance output sha1), fixture `polished_overlay_warp.SaveRAM` (sha256 `75c7a5dc...36b8`, the disclosed O-33 SYNTH setup fixture, Route 29 at (48,12)). The fixture is not committed under `tests/fixtures/`; the copy used is `F:/slink-work/lanes/pol-live/fixture/`. The probe insists on exactly 32768 bytes and the fixture is 32790 (a 22-byte RTC footer), so the lane copy was truncated to its first 32768 bytes (the RTC footer is dropped; the save area is unchanged).
+
+Route `tools/polished_live/routes/faint_f3_route.json` (1931 frames, native buttons from boot, no warp, trainer or story staging): 20 A pulses to CONTINUE, settle 150 frames, then Left/Right 56-frame holds along Route 29 row 12 (collision rows from `maps/Route29.ablk`; grass patch x44..53, y10..15, 10 percent per step) until a wild battle starts, then 70 A pulses (2 frames down, 14 up: FIGHT, first move, text) and 120 idle frames. One read-only exploration replay (own Lua, logs map/x/y/`wBattleMode` transitions only, not committed) found the wild battle: stepping onto (44,12) at route frame 541, `wBattleMode` = 1 at route frame 691 (Pidgey), so the route's walking prefix is cut at frame 691. The same replay twice more reproduced it frame for frame (deterministic).
+
+**Stock probe run: FAIL, a probe defect, not a finding.** EmuHawk pid 30752:
+
+```
+RESULT: FAIL faint-probe (played; owned PID 30752)
+FAIL: missing unique successful recording RESULT
+Expecting value: line 1 column 1 (char 0)
+```
+
+`trace.json` was left empty and EmuHawk stayed open until killed (own PID, `taskkill /T /F /PID`). Cause (from a lane-local copy of `faint_probe.lua` that logs the encoder reason): `L.json.encode(trace)` returned `nil, "JSON structure exceeds bounds"` because the recording held 6668 rows (default limit 100000 items), and `f:write(nil)` then raised. Almost all rows are bank-mismatched hits: `event.on_bus_exec` on the System Bus fires for whichever ROM bank is mapped at that address (copy_return 6365 hits, only 1 in bank `$0F`). The committed `faint_probe.lua` was NOT edited.
+
+**Measured run (lane-local copy of `faint_probe.lua`, differing only by one diagnostic log line and `encode(trace, {bytes=64 MiB, items=5e6})`; everything else, the ROM, route, contract and `evaluate()`, is the committed code).** EmuHawk pid 27868, ended rc 0, 0 guest writes, 0 register changes, 0 overflows, 0 driver errors, lane `F:/slink-work/lanes/pol-f3run/live/played-_vtye_ky`. `evaluate()` verdict **PASS**, one reason: `complete recording: 1 qualified pre-copy pass(es); not animation qualification`. (The wrapper printed `RESULT: PASS`; `main()`'s own line would read `RESULT: PASS faint-probe (played; owned PID 27868)`.)
+
+| site | address | hits total | bank `$0F` and PC = site (qualified) |
+|---|---|---|---|
+| resolve (ResolveFaints) | 44af | 17 | 1 |
+| pre_copy | 44c8 | 173 | 1 |
+| copy_call | 44ca | 1 | 1 |
+| copy_return | 44cd | 6365 | 1 |
+| faint (FaintUserPokemon) | 4cd2 | 2 | 2 |
+| lost (LostBattle) | 4ff6 | 108 | 0 |
+
+In every one of the 6666 rows the callback PC equalled the hook address (no WRONG_PC); the unqualified rows are other banks executing at that address (`$3A`: copy_return 6363, pre_copy 156; `$21`: resolve 16, pre_copy 16; `$14`: lost 100; `$23`: lost 8; `$34`: copy_return 1). LostBattle never ran in bank `$0F`.
+
+The one qualified pass (trace frames; `emu.framecount`), all rows bank `$0F`, `wBattleMode` 1, party 5, slot 0, player HP 159 (`$009F`), party HP 159, status 0, FAINTED bit clear, `wWhichMonFaintedFirst` = 2:
+
+| ord | frame | site | PC | SP | hBattleTurn |
+|---|---|---|---|---|---|
+| 4422 | 1390 | resolve | 44af | c0db | 0 |
+| 4423 | 1390 | faint | 4cd2 | c0d7 | 1 |
+| 4756 | 1460 | faint | 4cd2 | c0d7 | 0 |
+| 4757 | 1460 | pre_copy | 44c8 | c0db | 1 |
+| 4758 | 1460 | copy_call | 44ca | c0db | 0 |
+| 4759 | 1460 | copy_return | 44cd | c0db | 0 |
+
+Order resolve, faint, faint, pre_copy, copy_call, copy_return: the interval the oracle requires, with no ORDER_VIOLATION. The `faint` site is the entry of FaintUserPokemon (`call HasUserFainted; ret nz`), which runs whether or not the user fainted, so a hit there is not itself a faint. Context from the exploration replay (route frames, same inputs): enemy HP 16 at frame 692 (wild Pidgey Lv3), 0 at frame 1252, battle over (`wBattleMode` 0) at frame 1533 with the player back on the overworld at (44,12). So this was the **enemy-side faint** (the first `faint` hit has `hBattleTurn` = 1, the wild mon as the user); the player's mon never fainted (pre-copy `wBattleMonHP` 159, FAINTED clear) and no whiteout, so the player-side `FaintUserPokemon` body and `FAINT_NOT_OBSERVED_AT_44CD` (which needs a pre-copy HP of 0) are not exercised. PASS certifies a complete recording with a qualified 44c8 pre-copy hit, not a faint writer qualification.
+
+Probe defects found: (1) the 32768-byte fixture check rejects the 32790-byte native fixture; (2) the default JSON encode limit makes any run with more than about 4000 wrong-bank hits write an empty trace (on this route 6666), and the EmuHawk stays open until the deadline. SYNTH-fixture DEV evidence, not PHYSICAL.
