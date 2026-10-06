@@ -654,3 +654,31 @@ Not proven live: the entry text is fixed (no host/link status exists in the core
 the Pokegear is open was not exercised; only English text and the CGB palette were seen. The first phone run (same
 build) failed one driver expectation only. It expected an SLink row on s4's first screen, but the 5th row is below the
 fold until the scroll. The driver was corrected; the ROM was not changed.
+
+## Second trainer identity derived from the duo fixture (2026-10-06, SYNTH)
+
+`tools/polished_live/derive_save.py` builds the B side's SaveRAM from the existing duo fixture
+(`lanes/g2int-live/pol/fixture/polished_overlay_warp.SaveRAM`, sha256 `75c7a5dc...36b8`, itself a disclosed SYNTH
+setup fixture under O-33). **SYNTH identity derivative of an existing SYNTH setup fixture (O-33); not independently
+played; native Continue/save/reload evaluated separately.** The builder is pure (bytes in, bytes out) and refuses, before
+any change, a wrong size, marker, version or save phase, a party count outside 1..6, a bad checksum in either copy, a
+non-empty newbox `Entries` array in either copy, and an empty, over-long (more than 7 glyphs) or unencodable name.
+
+Changes, in the main (`0x2008`) and backup (`0x1208`) copies alike: the player ID (`53698` -> `53699` by default), the
+first 8 name bytes (`Aaaaaaa` -> `Bbbbbbb`), and for every occupied party slot the OT ID and the first 8 OT-name bytes.
+Then both checksums are recomputed (`13e4` -> `1414`). Nicknames, held items, the 3 EXTRA OT bytes (hyper training),
+the box area, version, phase and the 22-byte RTC trailer are byte-identical. With the default arguments exactly **100**
+bytes differ (per copy: ID 1, name 7, 5 slots x (OT ID 1 + OT name 7), checksum 2). The default output sha256 is
+`f5f19f5d...ca8d`; `held_item_variant` (separate, disclosed, never applied by default; CLI `--item SLOT:ITEMHEX`)
+changes one party held-item byte in both copies and re-seals.
+
+`verify_derived(original, derived)` reads both images through `polished_codec` and returns problems: checksums,
+markers/version/phase/trailer, only the declared offsets differ, player ID/name and every mon's OT ID/name changed as
+intended and equal to the player's, the EXTRA bytes kept, species/DVs/level/nickname unchanged, and the SLink mon KEYS
+(which include the OT ID) disjoint between the two images. The repo's own Lua census (`P.census`: sSaveVersion +
+sChecksum) admits the derived CartRAM as a complete empty census; a derivative with one stale checksum is refused by it.
+Evidence: `tests/unit/test_polished_save_identity.py` (red controls for every precondition and four builder mutations).
+
+Not proven: that the native Continue accepts the derived save, that a reload keeps it, and any live duo behaviour with
+two distinct identities. The Polished `sBackupCheckValue*` markers and `sPlayerData` fields outside the declared offsets
+are carried over unchanged by construction, not independently inspected for identity-bearing data.
