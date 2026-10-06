@@ -36,3 +36,26 @@ race, transformed identity, last mon). If universal visible Explosion is require
 cancellation first). A boolean capability cannot express per-action eligibility: the client enforces it.
 Do not use `EXPLODE_RIVAL.md` sections 1-2 as authority (section 6 retracts the dispatch claim); `UpdateBattleMonInParty` copies level/status/HP, not moves/PP
 (`home/battle.asm:230-239`), so the party move write only affects a later party-to-battle load.
+
+## Plain-faint design review (2026-10-06, Polished peer cx-aa6e438b; coordinator-checked in part)
+STATUS: design-of-record. Nothing here is built; capability `supports_explode_mode` stays off until the matrix closes. Source-checked by the coordinator so
+far: `HasPlayerFainted` is a bare two-byte HP OR (`home/battle.asm:613-618`) and `wWhichMonFaintedFirst` is consumed by ResolveFaints (`engine/battle/core.asm:715,753,815`).
+Everything else below is the peer's reading and is OPEN until its own oracle card (F0) runs on the SM83 machine.
+* A zero HP alone is not a full faint contract. PerformMove tests HasUserFainted before DoTurn, so a zero-HP player skips its own turn; ResolveFaints runs the
+  native faint presentation only when `wWhichMonFaintedFirst` is non-zero, then copies battle to party. Never pre-set the FAINTED substatus (FaintUserPokemon
+  returns early and skips presentation). The existing copyback observation at 0F:44CA is after that dispatch, so it cannot trigger a missed presentation.
+* Do NOT port the vanilla USEITEM-last recipe: an item already spent in BattlePack stays spent, ParsePlayerAction has already consumed the selection, and a
+  committed switch target persists (`wPlayerSwitchTarget`, shared `wDeferredSwitch` flags: never clear them wholesale, that can cancel an enemy switch).
+* Bounded first candidate (active target, USEMOVE action, no pending switch, no Transform): at the qualified 0F:416A hold write battle status 0, party status 0,
+  party HP 0/0, battle HP 0/0, then `wWhichMonFaintedFirst`=1 LAST only when it was 0 (preserve 1/2); read back all six bytes plus the order byte; keep the command
+  pending until native faint/copyback is observed. Refuse (stay pending, no false "not changed") on switch target, deferred switch, Transform bit (SUBSTATUS2 bit 4,
+  also same-species Transform), link mode, wrong PC/bank, or a changed target key. Last mon uses the native loss/draw logic (link must be refused; draws count as losses
+  only outside link/Battle Tower): do not hardcode loss.
+* Bench target: party Status 0 and HP 0/0 only, never the active battle mirror; reject the slot named by `wPlayerSwitchTarget-1` (selection race: HP is validated
+  at selection, materialised later). A post-copy pre-action hook is a separate qualification.
+* Cards (each <= 3 files, one writer per Polished facade): F0 engine-consumption oracle on the SM83 machine (`tests/unit/test_polished_plain_faint_engine.py`);
+  F1 bounded active writer (`polished_explode.lua`, `polished_writes.lua`); F2 client settlement (`client.lua`, `entry.lua`); F3 live probe; F4 committed-switch / bench race
+  (source pin first). Live matrix: free action, opponent first, Damp / locked / status-blocked then fallback, item already used, queued switch, bench before/after selection,
+  Transform incl. same species, last mon wild/trainer, simultaneous enemy faint, readback failure. Needs a granted played fixture (Route 29 save); no SYNTH trainer/story staging implied.
+* Ordering limit: this does not guarantee death before an enemy priority move; that needs a separate pre-action native faint-resolution seam.
+Owner decision still open: explode scope (this bounded contract vs universal visible Explosion).
