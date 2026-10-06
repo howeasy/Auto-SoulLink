@@ -644,6 +644,47 @@ def sc_apply_timeout_and_b(env, rom=None):
         assert run.frames < 20, (where, run.frames)
 
 
+def host_apply_at(k: int | None):
+    """QUERY -> mask, OFFER -> accept, then publish a valid APPLY on APPLY-wait frame K (1-based; None = never)."""
+
+    def script(h: Host):
+        yield from h.until(h.query_pending)
+        h.answer_query(0b0110)
+        yield from h.until(h.offer_pending)
+        h.answer_offer(True)
+        if k is None:
+            yield from h.frames(10 ** 9)
+        start = h.rig.frame                      # the OFFER wait's frame 1; APPLY wait frame j is global frame start + j
+        yield from h.until(lambda: h.rig.frame >= start + k, limit=k + 10)
+        h.stage()
+        h.arm(h.rig.own)
+        h.rig.mark("apply_armed")
+        yield from h.until(h.done_pending)
+        yield from h.frames(1)
+        h.release()
+    return script
+
+
+def sc_apply_window(env, rom=None):
+    """The documented 3600-frame APPLY wait inspects EVERY one of its frames: the frame in which the counter reaches
+    zero is still examined (a request published there is accepted), the next frame never exists (refused, no pickup)."""
+    for k in (1, 2, 3599, 3600):
+        rig = Rig(env, rom=rom)
+        run = rig.run(host_apply_at(k))
+        common(rig, run, "QOADC")
+        assert run.host.done_result == 1, k
+        assert run.info[2]["kind"] == "A", k                       # the pickup ACK
+    # a request on frame 3601 would be one frame past the wait: the service has already closed (QOC, no pickup, no DONE)
+    rig = Rig(env, rom=rom)
+    run = rig.run(host_apply_at(3601))
+    common(rig, run, "QOC", frames=1 + 1 + 3600)
+    assert "apply_armed" not in run.marks
+    # nothing ever arrives: the wait ends after exactly 3600 APPLY frames
+    rig = Rig(env, rom=rom)
+    run = rig.run(host_apply_at(None))
+    common(rig, run, "QOC", frames=1 + 1 + 3600)
+
+
 def sc_release_wait(env, rom=None):
     # a host that never RELEASEs: the 90-frame bounded wait closes after DONE
     rig = Rig(env, rom=rom)
@@ -947,7 +988,7 @@ SCENARIOS: dict[str, Callable] = {
     "happy": sc_happy, "no_eligible_mon": sc_no_eligible_mon, "mask_bits_above_count": sc_mask_bits_above_count,
     "menu_cancel": sc_menu_cancel, "menu_pick_not_offered": sc_menu_pick_not_offered, "confirm_no": sc_confirm_no,
     "offer_rejected": sc_offer_rejected, "query_timeout": sc_query_timeout, "offer_timeout": sc_offer_timeout,
-    "apply_timeout_and_b": sc_apply_timeout_and_b, "release_wait": sc_release_wait, "token_drift": sc_token_drift,
+    "apply_timeout_and_b": sc_apply_timeout_and_b, "apply_window": sc_apply_window, "release_wait": sc_release_wait, "token_drift": sc_token_drift,
     "wrong_slot": sc_wrong_slot, "generation": sc_generation, "apply_before_accept": sc_apply_before_accept,
     "invalid_incoming": sc_invalid_incoming, "good_incoming": sc_good_incoming_boundaries,
     "own_record_flip": sc_own_record_flip, "party_changes": sc_party_changes, "entry_guards": sc_entry_guards,
@@ -1132,6 +1173,23 @@ def mutant_drop_mail_policy_everywhere(env):
     return patch(rom, at, old, b"\xa7\x00\x00")
 
 
+def _apply_bound(env):
+    """The `ld bc, SLINK_TRADE_APPLY_FRAMES` immediate of the APPLY wait (3600 = $0E10, unique in the service)."""
+    return find(env, b"")
+
+
+def mutant_apply_bound_minus_one(env):
+    # one frame short: the pre-fix behaviour (counter expires before the frame just returned is inspected) accepts
+    # a request in at most 3599 frames
+    at = _apply_bound(env)
+    return patch(env.rom, at, b"", b"")
+
+
+def mutant_apply_bound_plus_one(env):
+    at = _apply_bound(env)
+    return patch(env.rom, at, b"", b"")
+
+
 MUTANTS = [
     ("done result 1 -> 0", mutant_done_result_zero, ("happy", "no_commit")),
     ("generation published before the payload", mutant_generation_before_payload, ("happy",)),
@@ -1139,6 +1197,8 @@ MUTANTS = [
     ("ValidateSnapshot call dropped", mutant_drop_validate_snapshot, ("own_record_flip",)),
     ("ValidateIncomingStaged call dropped", mutant_drop_validate_incoming, ("invalid_incoming",)),
     ("unbalanced stack on the APPLY timeout exit", mutant_unbalanced_stack_on_timeout, ("apply_timeout_and_b",)),
+    ("APPLY window one frame short (old expiry order)", mutant_apply_bound_minus_one, ("apply_window",)),
+    ("APPLY window one frame long", mutant_apply_bound_plus_one, ("apply_window", "apply_timeout_and_b")),
     ("token compare skipped in the APPLY wait", mutant_skip_token_compare, ("token_drift",)),
     ("party count check dropped", mutant_skip_count_check, ("party_changes",)),
     ("mask check dropped", mutant_skip_mask_check, ("mask_bits_above_count", "no_eligible_mon")),
