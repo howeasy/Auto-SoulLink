@@ -69,8 +69,18 @@ PHONE_NATIVES = {n: ((0x00, 0x2500 + i) if n == "GetMapPhoneService" else (0x24,
 PHONE_BRIDGES = {b: (0x00, PHONE_LO + 8 * i) for i, (_r, _n, b) in enumerate(pc.PHONE_HOOKS)}
 PHONE_CALLS = [(pc._flat(*PHONE_ROUTINES[r]) + 4 + 8 * i, n, b) for i, (r, n, b) in enumerate(pc.PHONE_HOOKS)]
 
+# TRADE slice 2a: SpecialsPointers entries 2 and 3 (bank $03, three bytes each: bank, addr lo, addr hi)
+# name the native specials in bank $0A; the overlay re-points them at the bank-$7E gates.
+GATE_ENTRIES = {"Special_WaitForLinkedFriendSpecial": (0x03, 0x4030), "Special_CheckLinkTimeoutSpecial": (0x03, 0x4033)}
+GATE_NATIVES = {"Special_WaitForLinkedFriend": (0x0A, 0x4D03), "Special_CheckLinkTimeout": (0x0A, 0x4D78)}
+SCRIPT_END = (0x2D, 0x7595)                  # a bare `endtext` ($C0) in the clean ROM
+GATES = {"SlinkTradeWaitGate": (0x7E, 0x4020), "SlinkTradeTimeoutGate": (0x7E, 0x4024)}
+GATES_END = (0x7E, 0x4028)
+TABLE_AT = pc._flat(0x03, 0x4030)
+
 CLEAN_SYMS = {"DelayFrame": (0x00, DELAY), "wPlayerPartyCount": (0x10, 0x5D00), "SoftReset": SOFT_RESET,
-              "DelayFrames": DELAY_FRAMES, **PHONE_ROUTINES, **PHONE_NATIVES}
+              "DelayFrames": DELAY_FRAMES, **PHONE_ROUTINES, **PHONE_NATIVES,
+              **GATE_ENTRIES, **GATE_NATIVES, pc.SCRIPT_END_LABEL: SCRIPT_END}
 OVERLAY_SYMS = {
     "DelayFrame": (0x00, DELAY),
     "wPlayerPartyCount": (0x10, 0x5D00),     # every clean symbol survives, unmoved
@@ -98,6 +108,9 @@ OVERLAY_SYMS = {
     # TRADE slice 1: the inert frame/item code links after the version field (zero-length here too).
     **{n: SFX_END for n in ("SlinkTradeCheckHeader", "SlinkTradeFrameEnd", "SlinkTradeItemAllowed",
                             "SlinkTradeAllowedItemsEnd")},
+    # TRADE slice 2a: the gates and the stub entry link after the item table; the clean symbols above survive.
+    **GATES, "SlinkTradeEntry": (0x7E, 0x4026), "SlinkTradeGatesEnd": GATES_END,
+    **GATE_ENTRIES, **GATE_NATIVES, pc.SCRIPT_END_LABEL: SCRIPT_END,
     "wSlinkMailbox": (0x00, pc.MAILBOX),
 }
 EMPTY_BANK = slice(pc._flat(pc.SERVICE_BANK, 0x4000), pc._flat(pc.SERVICE_BANK, 0x8000))
@@ -115,6 +128,11 @@ def clean_rom() -> bytes:
     rom[pc.TITLE_HOOK_FLAT:pc.TITLE_HOOK_FLAT + 3] = b"\xcd\xed\x43"      # call MainMenu_PrintCurrentTimeAndDay
     for at, native, _bridge in PHONE_CALLS:
         rom[at:at + 3] = b"\xcd" + PHONE_NATIVES[native][1].to_bytes(2, "little")
+    for i, native in enumerate(GATE_NATIVES):         # the two native entries, then a neighbour that must not move
+        bank, addr = GATE_NATIVES[native]
+        rom[TABLE_AT + 3 * i:TABLE_AT + 3 * i + 3] = bytes([bank]) + addr.to_bytes(2, "little")
+    rom[TABLE_AT + 6:TABLE_AT + 9] = b"\x0a\x46\x4e"
+    rom[pc._flat(*SCRIPT_END)] = pc.ENDTEXT_OPCODE
     return bytes(rom)
 
 
@@ -133,6 +151,8 @@ def overlay_rom(base: bytes | None = None) -> bytes:
     rom[pc.TITLE_HOOK_FLAT:pc.TITLE_HOOK_FLAT + 3] = b"\xcd" + PHONE_HI.to_bytes(2, "little")
     for at, _native, bridge in PHONE_CALLS:
         rom[at + 1:at + 3] = PHONE_BRIDGES[bridge][1].to_bytes(2, "little")
+    for i, (_native, gate) in enumerate(pc.TRADE_GATES):
+        rom[TABLE_AT + 3 * i:TABLE_AT + 3 * i + 3] = bytes([GATES[gate][0]]) + GATES[gate][1].to_bytes(2, "little")
     return bytes(rom)
 
 
@@ -210,7 +230,7 @@ def test_the_report_labels_each_span_with_its_bank_and_width():
     (BRIDGE - 1, "one byte before the ROM0 bridge"),
     (RESET_BRIDGE_END, "one byte after the ROM0 bridges"),
     (pc._flat(*SVC) - 1, "one byte before the service"),
-    (pc._flat(*SFX_END), "one byte after the sound service"),
+    (pc._flat(*GATES_END), "one byte after the trade gates"),
     (pc.HEADER_CHECKSUMS.start - 1, "one byte before the header checksums"),
     (pc.HEADER_CHECKSUMS.stop, "one byte after the header checksums"),
     (0x04000, "far from every span"),
@@ -474,3 +494,81 @@ def test_a_non_ups_blob_is_rejected():
     """
     with pytest.raises(ValueError, match="not a UPS1 patch"):
         ups_apply(bytes(2048), bytes(2048))
+
+
+# ------------------------------------------------------------------ (d) trade slice 2a: the special gates
+
+def test_the_gate_table_entries_are_one_allowed_six_byte_span():
+    """The two re-pointed SpecialsPointers entries are reported as ONE 6-byte run, derived from the sym.
+
+    ANCHOR FOR: deleting `allowed.append(gate_table_span(...))` -- the table bytes become `unexpected change`.
+    """
+    report = pc.verify_overlay(clean_rom(), overlay_rom(), CLEAN_SYMS, OVERLAY_SYMS)
+    assert f"bank $03 {TABLE_AT:#07x}-{TABLE_AT + 5:#07x} (  6 B) SpecialsPointers entries -> trade gates" in report
+
+
+def test_a_change_to_a_neighbouring_table_entry_is_refused():
+    """Only the two gated entries may change; the next SpecialsPointers entry is outside the span.
+
+    ANCHOR FOR: widening gate_table_span to the whole table (e.g. `ats[0] + 3 * 8`): this goes red then.
+    """
+    data = bytearray(overlay_rom())
+    data[TABLE_AT + 6] ^= 0xFF
+    with pytest.raises(RuntimeError, match=r"unexpected change at"):
+        pc.verify_overlay(clean_rom(), bytes(data), CLEAN_SYMS, OVERLAY_SYMS)
+
+
+@pytest.mark.parametrize("which", [0, 1])
+def test_a_gated_entry_whose_clean_bytes_are_not_the_native_special_is_refused(which):
+    """The old bytes are derived from the clean sym of the native special, not typed: a different clean
+    entry is refused even when the diff would otherwise sit inside the span.
+
+    ANCHOR FOR: deleting the `base[at:at + 3] != was` term in gate_table_span.
+    """
+    base = bytearray(clean_rom())
+    base[TABLE_AT + 3 * which + 1] ^= 0xFF
+    with pytest.raises(RuntimeError, match=r"Special at 0x.*want"):
+        pc.verify_overlay(bytes(base), overlay_rom(bytes(base)), CLEAN_SYMS, OVERLAY_SYMS)
+
+
+@pytest.mark.parametrize("which", [0, 1])
+def test_a_gated_entry_that_does_not_name_its_gate_is_refused(which):
+    """The new bytes must be the `dba` of the gate from the overlay sym (bank $7E, little-endian address).
+
+    ANCHOR FOR: deleting the `data[at:at + 3] != now` term; swapping the two gates in the builder's table.
+    """
+    data = bytearray(overlay_rom())
+    data[TABLE_AT + 3 * which + 1] ^= 0x01
+    with pytest.raises(RuntimeError, match=r"Special at 0x.*have"):
+        pc.verify_overlay(clean_rom(), bytes(data), CLEAN_SYMS, OVERLAY_SYMS)
+
+
+def test_the_script_redirect_target_must_be_a_bare_endtext_in_the_clean_rom():
+    """The timeout gate ends the script by pointing it at DayOfWeekSiblingsHousePokedexScript.End.
+
+    ANCHOR FOR: deleting the `ENDTEXT_OPCODE` check, or the label moving in the overlay.
+    """
+    base = bytearray(clean_rom())
+    base[pc._flat(*SCRIPT_END)] = 0x00
+    with pytest.raises(RuntimeError, match="not a bare `endtext`"):
+        pc.verify_overlay(bytes(base), overlay_rom(bytes(base)), CLEAN_SYMS, OVERLAY_SYMS)
+    with pytest.raises(RuntimeError, match="not a bare `endtext`"):
+        pc.verify_overlay(clean_rom(), overlay_rom(), CLEAN_SYMS, dict(OVERLAY_SYMS, **{pc.SCRIPT_END_LABEL: (0x2D, 0x7596)}))
+
+
+def test_the_gates_must_link_in_bank_7e_after_the_version_field():
+    """A gate linked outside bank $7E is refused (builder invariant, like the slice-1 frame/item symbols).
+
+    ANCHOR FOR: dropping the gate names from the symbol tuple in verify_overlay.
+    """
+    for name in ("SlinkTradeWaitGate", "SlinkTradeTimeoutGate", "SlinkTradeEntry", "SlinkTradeGatesEnd"):
+        with pytest.raises(RuntimeError, match="must link in bank \\$7E"):
+            pc.verify_overlay(clean_rom(), overlay_rom(), CLEAN_SYMS, dict(OVERLAY_SYMS, **{name: (0x70, 0x4400)}))
+
+
+def test_the_special_pointers_edit_is_in_the_builder_and_keeps_the_labels():
+    """The edit replaces exactly the two `add_special` lines and keeps both `<name>Special::` labels."""
+    (edit,) = [e for e in pc.POLISHED_EDITS if e[0] == "data/events/special_pointers.asm"]
+    assert edit[1] == ("\tadd_special Special_WaitForLinkedFriend\n\tadd_special Special_CheckLinkTimeout\n")
+    assert "Special_WaitForLinkedFriendSpecial::" in edit[2] and "dba SlinkTradeWaitGate\n" in edit[2]
+    assert "Special_CheckLinkTimeoutSpecial::" in edit[2] and "dba SlinkTradeTimeoutGate\n" in edit[2]

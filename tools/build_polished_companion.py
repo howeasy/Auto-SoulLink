@@ -96,6 +96,14 @@ POLISHED_EDITS = (
     # `ld [wWhichIndexSet], a`.
     ("engine/menus/main_menu.asm", ".loop\n\tcall MainMenu_PrintCurrentTimeAndDay\n",
      ".loop\n\tcall SlinkMainMenuLoopBridge ; SLink overlay: version line\n"),
+    # TRADE slice 2a: re-point SpecialsPointers entries 2 and 3 at the bank-$7E gates (trade_gate.asm).
+    # The labels keep their names, so the `special` script macro still resolves; nothing in bank $24 changes.
+    ("data/events/special_pointers.asm",
+     "\tadd_special Special_WaitForLinkedFriend\n\tadd_special Special_CheckLinkTimeout\n",
+     "Special_WaitForLinkedFriendSpecial:: ; SLink overlay: bank-$7E gate (trade request skips the cable wait)\n"
+     "\tdba SlinkTradeWaitGate\n"
+     "Special_CheckLinkTimeoutSpecial:: ; SLink overlay: bank-$7E gate\n"
+     "\tdba SlinkTradeTimeoutGate\n"),
     ("main.asm",
      "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n",
      "SECTION \"LureMenu\", ROMX\n\nINCLUDE \"engine/menus/lure_menu.asm\"\n\n"
@@ -126,6 +134,12 @@ RESET_HOOKS = (
 )
 RESET_HOOK_WINDOW = 0x20  # SoftReset's four instructions before the hooked call
 PHONE_HOOK_WINDOW = 0x40  # each hooked call lies within this many bytes of its routine's label
+# (native special, the bank-$7E gate its SpecialsPointers entry now names): trade slice 2a
+TRADE_GATES = (("Special_WaitForLinkedFriend", "SlinkTradeWaitGate"),
+               ("Special_CheckLinkTimeout", "SlinkTradeTimeoutGate"))
+# the bare `endtext` the timeout gate points the script at (maps/Route26DayofWeekSiblingsHouse.asm .End)
+SCRIPT_END_LABEL = "DayOfWeekSiblingsHousePokedexScript.End"
+ENDTEXT_OPCODE = 0xC0
 DELAY_NATIVE = bytes.fromhex("f044e0d7afe08f")  # ldh a,[rLY] / ldh [hDelayFrameLY],a / xor a / ldh [hVBlankOccurred],a
 HEADER_CHECKSUMS = range(0x14D, 0x150)
 TITLE_HOOK_FLAT = 0x483CD     # docs/polished/TITLE.md 8.4; ROM bytes `cd ed 43`          # rgbfix header + global checksum
@@ -204,13 +218,14 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
                # as one span (the bank is proven $FF throughout in the clean ROM above).
                (_flat(svc_bank, svc), _flat(svc_bank, max(new["SlinkPanelEnd"][1],
                                                 sfx_hi[1], new["SlinkVersionFieldEnd"][1],
-                                new["SlinkTradeAllowedItemsEnd"][1])),
-                f"bank ${SERVICE_BANK:02X} service + panel + sound + version + trade frame/items"),
+                                new["SlinkTradeAllowedItemsEnd"][1], new["SlinkTradeGatesEnd"][1])),
+                f"bank ${SERVICE_BANK:02X} service + panel + sound + version + trade frame/items/gates"),
                (HEADER_CHECKSUMS.start, HEADER_CHECKSUMS.stop, "header checksums")]
     # TRADE slice 1: the inert frame + item-policy code links after the version field, in the same bank
     if any(new[n][0] != SERVICE_BANK or new[n][1] < new["SlinkVersionFieldEnd"][1] or new[n][1] > 0x8000
-           for n in ("SlinkTradeCheckHeader", "SlinkTradeFrameEnd", "SlinkTradeItemAllowed", "SlinkTradeAllowedItemsEnd")):
-        raise RuntimeError("the trade frame/item code must link in bank $7E, after the version field")
+           for n in ("SlinkTradeCheckHeader", "SlinkTradeFrameEnd", "SlinkTradeItemAllowed", "SlinkTradeAllowedItemsEnd",
+                 "SlinkTradeWaitGate", "SlinkTradeTimeoutGate", "SlinkTradeEntry", "SlinkTradeGatesEnd")):
+        raise RuntimeError("the trade frame/item/gate code must link in bank $7E, after the version field")
     panel_bank, panel = new["SlinkPanel"]
     if panel_bank != SERVICE_BANK or panel < new["SlinkServiceEnd"][1]:
         raise RuntimeError(f"the panel must link in bank ${SERVICE_BANK:02X} after the service")
@@ -226,6 +241,7 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
     allowed += [(min(phone_lo, t_lo), max(phone_hi, t_hi), "ROM0 phone + title bridges"),
                 *phone_hook_spans(base, data, old, new)]
     allowed += reset_hook_spans(base, data, old, new)
+    allowed.append(gate_table_span(base, data, old, new))
     # TITLE-VERSION: the 3-byte same-size hook on MainMenuJoypadLoop's .loop (main_menu.asm:107).
     # Prove opcode + both operands first -- our own operand change trips "unexpected change" otherwise.
     hook = TITLE_HOOK_FLAT
@@ -259,6 +275,33 @@ def phone_hook_spans(base: bytes, data: bytes, old: dict, new: dict) -> list[tup
             raise RuntimeError(f"{routine}: `call {native}` at {at:#07x} is not `call {bridge}`")
         spans.append((at + 1, at + 3, f"{routine}: call {native} -> {bridge}"))
     return spans
+
+def gate_table_span(base: bytes, data: bytes, old: dict, new: dict) -> tuple[int, int, str]:
+    """The two re-pointed SpecialsPointers entries (3 bytes each: bank, addr lo, addr hi) and nothing else.
+
+    The old bytes are DERIVED from the clean sym of the native specials and must be what the clean ROM
+    holds; the new bytes are the `dba` of the gates from the overlay sym. The script's redirect target must
+    be the clean ROM's bare `endtext`.
+    """
+    ats = []
+    for native, gate in TRADE_GATES:
+        entry = old[native + "Special"]
+        if new[native + "Special"] != entry or entry[0] == 0:
+            raise RuntimeError(f"{native}Special moved or is in ROM0")
+        at = _flat(*entry)
+        was = bytes([old[native][0]]) + old[native][1].to_bytes(2, "little")
+        now = bytes([new[gate][0]]) + new[gate][1].to_bytes(2, "little")
+        if new[gate][0] != SERVICE_BANK or base[at:at + 3] != was or data[at:at + 3] != now:
+            raise RuntimeError(f"{native}Special at {at:#07x}: want {was.hex()} -> {now.hex()}, "
+                               f"have {base[at:at + 3].hex()} -> {data[at:at + 3].hex()}")
+        ats.append(at)
+    if ats != [ats[0] + 3 * i for i in range(len(ats))]:
+        raise RuntimeError("the gated SpecialsPointers entries are not adjacent")
+    end = old[SCRIPT_END_LABEL]
+    if new[SCRIPT_END_LABEL] != end or base[_flat(*end)] != ENDTEXT_OPCODE:
+        raise RuntimeError(f"{SCRIPT_END_LABEL} is not a bare `endtext` ({ENDTEXT_OPCODE:#04x}) at {end}")
+    return ats[0], ats[0] + 3 * len(ats), "SpecialsPointers entries -> trade gates"
+
 
 def reset_hook_spans(base: bytes, data: bytes, old: dict, new: dict) -> list[tuple[int, int, str]]:
     """Each RESET_HOOKS call is exactly one `call native` in the clean routine and now reads `call bridge`."""

@@ -46773,6 +46773,13 @@
 7e:428f SlinkTradeAllowedItems
 7e:428f SlinkTradeItemAllowedEnd
 7e:438f SlinkTradeAllowedItemsEnd
+7e:4400 SlinkTradeWaitGate
+7e:440c SlinkTradeWaitGate.native
+7e:4410 SlinkTradeTimeoutGate
+7e:4427 SlinkTradeTimeoutGate.native
+7e:442b SlinkTradeGatesCodeEnd
+7e:4480 SlinkTradeEntry
+7e:4484 SlinkTradeGatesEnd
 00:8000 vTiles0
 00:8800 vTiles1
 00:9000 vTiles2
