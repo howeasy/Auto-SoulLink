@@ -5,6 +5,9 @@ SYNTH: event flag + engine warp to POKECENTER_2F (5,3). TEST HOST: lease-only
 QUERY/OFFER replies; APPLY stages a COPY of own mon 0 with a distinct OT name,
 ONLY in OT slot 0 plus sender. No cable partner, server, SLink client or commit.
 The pure oracle consumes ordered byte writes, not just final mailbox snapshots.
+Exec-hook accounting retains bounded wrong-bank diagnostics without admitting them as
+native milestones; final/complete carry all-callback totals and registered site specs.
+Minimal serializer-failure traces are explicit failures, never gameplay evidence.
 """
 from __future__ import annotations
 
@@ -27,12 +30,63 @@ CASES = ("offer-reject", "cancel-menu", "no-eligible", "query-timeout", "apply-d
 TOKEN = [0x54, 0x45, 0x53, 0x54]
 MAGIC = [0x53, 0x4C, 0x54, 0x31, 1]
 HOOKS = ("SlinkTradeEntry", "SlinkTradeClose", "SlinkTradeCheckHeader", "Script_endtext", "GetScriptByte",
-         "SelectTradeOrDayCareMon", "NoYesBox", "SlinkTradeTimeoutGate")
+         "SelectTradeOrDayCareMon", "YesNoBox", "NoYesBox", "Special_TryQuickSave", "SlinkTradeTimeoutGate",
+         "OWPlayerInput", "SetInitialOptions.joypad_loop")
 EXTRA_SYMBOLS = HOOKS + ("wPartyMon1", "wOTPartyMon1", "wOTPartyMonOTs", "wOTPartyMonNicknames", "wOTPlayerName",
                          "hScriptBank", "hScriptPos", "hVBlank", "wScriptStackSize")
 SYNTH = ("SYNTH event flag wEventFlags+4 |= $02 + engine warp POKECENTER_2F (20:1) (5,3); "
          "TEST HOST copies own mon 0 to OT slot 0 with distinct OT name and sender for APPLY; "
          "no cable partner, server, SLink client, or native commit")
+HOOK_KINDS = {
+    "service_entry": "SlinkTradeEntry", "close": "SlinkTradeClose",
+    "check_header": "SlinkTradeCheckHeader", "endtext": "Script_endtext", "gsb": "GetScriptByte",
+    "party_menu": "SelectTradeOrDayCareMon", "yesno": "YesNoBox", "noyes": "NoYesBox",
+    "try_quicksave": "Special_TryQuickSave", "timeout_gate": "SlinkTradeTimeoutGate",
+    "OWPlayerInput": "OWPlayerInput", "SetInitialOptions.joypad_loop": "SetInitialOptions.joypad_loop",
+    "service_return": "service_return",
+}
+
+
+def _hook_accounting(trace, final, complete, symbols, why):
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from tools.polished_live.faint_probe import validate_hook_counts
+
+    sites = final.get("hook_sites")
+    expected_names = set(HOOKS) | {"service_return"}
+    if not isinstance(sites, dict) or set(sites) != expected_names or any(
+        not isinstance(site, dict) or set(site) != {"bank", "addr"} or
+        type(site["bank"]) is not int or not 0 <= site["bank"] <= 255 or
+        type(site["addr"]) is not int or not 0 <= site["addr"] < 0x8000
+        for site in (sites.values() if isinstance(sites, dict) else ())
+    ):
+        why.append("malformed hook_sites: expected every static hook and service_return")
+        return
+    if sites["SlinkTradeEntry"] != {"bank": 0x7E, "addr": 0x4480}:
+        why.append("hook_sites: service entry differs from pinned 7e:4480")
+    if symbols is not None:
+        for name in HOOKS:
+            expected = symbols.get(name)
+            if expected is None or sites[name] != {"bank": expected[0], "addr": expected[1]}:
+                why.append(f"hook_sites: {name} differs from symbols")
+    entry = next(iter(_events(trace, "service_entry")), None)
+    if not entry or type(entry.get("return_addr")) is not int or type(entry.get("return_bank")) is not int or (
+        sites["service_return"] != {"bank": entry.get("return_bank"), "addr": entry.get("return_addr")}
+        or entry.get("return_bank") != entry.get("bank")
+    ):
+        why.append("hook_sites: service_return differs from entry continuation observation")
+    for e in trace:
+        if e.get("kind") in HOOK_KINDS and e.get("hook_site") != HOOK_KINDS[e["kind"]]:
+            why.append(f"malformed hook metadata: {e['kind']} site identity")
+        if e.get("kind") == "wrong_pc":
+            why.append("wrong_pc: bank-matched callback has incorrect PC")
+    why.extend(validate_hook_counts(trace, final, sites))
+    for terminal in (final, complete):
+        if terminal is None or terminal.get("completed") is not True or type(terminal.get("driver_errors")) is not int or terminal["driver_errors"] != 0:
+            why.append("driver accounting: missing completion or driver errors")
+    if complete and any(complete.get(k) != final.get(k) for k in
+                        ("hook_sites", "hook_counts", "wrong_bank_sample_limit", "driver_errors", "completed")):
+        why.append("malformed hook accounting: complete differs from final")
 
 
 def _bytes(value):
@@ -217,13 +271,15 @@ def _write_audit(trace, why):
     return publications, host_transactions
 
 
-def evaluate(case, trace) -> tuple[bool, list[str]]:
+def evaluate(case, trace, symbols=None) -> tuple[bool, list[str]]:
     """Fail closed on incomplete instrumentation, invalid protocol, or non-restored machine state."""
     why: list[str] = []
     if case not in CASES:
         return False, [f"unknown case {case}"]
     if not isinstance(trace, list) or not trace or any(not isinstance(e, dict) for e in trace):
         return False, ["missing/malformed ordered trace"]
+    if _events(trace, "driver_error"):
+        return False, ["driver_error: observation incomplete"]
     required = ("kind", "ord", "frame", "sp", "bank", "vblank", "link", "running", "stack", "count",
                 "party_sum", "ot_tail_sum", "ot0_sum", "ot1_sum", "own0_sum", "lease", "sbank", "spos", "x", "y")
     if any(any(k not in e for k in required) or not _bytes(e.get("lease")) for e in trace):
@@ -242,6 +298,8 @@ def evaluate(case, trace) -> tuple[bool, list[str]]:
     setup, entry, close, ret, endtext, final, m0, m1, complete = (
         _once(trace, k, why) for k in ("setup", "service_entry", "close", "service_return", "endtext", "final",
                                       "move_start", "move_end", "complete"))
+    if final:
+        _hook_accounting(trace, final, complete, symbols, why)
     chain = [e for e in (setup, entry, close, ret, endtext, final, m0, m1, complete) if e]
     if any(a["ord"] >= b["ord"] for a, b in zip(chain, chain[1:], strict=False)):
         why.append("service/closure/endtext/movement events out of order")
@@ -446,7 +504,7 @@ def main(argv=None):
     except (OSError, ValueError) as exc:
         reasons.append(f"trace unavailable: {exc}")
     else:
-        _, failures = evaluate(args.case, trace)
+        _, failures = evaluate(args.case, trace, rows)
         reasons.extend(failures)
         print("\n".join(f"#{e.get('ord')} f{e.get('frame')} {e.get('kind')} lease={e.get('lease')}"
                         for e in trace if e.get("kind") != "gsb"))
