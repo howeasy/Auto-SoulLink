@@ -215,3 +215,7 @@ INCLUDE "engine/slink/version.asm"
 ; nothing calls them until the dispatch slice.
 INCLUDE "engine/slink/trade_frame.asm"
 INCLUDE "engine/slink/trade_items.asm"
+
+; TRADE slice 2a: the two special gates that re-point SpecialsPointers entries 2 and 3 (builder edit),
+; plus the stub SlinkTradeEntry. Trade requests skip the cable wait and end the script; battle is native.
+INCLUDE "engine/slink/trade_gate.asm"

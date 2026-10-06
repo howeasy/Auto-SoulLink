@@ -78,7 +78,7 @@ def test_resolved_offsets_are_in_range(sites: dict):
 
 def test_no_site_overlaps_a_companion_overlay_span(signals: dict, sites: dict):
     spans = [(s["start"], s["end"]) for s in signals["companion_overlay_spans"]]
-    assert len(spans) == 18, spans
+    assert len(spans) == 21, spans
     for name, site in sites.items():
         if site["status"] != "RESOLVED":
             continue
