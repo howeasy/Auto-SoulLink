@@ -85,6 +85,7 @@ class Result:
     writes: list[tuple[int, int, int]]
     farcalls: list[FarCallRecord]
     returned: bool
+    unmodelled_farcall_scratch: bool = False   # True when a MODEL-mode farcall ran: the real FarCall's scratch stack writes below SP are NOT reproduced (use farcall="native" for memory claims)
 
     @property
     def bc(self): return self.b << 8 | self.c
@@ -220,6 +221,7 @@ class SM83:
         self.hrombank = hrombank              # address of hROMBank; the FarCall model keeps it in step
         self.steps = 0
         self.min_sp = self.sp
+        self._entry_sp, self._max_depth = self.sp, 0
         self.farcalls: list[FarCallRecord] = []
         self.farcall_expect: dict[tuple[int, int], str] = {}
         self.farcall_allowed: set[tuple[int, int]] | None = None
@@ -451,13 +453,22 @@ class SM83:
         ret = self.pop16()
         fr = self._frame
         if fr is not None:
+            above = (at - fr.sentinel_sp) & 0xFFFF            # wrapped distance above the sentinel slot
+            if 0 < above < 0x8000:
+                raise self.fault("RET popped past the entry frame (more pops than pushes)")
             if ret == fr.sentinel:
                 fr.returned = True
-            elif at == fr.sentinel_sp:
+            elif above == 0:
                 raise self.fault(f"the routine returned to {ret:#06x}, not the sentinel {fr.sentinel:#06x}")
-            elif at > fr.sentinel_sp:
-                raise self.fault("RET popped past the entry frame (more pops than pushes)")
         self.pc = ret
+
+    def _dip(self, sp: int) -> None:
+        """Track the deepest stack as a WRAPPED distance below the entry SP, so a stack that wraps through $0000 still
+        reports its real depth (a plain min() read a wrapped SP as the shallowest)."""
+        depth = (self._entry_sp - sp) & 0xFFFF
+        if depth < 0x8000 and depth > self._max_depth:
+            self._max_depth = depth
+            self.min_sp = sp & 0xFFFF
 
     def _call(self, target: int) -> None:
         self.push16(self.pc)
@@ -475,8 +486,7 @@ class SM83:
                     if ret:
                         self._do_ret()
                     self.steps += 1
-                    if self.sp < self.min_sp:
-                        self.min_sp = self.sp
+                    self._dip(self.sp)
                     return
         self.steps += 1
         op = self.fetch()
@@ -493,8 +503,7 @@ class SM83:
             self._x0(op, y, z)
         else:
             self._x3(op, y, z)
-        if self.sp < self.min_sp:
-            self.min_sp = self.sp
+        self._dip(self.sp)
 
     def _x0(self, op: int, y: int, z: int) -> None:
         r = self.r
@@ -671,7 +680,7 @@ class SM83:
         The callee starts with [SP]=FARCALL_RETURN, [SP+2]=the caller's bank, [SP+3]=the return location
         (the byte after the data for farcall, DoNothing for farjp: its own `ret` then tail-returns).
         """
-        self.min_sp = min(self.min_sp, self.sp - FARCALL_EXTRA_DEPTH)
+        self._dip(self.sp - FARCALL_EXTRA_DEPTH)
         ptr = self.pop16()
         lo, hi, bank = (self.rd(ptr + i) for i in range(3))
         word = lo | hi << 8
@@ -685,7 +694,9 @@ class SM83:
             raise self.fault(f"{kind} to unexpected target {bank:#04x}:{target:#06x}")
         if len(self.mem.rom) and bank * 0x4000 >= len(self.mem.rom):
             raise self.fault(f"{kind} to bank {bank:#04x} beyond the ROM image")
-        from_bank = self.bank
+        # home/farcall.asm reads the caller's bank from hROMBank (`ldh a, [hROMBank]`), not from the mapper: a stale shadow
+        # is restored as the shadow (that is the real behaviour); without a configured hROMBank the mapper bank is used
+        from_bank = self.mem.read_raw(self.hrombank) if self.hrombank is not None else self.bank
         self.push16(DO_NOTHING if farjp else (ptr + 3) & 0xFFFF)
         self.sp = (self.sp - 1) & 0xFFFF
         self.wr(self.sp, from_bank)
@@ -727,11 +738,11 @@ class SM83:
         entry_sp = (DEFAULT_SP if sp is None else sp) & 0xFFFF
         self.sp = entry_sp
         sentinel_sp = (entry_sp - 2) & 0xFFFF
-        self.mem.ram[sentinel_sp] = sentinel & 0xFF           # unlogged setup writes
-        self.mem.ram[(sentinel_sp + 1) & 0xFFFF] = sentinel >> 8
+        self.mem.poke(sentinel_sp, bytes([sentinel & 0xFF, sentinel >> 8]))   # unlogged, through the SAME echo mapping as reads
         self.sp = sentinel_sp
         self.pc = addr
         self.min_sp = self.sp
+        self._entry_sp, self._max_depth = entry_sp, 2     # the 2-byte return slot counts
         saved, frame = self._frame, _Frame(sentinel, sentinel_sp)
         self._frame = frame
         w0, f0, s0 = len(self.mem.writes), len(self.farcalls), self.steps
@@ -746,8 +757,9 @@ class SM83:
             self._frame = saved
         return Result(a=self.a, f=self.f, b=self.b, c=self.c, d=self.d, e=self.e, h=self.h, l=self.l,
                       sp=self.sp, pc=self.pc, steps=self.steps - s0, sp_delta=(self.sp - entry_sp),
-                      min_sp=self.min_sp, stack_used=entry_sp - self.min_sp,
-                      writes=list(self.mem.writes[w0:]), farcalls=list(self.farcalls[f0:]), returned=True)
+                      min_sp=self.min_sp, stack_used=self._max_depth,
+                      writes=list(self.mem.writes[w0:]), farcalls=list(self.farcalls[f0:]), returned=True,
+                      unmodelled_farcall_scratch=bool(self.farcalls[f0:]) and self.farcall_mode == "model")
 
 
 def rom_image(banks: dict[int, bytes] | None = None, *, nbanks: int = 4, bank0: bytes = b"") -> bytearray:
