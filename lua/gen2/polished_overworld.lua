@@ -669,6 +669,11 @@ function O.boxes(deps)
             end
             if hits > 1 then refuse("ambiguous duplicate boxed key") end
             if not found then refuse("key not boxed") end
+            -- Eggs are off the wire, but the executor does not rely on that: an egg is never withdrawn as a mon. And
+            -- native Polished never lets a mail holder into a box (bills_pc.asm:135-139 PCSWAP_HOLDING_MAIL), so a
+            -- boxed record holding Mail has no mail SRAM to come back with; refuse both before any write.
+            if found.is_egg then refuse("egg in the box") end
+            if mail[found.held_item] then refuse("mail in the box (item " .. tostring(found.held_item) .. ")") end
             -- a second party match is an ambiguity, not "absent": refuse by name before any write
             local pmon, pwhy = find_key(party.mons, key)
             if pwhy then refuse(pwhy .. " in the party") end
