@@ -144,13 +144,17 @@ SlinkTradeProposerService::
 
 SlinkTradeWaitApply::
 	ld bc, SLINK_TRADE_APPLY_FRAMES
-.wait
-	call SlinkTradeWaitFrame
-	jp c, SlinkTradeExit ; timeout/B before APPLY never mutates anything
+	jr .wait
+.next
+	; The frame just returned has been INSPECTED and was not an APPLY: only now does the counter expire, so
+	; all SLINK_TRADE_APPLY_FRAMES frames (the last one included) can carry the request.
 	dec bc
 	ld a, b
 	or c
 	jp z, SlinkTradeExit
+.wait
+	call SlinkTradeWaitFrame
+	jp c, SlinkTradeExit ; timeout/B before APPLY never mutates anything
 	call SlinkTradeCheckHeader
 	jp c, SlinkTradeExit
 	ld hl, sp + 0
@@ -158,12 +162,12 @@ SlinkTradeWaitApply::
 	jp c, SlinkTradeExit
 	ld a, [SLINK_TRADE_FRAME + 5]
 	cp SLINK_TRADE_CMD_APPLY
-	jr nz, .wait
+	jr nz, .next
 	ld a, [SLINK_TRADE_FRAME + 6]
 	ld d, a
 	ld a, [SLINK_TRADE_FRAME + 7]
 	cp d
-	jr z, .wait ; an acknowledged generation is not a fresh request
+	jr z, .next ; an acknowledged generation is not a fresh request
 	ld hl, sp + 6
 	ld a, [SLINK_TRADE_FRAME + 7]
 	cp [hl]
@@ -200,6 +204,8 @@ SlinkTradeWaitApply::
 	; fallthrough
 
 SlinkTradeWaitRelease::
+	; Counter-before-inspection is harmless here: RELEASE and expiry take the same exit (SlinkTradeExit), so
+	; a RELEASE seen on the final frame changes nothing observable (unlike the APPLY wait above).
 	ld bc, SLINK_TRADE_RELEASE_FRAMES
 .wait
 	call SlinkTradeWaitFrame
