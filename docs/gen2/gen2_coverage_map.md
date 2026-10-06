@@ -1,6 +1,6 @@
 # Gen 2 coverage map — concrete planned bindings
 
-This P2 binding maps **102 of 102 obligations**: 53 requirements and 49 protocol section 9 assertions, including 38a/38b. There are **zero UNMAPPED** rows. All six future overlay/ghost target slots remain explicitly PLANNED and unhashed. Every evidence cell remains OPEN. Mapping a scenario does not claim that its implementation exists, its lane ran, its artifact is admitted, or its behavior passed.
+This P2 binding maps **103 of 103 obligations**: 53 requirements and 50 protocol section 9 assertions, including 38a/38b. There are **zero UNMAPPED** rows. All six future overlay/ghost target slots remain explicitly PLANNED and unhashed. Every evidence cell remains OPEN. Mapping a scenario does not claim that its implementation exists, its lane ran, its artifact is admitted, or its behavior passed.
 
 Bindings are authored by the team from PLAN, GEN2_BINDING_PLAN section 5 and its row joins, the requirements, protocol section 9, inspected P2 tools/tests and the runner manifest. Routine mapping is not an owner hand-entry prerequisite.
 
@@ -8,7 +8,7 @@ Bindings are authored by the team from PLAN, GEN2_BINDING_PLAN section 5 and its
 
 * The marked JSON block is authoritative. Each MAPPED row specifies stimulus, artifact scope, positive/refusal controls, independent oracle, lane and receipt marker.
 * PLANNED BINDING is an executable-scenario specification, not an execution result. EXISTS identifies inspected source/model tools; PLANNED filenames remain phase targets without a claim of present implementation. Native flows and fixtures are unqualified.
-* SOURCE-only: F-1/F-4/F-5/F-7g. MODEL-only by design: C-0/C-4/D-13. Their declared layers are unchanged. All 49 protocol assertions retain the explicit SOURCE+PHYSICAL caller policy; production-graph fake-server observations remain supplementary MODEL.
+* SOURCE-only: F-1/F-4/F-5/F-7g. MODEL-only by design: C-0/C-4/D-13. Their declared layers are unchanged. All 50 protocol assertions retain the explicit SOURCE+PHYSICAL caller policy; production-graph fake-server observations remain supplementary MODEL.
 * NATURAL engine scenarios and COMMAND executor scenarios remain separate. SOURCE and MODEL stimuli do not qualify physical behavior. C-6g/D-1 explicitly include C-G link alongside C-C/G-S representatives.
 * Plain clean digests are selected source candidates, not runtime admission. Crystal1.1 remains build-only. P4/P5 targets use separate descriptors; their unknown digests are null, never substituted with base-ROM hashes.
 * Artifact scope is independently injected through the runner's explicit target declarations and obligation bindings. Removing or changing a target inside this map cannot grant evidence eligibility. CLOSED evidence on a PLANNED target refuses in every mode/layer.
@@ -27,7 +27,7 @@ The coordinator integrated docs/gen2/gen2_requirements.md byte-for-byte from the
 | Input | SHA256 |
 |---|---|
 | requirements | 7f29009566cf39af96650f9a1671d5d5bc11cdc98b1ba19e61536f57844c4f76 |
-| protocol | fe852bf090b2004b38e879b17370bde29a645991039f32306a3c5c74fa32118b |
+| protocol | c95f3ff86fab399f53a9a04a03dbf99e6eb363009d553e344489b1dac6c27c69 |
 | artifact_policy | 113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed |
 
 | Current clean source candidate | SHA1 |
@@ -187,6 +187,7 @@ The JSON F-3 mapping repeats the family stimuli, controls and method selections,
 | protocol:9.43 | SOURCE + PHYSICAL | MAPPED | P4.3 | live-trade-gates |
 | protocol:9.44 | SOURCE + PHYSICAL | MAPPED | P3b.4/P3b.6/P3b.7 | live-new-gates |
 | protocol:9.45 | SOURCE + PHYSICAL | MAPPED | P3b.5/P6.3 conditional | release-evidence |
+| protocol:9.45a | SOURCE + PHYSICAL | MAPPED | P3b.5/P6.3 conditional | release-evidence |
 | protocol:9.46 | SOURCE + PHYSICAL | MAPPED | P3a.2/P3b.3a/P3b.6/P3b.7 | live-new-gates |
 | protocol:9.47 | SOURCE + PHYSICAL | MAPPED | P3b.6/P4.1 | live-gates |
 
@@ -222,7 +223,7 @@ Inventory and mapping modes validate the complete planned map. Closure mode stil
   "schema_version": 1,
   "input_sha256": {
     "requirements": "7f29009566cf39af96650f9a1671d5d5bc11cdc98b1ba19e61536f57844c4f76",
-    "protocol": "fe852bf090b2004b38e879b17370bde29a645991039f32306a3c5c74fa32118b",
+    "protocol": "c95f3ff86fab399f53a9a04a03dbf99e6eb363009d553e344489b1dac6c27c69",
     "artifact_policy": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed"
   },
   "rows": [
@@ -3773,6 +3774,40 @@ Inventory and mapping modes validate the complete planned map. Closure mode stil
         "refusal_control": "Missing/double response, malformed/unresolved team accepted or disabled capability causing writes fails.",
         "oracle": "SERVER reply schema/count; GAME and independent team decode only for separately enabled runtime behavior.",
         "receipt_marker": "gen2.protocol.9.45",
+        "lane": "release-evidence"
+      },
+      "evidence": {
+        "SOURCE": {
+          "status": "OPEN",
+          "reason": "No coverage receipt matching this planned binding, current input/artifact pins and declared layer has been accepted."
+        },
+        "PHYSICAL": {
+          "status": "OPEN",
+          "reason": "PLANNED cartridge scenario has not run or qualified; no physical receipt is claimed."
+        }
+      }
+    },
+    {
+      "id": "protocol:9.45a",
+      "required_layers": [
+        "SOURCE",
+        "PHYSICAL"
+      ],
+      "mapping": {
+        "status": "MAPPED",
+        "stimulus": {
+          "kind": "COMMAND",
+          "description": "PLANNED BINDING [P3b.5/P6.3 conditional]. Preserve default-disabled rival swap. Exercise in MODEL that replace_rival_team echoes the session nonce and battle_id of its battle when the client declared battle_identity, and that a Gen 2 client which never declares it keeps the pre-card behaviour (a command with no identity fields). PLANNED: production Entry.build conformance in tests/unit/test_gen2_client.py/test_protocol_conformance.py; tests/live/test_gen2_new_gates.py and tests/e2e/test_duo_gen2_new.py cases as the selected lane requires."
+        },
+        "artifacts": {
+          "pokecrystal": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+          "pokegold": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+          "pokesilver": "49b163f7e57702bc939d642a18f591de55d92dae"
+        },
+        "positive_control": "A replace_rival_team for a client that declared battle_identity echoes that battle session nonce and battle_id; one that never declared it gets a command with no identity fields.",
+        "refusal_control": "Missing, mismatched or other-session identity accepted for a declaring client, identity fields sent to a non-declaring client, or disabled capability causing writes fails.",
+        "oracle": "SERVER command schema (identity fields present only for declaring clients); GAME only for separately enabled runtime behavior.",
+        "receipt_marker": "gen2.protocol.9.45a",
         "lane": "release-evidence"
       },
       "evidence": {
