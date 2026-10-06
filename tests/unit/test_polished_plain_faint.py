@@ -11,7 +11,8 @@ import pytest
 
 from tests.unit import test_polished_explode_path as battle_rig
 from tests.unit.test_polished_explode_path import SYM, lcall, ready, snapshot
-from tests.unit.test_polished_write_path import key_of
+from tests.unit.test_polished_plain_faint_engine import resolve_visits
+from tests.unit.test_polished_write_path import key_of, overlay
 
 ROOT = Path(__file__).resolve().parents[2]
 WRITER = "lua/gen2/polished_writes.lua"
@@ -28,6 +29,7 @@ def setup(*, order=0, overrides=None, faults=False):
             if a == io.f1_at then
                 io.f1_touched = true
                 if io.f1_fault == 'swallow' then return end
+                if io.f1_fault == 'throw-before' then error('injected before-write',0) end
             end""")
         harness = harness.replace('else mem[a] = v end', """else mem[a] = v end
             if a == io.f1_at and io.f1_fault == 'throw-after' then error('injected after-write',0) end""")
@@ -155,14 +157,82 @@ def test_faint_coordinates_are_pinned_symbols():
         assert tuple(row.values()) == SYM[name]
 
 
-@pytest.mark.parametrize("order", [0, 1, 2], ids=["zero-order", "player-order", "enemy-order"])
-def test_already_zero_is_idempotent_without_order_retrigger(order):
+@pytest.mark.parametrize("order,fainted", [(1, False), (2, False), (0, True)],
+                         ids=["player-pending", "enemy-pending", "native-already-fainted"])
+def test_already_zero_is_idempotent_without_order_retrigger(order, fainted):
     rig, mons = setup(order=order)
+    for a in addresses()[:6]:
+        rig.mem[a] = 0
+    rig.put("wPlayerSubStatus2", 4 if fainted else 0)
+    ok, why = call(rig, mons)
+    assert ok, why
+    assert rig.writes() == [] and rig.get("wWhichMonFaintedFirst") == order
+
+
+def assert_player_notification(rig, start):
+    assert [w["addr"] for w in rig.writes()[start:]] == [addresses()[6]], "repair writes only notification"
+    assert all(rig.mem[a] == 0 for a in addresses()[:6])
+    assert rig.get("wWhichMonFaintedFirst") == 1, "player notification present"
+    # F0 executes the built ResolveFaints selector; its FaintUserPokemon trap
+    # observes dispatch/order only, not native animation or complete whiteout.
+    assert resolve_visits((overlay()[1], SYM), rig.get("wWhichMonFaintedFirst")) == [0, 1]
+
+
+def test_zero_hp_without_pending_or_processed_faint_repairs_notification():
+    rig, mons = setup()
     for a in addresses()[:6]:
         rig.mem[a] = 0
     ok, why = call(rig, mons)
     assert ok, why
-    assert rig.writes() == [] and rig.get("wWhichMonFaintedFirst") == order
+    assert_player_notification(rig, 0)
+
+
+@pytest.mark.parametrize("fault", ["swallow", "throw-before", "throw-after"],
+                         ids=["lost-order-byte", "order-write-throws", "order-landed-then-throws"])
+def test_final_notification_fault_then_fresh_retry_dispatches_player_faint(fault):
+    rig, mons = setup(faults=True)
+    rig.io.f1_at, rig.io.f1_fault = addresses()[6], fault
+    ok, why = call(rig, mons)
+    assert not ok and "PARTIAL ACTIVE FAINT" in why, why
+    assert all(rig.mem[a] == 0 for a in addresses()[:6])
+    assert rig.get("wWhichMonFaintedFirst") == (1 if fault == "throw-after" else 0)
+    rig.io.f1_fault = None
+    start = len(rig.writes())
+    # call() takes the unchanged key, but the facade rereads the now-zero record.
+    ok, why = call(rig, mons)
+    assert ok, why
+    if fault == "throw-after":
+        assert len(rig.writes()) == start, "already pending notification must not retrigger"
+        assert resolve_visits((overlay()[1], SYM), rig.get("wWhichMonFaintedFirst")) == [0, 1]
+    else:
+        assert_player_notification(rig, start)
+
+
+def test_control_returning_success_without_notification_fails_repair_oracle():
+    old = 'if order ~= 0 or (sub & 0x04) ~= 0 then'
+    assert SOURCE[WRITER].count(old) == 1
+    rig, mons = setup(overrides={WRITER: SOURCE[WRITER].replace(old, 'if true then')})
+    for a in addresses()[:6]:
+        rig.mem[a] = 0
+    ok, why = call(rig, mons)
+    assert ok, why
+    assert resolve_visits((overlay()[1], SYM), rig.get("wWhichMonFaintedFirst")) == []
+    with pytest.raises(AssertionError, match="repair writes only notification"):
+        assert_player_notification(rig, 0)
+
+
+@pytest.mark.parametrize("fault", ["swallow", "throw-before"], ids=["repair-drop", "repair-throws"])
+def test_notification_only_repair_failure_is_still_partial(fault):
+    rig, mons = setup(faults=True)
+    for a in addresses()[:6]:
+        rig.mem[a] = 0
+    rig.io.f1_at, rig.io.f1_fault = addresses()[6], fault
+    ok, why = call(rig, mons)
+    assert not ok and "PARTIAL ACTIVE FAINT" in why, why
+    assert f'{addresses()[6]:04X}=00' in why.split("observed=", 1)[1]
+    assert all(rig.mem[a] == 0 for a in addresses()[:6])
+    assert all(w["addr"] == addresses()[6] for w in rig.writes())
+    assert rig.parts.battle.writes.armed is None
 
 
 @pytest.mark.parametrize("mutant", [False, True], ids=["unsettled-mirror", "ignore-mirror-control"])
@@ -170,7 +240,8 @@ def test_zero_battle_hp_does_not_hide_an_unsettled_party_mirror(mutant):
     source = SOURCE[WRITER]
     if mutant:
         source = source.replace('before[1] == 0 and before[2] == 0 and before[3] == 0 and before[4] == 0', 'true')
-    rig, mons = setup(overrides={WRITER: source})
+    # Keep a notification pending: isolate the mirror guard from repair readback.
+    rig, mons = setup(order=1, overrides={WRITER: source})
     rig.put("wBattleMonHP", 0)
     rig.put("wBattleMonHP", 0, 1)
     ok, why = call(rig, mons)
@@ -273,7 +344,7 @@ def test_semantic_mutants_break_the_real_oracles(case):
     elif case == "reset-order":
         source = source.replace("if order == 0 then", "if true then")
     elif case == "idempotence":
-        source = source.replace("if zero then", "if false then")
+        source = source.replace("if zero then", "if false then").replace("if not zero then", "if true then")
     else:
         source = source.replace('assert(after[i] == 0, "active faint HP/status read-back mismatch")', '')
         # Deliberately corrupt the requested battle HP byte; only readback can reject it.
@@ -284,6 +355,7 @@ def test_semantic_mutants_break_the_real_oracles(case):
     if case == "idempotence":
         for a in addresses()[:6]:
             rig.mem[a] = 0
+        rig.put("wPlayerSubStatus2", 4)  # native already processed, not missing notification
     before = dict(rig.mem.items())
     ok, _ = call(rig, mons)
     if case == "idempotence":
