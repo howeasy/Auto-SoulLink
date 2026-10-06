@@ -1,0 +1,432 @@
+{
+ "steps": [
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 90,
+   "buttons": []
+  },
+  {
+   "phase": "idle",
+   "frames": 300,
+   "buttons": []
+  },
+  {
+   "phase": "walking",
+   "frames": 56,
+   "buttons": [
+    "Up"
+   ]
+  },
+  {
+   "phase": "idle",
+   "frames": 30,
+   "buttons": []
+  },
+  {
+   "phase": "walking",
+   "frames": 40,
+   "buttons": [
+    "Right"
+   ]
+  },
+  {
+   "phase": "idle",
+   "frames": 30,
+   "buttons": []
+  },
+  {
+   "phase": "start_menu",
+   "frames": 2,
+   "buttons": [
+    "Start"
+   ]
+  },
+  {
+   "phase": "start_menu",
+   "frames": 100,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "B"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "B"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "B"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "B"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 40,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 8,
+   "buttons": [
+    "Up"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 30,
+   "buttons": []
+  },
+  {
+   "phase": "npc_talk",
+   "frames": 2,
+   "buttons": [
+    "A"
+   ]
+  },
+  {
+   "phase": "npc_talk",
+   "frames": 100,
+   "buttons": []
+  },
+  {
+   "phase": "npc_talk",
+   "frames": 2,
+   "buttons": [
+    "B"
+   ]
+  },
+  {
+   "phase": "npc_talk",
+   "frames": 100,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "B"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "B"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "B"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 2,
+   "buttons": [
+    "B"
+   ]
+  },
+  {
+   "phase": "setup",
+   "frames": 14,
+   "buttons": []
+  },
+  {
+   "phase": "setup",
+   "frames": 120,
+   "buttons": []
+  }
+ ]
+}

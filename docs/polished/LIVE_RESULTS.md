@@ -685,3 +685,18 @@ are carried over unchanged by construction, not independently inspected for iden
 
 ### Coordinator live check of the derived second identity (2026-10-06)
 The derived save `F:/slink-work/lanes/pol-ident/B.SaveRAM` (sha256 `f5f19f5d2e3e26e343214722b5116e1aac0c71a1200882a4cc6f58259bc6ca8d`, from `tools/polished_live/derive_save.py`, 100 bytes different, both checksums `0x1414`) was booted through the engine's real CONTINUE by the existing writes smoke (`writes_run.py`, only its fixture-hash pin overridden from the calling script): `RESULT: PASS pol-live-writes (a)+(b) complete (0 checks failed)` on overlay `97628616` (EmuHawk pid 33788, lane `F:/slink-work/lanes/pol-ident-live`). The client's party keys carry the NEW OT id: `CFFFFF:D1C3:037:40`, `BFFFFF:D1C3:022:00` (the original fixture's are `...:D1C2:...`), so the game loaded the derived identity and the key rule separates the two saves. SYNTH derivative of a SYNTH fixture (O-33), not independently played; two-identity duo behaviour and native save/reload of the derived save remain unproven.
+
+## D3 dispatcher measurement, first live run (2026-10-06, SYNTH fixture, DEV)
+
+`tools/polished_live/dispatch_probe.py` (read-only: 0 guest writes, 0 register changes, 0 prompt-entry hits) on overlay `aecedbb2` (provenance output sha1), fixture `polished_overlay_warp.SaveRAM` (sha256 `75c7a5dc...36b8`, the disclosed O-33 SYNTH setup fixture), route `tools/polished_live/routes/dispatch_d3_route.json` (native buttons only, 1498 frames from boot, `--frames 1600`). Geometry came from the pinned source (`maps/Route29.asm`, `Route29.ablk`, `johto_traditional_collision.asm`), checked by one read-only exploration replay (position/script-mode log only). Route: 20 A pulses to CONTINUE; idle 300; walk Up 4 steps (48,12)->(48,8); walk Right 3 steps ->(51,8); START menu open (100 frames) then closed with B pulses; face the Route 29 sign at (51,7) and read it (two text pages). **The "npc_talk" phase is a sign text box (`bg_event` jumptext), not a person**: no NPC lies within ~20 steps of (48,12) (nearest: Fisher at (25,3), about 32 steps).
+
+Verdict: **PASS** (0 reasons). EmuHawk pid 34768, ended. Lane `F:/slink-work/lanes/pol-dispatch-probe/played-tjeu2gx4/probe`. 1551 dispatcher entries, 0 prompt entries.
+
+| phase | frames | entries | stack pins matched | engine guards clean | context_accept |
+|---|---|---|---|---|---|
+| idle | 360 | 360 | 360 / 360 | 330 | 330 |
+| walking | 96 | 96 | 96 / 96 | 2 | 2 |
+| start_menu | 102 | 101 | 0 | 0 | 0 |
+| npc_talk (sign) | 204 | 204 | 0 | 0 | 0 |
+
+Idle and walking: every entry carried the nine pinned bytes (SP `$C0D2`; 15 distinct 28-byte images in idle, 17 in walking; only the non-pinned bytes vary). The commonest idle image (302 of 360) is `4c408300802522d186d68000ab0dc25100fe86d6444622d16b51e250`. Engine guards, not the stack, refused most walking entries: 75 had `wMapEventStatus` != 0 with the step flag set, 7 the step flag only, 12 `wScriptMode` = 3 (the first frame of a step); the 30 unclean idle entries are the frames just after a step with the step flag still set. Negatives: START menu and sign text both ran with `wScriptMode` = 1 (so the engine guard alone refuses), and the stack differs as well: SP `$C0B8`-`$C0D2` with pinned offsets 14, 15 and 24 always mismatched (5, 25, 26, 27 in most). Not measured: battle phase, any person NPC, the accept path (lease never published). SYNTH-fixture DEV evidence, not PHYSICAL.
