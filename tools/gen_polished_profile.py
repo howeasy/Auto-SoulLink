@@ -234,6 +234,121 @@ def panel_block(ram: dict) -> dict:
             "stride": stride, "terminator": terminator}
 
 
+TRADE_ENTRIES = (
+    "SlinkTradeWaitGate", "SlinkTradeTimeoutGate", "SlinkTradeEntry",
+    "SlinkTradeProposerService", "SlinkTradeProposerServiceEnd",
+    "SlinkTradeDispatch", "SlinkTradePromptEntry",
+)
+TRADE_STACK_PINS = (
+    "NextOverworldFrame", "DelayFrame", "NextOverworldFrame.gfx_done",
+    "HandleMap", "OverworldLoop.loop",
+)
+
+
+def trade_block(symbols: dict, provenance: dict) -> dict:
+    """C2: complete, provenance-bound description, NOT production write authority.
+
+    Numeric DEFs are not exported by this build's sym. Read only sources whose
+    bytes match the build receipt; all addresses and record sizes come from sym.
+    PromptEntry is deliberately NOT a responder capability: v7 exports a ret stub.
+    `staging` is the host payload allowlist; `snapshot` is ROM-owned and must never
+    be included in the host write permit. Neither grants authority outside a lease.
+    """
+    def source(rel):
+        raw = (ROOT / rel).read_bytes()
+        require(provenance["overlay"]["sources_sha256"].get(rel)
+                == hashlib.sha256(raw).hexdigest(), f"trade source provenance mismatch: {rel}")
+        return raw.decode("utf-8")
+
+    def number(text, name, seen=frozenset()):
+        require(name not in seen, f"trade constant cycle: {name}")
+        matches = re.findall(rf"^DEF\s+{re.escape(name)}\s+EQU\s+([^;\n\r]+)", text, re.M)
+        require(len(matches) == 1, f"trade constant missing or duplicated: {name}")
+        expr = matches[0].strip()
+        if re.fullmatch(r"\d+", expr):
+            return int(expr)
+        if re.fullmatch(r"\$[0-9a-fA-F]+", expr):
+            return int(expr[1:], 16)
+        require(re.fullmatch(r"\w+", expr), f"unsupported trade constant: {name} = {expr}")
+        return number(text, expr, seen | {name})
+
+    abi = source("patch/gb/slink_abi.inc")
+    frame = source("patch/polished/src/trade_frame.asm")
+    service = source("patch/polished/src/trade_service.asm")
+
+    def location(name, rom=False):
+        require(name in symbols, f"trade required symbol missing: {name}")
+        bank, addr = symbols[name]
+        valid = ((bank == 0 and 0 <= addr < 0x4000) or (bank > 0 and 0x4000 <= addr < 0x8000)) if rom else (
+            (bank == 0 and 0xC000 <= addr < 0xD000) or (1 <= bank <= 7 and 0xD000 <= addr < 0xE000))
+        require(valid, f"trade symbol outside {'ROM' if rom else 'WRAM'}: {name}")
+        return {"symbol": name, "bank": bank, "addr": addr}
+
+    def span(start, end):
+        row, stop = location(start), location(end)
+        require(row["bank"] == stop["bank"] and stop["addr"] > row["addr"], f"trade span: {start}/{end}")
+        return {**row, "size": stop["addr"] - row["addr"]}
+
+    entries = {name: location(name, rom=True) for name in TRADE_ENTRIES}
+
+    def component(name):
+        # Paired implementation markers: a PromptEntry stub is never sufficient.
+        # Future cards export these start/End labels; presence is not live qualification.
+        present = [label in symbols for label in (name, name + "End")]
+        require(all(present) or not any(present), f"trade incomplete component: {name}")
+        if not all(present):
+            return False
+        start, end = location(name, rom=True), location(name + "End", rom=True)
+        require(start["bank"] == end["bank"] and end["addr"] > start["addr"], f"trade component extent: {name}")
+        entries[name], entries[name + "End"] = start, end
+        return True
+
+    capabilities = {"proposer_service": component("SlinkTradeProposerService"),
+                    "responder_service": component("SlinkTradeResponderService"),
+                    "commit": component("SlinkTradeCommit")}
+    for name in TRADE_STACK_PINS:
+        location(name, rom=True)
+    staging = {
+        "party": span("wOTPartyMon1", "wOTPartyMon1End"),
+        "ot": span("wOTPartyMonOTs", "wOTPartyMon2OT"),
+        "nickname": span("wOTPartyMonNicknames", "wOTPartyMon2Nickname"),
+        "sender": span("wOTPlayerName", "wOTPlayerID"),
+    }
+    snapshot = {
+        "party": span("wOTPartyMon2", "wOTPartyMon2End"),
+        "ot": span("wOTPartyMon2OT", "wOTPartyMon3OT"),
+        "nickname": span("wOTPartyMon2Nickname", "wOTPartyMon3Nickname"),
+    }
+    for name in snapshot:
+        require(staging[name]["size"] == snapshot[name]["size"], f"trade slot sizes disagree: {name}")
+    mailbox = span("wSlinkMailbox", "wSlinkMailboxEnd")
+    offset, size = number(abi, "SLINK_OFS_TRADE_LEASE"), number(abi, "SLINK_TRADE_LEASE_SIZE")
+    require(offset >= 0 and offset + size <= mailbox["size"], "trade lease outside mailbox")
+    fields = {name.lower(): number(frame, f"SLINK_TRADE_OFS_{name}") for name in (
+        "MAGIC", "VERSION", "COMMAND", "GENERATION", "ACK", "RESULT", "SLOT", "AVAILABLE", "MASK", "TOKEN")}
+    # Magic/token occupy four bytes; every other field is a byte. Reject holes or aliasing.
+    covered = [i for name, pos in fields.items() for i in range(pos, pos + (4 if name in ("magic", "token") else 1))]
+    require(sorted(covered) == list(range(size)), "trade lease fields overlap or leave holes")
+    lease = {"symbol": "wSlinkMailbox", "bank": mailbox["bank"], "base": mailbox["addr"] + offset,
+             "offset": offset, "size": size, "fields": fields,
+             "version": number(abi, "SLINK_TRADE_VERSION"),
+             "magic": [number(abi, f"SLINK_TRADE_MAGIC_{i}") for i in range(4)]}
+    spans = [*staging.values(), *snapshot.values(), {"bank": lease["bank"], "addr": lease["base"], "size": size}]
+    for i, left in enumerate(spans):
+        for right in spans[i + 1:]:
+            require(left["bank"] != right["bank"] or left["addr"] + left["size"] <= right["addr"]
+                    or right["addr"] + right["size"] <= left["addr"], "trade staging/snapshot/lease overlap")
+    return {
+        "schema": "polished-trade-v1", "production": False,
+        "capabilities": capabilities,
+        "lease": lease, "entries": entries, "dispatcher_stack_pin_names": list(TRADE_STACK_PINS),
+        "staging": staging, "snapshot": snapshot,
+        "commands": {name: number(abi, f"SLINK_TRADE_CMD_{name}") for name in (
+            "QUERY", "OFFER", "PROMPT", "APPLY", "DONE", "RELEASE")},
+        "timeouts": {name: number(service, f"SLINK_TRADE_{name}_FRAMES") for name in (
+            "QUERY", "OFFER", "APPLY", "RELEASE")},
+    }
+
 
 def build() -> dict:
     pack.verify_source()
@@ -325,7 +440,7 @@ def build() -> dict:
     overlay = {"artifact": "polished_overlay", "base_sha1": clean["sha1"], "rom_sha1": out["sha1"],
                "md5": out["md5"], "sym": SYM.name, "sym_sha256": sym_sha, "abi": abi,
                "ram": {name: ram[name] for name in OVERLAY_RAM + PANEL_RAM},
-               "panel": panel_block(ram)}
+               "panel": panel_block(ram), "trade": trade_block(symbols, prov)}
     for name in OVERLAY_RAM + PANEL_RAM:
         require(ram_bank[name] == 0, f"{name} outside WRAM0")
     sfx = {name: constants[const] for name, const in SFX_CODES}

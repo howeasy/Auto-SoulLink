@@ -605,7 +605,146 @@
           ]
         },
         "sym": "polished_slink.sym",
-        "sym_sha256": "668e62276a5dd863075c87cfbc22075061e97642a14bc8f09d82ed06c0c9b717"
+        "sym_sha256": "668e62276a5dd863075c87cfbc22075061e97642a14bc8f09d82ed06c0c9b717",
+        "trade": {
+          "capabilities": {
+            "commit": false,
+            "proposer_service": true,
+            "responder_service": false
+          },
+          "commands": {
+            "APPLY": 5,
+            "DONE": 7,
+            "OFFER": 2,
+            "PROMPT": 3,
+            "QUERY": 1,
+            "RELEASE": 8
+          },
+          "dispatcher_stack_pin_names": [
+            "NextOverworldFrame",
+            "DelayFrame",
+            "NextOverworldFrame.gfx_done",
+            "HandleMap",
+            "OverworldLoop.loop"
+          ],
+          "entries": {
+            "SlinkTradeDispatch": {
+              "addr": 18176,
+              "bank": 126,
+              "symbol": "SlinkTradeDispatch"
+            },
+            "SlinkTradeEntry": {
+              "addr": 17536,
+              "bank": 126,
+              "symbol": "SlinkTradeEntry"
+            },
+            "SlinkTradePromptEntry": {
+              "addr": 18304,
+              "bank": 126,
+              "symbol": "SlinkTradePromptEntry"
+            },
+            "SlinkTradeProposerService": {
+              "addr": 18944,
+              "bank": 126,
+              "symbol": "SlinkTradeProposerService"
+            },
+            "SlinkTradeProposerServiceEnd": {
+              "addr": 19694,
+              "bank": 126,
+              "symbol": "SlinkTradeProposerServiceEnd"
+            },
+            "SlinkTradeTimeoutGate": {
+              "addr": 17424,
+              "bank": 126,
+              "symbol": "SlinkTradeTimeoutGate"
+            },
+            "SlinkTradeWaitGate": {
+              "addr": 17408,
+              "bank": 126,
+              "symbol": "SlinkTradeWaitGate"
+            }
+          },
+          "lease": {
+            "bank": 0,
+            "base": 50713,
+            "fields": {
+              "ack": 7,
+              "available": 10,
+              "command": 5,
+              "generation": 6,
+              "magic": 0,
+              "mask": 11,
+              "result": 8,
+              "slot": 9,
+              "token": 12,
+              "version": 4
+            },
+            "magic": [
+              83,
+              76,
+              84,
+              49
+            ],
+            "offset": 14,
+            "size": 16,
+            "symbol": "wSlinkMailbox",
+            "version": 1
+          },
+          "production": false,
+          "schema": "polished-trade-v1",
+          "snapshot": {
+            "nickname": {
+              "addr": 54264,
+              "bank": 1,
+              "size": 11,
+              "symbol": "wOTPartyMon2Nickname"
+            },
+            "ot": {
+              "addr": 54198,
+              "bank": 1,
+              "size": 11,
+              "symbol": "wOTPartyMon2OT"
+            },
+            "party": {
+              "addr": 53947,
+              "bank": 1,
+              "size": 48,
+              "symbol": "wOTPartyMon2"
+            }
+          },
+          "staging": {
+            "nickname": {
+              "addr": 54253,
+              "bank": 1,
+              "size": 11,
+              "symbol": "wOTPartyMonNicknames"
+            },
+            "ot": {
+              "addr": 54187,
+              "bank": 1,
+              "size": 11,
+              "symbol": "wOTPartyMonOTs"
+            },
+            "party": {
+              "addr": 53899,
+              "bank": 1,
+              "size": 48,
+              "symbol": "wOTPartyMon1"
+            },
+            "sender": {
+              "addr": 53878,
+              "bank": 1,
+              "size": 11,
+              "symbol": "wOTPlayerName"
+            }
+          },
+          "timeouts": {
+            "APPLY": 3600,
+            "OFFER": 600,
+            "QUERY": 600,
+            "RELEASE": 90
+          }
+        }
       },
       "ram": {
         "hAppendVWFText": 65511,
