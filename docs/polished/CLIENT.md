@@ -1034,6 +1034,26 @@ date later composed features (capture site, overworld hold, deposit, withdraw, e
 | **trade** | **OPEN** | — | — | `profile.overlay` has no `trade` block |
 | **SFX / panel** | **OPEN** | — | — | Needs a later overlay milestone (caps != 0). `P.writes` is composed and live; the only brake is the ROM-advertised caps byte |
 
+**Correction (2026-10-06): the `battle_faint` / `battle_bench` / rival swap row above is a historical OPEN snapshot.**
+The current graph is **COMPOSED (DEV-qualified)** for `force_faint`, explode and a rival facade, as the
+C-COMPOSE correction records (`lua/gen2/entry.lua:836-868,913-949`), with distinct limits:
+
+- `force_faint` uses the overworld writer through the facade (`lua/gen2/polished_explode.lua:183`).
+  An active-battler plain faint in battle is still **not composed** and refuses by name (`:184-186`).
+- Explode is **Explosion-move/PP replacement only** (`lua/gen2/polished_writes.lua:166-185`), not proof
+  that Explosion executes or a guarantee of death/plain-faint fallback; see `docs/polished/EXPLODE_SCOPE.md:6-16`.
+- Rival writes require the owner-supplied `deps.rival_classes` set and the CPU at **0f:47DD**
+  (`lua/gen2/entry.lua:913-918`; `lua/gen2/polished_overworld.lua:893-894`;
+  `lua/gen2/polished_rival.lua:129-141`). The client exec hook for that rival site is **not built**:
+  the composed battle hook enters the explode hold, while `rival_tick` runs at frame end
+  (`lua/gen2/client.lua:1497-1506,1911`). Composing the facade does not make the rival write reachable.
+- `battle_bench` remains **not composed** (`lua/gen2/entry.lua:866,919-940`);
+  receipt-time bench handling returns without it (`lua/gen2/client.lua:1653-1654`).
+
+These are composition facts, not PHYSICAL qualification: the battle writer reports
+`DEV_OVERLAY_PREDICATE_HOLD` (`lua/gen2/polished_overworld.lua:889`), and the graph still returns
+`production_admitted=false`, qualification `DEV_OVERLAY_SHA1` (`lua/gen2/entry.lua:948-949`).
+
 ### 5.2 Corrected claims
 
 **(a) A11 — `client.foundation` was hard-coded `gen2_gsc`; the server refused the hello. SUPERSEDED.**

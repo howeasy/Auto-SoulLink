@@ -862,12 +862,16 @@ maintained separately and drift.
    added to the table cannot be forgotten by the party check.
 3. Reuse Polished's own `ItemIsMail_a` rather than the overlay's own mail test, so an item Polished
    newly classifies as mail is refused without an overlay change.
-4. Add the invariant as a **build-time `ASSERT`**: the number of mail IDs refused by the table equals
-   the count `data/items/mail_items.asm` declares. This is the check that fails loudly if the two
-   ever drift, and it is a one-line test.
+4. Add the invariant as a **proposed build-time `ASSERT`**: the number of mail IDs refused by the table
+   equals `NUM_MAILS` from `constants/item_constants.asm:313-324`, which enumerates the mail IDs
+   beginning at `FIRST_MAIL`. This proposed table check would fail loudly if the two ever drift;
+   no implementation of that assertion is claimed here.
 
-**UNVERIFIED:** the exact mail-item set in Polished's `data/items/mail_items.asm` and whether
-`ItemIsMail_a` and the overlay's table agree today.
+**UNVERIFIED:** whether `ItemIsMail_a` and the overlay's table agree today, and whether the proposed
+table-agreement assertion is implemented. The pinned mail bounds themselves are established by
+`constants/item_constants.asm:313-324`: `FIRST_MAIL = $F5`, ten mail IDs through `MIRAGE_MAIL = $FE`,
+and `NUM_MAILS = 10`. The native tail-of-list assertion in `home/header.asm:116-117` is not the
+proposed overlay-table agreement check.
 
 ## 8.7 Card status after this pass
 

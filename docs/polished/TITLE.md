@@ -88,8 +88,9 @@ Two differences from pokecrystal that must be handled:
   card and needs the `wLYOverrides` buffer semantics, which I have not read.
 - **Palette.** `TitleScreenPalettes` (`:142`, `:147`) is loaded whole; the patch must
   use a palette index that already exists in it. pokecrystal's banner used palette 6.
-  **UNVERIFIED** which Polished palette index is the logo's own; that needs
-  `data/movie/title_screen_palettes.asm` read, which I did not do.
+  **UNVERIFIED** which Polished palette index is the logo's own. The palette source is
+  `gfx/title/title.pal`, included as `TitleScreenPalettes` by
+  `engine/movie/title.asm:368-369`; the logo's palette-index mapping is not established here.
 
 ### 2.4 Tile and VRAM budget
 
