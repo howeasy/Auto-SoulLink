@@ -1,6 +1,6 @@
 {
   "schema": "polished-overlay-provenance-v1",
-  "generated": "2026-10-06T16:35:51Z",
+  "generated": "2026-10-06T17:43:23Z",
   "source": {
     "url": "https://github.com/Rangi42/polishedcrystal",
     "tag": "v3.2.3",
@@ -19,6 +19,8 @@
       "trade_gate.asm",
       "trade_items.asm",
       "trade_items_table.asm",
+      "trade_snapshot.asm",
+      "trade_validate.asm",
       "version.asm",
       "slink_abi.inc"
     ],
@@ -33,13 +35,15 @@
     ],
     "sources_sha256": {
       "patch/polished/src/panel.asm": "eff21dd57c8736096a92ebc4b653d49203cedfb89cd13bcf1569e7426ccc4679",
-      "patch/polished/src/slink.asm": "223ab79583584386515e758bf4faa47e5b39af2c9eba8e0e5e5cfc21d47eade0",
+      "patch/polished/src/slink.asm": "66cd79b1bed7e2c1d7882d7127f39ca05870e1729808f2a93f3c3dd4a8b363b1",
       "patch/polished/src/slink_mailbox.asm": "5ba31fe8ebd7adf050ad71a49d559150797d49d0b95bff473a08d8e26c09939a",
       "patch/polished/src/slink_sfx.asm": "16611d1282f08cee6eec076f56de25c52ebddcc2058efb0e21112fcb5ae1f1e4",
       "patch/polished/src/trade_frame.asm": "e541628d419b23bbb75f14e1bcf1d9a2ceb98b521159665c5d94dcdeffba9afb",
       "patch/polished/src/trade_gate.asm": "10455b6043fd5252b8a1dc2cddf91f7e4742b473d78acb99429d859ec1115eed",
       "patch/polished/src/trade_items.asm": "cf5d56f62fdb0473ebe31057325c84b72a4f825702665ab3a3756abe6ebef62a",
       "patch/polished/src/trade_items_table.asm": "1e001ad1ac4727c79de013fbadbde3c99e76d5ce52eef0a24fc7cd67fb1fdde5",
+      "patch/polished/src/trade_snapshot.asm": "3de31370df6b3e3a1c16ba67ea5edbab13da8d5329737f07ab807db86a2f371c",
+      "patch/polished/src/trade_validate.asm": "0b7ca2ba32a4016f4b6d6c76bceb5b582c43d18d8d9a6b674ab419c30d62a096",
       "patch/polished/src/version.asm": "c651a857adfc9e1004ce794d669777f498a701085054511bc3ef8e63c9399bf7",
       "patch/gb/slink_abi.inc": "be0ee30a84330c794a1b5f3a2cf4c1435bdfdf3bf63fa4f010deb02a0291181e"
     },
@@ -48,14 +52,14 @@
   },
   "command": "make -j4 CFLAGS=-O2 polishedcrystal-3.2.3.gbc",
   "output": {
-    "sha1": "97628616e36b2bd0c241699aa00e5abcfe0d45db",
-    "md5": "637ebf18b7a8ae327505835808cdc446",
-    "header_crc": "5741",
-    "crc32": "7B93DA0A",
+    "sha1": "26ed4a41c5901ae6dcae49ec0929a034d1f40219",
+    "md5": "d95362b1a8c138d628f38850ce701379",
+    "header_crc": "9CB4",
+    "crc32": "DA1506EC",
     "title": "PKPCRYSTAL\u0000PKPC",
     "size": 2097152,
     "identical_to_clean": false,
-    "canonical_sha1": "6fc63b35757476fdfd090aeb0aa3172a1e228ff6",
+    "canonical_sha1": "2b5e36b9055ff5df715e4774bb5a1cd777055f6a",
     "version_slot": {
       "offset": 2064749,
       "length": 20
@@ -72,12 +76,12 @@
     ],
     "ups": {
       "file": "patch/dist/SLink-Polished.ups",
-      "size": 1030,
-      "sha256": "d20a9f66040bedf5efd98026ae21410ce1d96bab6aa2c8303c61d2216b3ae90b"
+      "size": 1355,
+      "sha256": "a6ad626c7ffeae80909014f46d109a66d9a69a9f057d81030d0a5151074dc0ad"
     }
   },
   "symbols": {
-    "polished_slink.sym": "91c767d31b1ae853780e9b03be2f102c3325ff132adb3efc2a5928f791417fdf",
-    "polished_slink.map": "75e062870bd98dc9858bed056fe4743c0e66b83d200cfd3519e33b715dc30550"
+    "polished_slink.sym": "21b60e110b329d15655b91c6356e9d1d35083957d0c1ee47c600f8d2f1635085",
+    "polished_slink.map": "00d7793268576e7f5ee4869a8886b04490c97529a2334a58c884a69b4368f433"
   }
 }
