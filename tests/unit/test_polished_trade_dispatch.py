@@ -592,11 +592,13 @@ def test_the_dispatch_section_overlaps_no_other_bank_7e_symbol_and_fits_its_slot
     assert inside == {}, inside
     below = max(a for n, a in others.items() if a < lo_)
     assert below <= nsyms["SlinkTradeValidateEnd"][1] < lo_, hex(below)
-    # nothing else in bank $7E is at or above our start other than ours
-    assert [n for n, a in others.items() if a >= lo_] == []
+    # nothing else in bank $7E sits between our start and the held proposer service (which links after us at 7e:4a00)
+    service_at = nsyms["SlinkTradeProposerService"][1]
+    assert service_at >= 0x4800 > hi_
+    assert [n for n, a in others.items() if lo_ <= a < service_at] == []
 
 
-def test_the_builder_allows_the_dispatch_span_and_refuses_one_byte_past_it(world, clean_rom, csyms, nsyms):
+def test_the_builder_allows_the_dispatch_span_and_refuses_one_byte_past_the_combined_span(world, clean_rom, csyms, nsyms):
     w = world
     pc.verify_overlay(clean_rom, w.rom, csyms, nsyms)                       # the real overlay passes
     last = flat(BANK7E, w.end)
@@ -605,6 +607,12 @@ def test_the_builder_allows_the_dispatch_span_and_refuses_one_byte_past_it(world
     pc.verify_overlay(clean_rom, bytes(data), csyms, nsyms)
     data[flat(BANK7E, w.entry)] ^= 0xFF                                      # the dispatcher's first byte
     pc.verify_overlay(clean_rom, bytes(data), csyms, nsyms)
-    data[last] ^= 0xFF                                                       # one past the end: refused
+    # the allowed span now runs on to the held service's end (the allowed bytes between the two are all one
+    # contiguous empty-bank allowance), so the byte just past the dispatch end is no longer refused ...
+    data[last] ^= 0xFF
+    pc.verify_overlay(clean_rom, bytes(data), csyms, nsyms)
+    # ... and the first byte past the SERVICE end is
+    past = flat(BANK7E, nsyms["SlinkTradeProposerServiceEnd"][1])
+    data[past] ^= 0xFF
     with pytest.raises(RuntimeError, match=r"unexpected change at"):
         pc.verify_overlay(clean_rom, bytes(data), csyms, nsyms)
