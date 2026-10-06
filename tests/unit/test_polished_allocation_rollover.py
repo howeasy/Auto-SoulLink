@@ -294,7 +294,7 @@ def test_one_entry_left_in_the_last_slot_of_bank_2_is_used_then_the_next_deposit
 # ── a partially occupied target box: the first free slot is not slot 1 ──────
 
 def occupied(slots, d):
-    """Box 1 slots `slots` hold valid mons at pokedb bank d entries 1..len (flagged, both copies); a bank-2 run has
+    """Box 1 slots `slots` hold valid mons at pokedb bank d entries 1..len (flagged; the GAMEPLAY record only, plant() does not write the backup copy); a bank-2 run has
     bank 1 fully flagged. The next deposit lands at entry len + 1 in the first slot NOT in `slots`."""
     def setup(img):
         if d == 2:
