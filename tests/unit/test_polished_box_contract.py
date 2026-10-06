@@ -22,7 +22,14 @@ import pytest
 lupa = pytest.importorskip("lupa")
 
 from tests.unit.test_polished_withdraw_path import boxed, boxed_mon, options  # noqa: E402
-from tests.unit.test_polished_write_path import Rig, key_of, party  # noqa: E402
+from tests.unit.test_polished_write_path import (  # noqa: E402
+    HP,
+    PARTY_MONS,
+    RECORD,
+    Rig,
+    key_of,
+    party,
+)
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 OVERWORLD = (REPO / "lua/gen2/polished_overworld.lua").read_text(encoding="utf-8")
@@ -44,8 +51,11 @@ def withdraw_scenario(party_size, *, wrapped=True):
     if not wrapped:
         unwrap(rig)
     key = key_of(mon)
-    with contextlib.suppress(Exception):          # the unwrapped shape raises inside the client
+    if wrapped:                                   # the wrapped path must never raise: nothing is swallowed
         rig.send_command({"cmd": "party_mon", "key": key})
+    else:
+        with contextlib.suppress(Exception):      # only the deliberate control raises inside the client (bug 1)
+            rig.send_command({"cmd": "party_mon", "key": key})
     return rig, key
 
 
@@ -66,6 +76,53 @@ def test_control_the_raw_executor_shape_moves_the_mon_but_never_acks():
     rig, key = withdraw_scenario(3, wrapped=False)
     assert rig.count() == 4                                    # memory moved ...
     assert rig.sent("sync_retrieve_done") == []                # ... and the server was never told (bug 1)
+
+
+def test_a_duplicate_party_mon_after_a_completed_withdraw_is_a_done_not_a_failure():
+    """Review cx-4beeb281 (HIGH): with no settle holding the key, a second party_mon for a mon that already moved
+    reached the executor again and refused `key not boxed`; the server treats that as a failed retrieval (drops the
+    rebuild key, re-boxes the PARTNER). The mon being in the party and in no box IS the withdraw's postcondition: a
+    repeat is a re-ack, never a second mutation and never a failure."""
+    rig, key = withdraw_scenario(3)
+    assert rig.count() == 4 and [m["key"] for m in rig.sent("sync_retrieve_done")] == [key]
+    writes_before = len(rig.writes())
+    rig.send_command({"cmd": "party_mon", "key": key})                    # the duplicate
+    assert rig.sent("sync_retrieve_failed") == [], rig.sent("sync_retrieve_failed")
+    assert [m["key"] for m in rig.sent("sync_retrieve_done")] == [key, key]    # re-acked
+    assert rig.count() == 4 and len(rig.writes()) == writes_before              # no second mutation
+
+
+def test_a_duplicate_for_a_mon_that_has_since_died_is_refused_not_re_announced():
+    """cx-082b6600: withdraw, the mon dies in the party, a delayed duplicate arrives: a done would make the server add
+    the dead key back to party_keys. It is refused by name instead (a dead pair is not ALIVE: no partner re-box)."""
+    rig, key = withdraw_scenario(3)
+    base = PARTY_MONS + 3 * RECORD + HP
+    rig.mem[base] = 0
+    rig.mem[base + 1] = 0
+    done_before = len(rig.sent("sync_retrieve_done"))
+    rig.send_command({"cmd": "party_mon", "key": key})
+    (failed,) = rig.sent("sync_retrieve_failed")
+    assert "dead in the party" in failed["reason"]
+    assert len(rig.sent("sync_retrieve_done")) == done_before
+
+
+def test_the_executor_itself_is_idempotent_on_an_already_withdrawn_key():
+    rig, key = withdraw_scenario(3)
+    assert rig.count() == 4 and [m["key"] for m in rig.sent("sync_retrieve_done")] == [key]   # the setup really happened
+    boxes = rig.parts.overworld.boxes
+    raw = rig.lua.eval("function(t) return getmetatable(t).__index end")(boxes)
+    count, writes = rig.count(), len(rig.writes())
+    res = rig.lua.eval("function(b, k) return b.withdraw(k) end")(raw, key)
+    assert (res[0] if isinstance(res, tuple) else res) is True
+    assert rig.count() == count and len(rig.writes()) == writes
+
+
+def test_a_withdrawn_key_that_is_in_neither_place_still_refuses():
+    rig = Rig(party(3))
+    options(rig)
+    rig.send_command({"cmd": "party_mon", "key": "ABCDEF:1234:010:00"})
+    (failed,) = rig.sent("sync_retrieve_failed")
+    assert "not boxed" in failed["reason"]
 
 
 def test_a_full_party_retries_then_fails_with_the_client_reason():

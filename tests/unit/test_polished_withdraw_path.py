@@ -787,9 +787,11 @@ def test_a_both_places_state_reconciles_by_removing_only_the_box_copy():
     assert rig.count() == 4 and count_of_key(rig, key) == 1 and entries_byte(rig) == 0
     assert bytes(rig.img.mem["CartRAM"][entry_flat(1, 7):entry_flat(1, 7) + 49]) == entry
     assert rig.img.mem["WRAM"][FLAG_FLAT[1]] == flag_before
-    # and a third call is the plain refusal: the mon is only in the party now
-    done, why = _pair(_lua_withdraw(rig.lua)(ex, key))
-    assert done is None and "not boxed" in why
+    # and a third call is an idempotent DONE with no write (cx-4beeb281): the mon is only in the party now, which IS the
+    # withdraw's postcondition; refusing `key not boxed` made the server re-box the partner on a duplicate delivery
+    rig.lua.eval(CLEAR)(rig.log["writes"])
+    done, note = _pair(_lua_withdraw(rig.lua)(ex, key))
+    assert done is True and note["already_in_party"] is True and rig.writes() == [] and rig.count() == 4
 
 
 def test_reconcile_refuses_when_the_party_copy_differs_from_the_boxed_entry():

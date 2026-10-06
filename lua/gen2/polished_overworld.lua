@@ -668,7 +668,23 @@ function O.boxes(deps)
                 end
             end
             if hits > 1 then refuse("ambiguous duplicate boxed key") end
-            if not found then refuse("key not boxed") end
+            if not found then
+                -- IDEMPOTENT: a duplicate party_mon (a queued repeat, a re-send) for a mon that already moved finds it in no
+                -- box but in the party, which IS the withdraw's postcondition. That is a done (a re-ack), never a refusal:
+                -- the server reads `key not boxed` as a failed retrieval and re-boxes the partner. No write, no cache: the
+                -- party is read fresh, so a later deposit and a legitimate new withdraw are unaffected.
+                local already, awhy = find_key(party.mons, key)
+                if awhy then refuse(awhy .. " in the party") end
+                if already and not already.is_egg then
+                    -- a DEAD mon (HP 0) still physically in the party must not be re-announced as retrieved: the server's
+                    -- sync_retrieve_done would add its key back to party_keys after the death handler removed it
+                    -- (cx-082b6600). A refusal here is right for the server too: a dead pair is not ALIVE, so the failure
+                    -- handler discards the (already absent) key and re-boxes nobody.
+                    if (already.hp or 0) == 0 then refuse("dead in the party (hp 0)") end
+                    return true, {already_in_party = true, slot = already.slot}
+                end
+                refuse("key not boxed")
+            end
             -- Eggs are off the wire, but the executor does not rely on that: an egg is never withdrawn as a mon. And
             -- native Polished never lets a mail holder into a box (bills_pc.asm:135-139 PCSWAP_HOLDING_MAIL), so a
             -- boxed record holding Mail has no mail SRAM to come back with; refuse both before any write.
