@@ -120,7 +120,7 @@ Both flags stay **False**. Live (a)(b)(d) PASS proves memory effects of one mon 
 5. **Last-healthy-mon guard:** the Polished executor guards only `party.count <= 1`, as the vanilla Gen 2 executor does (`lua/gen2/boxes.lua:460,581`); native storage also refuses to leave no healthy mon. Parity decision, not a regression.
 6. **Allocation rollover and bank 2:** no composed deposit proof at entries 167/168, 195/196, 207, bank-1-full -> bank-2, both banks full; flags are retained after withdraw (native `NewStoragePointer` rebuilds them); one live bank-2 deposit/withdraw + native save/reload still owed.
 7. **Egg/mail:** the executor accepts any census match; eggs are off-wire and mail cannot be boxed natively, but there is no executor-level refusal test.
-8. **Retry identity:** a completed withdraw retried without its settle fails `key not boxed`; two byte-identical independent mons collapse on reconcile (documented in WITHDRAW.md).
+8. **Retry identity:** a completed withdraw retried without its settle is now an idempotent done (WITHDRAW.md 'Idempotent withdraw'; key-level limits there); two byte-identical independent mons collapse on reconcile (documented in WITHDRAW.md).
 9. **Reset durability:** the 73-cut withdraw sweep is in-memory; there is no deposit byte-cut sweep and no emulator reset/native-save scenario.
 10. **Explode:** bench targets and item/switch fallbacks refuse (`polished_explode.lua:183-186`); the five-byte move replacement is tested, the forced death outcome (Damp, action prevention) is not; live battle negatives (c) NOT RUN.
 11. **Evidence is for a past overlay:** the live PASS names `6e43f8d9`; the current overlay differs. Re-run on the frozen cut.

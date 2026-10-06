@@ -676,6 +676,11 @@ function O.boxes(deps)
                 local already, awhy = find_key(party.mons, key)
                 if awhy then refuse(awhy .. " in the party") end
                 if already and not already.is_egg then
+                    -- a DEAD mon (HP 0) still physically in the party must not be re-announced as retrieved: the server's
+                    -- sync_retrieve_done would add its key back to party_keys after the death handler removed it
+                    -- (cx-082b6600). A refusal here is right for the server too: a dead pair is not ALIVE, so the failure
+                    -- handler discards the (already absent) key and re-boxes nobody.
+                    if (already.hp or 0) == 0 then refuse("dead in the party (hp 0)") end
                     return true, {already_in_party = true, slot = already.slot}
                 end
                 refuse("key not boxed")
