@@ -224,7 +224,8 @@ def test_pinned_rom_site_is_bank_qualified():
     assert P.check_site_bytes(bytes(rom)) == "218bd2fa0cd1"
 
 
-@pytest.mark.parametrize("rom", [synthetic_rom(b"\x22\x8b\xd2\xfa\x0c\xd1"), b"", synthetic_rom()[:247776]])
+@pytest.mark.parametrize("rom", [synthetic_rom(b"\x22\x8b\xd2\xfa\x0c\xd1"), b"", synthetic_rom()[:247776]],
+                         ids=["wrong-site-bytes", "empty", "truncated"])  # ids: ROM images overflow pytest's env var
 def test_staged_site_mismatch_or_truncation_prevents_launch(rom):
     with pytest.raises(ValueError, match="pinned prefix"):
         P.check_site_bytes(rom)
