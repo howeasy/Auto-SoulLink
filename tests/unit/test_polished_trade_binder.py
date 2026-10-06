@@ -1,8 +1,8 @@
 """C3 real Lua binder + shared permit/lease against the assembled proposer service.
 
 Native UI/frame routines use the existing service rig traps; no emulator/live
-qualification. Validation facts are read from provenance-bound source and the
-built ROM table, never guessed by the binder. C4 owns that injection/admission.
+qualification. Validation facts now come from the generated profile and the
+built ROM table; C4 owns ROM reader admission. Explicit fact overrides remain.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import re
 
 import pytest
 from lupa.lua55 import LuaRuntime
@@ -31,13 +30,13 @@ def facts(env):
     raw = (ROOT / rel).read_bytes()
     prov = json.loads((ROOT / "data/polished/overlay_provenance.json").read_bytes())
     assert hashlib.sha256(raw).hexdigest() == prov["overlay"]["sources_sha256"][rel]
-    floor = int(re.search(rb"DEF SLINK_TRADE_NAME_FLOOR EQU \$([0-9a-f]+)", raw)[1], 16)
-    items = list(
-        env.rom[env.flat("SlinkTradeAllowedItems") : env.flat("SlinkTradeAllowedItemsEnd")]
-    )
-    nature = int(re.search(rb"NUM_NATURES == (\d+)", raw)[1])
-    lowmax = int(re.search(rb"ld d, \$([0-9a-f]+)", raw)[1], 16)
-    return {"glyph_floor": floor, "nature_count": nature, "species_low_max": lowmax, "items": items}
+    validation = copy.deepcopy(PROFILE['overlay']['trade']['validation'])
+    locator = validation['items']
+    assert (locator['bank'],locator['addr']) == env.sym['SlinkTradeAllowedItems']
+    start = svc.pc._flat(locator['bank'],locator['addr'])
+    assert start+locator['size'] == env.flat('SlinkTradeAllowedItemsEnd')
+    validation['items'] = list(env.rom[start:start+locator['size']])
+    return validation
 
 
 def payload():
@@ -83,11 +82,15 @@ class Binder:
             {
                 "profile": copy.deepcopy(profile or PROFILE),
                 "dev": dev,
-                "validation": facts(env) if validation == "built" else validation,
+                "validation": None if validation == "built" else validation,
             },
             recursive=True,
         )
         spec.io = io
+        if validation == 'built':
+            g.pyrom = lambda bank, addr, size: self.lua.table_from(list(
+                env.rom[svc.pc._flat(bank,addr):svc.pc._flat(bank,addr)+size]))
+            spec.read_rom = self.lua.eval('function(bank,addr,size) return pyrom(bank,addr,size) end')
         out = self.pt.compose(spec)
         self.api, self.error = out if isinstance(out, tuple) else (out, None)
 

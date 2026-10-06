@@ -148,9 +148,11 @@ end
 -- ── the composition seam ───────────────────────────────────────────────────────
 
 -- spec = {profile=selected title, io, dev=true,
---         validation={glyph_floor,nature_count,species_low_max,items}}.
--- validation is a build-derived fact bundle, NOT a policy callback. items is the
--- exact 256-byte SlinkTradeAllowedItems table indexed 1..256. C4 supplies provenance.
+--         read_rom=function(bank,addr,size) -> byte array}.
+-- C2.1 loads validation from overlay.trade.validation and its ROM table locator.
+-- C4 supplies an admitted ROM reader. Tests may instead inject spec.validation
+-- = {glyph_floor,nature_count,species_low_max,items}; items is the exact 256-byte
+-- SlinkTradeAllowedItems array indexed 1..256, never a policy callback.
 -- This validation is ADVISORY pre-screening only; passing stages a request for
 -- SlinkTradeValidateIncomingStaged, which remains the native acceptance authority.
 -- No server events are emitted. disposition() returns PENDING / NOT_PERFORMED /
@@ -243,7 +245,18 @@ function PT.compose(spec)
             assert(a.addr+a.size <= b.addr or b.addr+b.size <= a.addr, 'trade span overlap')
         end end
         assert(spec.dev == true, 'development proposer trade disabled')
-        local v = clone(assert(spec.validation, 'trade validation facts required'))
+        local v
+        if spec.validation ~= nil then
+            v = clone(spec.validation) -- explicit override: malformed never falls back
+        else
+            v = clone(assert(t.validation, 'trade validation profile required'))
+            local locator = assert(v.items, 'trade item table locator required')
+            assert(locator.symbol == 'SlinkTradeAllowedItems' and integer(locator.bank) and locator.bank > 0
+                   and integer(locator.addr) and locator.addr >= 0x4000 and locator.addr+256 <= 0x8000
+                   and locator.size == 256, 'invalid trade item table locator')
+            assert(type(spec.read_rom) == 'function', 'trade ROM reader required')
+            v.items = clone(spec.read_rom(locator.bank,locator.addr,locator.size))
+        end
         assert(integer(v.glyph_floor) and v.glyph_floor > p.overlay.panel.terminator and v.glyph_floor <= 255 and
                integer(v.nature_count) and v.nature_count > 0 and v.nature_count <= c.NATURE_MASK+1,
                'invalid validation facts')

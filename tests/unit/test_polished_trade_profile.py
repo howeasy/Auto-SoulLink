@@ -9,7 +9,10 @@ import re
 
 import pytest
 
+from tests.unit import test_polished_trade_binder as bt
 from tools import gen_polished_profile as gp
+
+binder_env = bt.env
 
 
 @pytest.fixture
@@ -28,6 +31,10 @@ def assert_schema(trade):
     assert lease["magic"] == [0x53, 0x4C, 0x54, 0x31] and lease["version"] == 1
     assert trade["commands"] == {"QUERY": 1, "OFFER": 2, "PROMPT": 3, "APPLY": 5, "DONE": 7, "RELEASE": 8}
     assert trade["timeouts"] == {"QUERY": 600, "OFFER": 600, "APPLY": 3600, "RELEASE": 90}
+    assert trade['validation'] == {
+        'glyph_floor': 0x5F, 'nature_count': 25, 'species_low_max': 0xFE,
+        'items': {'symbol':'SlinkTradeAllowedItems','bank':0x7E,'addr':0x428F,'size':256},
+    }
     assert set(trade["entries"]) == set(gp.TRADE_ENTRIES)
     assert trade["dispatcher_stack_pin_names"] == ["NextOverworldFrame", "DelayFrame",
         "NextOverworldFrame.gfx_done", "HandleMap", "OverworldLoop.loop"]
@@ -133,7 +140,8 @@ def test_overlap_refused(inputs):
 
 
 @pytest.mark.parametrize("rel", ["patch/gb/slink_abi.inc", "patch/polished/src/trade_frame.asm",
-                                "patch/polished/src/trade_service.asm"], ids=["abi", "frame", "service"])
+                                "patch/polished/src/trade_service.asm", "patch/polished/src/trade_validate.asm"],
+                         ids=["abi", "frame", "service", "validator"])
 def test_source_provenance_required(inputs, rel):
     inputs[1]["overlay"]["sources_sha256"][rel] = "0" * 64
     with pytest.raises(ValueError, match="trade source provenance mismatch"):
@@ -147,7 +155,8 @@ def test_deterministic(inputs):
 
 def test_constants_follow_receipted_source_copy(inputs, monkeypatch, tmp_path):
     symbols, prov = inputs
-    for rel in ("patch/gb/slink_abi.inc", "patch/polished/src/trade_frame.asm", "patch/polished/src/trade_service.asm"):
+    for rel in ("patch/gb/slink_abi.inc", "patch/polished/src/trade_frame.asm", "patch/polished/src/trade_service.asm",
+                "patch/polished/src/trade_validate.asm"):
         raw = (gp.ROOT / rel).read_bytes()
         if rel.endswith("trade_service.asm"):
             changed = raw.replace(b"SLINK_TRADE_QUERY_FRAMES EQU 600", b"SLINK_TRADE_QUERY_FRAMES EQU 601")
@@ -238,3 +247,150 @@ def test_disabled_overlap_guard_mutant_is_caught(inputs):
     symbols["wOTPlayerID"] = symbols["wOTPartyMon1End"]
     with pytest.raises(AssertionError):
         assert_disjoint(namespace["trade_block"](symbols, prov))
+
+
+@pytest.mark.parametrize('name', ['SlinkTradeAllowedItems','SlinkTradeAllowedItemsEnd'], ids=['table','table-end'])
+def test_validation_table_label_required(inputs, name):
+    del inputs[0][name]
+    with pytest.raises(ValueError, match='trade required symbol missing: '+name):
+        gp.trade_block(*inputs)
+
+
+def test_validation_locator_follows_sym_copy(inputs, tmp_path):
+    raw = gp.SYM.read_text()
+    for name in ['SlinkTradeAllowedItems','SlinkTradeAllowedItemsEnd']:
+        bank, addr = inputs[0][name]
+        raw,count = re.subn(rf'^{bank:02x}:{addr:04x} {name}$',f'{bank:02x}:{addr+1:04x} {name}',raw,flags=re.M)
+        assert count == 1
+    copied = tmp_path / gp.SYM.name
+    copied.write_text(raw)
+    table = gp.trade_block(gp.parse_symbols(copied.read_text()),inputs[1])['validation']['items']
+    assert table['addr'] == inputs[0]['SlinkTradeAllowedItems'].address+1
+    assert table['size'] == 256
+
+
+@pytest.mark.parametrize('bad', ['short','long','bank'], ids=['short','long','bank'])
+def test_validation_table_geometry_refused(inputs, bad):
+    sym = inputs[0]
+    end = sym['SlinkTradeAllowedItemsEnd']
+    sym['SlinkTradeAllowedItemsEnd'] = (end._replace(bank=end.bank+1) if bad == 'bank'
+                                      else end._replace(address=end.address+(-1 if bad == 'short' else 1)))
+    with pytest.raises(ValueError, match='trade item table must span'):
+        gp.trade_block(*inputs)
+
+
+def source_copy(inputs, monkeypatch, tmp_path, old, new):
+    for rel in ('patch/gb/slink_abi.inc','patch/polished/src/trade_frame.asm',
+                'patch/polished/src/trade_service.asm','patch/polished/src/trade_validate.asm'):
+        raw = (gp.ROOT / rel).read_bytes()
+        if rel.endswith('trade_validate.asm'):
+            assert old in raw
+            raw = raw.replace(old,new)
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_bytes(raw)
+        inputs[1]['overlay']['sources_sha256'][rel] = hashlib.sha256(raw).hexdigest()
+    monkeypatch.setattr(gp,'ROOT',tmp_path)
+
+
+@pytest.mark.parametrize('key,old,new,value', [
+    ('glyph_floor',b'SLINK_TRADE_NAME_FLOOR EQU $5f',b'SLINK_TRADE_NAME_FLOOR EQU $60',0x60),
+    ('nature_count',b'NUM_NATURES == 25',b'NUM_NATURES == 24',24),
+    ('species_low_max',b'ld d, $fe',b'ld d, $fd',0xFD),
+], ids=['glyph','nature','species'])
+def test_validation_follows_receipted_source(inputs, monkeypatch, tmp_path, key, old, new, value):
+    source_copy(inputs,monkeypatch,tmp_path,old,new)
+    assert gp.trade_block(*inputs)['validation'][key] == value
+
+
+@pytest.mark.parametrize('old,new', [
+    (b'DEF SLINK_TRADE_NAME_FLOOR EQU $5f',b'; missing glyph floor'),
+    (b'NUM_NATURES == 25',b'OTHER_CONSTANT == 25'),
+    (b'ld d, $fe',b'nop'),
+], ids=['glyph','nature','species'])
+def test_missing_validator_source_fact_refuses(inputs, monkeypatch, tmp_path, old, new):
+    source_copy(inputs,monkeypatch,tmp_path,old,new)
+    with pytest.raises(ValueError, match='trade (constant|validator facts)'):
+        gp.trade_block(*inputs)
+
+
+@pytest.mark.parametrize('key', ['glyph_floor','nature_count','species_low_max','items'], ids=['glyph','nature','species','table'])
+def test_validation_schema_mutants_are_caught(inputs, key):
+    trade = gp.trade_block(*inputs)
+    if key == 'items':
+        trade['validation'][key]['addr'] += 1
+    else:
+        trade['validation'][key] += 1
+    with pytest.raises(AssertionError):
+        assert_schema(trade)
+
+
+# Invoke the existing C3 corpus unchanged, once per loader. No assertion is removed
+# or replaced in the binder tests: all native subset/parity assertions run both ways.
+CORPUS = next(mark.args[1] for mark in bt.test_validator_parity_with_real_staged_routine.pytestmark
+              if mark.name == 'parametrize' and mark.args[0] == 'case')
+
+
+@pytest.mark.parametrize('case',CORPUS,ids=list(CORPUS))
+@pytest.mark.parametrize('loader',['profile','injected'],ids=['profile','injected'])
+def test_existing_rom_corpus_both_fact_paths(binder_env, monkeypatch, case, loader):
+    original = bt.Binder
+    if loader == 'injected':
+        def injected(env, **kwargs):
+            return original(env,validation=bt.facts(env),**kwargs)
+        monkeypatch.setattr(bt,'Binder',injected)
+    bt.test_validator_parity_with_real_staged_routine(binder_env,case)
+
+
+@pytest.mark.parametrize('bad', ['missing','symbol','bank','addr','size','reader-short','reader-value'],
+                         ids=['missing','symbol','bank','addr','size','reader-short','reader-value'])
+def test_profile_fact_loading_fails_closed(binder_env, bad):
+    profile = copy.deepcopy(bt.PROFILE)
+    if bad == 'missing':
+        del profile['overlay']['trade']['validation']
+    elif bad.startswith('reader-'):
+        pass
+    else:
+        table = profile['overlay']['trade']['validation']['items']
+        table[bad] = {'symbol':'wrong','bank':0,'addr':0x7FFF,'size':255}[bad]
+    mutation = None
+    if bad == 'reader-short':
+        mutation = ('v.items = clone(spec.read_rom(locator.bank,locator.addr,locator.size))', 'v.items = {}')
+    elif bad == 'reader-value':
+        mutation = ('v.items = clone(spec.read_rom(locator.bank,locator.addr,locator.size))',
+                    'v.items = clone(spec.read_rom(locator.bank,locator.addr,locator.size)); v.items[1] = 2')
+    b = bt.Binder(binder_env,profile=profile,mutation=mutation)
+    assert b.api is None and b.error and not b.writes
+
+
+def test_profile_loader_requires_reader_but_explicit_override_does_not(binder_env):
+    b = bt.Binder(binder_env,validation=None)
+    assert b.api is None and 'ROM reader required' in b.error
+    b = bt.Binder(binder_env,validation=bt.facts(binder_env))
+    assert b.api is not None and b.call('advertised') is False
+
+
+def test_both_fact_paths_emit_identical_staging_and_publications(binder_env):
+    loaded = bt.Binder(binder_env)
+    injected = bt.Binder(binder_env,validation=bt.facts(binder_env))
+    for binder in (loaded,injected):
+        binder.accepted()
+        binder.frame += 1
+        assert binder.apply() == 44
+    assert loaded.writes == injected.writes
+    assert loaded.mem == injected.mem
+
+
+def test_source_hash_bypass_mutant_is_caught(inputs):
+    text = inspect.getsource(gp.trade_block)
+    old = 'require(provenance["overlay"]["sources_sha256"].get(rel)'
+    assert old in text
+    namespace = dict(gp.__dict__)
+    exec(text.replace(old,'require(True or provenance["overlay"]["sources_sha256"].get(rel)'),namespace)
+    inputs[1]['overlay']['sources_sha256']['patch/polished/src/trade_validate.asm'] = '0'*64
+    with pytest.raises(ValueError, match='provenance mismatch'):
+        gp.trade_block(*inputs)
+    # Mutant emits a family despite the invalid receipt, violating refusal.
+    result = namespace['trade_block'](*inputs)
+    with pytest.raises(AssertionError):
+        assert result is None

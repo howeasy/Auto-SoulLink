@@ -275,6 +275,7 @@ def trade_block(symbols: dict, provenance: dict) -> dict:
     abi = source("patch/gb/slink_abi.inc")
     frame = source("patch/polished/src/trade_frame.asm")
     service = source("patch/polished/src/trade_service.asm")
+    validator = source("patch/polished/src/trade_validate.asm")
 
     def location(name, rom=False):
         require(name in symbols, f"trade required symbol missing: {name}")
@@ -306,6 +307,24 @@ def trade_block(symbols: dict, provenance: dict) -> dict:
     capabilities = {"proposer_service": component("SlinkTradeProposerService"),
                     "responder_service": component("SlinkTradeResponderService"),
                     "commit": component("SlinkTradeCommit")}
+    # These two values are not exported DEFs: the build asserts NUM_NATURES,
+    # and the low-species bound is an immediate in ValidateRecord. Parse only
+    # executable/assertion lines in the provenance-bound source, never comments.
+    code = "\n".join(line.split(";", 1)[0].strip() for line in validator.splitlines())
+    nature = re.findall(r"^ASSERT\b[^\n]*\bNUM_NATURES\s*==\s*(\d+)\b", code, re.M)
+    record = re.search(r"^SlinkTradeValidateRecord::\n(.*?)^\.limit$", code, re.M | re.S)
+    require(len(nature) == 1 and record is not None, "trade validator facts missing: nature/record")
+    low = re.findall(r"^ld d, \$([0-9a-fA-F]+)$", record[1], re.M)
+    require(len(low) == 1 and "cp NUM_NATURES" in record[1], "trade validator facts missing: species/nature check")
+    table = location("SlinkTradeAllowedItems", rom=True)
+    table_end = location("SlinkTradeAllowedItemsEnd", rom=True)
+    require(table["bank"] == table_end["bank"] and table_end["addr"] - table["addr"] == 256,
+            "trade item table must span all 256 byte ids in one ROM bank")
+    validation = {"glyph_floor": number(validator, "SLINK_TRADE_NAME_FLOOR"),
+                  "nature_count": int(nature[0]), "species_low_max": int(low[0], 16),
+                  "items": {**table, "size": table_end["addr"] - table["addr"]}}
+    require(0 < validation["glyph_floor"] <= 255 and 0 < validation["nature_count"] <= 32
+            and 0 < validation["species_low_max"] < 256, "trade validator facts outside byte/mask bounds")
     for name in TRADE_STACK_PINS:
         location(name, rom=True)
     staging = {
@@ -343,6 +362,7 @@ def trade_block(symbols: dict, provenance: dict) -> dict:
         "capabilities": capabilities,
         "lease": lease, "entries": entries, "dispatcher_stack_pin_names": list(TRADE_STACK_PINS),
         "staging": staging, "snapshot": snapshot,
+        "validation": validation,
         "commands": {name: number(abi, f"SLINK_TRADE_CMD_{name}") for name in (
             "QUERY", "OFFER", "PROMPT", "APPLY", "DONE", "RELEASE")},
         "timeouts": {name: number(service, f"SLINK_TRADE_{name}_FRAMES") for name in (

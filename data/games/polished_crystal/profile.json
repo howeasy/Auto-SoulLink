@@ -743,6 +743,17 @@
             "OFFER": 600,
             "QUERY": 600,
             "RELEASE": 90
+          },
+          "validation": {
+            "glyph_floor": 95,
+            "items": {
+              "addr": 17039,
+              "bank": 126,
+              "size": 256,
+              "symbol": "SlinkTradeAllowedItems"
+            },
+            "nature_count": 25,
+            "species_low_max": 254
           }
         }
       },
