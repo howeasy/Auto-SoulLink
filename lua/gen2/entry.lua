@@ -938,7 +938,7 @@ local function compose_polished(deps, decision)
             hello_session=load("lua/hello_session.lua"), reply_dispatch=load("lua/reply_dispatch.lua"),
             owed_reports=load("lua/owed_reports.lua"),
         })
-        return {pack="polished_crystal", title="polished", profile=profile, panel=panel, panel_writes=panel_writes,
+        local parts = {pack="polished_crystal", title="polished", profile=profile, panel=panel, panel_writes=panel_writes,
                 data={profile=wrapper, charmap=charmap, evolutions=evolutions, area_map=area_map}, reads=reads, client=client,
                 -- the overworld write path, under its own key: `checkpoint` stays nil because no PC hold is
                 -- composed (there is no Polished checkpoint PC to hold at; see C-WRITE above)
@@ -947,6 +947,35 @@ local function compose_polished(deps, decision)
                         rival=rival},
                 production_admitted=false, artifact_kind=decision.kind, runtime_rom_sha1=decision.rom_sha1,
                 runtime_started=false, qualification="DEV_OVERLAY_SHA1"}
+        -- C4: dev/test access only. Do not pass this binder to client.new: its
+        -- production trade pump and hello capability remain unchanged. C3 owns
+        -- its narrow trade permit; this branch adds no permit or overworld span.
+        if deps.polished_trade_dev == true then
+            local composed, trade, why = pcall(function()
+                assert(profile.overlay.trade, "overlay.trade family missing")
+                local reader = io_.read_u8
+                assert(type(reader) == "function", "live ROM reader missing")
+                local byte = function(offset) return reader(offset, "ROM") end
+                assert(io_.domain_size("ROM") == size and Admission.sha1(byte, size) == decision.rom_sha1,
+                       "dev trade ROM hash mismatch")
+                local PT = load("lua/gen2/polished_trade.lua")
+                return PT.compose({profile=profile, io=io_, dev=true,
+                    read_rom=function(bank, addr, n)
+                        assert(type(bank) == "number" and bank % 1 == 0 and bank > 0
+                               and type(addr) == "number" and addr % 1 == 0 and addr >= 0x4000
+                               and type(n) == "number" and n % 1 == 0 and n > 0 and addr+n <= 0x8000,
+                               "invalid dev trade ROM range")
+                        local flat = bank * 0x4000 + addr - 0x4000
+                        assert(flat+n <= size, "dev trade ROM range outside cartridge")
+                        local bytes = {}
+                        for i=1,n do bytes[i]=byte(flat+i-1) end
+                        return bytes
+                    end})
+            end)
+            if composed and trade then parts.dev_polished_trade = trade
+            elseif deps.log then deps.log("[SLink-polished] dev trade unavailable: " .. tostring(composed and why or trade)) end
+        end
+        return parts
     end)
     if not ok then return nil, tostring(result) end
     return result
