@@ -57,3 +57,18 @@ Emulator reset, power loss, savestate load, script reload and server restart are
 unresolved marker must survive a reconnect, never silently become NOT_COMPLETE; closing it needs pinned before/after native-save copies, a
 durable operation identity or reconstructible evidence, a fresh boot census, byte readback and cut/reload tests across each write boundary. A
 WRAM mailbox byte cannot supply this. Native-save durability is separate from volatile logical completion.
+
+## Build order and the memorialize reconciliation (Polished peer cx-59473cdb, coordinator-verified 2026-10-06)
+
+Order: **F** (last-healthy parity: keep count-only for this batch unless you say otherwise; never an indiscriminate healthy-survivor rule for burial) and
+**G** (box-20 RETRIEVAL policy incl. the non-dead quarantine relocation, `server/server.py:5299-5318`) are your rulings; then **C** executor egg/mail refusal
+tests (withdraw has NO egg/mail exclusion, `polished_overworld.lua:656-674`; deposit has) and **E** allocation-rollover tests (entries 167/168, 195/196,
+207, bank-1-full -> bank 2, both full, gameplay AND backup references) in parallel as test-first lanes; then **A** (this contract; author **D**'s composed
+deposit byte-cut + State round-trip test red FIRST as its falsifier) with ONE runtime writer; then **B** (memorialize, box-origin before party-origin) on the
+negotiated contract. Batch every production Lua/server fix into ONE frozen digest cut (tests and docs do not stale `CODE_DIGEST`); shared-code changes
+verify Gen 3 first, then the other generations (CLAUDE.md). `polished_overworld.lua` is the hot file: one writer at a time.
+**Reconciliation:** the contract's `cmd` enum MUST include `memorialize` before B ships (B does not first ship bare-true and convert). For memorialize:
+COMPLETE runs the existing verified memorial completion once; UNCERTAIN keeps `pending_memorials` and the hold and never calls `_handle_memorialize_failed`
+(`state.py:4431-4456` retires the obligation and may mark the pair MEMORIAL while the mon stays put); NOT_COMPLETE is an honest no-mutation result and does NOT
+by itself retire the death obligation (the named `last party mon` retry / game-over drop stay). `MEMORIALIZE.md`'s bare-true return section is the legacy
+adapter view only. If memorial outcome policy is not approved, leave B uncomposed.

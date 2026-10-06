@@ -47,3 +47,8 @@ zero writes and retry after retrieval; egg/mail/fainted-survivor pins; full memo
 no-op and exact-duplicate reconcile (red: key-only); the real `run_box` emits done with no concat error and no settle (red: return a table, then a
 string); unsafe checkpoint/save in progress/bad checksum/incomplete census write nothing; save/reset/reconnect; box-20 retrieval policy once ruled;
 byte-cut and silent-write faults never produce a false done (needs the three-outcome contract, BOX_WRITE_CONTRACT.md).
+
+## Reconciliation (2026-10-06)
+The bare-`true` return section above is the LEGACY adapter view. B ships on the negotiated three-outcome contract from its first enabled version (see
+`BOX_WRITE_CONTRACT.md` "Build order and the memorialize reconciliation"): a late failure after bytes changed must never become an ordinary
+`memorialize_failed`, which finalises the server obligation.
