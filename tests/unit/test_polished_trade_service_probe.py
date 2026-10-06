@@ -174,6 +174,15 @@ def mutate(trace, kind, **fields):
     return out
 
 
+def rekind(trace, old, new, **fields):
+    """Turn the first `old` event into a `new`-kind event (mutate's own `kind` parameter selects, never sets)."""
+    out = copy.deepcopy(trace)
+    e = next(e for e in out if e["kind"] == old)
+    e.update(fields)
+    e["kind"] = new
+    return out
+
+
 def renumber(trace):
     for i, e in enumerate(trace, 1):
         e["ord"] = i
@@ -234,7 +243,7 @@ DEFECTS = (
     ("no movement", lambda t: mutate(t, "move_end", y=3), "player did not move"),
     ("VBlank leaked", lambda t: mutate(t, "final", vblank=1), "final vblank != 0"),
     ("link mode leaked", lambda t: mutate(t, "final", link=1), "final link != 0"),
-    ("observation overflow", lambda t: mutate(t, "move_start", kind="gsb_overflow"), "gsb_overflow"),
+    ("observation overflow", lambda t: rekind(t, "move_start", "gsb_overflow"), "gsb_overflow"),
     ("early exit", lambda t: missing(t, "complete"), "complete: expected exactly once"),
 )
 
@@ -269,7 +278,7 @@ def test_timeout_host_cannot_write_unsolicited():
 
 @pytest.mark.parametrize("case", P.CASES)
 def test_missing_symbol_fails_closed(case):
-    trace = mutate(good_trace(case), "move_start", kind="missing_symbol", symbol="SlinkTradeEntry")
+    trace = rekind(good_trace(case), "move_start", "missing_symbol", symbol="SlinkTradeEntry")
     ok, reasons = P.evaluate(case, trace)
     assert not ok
     assert any("missing_symbol" in r for r in reasons)
