@@ -1,9 +1,12 @@
 # F2: Polished active-faint identity and native-consumption settlement
 
 **Design for review, not implementation or release authority.** Source cut:
-`b2da827c98e8e91c8706fa88cf57452c92cf4bd8` (contains F1). This document changes
+`faffd4ca841d3857ef475b24e8c71877a9dc1542` (contains F1.1). This document changes
 no runtime, capability, protocol or receipt. References below are to that cut;
-re-pin line numbers before dispatch. F1 is MODEL-tested; native settlement is OPEN.
+re-pin line numbers before dispatch. F1/F1.1 are MODEL-tested; native settlement is OPEN.
+This revision accepts review cx-432e6cb2: tick-only HP evidence, explicit hello
+identity invalidation, centrally owned overworld retention, and the corrected
+regression-order citation. No runtime behavior is changed by this revision.
 
 **Recommendation:** add a Polished-only optional settlement interface to the existing
 Gen 2 client. A successful writer call starts observation; it does not complete a
@@ -30,10 +33,11 @@ not an end-to-end solution. Production enablement must wait for that decision.
   (`lua/gen2/polished_explode.lua:195-220`,
   `lua/gen2/polished_writes.lua:194-282`). It writes six HP/status bytes and conditionally
   first-faint order last. It does not cancel committed actions or implement a bench faint.
-- F1 already-zero success requires both HP/status mirrors settled; it does not
-  reset native order. A post-attempt failure reports `PARTIAL ACTIVE FAINT:` with
-  before/observed bytes; this is not a zero-write refusal
-  (`polished_writes.lua:244-279`).
+- F1.1 distinguishes pending/native-processed notification from a lost notification
+  even when both HP/status mirrors are settled zero. The exact table below replaces
+  the old unconditional already-zero success rule. A post-attempt failure reports
+  `PARTIAL ACTIVE FAINT:` with before/observed bytes; this is not a zero-write
+  refusal (`polished_writes.lua:247-286`).
 
 ## 2. Local transaction and routing contract
 
@@ -63,25 +67,92 @@ must not be presented as a server-issued transaction id.
    Explosion writer. A writer return means **attempt staged**, not death or proof
    that the Explosion move executed. Retain the obligation and await an observation
    after that action before choosing fallback. Do not inject Explosion every hold.
+   **Mutual exclusion:** select one operation per obligation/hold attempt and spend
+   that attempt's dispatch token. Never call Explosion and active plain faint under
+   the same token, including through a direct facade API. A later evidence-authorized
+   fallback is a new attempt for the same obligation, not a second operation in the
+   old attempt. Current routing chooses one branch (`client.lua:1596-1600`); F1's
+   methods each check the same hook marker but do not independently enforce this
+   mutual exclusion (`polished_explode.lua:195-227`). F2 must own and test it.
 5. A surviving blocked attempt may become a pending F1 plain faint at a subsequent
    qualified hold, within F1's existing restrictions. A missing observation is not
    evidence that an attempt failed or that it is safe to restage. Item/switch,
    Transform or other F1 refusals remain PENDING; F2 does not weaken F1 or fake USEMOVE.
-6. Benched target: F1 does not apply. Preserve the current conservative handoff to
-   the overworld path; immediate in-battle bench enforcement needs a separate
+6. Benched target: F1 does not apply. Preserve the conservative destination of the
+   handoff, but use the explicit opted-in retention seam below rather than the
+   legacy consuming executor; immediate in-battle bench enforcement needs a separate
    writer/selection-race proof (`polished_explode.lua:193-194`;
    `client.lua:1607-1615,1643-1705`).
-7. Out of battle: use the existing safe overworld faint, provided this obligation
-   is still zero-write PENDING. Do not hand PARTIAL or awaiting-consumption work
-   to ordinary `run_deferred` automatically (`client.lua:955-1024`).
+7. Out of battle: use the existing safe overworld **writer**, provided this obligation
+   is still zero-write PENDING, through the retention seam below. Do not hand PARTIAL
+   or awaiting-consumption work to ordinary `run_deferred` automatically
+   (`client.lua:955-1024`).
+
+### F1.1 zero-HP outcome table
+
+All six HP/status bytes must be settled zero; all other F1 guards still apply.
+
+| Native order / FAINTED state | F1.1 writer behavior | F2 interpretation |
+|---|---|---|
+| Order 1 or 2, either FAINTED value | Success, zero writes; preserve order | Notification pending; await the bound native-consumption witness |
+| Order 0 and FAINTED bit2 set | Success, zero writes | Native processing indicated, but still require a fresh bound execution/identity witness before COMPLETE |
+| Order 0 and FAINTED bit2 clear | **REPAIR-REQUIRED:** write only `wWhichMonFaintedFirst=1`, one-byte permit, readback | A repaired notification is not completed native processing; await the witness |
+| Any repair write/readback failure | PARTIAL with observed state | Keep quarantined; do not retry blindly |
+
+Source: `polished_writes.lua:247-286`. A swallowed final order byte can produce
+the third row. No F2 rule may restore the old “zero HP means idempotent success”
+assumption. The narrow repair capability does not authorize automatic retry of an
+arbitrary PARTIAL operation; any disposition must revalidate identity, hold and
+the full observed image under the approved recovery contract.
+
+### Central ownership and the opted-in overworld seam
+
+Legacy `run_deferred` removes the queue item before execution (`client.lua:975`),
+drops absent/ambiguous targets (`988-992`), quietly consumes HP0 (`994-997`), and
+logs a writer refusal without requeue or NACK (`1016-1021`). Literal reuse would
+lose the retained obligation. Keep that behavior only for nil-capability clients.
+
+For opted-in death work, the settlement owner retains the canonical obligation;
+`deferred` and `pending_battle_writes` contain only scheduling references to it.
+At a safe overworld hold, borrow one reference without retiring its owner, resolve
+identity afresh, and call the existing overworld writer through an explicit local
+outcome adapter. This is an internal interface, not a new wire event:
+
+- Missing/ambiguous/temporarily hidden target or proved zero-write refusal: PENDING;
+  retain the owner and requeue exactly one reference for a later qualified hold.
+  Do not spin within the same hold or turn identity absence into completion.
+- Successful overworld writer plus fresh exact keyed party HP/status-zero readback:
+  COMPLETE for a **never-attempted-in-battle, out-of-battle** obligation. Here no
+  battle animation is owed. Already-zero quiet work still needs that keyed readback;
+  the legacy `quiet and mon.hp==0` shortcut cannot retire the owner unchecked.
+- Any attempted write without trustworthy postcondition: PARTIAL. A Lua exception
+  alone does not prove zero writes; classify using operation-scoped permit receipts
+  and memory evidence. Unknown attemptedness also quarantines, never silently requeues.
+- The ordinary overworld proof cannot complete an earlier active attempt whose
+  native-consumption witness is missing. Keep that attempted obligation unresolved.
+
+The existing overworld writer verifies HP/status (`polished_overworld.lua:315-338`),
+but the exact local outcome adapter/receipt access is **UNVERIFIED until implemented**.
+Do not claim all its thrown errors are typed zero-write refusals. If the facade cannot
+obtain enough evidence, it must classify conservatively or obtain a separately leased
+writer-interface change; it must not copy/reimplement the memory writer in the client.
+
+All death producers/consumers consult this same owner, not only command receipt:
+`dead_keys` replaces the local set (`client.lua:608-610`); `revived_dead`/deferred
+re-zero can create work (`943-975`); `lift_deferred_deaths` moves deferred references
+and creates new ones from `dead_keys` (`1532-1553`); battle-exit handoff also moves
+them (`1234-1239,1696-1705`). A server refresh of `dead_keys` does not clear an
+awaiting/partial owner, and none of these paths may create a second write attempt,
+erase quarantine, or bypass exclusive Explosion/plain-faint selection. Completed
+death revival remains a separate later incident after fresh positive-HP evidence.
 
 ### Outcomes and obligation ownership
 
 | State | Required evidence | Client action | Existing server wire behavior |
 |---|---|---|---|
-| PENDING, not attempted | Named zero-write refusal or no qualified hold | Retain one obligation; retry at next eligible hold, or safe existing overworld route | No force-faint ACK/NACK exists; do not send one |
+| PENDING, not attempted | Named zero-write refusal or no qualified hold | Retain one obligation; retry at next eligible hold, or opted-in overworld retention route | No force-faint ACK/NACK exists; do not send one |
 | PENDING, awaiting consumption | Writer returned success or an Explosion attempt was staged, without sufficient native witness | Freeze this obligation against repeated writes; collect bound observations | Normal truthful telemetry only; no invented success event |
-| COMPLETE | Matching native-consumption evidence below, plus exact target readback | Retire local write obligation; emit KO once; install completed-death/revival protection once | Continue ordinary `tick`/`safe` party telemetry; **no new completion ACK** |
+| COMPLETE | Active attempt: native-consumption witness plus exact readback; never-attempted-in-battle overworld obligation: the separate keyed overworld proof above | Retire local write obligation; emit KO once; install completed-death/revival protection once | Continue ordinary party-bearing `tick` telemetry; existing `safe` is box census only; **no new completion ACK** |
 | PARTIAL | F1 attempted-write error, unreadable post-attempt state, or uncertain lifecycle loss after an attempt | Preserve evidence and obligation; no blind retry, overworld re-zero, conflicting memorial/box write, or completed KO claim | Existing protocol cannot declare/hold this uncertainty; shared-protocol decision required |
 
 The distinction between PENDING sub-states is necessary: treating successful
@@ -108,11 +179,18 @@ assertion 25 (`666`) forbids a `faint{key}` echo for client-zeroed HP; assertion
 `box_mon_failed`, `trade_done`, or `awaiting_save` for faint settlement.
 
 The existing evidence message is an ordinary
-`tick{party:[{key,hp,...}],in_battle:...}` or the existing qualified `safe` event,
-using the real wire projection and cadence (`client.lua:1443-1472`; protocol
-section 4 and assertion 14). Do not emit `safe` while still battling, synthesize
+`tick{party:[{key,hp,...}],in_battle:...}`, using the real wire projection and
+cadence (`client.lua:1456-1472`; protocol section 4 and assertion 14). The existing
+Gen 2 `safe` send carries ONLY `pc_boxes` and `pc_boxes_generation`, never party
+HP (`client.lua:1896-1901`); **it cannot be faint-settlement HP evidence**. State's
+shared safe/tick handler reads party only when supplied (`server/state.py:667-698`),
+which does not mean this client supplies it on safe. Require a real party-bearing
+tick, not merely a safe event or a tick with party omitted. Do not emit `safe` while still battling, synthesize
 HP0 on the wire, send `party:[]` to represent uncertainty, or suppress truthful
 HP merely to prevent the server observing an intermediate value.
+This design keeps safe unchanged. A Polished-gated party-bearing safe would be a
+separate shared-protocol proposal needing owner GO and regression; it is not an
+implicit shortcut authorized by F2.
 
 `SoulLinkState._arm_inflight` records death delivery in `death_inflight`, separately
 from sync commands (`server/state.py:3502-3508`). `_ack_inflight` removes sync
@@ -133,6 +211,40 @@ name/schema is **UNVERIFIED / deliberately not invented by F2-DESIGN**. The prop
 box-write contract does not currently authorize reusing its events for faints.
 Until approved, F2 can be MODEL-tested but cannot claim end-to-end partial recovery
 or justify enabling a production capability.
+
+### Hello identity invalidation is a separate boundary
+
+`self:boundary` advances `self.epoch` (`client.lua:383-386`), but hello-session
+`on_invalidate("identity_changed")` clears aliases/dead state and calls `drop_held`
+without advancing it (`1403-1411`). Epoch-only settlement validation would therefore
+accept an old-save witness unless F2 explicitly closes this gap.
+
+When the optional settlement interface exists, BEFORE legacy alias/held cleanup:
+
+1. Stop accepting new attempts and invalidate the settlement generation, advancing
+   the client/observer epoch together or using a dedicated captured identity-generation
+   token checked by every producer and consumer. Bind records to the admitted save
+   identity as well as physical key; an equal key on another save is not sufficient.
+2. Drain/discard old queued bound observations and invalidate callback-held samples;
+   a batch already removed from a queue must still fail generation/identity validation
+   at consumption. `signals:abandon(reason)` drains Polished queued observations
+   (`signals.lua:1531-1538`); its `boundary(reason)` only validates an allowed reason
+   (`1528-1530`) and must not be mistaken for a flush or called with an unsupported
+   new reason. The implementation must audit both paths.
+3. Quarantine attempted/awaiting/PARTIAL obligations under the OLD identity with
+   their evidence; never transfer them to the new save's deferred queue or mark them
+   complete/not changed. Retain unattempted obligations as old-identity pending,
+   not new-save write authority, until an approved disposition resolves them.
+4. Only start new-identity work after a new admitted hello establishes that identity.
+   `identity_unavailable` is not proof of a save change (current comment at
+   `1405-1406`): suspend attempts/settlement while identity cannot be verified, then
+   require renewed identity and fresh evidence. Do not clear an attempted owner.
+
+Do not invoke the generic battle/reset handoff wholesale: it currently defers owed
+battle writes (`client.lua:390-392`), which is unsafe for attempted old-identity work.
+All changes above are capability-gated; nil-capability hello invalidation remains
+unchanged. Restart persistence/disposition remains UNVERIFIED and part of the
+PARTIAL protocol blocker, not solved by clearing a Lua table.
 
 ## 4. Settlement observation: before is not after
 
@@ -193,11 +305,14 @@ All following edits are proposals for a later code lease; none are made here.
 |---|---|---|
 | `lua/gen2/client.lua:117-138` | Optional settlement state, outstanding obligations and sample sequence | Allocate/use only when `p.active_faint_settlement` exists |
 | `client.lua:545-578` | Deduplicate owed physical/logical identity; suppress obsolete “no active faint” HUD only for capable path | Existing receipt/queue branch remains default |
+| `client.lua:608-610,943-975,1532-1553` | Route dead-key refresh, revival generation and deferred lifting through the central settlement owner; no bypass of quarantine or exclusive operation selection | Preserve existing set replacement/lifting and generation when optional interface absent |
 | `client.lua:1497-1506,1570-1639` | Preserve hook entry/leave and disarm; copy snapshot per command with resolved physical key; route opted-in attempt/settlement instead of generic `landed` KO branch | No alteration to vanilla writer APIs, action selection or byte order |
 | `client.lua:1193-1255,1258-1302,1855-1861` | Route validated observations and bound sequence to optional settlement handler; preserve natural events | No Polished interpretation of vanilla event batches |
-| `client.lua:943-1024,1234-1239,1696-1705` | Exclude awaiting-consumption/PARTIAL from generic deferred re-zero and battle-exit handoff; allow ordinary zero-write pending handoff | Legacy queues/settle logic unchanged when capability absent |
+| `client.lua:975-1021,1234-1239,1696-1705` | Add explicit opted-in executor outcomes: retain/requeue one PENDING owner; retire only on context-appropriate proof; quarantine attempted uncertainty; no legacy missing-target/refusal consumption | Nil-capability path keeps existing consuming queue/executor semantics |
 | `client.lua:1064-1160` | Refuse to execute a conflicting box/retrieve/memorial operation on a locally unresolved target; retain intent rather than emitting a misleading completion/failure | Guard only the opted-in unresolved identity; do not change ordinary box return contracts |
 | `client.lua:383-418,1917-1921` | Invalidate witness epochs/remove hooks; retain uncertainty across boundary rather than silently retrying attempted work | Existing reset/rebaseline behavior remains default |
+| `client.lua:1403-1411` | Capability-gated hello identity invalidation before alias cleanup: invalidate identity generation, purge bound observations, quarantine attempted old-save work | No change to legacy hello invalidation without optional interface |
+| `client.lua:1456-1472,1895-1901` | Require party-bearing tick for server HP evidence; preserve box-only safe; no synthetic HP or safe-as-settlement shortcut | Wire payloads/cadence remain unchanged for every existing client |
 | `lua/gen2/entry.lua:824-846,919-947` | Compose optional Polished observer/settlement object and pass it to Client.new, using admitted ROM/data and existing authority/registry | Only `compose_polished`; vanilla composition at `633-677` untouched |
 | `lua/gen2/polished_explode.lua:98-149,195-220,232-240` | Expose optional F1 result classification/read-only identity evidence and observer lifecycle without a second writer; keep strict F1 guards | Polished-specific facade; do not change vanilla `writes.lua` |
 
@@ -216,12 +331,14 @@ card. The precise final observer file split is UNVERIFIED pending source review.
 “Legacy unchanged” means equal observable event/write/queue behavior, not that
 edited shared files have identical bytes. Never branch on game name inside the
 shared client: branch on the optional facade interface supplied only by Polished.
+Absent-interface equivalence is a required future regression result, not something
+this design-only revision can establish before F2 code exists.
 The three Lua runtime files above stale Gen 2 CODE_DIGEST
 (`tools/gen2_code_digest.py:26-47`); this Markdown file does not.
 If a State/protocol extension is approved, verify Gen 3 first and then other
 generations, and run the full affected suites; `-k` subsets alone are not a
 complete shared regression. The existing contract records that shared-code
-requirement (`docs/polished/BOX_WRITE_CONTRACT.md:4-6`).
+requirement (`docs/polished/BOX_WRITE_CONTRACT.md:68-69`).
 
 ## 6. MODEL tests and red controls
 
@@ -248,14 +365,37 @@ SM83 engine oracles; do not mock a writer into returning desired completion.
 7. Commanded echo suppressed without losing unrelated natural `faint`; natural
    `whiteout` behavior unchanged. Red: use one unscoped suppression flag, or emit
    `faint` as the command ACK. Never invent a forced whiteout event.
-8. Real State round-trip of emitted tick/safe data: existing death repair/inflight
-   semantics and partner queues observed after each event, not only final state.
+8. Real State round-trip: emitted box-only safe cannot provide HP evidence or
+   complete the obligation; only a real party-bearing tick can supply server HP.
+   Red: treat safe arrival (or a tick lacking party) as a zero-HP witness. Observe
+   death repair/inflight semantics and partner queues after each event, not only final state.
    For PARTIAL, demonstrate the current protocol gap; an unimplemented hold
    must not be mocked and reported as solved.
 9. Vanilla Crystal/Gold/Silver compositions omit the optional field. Replay
    force_faint/force_explode, item/switch, bench, echo, reset and overworld paths;
    compare write logs, messages and queue state to the baseline. Red: enable the
    new branch without capability. No edits to vanilla executor required.
+10. Queue an old-identity pre/after-copy observation, then deliver
+    `identity_changed` before drain and again after drain/before consumption.
+    Attempted owner quarantines, old observation cannot COMPLETE, and no write
+    reaches the new save even if key/slot match. Red: rely on unchanged `self.epoch`
+    or flush only the queued batches. Test `identity_unavailable` separately.
+11. Carry a zero-write PENDING obligation to overworld: missing key, ambiguous key,
+    writer refusal and unchanged HP must retain exactly one reference, not silently
+    disappear at `975/988/1016`. A later qualified successful write and keyed readback
+    can retire it. Red: use the legacy consumer or treat every pcall failure as
+    zero-write. Attempted readback failure instead quarantines.
+12. While awaiting/PARTIAL, inject repeated `dead_keys`, ordinary force commands,
+    `revived_dead` and `lift_deferred_deaths`/battle-end paths. None can schedule a
+    second attempt. Red: deduplicate only command receipt. Nil-capability controls
+    must retain their original queue behavior.
+13. F1.1 table: pending order1/2 and order0+FAINTED set are zero-write successes;
+    order0+FAINTED clear repairs only the order byte and awaits consumption. Red:
+    old zero-HP-as-success branch; repair failure must not become COMPLETE.
+14. Same obligation/hold token chooses Explosion OR active faint, never both.
+    Red: invoke both direct facade methods under one retained token and require the
+    opted-in controller to reject the second dispatch. Separately prove a later
+    witnessed-survival fallback gets a new attempt, without relaxing F1 guards.
 
 ## 7. F3 live matrix and decisions
 
@@ -271,7 +411,8 @@ versus Damp/sleep/freeze/paralysis/Disable/obedience/absent-target survival;
 committed item/switch (must remain pending under current F1); Transform including
 same-species (must refuse); bench/switch-selection race (no unsupported F1 write);
 party/battle copyback and callback ordering; repeated server command; disconnect,
-battle end, reset/reload before/after writer/observer; partial-write fault only
+battle end, hello identity change with queued/already-drained old observations,
+reset/reload before/after writer/observer; partial-write fault only
 under a separately approved fault-injection lane. Record actual native FAINTED
 transition, copyback return, slot identity and movement/whiteout outcome.
 
