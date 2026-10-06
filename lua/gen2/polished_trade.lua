@@ -6,25 +6,28 @@
 --
 --       -- in lua/gen2/entry.lua, inside compose_polished, next to the `client` construction:
 --       local PT = load("lua/gen2/polished_trade.lua")
---       local trade = PT.compose({reads = reads, io = io_, profile = profile,
---                                 charmap = charmap, admission = Admission})
---       -- then pass `trade = trade` into client.new{...} (client.lua's trade hooks read `self.trade`)
+--       local trade, why = PT.compose({io = io_, profile = profile,
+--                                     validation = pinned_validation_facts, dev = explicit_dev_flag})
+--       -- C4 must adapt the dispositions below; this is NOT a vanilla binder drop-in.
 --
 --   compose() is fail-closed: if the profile does not yet carry the Polished overlay trade block, it
 --   returns nil, why -- the client keeps its hello and ticks and logs the reason once. Nothing here
 --   can half-arm.
 --
 -- WHAT IS ACTUALLY IMPLEMENTED
---   The 53-byte `trademon` codec, which is the piece the vanilla Gen 2 path has no analogue for and
---   which the overlay's staging needs on both sides. Vanilla Crystal's trademon is 50 bytes;
+--   The standalone 53-byte `trademon` codec is retained; the binder below stages
+--   the 70-byte party blob, never this animation struct. Vanilla Crystal's trademon is 50 bytes;
 --   Polished's is 53 (wPlayerTrademon 00:c51c .. wPlayerTrademonEnd 00:c551, and wOTTrademon
 --   00:c551 .. wOTTrademonEnd 00:c586 -- three more, and the extra bytes are the third DV byte plus
 --   the two attribute bytes that carry shiny/ability/nature and ext-species/form/gender/is-egg).
 --   See docs/polished/TRADE.md §8.2 and server/adapters/polished_codec.py, which is the byte-for-byte
 --   twin of this module and whose tests/unit/test_polished_trade_codec.py pins both against the sym.
 --
---   NOT implemented here, and deliberately not faked: the ROM service, the receptionist anchor, the
---   party-replace commit and the lease binder. Those are M1/M2b and they need the overlay.
+--   C3 adds a DEV-ONLY proposer binder over the shared GB lease. C4 composition,
+--   responder pickup, commit and production admission remain separate cards.
+local module_dir = debug.getinfo(1, "S").source:match("^@(.+[/\\])[^/\\]+$")
+local Lease = dofile(assert(module_dir, "polished_trade.lua must be loaded by path") .. "../gb_trade_lease.lua")
+local Permit = dofile(module_dir .. "../write_permit.lua")
 local PT = {}
 
 -- ── the 53-byte struct ─────────────────────────────────────────────────────────
@@ -144,31 +147,249 @@ end
 
 -- ── the composition seam ───────────────────────────────────────────────────────
 
---- spec = {profile, io, charmap}. Returns the trade part, or nil, why.
---- The addresses come from the profile's overlay trade block; without it there is no trade, and
---- this returns nil rather than a half-built object (the same shape compose_polished uses for
---- panel and census).
+-- spec = {profile=selected title, io, dev=true,
+--         validation={glyph_floor,nature_count,species_low_max,items}}.
+-- validation is a build-derived fact bundle, NOT a policy callback. items is the
+-- exact 256-byte SlinkTradeAllowedItems table indexed 1..256. C4 supplies provenance.
+-- This validation is ADVISORY pre-screening only; passing stages a request for
+-- SlinkTradeValidateIncomingStaged, which remains the native acceptance authority.
+-- No server events are emitted. disposition() returns PENDING / NOT_PERFORMED /
+-- UNCERTAIN plus a reason. A write exception latches UNCERTAIN; do not retry it.
+-- reset() starts another visit only after a closed, proved NOT_PERFORMED visit.
+local function integer(n) return type(n) == "number" and n % 1 == 0 end
+local function clone(t)
+    if type(t) ~= "table" then return t end
+    local out = {}; for k,v in pairs(t) do out[k] = clone(v) end; return out
+end
+local function slice(t, a, b)
+    local out = {}; for i=a,b do out[#out+1] = t[i] end; return out
+end
+
 function PT.compose(spec)
     local ok, result = pcall(function()
         assert(type(spec) == "table", "trade spec required")
-        local profile = assert(spec.profile, "profile required")
-        local ov = profile.overlay
-        assert(ov and ov.trade and ov.ram, "profile.overlay.trade block required (Polished)")
-        local T = {encode = PT.encode, decode = PT.decode, species_of = PT.species_of,
-                   TRADEMON_SIZE = PT.TRADEMON_SIZE, OFF = OFF, NAME_SIZE = NAME_SIZE}
-        -- The lease and the OT-party staging spans. Polished has NO wOTPartySpecies, so the vanilla
-        -- six-span staging window (which includes species0 + $FF) has no counterpart here: the
-        -- species reaches the trade inside wOTPartyMon1Species, i.e. inside the party-struct span.
-        local ram = ov.ram
-        T.spans = {
-            lease = {bank = 0, addr = ram.wSlinkMailbox.addr + ov.trade.lease_offset, n = ov.trade.lease_size},
-            player = {bank = ram.wOTPlayerName.bank, addr = ram.wOTPlayerName.addr, n = NAME_SIZE},
-            count = {bank = ram.wOTPartyCount.bank, addr = ram.wOTPartyCount.addr, n = 1},
-            mon = {bank = ram.wOTPartyMons.bank, addr = ram.wOTPartyMons.addr, n = profile.derived.party_struct_size},
-            ot = {bank = ram.wOTPartyMonOTs.bank, addr = ram.wOTPartyMonOTs.addr, n = NAME_SIZE},
-            nick = {bank = ram.wOTPartyMonNicknames.bank, addr = ram.wOTPartyMonNicknames.addr, n = NAME_SIZE},
-        }
-        assert(T.spans.lease.n == 16, "trade lease is 16 bytes (patch/gb/slink_abi.inc)")
+        local p = clone(assert(spec.profile, "profile required"))
+        local t = assert(p.overlay and p.overlay.trade, "overlay.trade required")
+        assert(t.schema == "polished-trade-v1", "trade schema unsupported")
+        assert(type(t.production) == "boolean" and type(t.capabilities) == "table", "trade capabilities missing")
+        for _, k in ipairs({'proposer_service','responder_service','commit'}) do
+            assert(type(t.capabilities[k]) == 'boolean', 'trade capability missing: '..k)
+        end
+        assert(t.capabilities.proposer_service, "proposer service absent")
+        local entries = assert(t.entries, "trade entries missing")
+        local function site(name)
+            local s = assert(entries[name], "trade entry missing: "..name)
+            assert(s.symbol == name and integer(s.bank) and s.bank > 0 and integer(s.addr)
+                and s.addr >= 0x4000 and s.addr < 0x8000, "invalid trade entry: "..name)
+        end
+        for _, name in ipairs({'SlinkTradeWaitGate','SlinkTradeTimeoutGate','SlinkTradeEntry',
+            'SlinkTradeProposerService','SlinkTradeProposerServiceEnd','SlinkTradeDispatch','SlinkTradePromptEntry'}) do site(name) end
+        local function extent(name)
+            assert(entries[name].bank == entries[name..'End'].bank and
+                   entries[name].addr < entries[name..'End'].addr, 'invalid trade extent: '..name)
+        end
+        extent('SlinkTradeProposerService')
+        for cap,name in pairs({responder_service='SlinkTradeResponderService',commit='SlinkTradeCommit'}) do
+            assert((entries[name] ~= nil) == t.capabilities[cap] and
+                   (entries[name..'End'] ~= nil) == t.capabilities[cap], 'partial trade component: '..cap)
+            if t.capabilities[cap] then site(name); site(name..'End'); extent(name) end
+        end
+        local pins = assert(t.dispatcher_stack_pin_names, "trade stack pin names missing")
+        local pinset = {}; for _, name in ipairs(pins) do pinset[name] = true end
+        for _, name in ipairs({'NextOverworldFrame','DelayFrame','NextOverworldFrame.gfx_done','HandleMap','OverworldLoop.loop'}) do
+            assert(pinset[name], 'trade stack pin missing: '..name)
+        end
+        for _, name in ipairs({'QUERY','OFFER','PROMPT','APPLY','DONE','RELEASE'}) do
+            assert(t.commands and t.commands[name] == Lease[name], 'trade command mismatch: '..name)
+        end
+        for _, name in ipairs({'QUERY','OFFER','APPLY','RELEASE'}) do
+            assert(t.timeouts and integer(t.timeouts[name]) and t.timeouts[name] > 0, 'trade timeout missing: '..name)
+        end
+        local l = assert(t.lease, 'trade lease missing')
+        assert(l.offset == Lease.OFF_LEASE and l.size == Lease.LEASE_SIZE and l.version == Lease.VERSION,
+            'trade lease ABI mismatch')
+        assert(l.symbol == 'wSlinkMailbox' and p.overlay.ram.wSlinkMailbox + l.offset == l.base,
+            'trade lease base mismatch')
+        for i=1,#Lease.MAGIC do assert(l.magic[i] == Lease.MAGIC[i], 'trade magic mismatch') end
+        -- These are the shared helper's ABI positions, not vanilla game addresses.
+        for name,offset in pairs({magic=0,version=4,command=5,generation=6,ack=7,result=8,slot=9,available=10,mask=11,token=12}) do
+            assert(l.fields and l.fields[name] == offset, 'trade field mismatch: '..name)
+        end
+        local spans, protected = {}, {}
+        local function span(s, label)
+            assert(type(s) == 'table' and integer(s.addr) and integer(s.size) and s.size > 0,
+                'trade span missing: '..label)
+            assert((s.bank == 0 and s.addr >= 0xC000 and s.addr+s.size <= 0xD000) or
+                   (s.bank == 1 and s.addr >= 0xD000 and s.addr+s.size <= 0xE000), 'trade span bank: '..label)
+            return s
+        end
+        spans[1] = span({bank=l.bank,addr=l.base,size=l.size}, 'lease')
+        local st, snap = assert(t.staging,'trade staging missing'), assert(t.snapshot,'trade snapshot missing')
+        local d, c, r = p.derived, p.constants, p.structs.party
+        local sizes = {party=d.party_struct_size,ot=d.name_length,nickname=d.mon_name_length,sender=d.name_length}
+        local names = {party='wOTPartyMon1',ot='wOTPartyMonOTs',nickname='wOTPartyMonNicknames',sender='wOTPlayerName'}
+        local snames = {party='wOTPartyMon2',ot='wOTPartyMon2OT',nickname='wOTPartyMon2Nickname'}
+        for k,n in pairs(sizes) do
+            local s = span(st[k], k); assert(s.symbol == names[k] and s.size == n, 'staging shape: '..k)
+            spans[#spans+1] = s
+            if k ~= 'sender' then
+                s = span(snap[k], k); assert(s.symbol == snames[k] and s.size == n, 'snapshot shape: '..k)
+                protected[#protected+1] = s
+            end
+        end
+        local all = {}; for _,s in ipairs(spans) do all[#all+1]=s end
+        for _,s in ipairs(protected) do all[#all+1]=s end
+        for i,a in ipairs(all) do for j=i+1,#all do local b=all[j]
+            assert(a.addr+a.size <= b.addr or b.addr+b.size <= a.addr, 'trade span overlap')
+        end end
+        assert(spec.dev == true, 'development proposer trade disabled')
+        local v = clone(assert(spec.validation, 'trade validation facts required'))
+        assert(integer(v.glyph_floor) and v.glyph_floor > p.overlay.panel.terminator and v.glyph_floor <= 255 and
+               integer(v.nature_count) and v.nature_count > 0 and v.nature_count <= c.NATURE_MASK+1,
+               'invalid validation facts')
+        assert(integer(v.species_low_max) and v.species_low_max > 0 and v.species_low_max < 256,
+               'invalid species bound')
+        assert(Lease.valid_bytes(v.items,256), 'trade item table required')
+        for _,value in ipairs(v.items) do assert(value == 0 or value == 1, 'invalid item table') end
+        local io = assert(spec.io, 'trade IO required')
+        for _,name in ipairs({'read_u8','read_range','write_u8','bank_valid','framecount'}) do
+            assert(type(io[name]) == 'function','trade IO missing: '..name)
+        end
+        local function frame()
+            local n=io.framecount(); assert(integer(n) and n >= 0, 'invalid frame counter'); return n
+        end
+        local function window(a,n)
+            for _,s in ipairs(spans) do if a >= s.addr and a+n <= s.addr+s.size then return s end end
+        end
+        local emitted, poisoned = 0, nil
+        local permit = Permit.new({write_u8=function(a,b,dom)
+            emitted=emitted+1; return io.write_u8(a,b,dom)
+        end, domains={['System Bus']={
+            bounds=function(a,n,why) return why == 'trade' and window(a,n) ~= nil end,
+            mapped=function(a,n) local s=window(a,n); return s and io.bank_valid(s.bank,a,n) == true end,
+            pointer_stable=function() return true end,
+        }}, lifetime={capture=frame,valid=function(token) return token == frame() end},
+        provenance=function(dom,a,n,why) return {domain=dom,addr=a,n=n,why=why,frame=frame()} end})
+        local writes = {write_bytes=function(_,a,b) return permit:write_bytes('System Bus',a,b) end}
+        local function text(bytes, first, n)
+            for i=first,first+n-1 do
+                if bytes[i] == p.overlay.panel.terminator then return true end
+                if bytes[i] < v.glyph_floor then return false end
+            end
+            return false
+        end
+        local function check(payload)
+            if type(payload) ~= 'table' or not Lease.valid_bytes(payload.blob,st.party.size+st.ot.size+st.nickname.size)
+                or not Lease.valid_bytes(payload.sender,st.sender.size) then return 'invalid incoming payload length' end
+            local b=payload.blob
+            local low=b[r.Species+1]
+            local ext=band(b[r.Form+1],c.EXTSPECIES_MASK) ~= 0
+            if low == 0 or low > (ext and (d.species_count-256) or v.species_low_max) then return 'invalid incoming species' end
+            if v.items[b[r.Item+1]+1] ~= 1 then return 'held item refused' end
+            if band(b[r.Personality+1],c.NATURE_MASK) >= v.nature_count then return 'invalid incoming nature' end
+            if b[r.Level+1] < 1 or b[r.Level+1] > c.MAX_LEVEL then return 'invalid incoming level' end
+            if not text(b,st.party.size+1,d.player_name_length) or
+               not text(b,st.party.size+st.ot.size+1,st.nickname.size) or
+               not text(payload.sender,1,st.sender.size) then return 'invalid incoming name' end
+        end
+        local function stage(payload)
+            local b=payload.blob
+            local batch={
+                {domain='System Bus',addr=st.party.addr,bytes=slice(b,1,st.party.size)},
+                {domain='System Bus',addr=st.ot.addr,bytes=slice(b,st.party.size+1,st.party.size+st.ot.size)},
+                {domain='System Bus',addr=st.nickname.addr,bytes=slice(b,st.party.size+st.ot.size+1,#b)},
+                {domain='System Bus',addr=st.sender.addr,bytes=payload.sender},
+            }
+            permit:write_batch(batch)
+            for _,s in ipairs(batch) do
+                local observed=io.read_range(s.addr,#s.bytes)
+                assert(Lease.valid_bytes(observed,#s.bytes), 'staging readback unreadable')
+                for i=1,#s.bytes do assert(observed[i] == s.bytes[i], 'staging readback mismatch') end
+            end
+        end
+        local raw=Lease.new({lease=l.base,party_capacity=d.party_capacity,check=check,stage=stage},io,writes)
+        local offered, answered_at, token, attempted, disposition, reason
+        local T={hooks=clone(entries),spans=clone(st),timeouts=clone(t.timeouts),write_log=permit.log}
+        local function scoped(fn,...)
+            if poisoned then return nil,'UNCERTAIN',poisoned end
+            local before=emitted
+            local out=table.pack(pcall(function(...) return permit:scope('trade',nil,fn,...) end,...))
+            if not out[1] then
+                if emitted > before then poisoned=tostring(out[2]); return nil,'UNCERTAIN',poisoned end
+                return nil,'PENDING',tostring(out[2])
+            end
+            if out[2] == nil then return nil,'PENDING',tostring(out[3]) end
+            return table.unpack(out,2,out.n)
+        end
+        function T:advertised() return false end -- C3 is proposer-only even with future component labels.
+        function T:poll_query() if not poisoned and not attempted then return raw:poll_query() end end
+        function T:poll_offer() if not poisoned and not attempted then return raw:poll_offer() end end
+        function T:answer_query(gen,mask,visit)
+            if attempted then return nil,'PENDING','APPLY already attempted' end
+            local yes,a,b=scoped(raw.answer_query,raw,gen,mask,visit)
+            if yes then token=clone(visit); offered=nil; answered_at=nil; disposition=nil; reason=nil; return yes end
+            return yes,a,b
+        end
+        function T:answer_offer(gen,accept)
+            if attempted or offered then return nil,'PENDING','OFFER already answered' end
+            local offer=raw:poll_offer()
+            local yes,a,b=scoped(raw.answer_offer,raw,gen,accept)
+            if yes then
+                offered=clone(offer); offered.accepted=accept; answered_at=frame()
+                if not accept then disposition='NOT_PERFORMED'; reason='offer rejected' end
+                return yes
+            end
+            return yes,a,b
+        end
+        function T:arm(command,slot,visit,payload)
+            if poisoned then return nil,'UNCERTAIN',poisoned end
+            if command ~= t.commands.APPLY then return nil,'PENDING','proposer APPLY only' end
+            if attempted or not offered or not offered.accepted then return nil,'PENDING','accepted OFFER required' end
+            if frame() <= answered_at then return nil,'PENDING','OFFER frame gap required' end
+            if slot ~= offered.slot or not Lease.valid_bytes(visit,4) then return nil,'PENDING','offer slot/token mismatch' end
+            for i=1,4 do if visit[i] ~= token[i] then return nil,'PENDING','visit token mismatch' end end
+            local bytes=io.read_range(l.base,l.size)
+            if not Lease.valid_bytes(bytes,l.size) then return nil,'PENDING','unreadable lease' end
+            for i=1,4 do if bytes[l.fields.token+i] ~= token[i] or bytes[l.fields.magic+i] ~= l.magic[i] then
+                return nil,'PENDING','lease identity changed' end end
+            if bytes[l.fields.version+1] ~= l.version or bytes[l.fields.command+1] ~= t.commands.OFFER or
+               bytes[l.fields.generation+1] ~= offered.gen or bytes[l.fields.ack+1] ~= offered.gen or
+               bytes[l.fields.slot+1] ~= slot or bytes[l.fields.result+1] ~= 0 then return nil,'PENDING','offer lease changed' end
+            local gen,a,b=scoped(raw.arm,raw,command,slot,clone(visit),clone(payload))
+            if gen then attempted=true; return gen end
+            return gen,a,b
+        end
+        function T:poll_done()
+            if poisoned then return {disposition='UNCERTAIN',reason=poisoned} end
+            local done=raw:poll_done(); if not done then return nil end
+            disposition=done.result == 1 and 'NOT_PERFORMED' or 'UNCERTAIN'
+            reason=done.result == 1 and 'commit disabled' or 'unexpected DONE result'
+            return {result=done.result,disposition=disposition,reason=reason}
+        end
+        function T:release(gen)
+            local done=self:poll_done()
+            if not done or done.disposition ~= 'NOT_PERFORMED' then return nil,'UNCERTAIN','not a safe DONE' end
+            return scoped(raw.release,raw,gen)
+        end
+        function T:closed() return io.read_u8(l.base+l.fields.command) == 0 end
+        function T:disposition()
+            if poisoned then return 'UNCERTAIN',poisoned end
+            if disposition then return disposition,reason end
+            if self:closed() then return attempted and 'UNCERTAIN' or 'NOT_PERFORMED','lease closed' end
+            return 'PENDING','awaiting native service'
+        end
+        function T:reset()
+            if poisoned or (attempted and disposition ~= 'NOT_PERFORMED') then
+                return nil,'UNCERTAIN','unsettled visit cannot reset'
+            end
+            if not self:closed() then return nil,'PENDING','lease must close before reset' end
+            offered,answered_at,token,attempted,disposition,reason=nil,nil,nil,nil,nil,nil
+            raw.expected,raw.phase,raw.visit_token,raw.entry_observed=nil,nil,nil,false
+            return true
+        end
+        -- Diagnostic permit seam: callers cannot widen the scope or obtain raw IO.
+        T.writes={arm=function() permit:arm('trade') end,disarm=function() permit:disarm() end,
+                  write_bytes=writes.write_bytes,log=permit.log}
         return T
     end)
     if not ok then return nil, tostring(result) end
