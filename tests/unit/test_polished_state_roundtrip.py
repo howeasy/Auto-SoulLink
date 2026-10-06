@@ -139,6 +139,8 @@ def test_a_single_withdraw_round_trips_through_the_real_server(tmp_path):
     assert rb is not None, "the rebuild finished on the first ack: the fixture cannot show the key surviving"
     assert rb["queued_keys"] == [sc.key, sc.other] and rb["restored_keys"] == {sc.key}
     assert snap["party_keys"]["b"] == [sc.partner]                         # B's half untouched
+    # the ACK adds membership but must NOT bump the server's count: it stays the last tick-observed size (3)
+    assert snap["party_size"]["a"] == delivered["party_size"]["a"] == 3, (snap["party_size"], delivered["party_size"])
 
 
 # ── T2: the duplicate, and T3 its red control through the real client ────────────────────────────────────
@@ -167,6 +169,7 @@ def test_a_duplicate_party_mon_after_a_completed_withdraw_never_reboxes_the_part
     assert last["rebuild"]["a"]["queued_keys"] == [sc.key, sc.other]
     assert last["rebuild"]["a"]["restored_keys"] == {sc.key}
     assert last["party_keys"]["b"] == [sc.partner] and last["queued"] == {"a": [], "b": []}
+    assert last["party_size"]["a"] == 3, last["party_size"]                  # a re-ack never moves the server's count
 
 
 def mutated_overworld():

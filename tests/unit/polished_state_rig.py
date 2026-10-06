@@ -10,7 +10,8 @@ snapshots matter: a later tick can repair the model, so only the intermediate st
 the partner or dropped a rebuild key.
 
 The only thing seeded rather than observed is the Soul Link pair itself (`seed_pair`): the link, its index and the
-server's party model for the partner are written directly. That is a SEEDED fixture, not an admission and not a
+server's party model for the partner are written directly. Also seeded by the tests that use them: a minimal rebuild record (`seed_rebuild`, an unlinked phantom
+key in part 1 keeps the rebuild open) and, where stated, death/count bookkeeping. That is a SEEDED fixture, not an admission and not a
 natural capture.
 
 Delivery is never faked: a server command reaches the client only through the state's own tick reply
@@ -168,5 +169,7 @@ def seed_pair(state, a_key, b_key, area="route_29", status=LinkStatus.ALIVE, a_p
 
 
 def seed_rebuild(state, player, queued_keys):
-    """SEEDED: an auto-rebuild in progress for `player` (the shape _handle_whiteout builds)."""
+    """SEEDED: a MINIMAL ACK-bookkeeping rebuild record (queued_keys/restored_keys only). It is NOT the production
+    shape: _handle_whiteout (server/state.py ~3275-3279) also writes started_at and queued_partner_keys, and plans only
+    fully boxed pairs. Use it for ACK/NACK bookkeeping tests, never as a whiteout-fidelity claim."""
     state.rebuild_pending[player] = {"queued_keys": list(queued_keys), "restored_keys": set()}
