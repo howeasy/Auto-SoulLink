@@ -233,3 +233,6 @@ INCLUDE "engine/slink/trade_validate.asm"
 ; TRADE card D1/D2: the responder dispatcher (called from SlinkService each frame) and the INERT
 ; SlinkTradePromptEntry stub it calls. Refuses by itself; the stub never touches the lease.
 INCLUDE "engine/slink/trade_dispatch.asm"
+
+; TRADE card C1a: the held PROPOSER-ONLY service (commit disabled), behind the SlinkTradeEntry trampoline.
+INCLUDE "engine/slink/trade_service.asm"
