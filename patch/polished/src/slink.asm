@@ -112,6 +112,11 @@ SlinkService::
 .remember
 	ld a, b
 	ld [SLINK_LAST_SAMPLE], a
+	; The responder dispatcher (patch/polished/src/trade_dispatch.asm): a plain `call` made at the
+	; service's own depth with NOTHING pushed before it -- its stack fingerprint is offsets from this
+	; exact depth. It refuses by itself (no mutation, DE preserved) unless this DelayFrame is the idle
+	; overworld's frame wait with a PROMPT in the lease, so it is not gated here. B/A are free here.
+	call SlinkTradeDispatch
 	; One foreground service per DelayFrame, in the same order vanilla uses: the sound service
 	; preserves DE, so the bridge's contract is unchanged. `jp`, never `call`, to keep the depth
 	; bounded by the bridge.
@@ -224,3 +229,7 @@ INCLUDE "engine/slink/trade_gate.asm"
 ; calls them until the held service.
 INCLUDE "engine/slink/trade_snapshot.asm"
 INCLUDE "engine/slink/trade_validate.asm"
+
+; TRADE card D1/D2: the responder dispatcher (called from SlinkService each frame) and the INERT
+; SlinkTradePromptEntry stub it calls. Refuses by itself; the stub never touches the lease.
+INCLUDE "engine/slink/trade_dispatch.asm"

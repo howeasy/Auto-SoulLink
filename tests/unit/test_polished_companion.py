@@ -83,6 +83,10 @@ SNAP_SYMS = {"SlinkTradeSnapshot": (0x7E, 0x4030), "SlinkTradeValidateSnapshot":
              "SlinkTradeValidateIncomingStaged": (0x7E, 0x403C), "SlinkTradeValidateIncoming": (0x7E, 0x403E),
              "SlinkTradeValidateEnd": (0x7E, 0x4040)}
 VALIDATE_END = SNAP_SYMS["SlinkTradeValidateEnd"]
+# TRADE card D1/D2: the responder dispatcher and its inert PromptEntry stub link after the predicate (bank $7E)
+DISPATCH_SYMS = {"SlinkTradeDispatch": (0x7E, 0x4040), "SlinkTradeDispatchCodeEnd": (0x7E, 0x4044),
+                 "SlinkTradePromptEntry": (0x7E, 0x4048), "SlinkTradeDispatchEnd": (0x7E, 0x404C)}
+DISPATCH_END = DISPATCH_SYMS["SlinkTradeDispatchEnd"]
 TABLE_AT = pc._flat(0x03, 0x4030)
 
 CLEAN_SYMS = {"DelayFrame": (0x00, DELAY), "wPlayerPartyCount": (0x10, 0x5D00), "SoftReset": SOFT_RESET,
@@ -120,6 +124,8 @@ OVERLAY_SYMS = {
     **GATE_ENTRIES, **GATE_NATIVES, pc.SCRIPT_END_LABEL: SCRIPT_END,
     # TRADE card 2a: the snapshot and the incoming predicate follow the gates.
     **SNAP_SYMS,
+    # TRADE card D1/D2: the dispatcher and the PromptEntry stub follow the predicate.
+    **DISPATCH_SYMS,
     "wSlinkMailbox": (0x00, pc.MAILBOX),
 }
 EMPTY_BANK = slice(pc._flat(pc.SERVICE_BANK, 0x4000), pc._flat(pc.SERVICE_BANK, 0x8000))
@@ -239,7 +245,7 @@ def test_the_report_labels_each_span_with_its_bank_and_width():
     (BRIDGE - 1, "one byte before the ROM0 bridge"),
     (RESET_BRIDGE_END, "one byte after the ROM0 bridges"),
     (pc._flat(*SVC) - 1, "one byte before the service"),
-    (pc._flat(*VALIDATE_END), "one byte after the trade snapshot/validate section"),
+    (pc._flat(*DISPATCH_END), "one byte after the trade dispatch section"),
     (pc.HEADER_CHECKSUMS.start - 1, "one byte before the header checksums"),
     (pc.HEADER_CHECKSUMS.stop, "one byte after the header checksums"),
     (0x04000, "far from every span"),
@@ -593,15 +599,26 @@ def test_the_snapshot_and_validate_symbols_must_link_in_bank_7e_after_the_versio
             pc.verify_overlay(clean_rom(), overlay_rom(), CLEAN_SYMS, dict(OVERLAY_SYMS, **{name: (0x70, 0x4400)}))
 
 
-def test_the_allowed_bank_7e_span_ends_exactly_at_the_validate_end_symbol():
-    """Bytes up to SlinkTradeValidateEnd are one allowed run; the very next byte is refused.
+def test_the_allowed_bank_7e_span_ends_exactly_at_the_dispatch_end_symbol():
+    """Bytes up to SlinkTradeDispatchEnd are one allowed run; the very next byte is refused.
 
-    ANCHOR FOR: dropping SlinkTradeSnapshotEnd/SlinkTradeValidateEnd from the span-end max() in verify_overlay.
+    ANCHOR FOR: dropping SlinkTradeDispatchEnd from the span-end max() in verify_overlay (the byte just
+    inside the dispatcher stub is then refused), or widening the span past it.
     """
-    last = pc._flat(*VALIDATE_END)
+    last = pc._flat(*DISPATCH_END)
     data = bytearray(overlay_rom())
-    data[last - 1] ^= 0xFF                      # inside the section: the overlay may write it
+    data[last - 1] ^= 0xFF                      # inside the section (the stub): the overlay may write it
     pc.verify_overlay(clean_rom(), bytes(data), CLEAN_SYMS, OVERLAY_SYMS)
     data[last] ^= 0xFF                          # one byte past the end symbol: unexpected
     with pytest.raises(RuntimeError, match=r"unexpected change at"):
         pc.verify_overlay(clean_rom(), bytes(data), CLEAN_SYMS, OVERLAY_SYMS)
+
+
+def test_the_dispatch_symbols_must_link_in_bank_7e_after_the_version_field():
+    """The dispatcher/stub symbols are in the builder's bank-$7E link check (like the gates and the snapshot).
+
+    ANCHOR FOR: dropping a dispatch name from the symbol tuple in verify_overlay.
+    """
+    for name in DISPATCH_SYMS:
+        with pytest.raises(RuntimeError, match="must link in bank \\$7E"):
+            pc.verify_overlay(clean_rom(), overlay_rom(), CLEAN_SYMS, dict(OVERLAY_SYMS, **{name: (0x70, 0x4400)}))

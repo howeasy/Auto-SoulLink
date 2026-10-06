@@ -192,7 +192,7 @@ def test_the_profile_carries_the_native_id_table_and_the_service_facts():
     assert block["play_sfx"] == list(SYM["PlaySFX"]) == [0, 0x39BD]
     assert block["check_sfx"] == list(SYM["CheckSFX"]) == [0, 0x3AC6]
     assert block["music_fade"] == SYM["wMusicFade"][1] == 0xCCB2
-    assert block["service"] == list(SYM["SlinkSfxService"]) == [0x7E, 0x4101]
+    assert block["service"] == list(SYM["SlinkSfxService"]) == [0x7E, 0x4104]
     assert P["constants"]["SFX_ITEM"] == 1 and P["constants"]["SFX_WRONG"] == 0x19
     assert P["constants"]["SFX_BUMP"] == 0x24 and P["constants"]["SFX_READ_TEXT_2"] == 0x08
 
