@@ -157,6 +157,7 @@ function R.new(deps)
             local r = mon.record
             local form = r[s.Form + 1]
             local species = r[s.Species + 1] + ((form & c.EXTSPECIES_MASK) ~= 0 and 0x100 or 0)
+            -- species_known takes a RAW species id (1..$123 minus the holes), never a variant BaseData record index
             assert(species >= 1 and deps.species_known(species) == true, what .. ": unknown species " .. species)
             assert((form & c.IS_EGG_MASK) == 0, what .. ": an egg cannot battle")
             assert(r[s.Level + 1] >= 1 and r[s.Level + 1] <= c.MAX_LEVEL, what .. ": level out of range")
@@ -189,9 +190,11 @@ function R.new(deps)
     local function allow(domain, addr, n)
         return narrow ~= nil and inside(narrow, addr, n) and (caller_allow == nil or caller_allow(domain, addr, n))
     end
-    -- a failed write disarms the permit (Permit:guard), so the restore arms its own, over the same narrowed ranges
+    -- a failed write disarms the permit (Permit:guard), so the restore arms its own, over the same narrowed ranges.
+    -- Returns true only when every saved byte READS BACK: a restore write can fail like any other, and a torn enemy
+    -- party must be reported as torn, never as the original read-back error alone.
     local function restore(p)
-        pcall(function()
+        local wrote, werr = pcall(function()
             local spans = {}
             for i, r in ipairs(p.narrow) do
                 for j = 1, r[2] do
@@ -207,6 +210,22 @@ function R.new(deps)
             gate:arm("rival_swap", allow)
             gate:write_batch(spans)
         end)
+        local torn
+        local read, rerr = pcall(function()
+            for i, r in ipairs(p.narrow) do
+                for j = 1, r[2] do
+                    if wram(1, r[1] + j - 1) ~= p.saved[i][j] then torn = r[1] + j - 1 return end
+                end
+            end
+        end)
+        if wrote and read and torn == nil then return true end
+        return false, torn and string.format("$%04X still differs from the saved original", torn)
+                          or tostring(werr or rerr)
+    end
+    local function fail(p, why)
+        local restored, rwhy = restore(p)
+        if restored then error(why, 0) end
+        error("TORN ENEMY PARTY: " .. tostring(why) .. "; rollback FAILED: " .. tostring(rwhy), 0)
     end
 
     local proxy = setmetatable({}, {__index = function(_, key)
@@ -232,9 +251,9 @@ function R.new(deps)
             local p = plan(mons, ctx)
             narrow = p.narrow
             local ok, why = pcall(function() gate:write_batch(p.arrays); verify(p.arrays) end)
-            if not ok then restore(p); error(why, 0) end
+            if not ok then fail(p, why) end
             ok, why = pcall(function() gate:write_batch(p.last); verify(p.last) end)
-            if not ok then restore(p); error(why, 0) end
+            if not ok then fail(p, why) end
             if log then log("[SLink-gen2] Polished rival team written: " .. p.count .. " mon(s)") end
         end)
     end

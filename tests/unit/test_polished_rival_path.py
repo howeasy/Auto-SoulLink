@@ -62,6 +62,7 @@ return function(io, mem, log, st)
         if d ~= nil and d ~= "System Bus" then return original(a, v, d) end
         log.writes[#log.writes + 1] = {addr = a, domain = "System Bus", value = v}
         if st.drop[a] then return end
+        if st.late[a] and #log.writes > st.late_after then return end    -- lost only AFTER N writes: the rollback's own
         mem[a] = v
     end
 end
@@ -81,7 +82,8 @@ class RivalRig(BattleRig):
         if overrides:
             self.lua.globals().SLINK_OVERRIDES = self.lua.table_from(overrides)
             self.lua.execute(OVERRIDE)
-        self.state = self.lua.table_from({"pc": pc_, "drop": self.lua.table_from({})})
+        self.state = self.lua.table_from({"pc": pc_, "drop": self.lua.table_from({}),
+                                          "late": self.lua.table_from({}), "late_after": 0})
         self.parts, why = _pair(_entry(self.lua).build(deps))
         assert why is None, why
         self.client = self.parts.client
@@ -92,6 +94,10 @@ class RivalRig(BattleRig):
 
     def drop(self, address):
         self.state["drop"][address] = True
+
+    def drop_late(self, address, after):
+        self.state["late"][address] = True
+        self.state["late_after"] = after
 
     def set_pc(self, value):
         self.state["pc"] = value
@@ -142,6 +148,8 @@ def ready(count_in_ram=0, *, classes=(RIVAL_CLASS,), cur=0, pc_=RIVAL_PC, overri
         rig.rival.writes.disarm(rig.rival.writes)
         rig.lua.eval("function(l) for k in pairs(l.writes) do l.writes[k] = nil end end")(rig.log)
         rig.state["drop"] = rig.lua.table_from({})
+        rig.state["late"] = rig.lua.table_from({})
+        rig.state["late_after"] = 0
         rig.set_pc(pc_)
         rig.rival.set_classes(rig.rival, rig.lua.table_from(list(classes)))
         for label in ("wLinkMode", "wGameLogicPaused"):
@@ -482,3 +490,52 @@ def test_mutant_6_a_vanilla_species_list_write_is_refused_by_the_bounds():
     ok, why = swap(rig, py_party(2))
     assert ok is False and "write refused" in why and rig.writes() == [] and rig.block() == before
     assert rig.mem[HERB_AT] == HERB
+
+
+# ── review cx-c01c159e: raw species domain, a verified rollback, a leaked permit ─────────────────────────────
+
+def test_a_variant_record_index_is_not_a_raw_species():
+    """Raw species 292 (species byte $24 + the EXTSPECIES bit) is a VARIANT BaseData record index, not a species: the
+    engine's raw species end at 291 ($123). The species check must use the species table, not the base-stats table that
+    also carries the variant records."""
+    mons = py_party(2)
+    mons[0]["record"][0] = 0x24
+    mons[0]["record"][21] |= 0x20
+    refused(ready(), "unknown species 292", mons)
+    ok = py_party(2)
+    ok[0]["record"][0] = 0x24                                                      # species 36 (no ext bit): known
+    ok[0]["record"][21] &= ~0x20 & 0xFF
+    assert swap(ready(), ok)[0] is True
+
+
+def test_a_failed_rollback_is_reported_as_a_torn_party_not_hidden_behind_the_first_error():
+    rig = ready()
+    before = rig.block()
+    rig.drop(MONS + 5)                                                             # the forward read-back fails ...
+    rig.drop_late(OTS, after=2 * RECORD + 2 * NAME + 2 * NICK)                     # ... and the rollback loses a byte it must restore
+    ok, why = swap(rig, py_party(2))
+    assert ok is False and "TORN ENEMY PARTY" in why and "rollback FAILED" in why and "read-back mismatch" in why, why
+    assert rig.block() != before and rig.mem[COUNT] == 3                           # honest: the count was never touched
+    assert rig.mem[HERB_AT] == HERB
+
+
+def test_a_refused_write_leaves_the_permit_disarmed_without_the_helpers_disarm():
+    rig = ready()
+    writes = rig.rival.writes
+    rig.drop(MONS + 5)
+    assert lcall(rig, writes.arm, writes, "rival_swap")[0] is True
+    table = rig.lua.table_from({"link_mode": 0, "cur_ot_mon": 0})
+    ok, why = lcall(rig, writes.write_enemy_party, writes, to_lua(rig.lua, py_party(2)), table)
+    assert ok is False
+    assert writes.armed is None, "the writer left its permit armed after a refusal"
+    writes.disarm(writes)
+
+
+def test_mutant_5_an_ignored_rollback_result_hides_a_torn_party():
+    source = mutate(RIVAL, "if restored then error(why, 0) end", "do error(why, 0) end")
+    rig = ready(overrides=mutant(source))
+    rig.drop(MONS + 5)
+    rig.drop_late(OTS, after=2 * RECORD + 2 * NAME + 2 * NICK)
+    ok, why = swap(rig, py_party(2))
+    assert ok is False and "TORN ENEMY PARTY" not in why, "the rollback verification is not load-bearing"
+

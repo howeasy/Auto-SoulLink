@@ -593,3 +593,10 @@ shadowed the narrowed `allow` with the caller's `nil`.
   `deps.rival_classes` (wOtherTrainerClass values) or `:set_classes()`; nothing in the production composition supplies
   it, so it refuses. The server separately gates `replace_rival_team` on the adapter's `rival_trainer_ids()` and the
   per-run `rival_team_swap` flag; `supports_explode_mode`/rival capability flags stay as they were.
+
+### Review corrections (2026-10-06, headless Codex cx-c01c159e, coordinator-verified)
+* The write list in section 10.5 above says level `+30` and implies the count first: both are SUPERSEDED. The party struct has Level at **+31** (profile
+  `structs.party.Level`) and the implemented order is arrays, read-back, then `wOTPartyCount` LAST.
+* The species check takes a RAW species id (the species table, 1..$123 with holes); variant BaseData record indices (292..337) are not species. Fixed.
+* A failed rollback is no longer hidden: if the saved originals do not read back, the error is `TORN ENEMY PARTY: <original>; rollback FAILED: <why>`; a
+  server treats every non-empty error as a failed swap, so a torn party is only distinguishable by this text. UNVERIFIED live.

@@ -915,7 +915,7 @@ local function compose_polished(deps, decision)
         -- until deps.rival_classes (an OWNER decision) names a class AND the CPU is at 0f:47DD, which no client hook reaches.
         local rival = load("lua/gen2/polished_rival.lua").new({profile=profile, io=io_, Permit=Permit,
             facade=explode.writes, checkpoint=explode.checkpoint, hold=explode.battle_hold, coords=explode.sym,
-            species_known=function(id) return base_stats[id] ~= nil end, rival_classes=deps.rival_classes, log=deps.log})
+            species_known=function(id) return species_index.species[tostring(id)] ~= nil end, rival_classes=deps.rival_classes, log=deps.log})
         local client = load("lua/gen2/client.lua").new({
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
             writes=rival.writes, rival_swap=true, boxes=boxes, safety=explode.safety, battle_hold=explode.battle_hold,
