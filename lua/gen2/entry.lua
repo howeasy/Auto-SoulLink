@@ -906,10 +906,10 @@ local function compose_polished(deps, decision)
         end
         assert(next(base_stats) and next(move_pp), "withdraw tables are empty")
         local Stats = load("lua/gen2/polished_stats.lua")
-        local boxes = Overworld.boxes({profile = profile, reads = reads, census = census, boxes = Boxes,
+        local boxes = Overworld.client_boxes(Overworld.boxes({profile = profile, reads = reads, census = census, boxes = Boxes,
                                        reader = boxes_io, writes = writes, mail = mail, log = deps.log,
                                        io = io_, coords = coords, stats = Stats, base_stats = base_stats,
-                                       variant_record = variant_record, move_pp = move_pp})
+                                       variant_record = variant_record, move_pp = move_pp}), deps.log)
         local client = load("lua/gen2/client.lua").new({
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
             writes=explode.writes, boxes=boxes, safety=explode.safety, battle_hold=explode.battle_hold,
