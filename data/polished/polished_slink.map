@@ -1,6 +1,6 @@
 SUMMARY:
 	ROM0: 16174 bytes used / 210 free
-	ROMX: 2048432 bytes used / 15952 free in 126 banks
+	ROMX: 2048558 bytes used / 15826 free in 126 banks
 	SRAM: 30936 bytes used / 1832 free in 4 banks
 	WRAM0: 3831 bytes used / 265 free
 	WRAMX: 24784 bytes used / 3888 free in 7 banks
@@ -3863,11 +3863,11 @@ ROMX bank #125:
 	TOTAL EMPTY: $0294 bytes
 
 ROMX bank #126:
-	SECTION: $4000-$404b ($004c bytes) ["SLink Service"]
-	SECTION: $404c-$4100 ($00b5 bytes) ["SLink Panel"]
-	SECTION: $4101-$4163 ($0063 bytes) ["Slink Sound Service"]
-	SECTION: $4164-$4180 ($001d bytes) ["SLink Version"]
-	EMPTY: $4181-$41ff ($007f bytes)
+	SECTION: $4000-$404e ($004f bytes) ["SLink Service"]
+	SECTION: $404f-$4103 ($00b5 bytes) ["SLink Panel"]
+	SECTION: $4104-$4166 ($0063 bytes) ["Slink Sound Service"]
+	SECTION: $4167-$4183 ($001d bytes) ["SLink Version"]
+	EMPTY: $4184-$41ff ($007c bytes)
 	SECTION: $4200-$4253 ($0054 bytes) ["SLink Trade Frame"]
 	EMPTY: $4254-$427f ($002c bytes)
 	SECTION: $4280-$438e ($010f bytes) ["SLink Trade Item Predicate"]
@@ -3879,8 +3879,12 @@ ROMX bank #126:
 	SECTION: $4500-$45aa ($00ab bytes) ["SLink Trade Snapshot"]
 	EMPTY: $45ab-$45ff ($0055 bytes)
 	SECTION: $4600-$4695 ($0096 bytes) ["SLink Trade Validate"]
-	EMPTY: $4696-$7fff ($396a bytes)
-	TOTAL EMPTY: $3bac bytes
+	EMPTY: $4696-$46ff ($006a bytes)
+	SECTION: $4700-$4779 ($007a bytes) ["SLink Trade Dispatch"]
+	EMPTY: $477a-$477f ($0006 bytes)
+	SECTION: $4780-$4780 ($0001 byte) ["SLink Trade Prompt Entry"]
+	EMPTY: $4781-$7fff ($387f bytes)
+	TOTAL EMPTY: $3b2e bytes
 
 VRAM bank #0:
 	SECTION: $8000-$9fff ($2000 bytes) ["VRAM0"]
