@@ -109,3 +109,18 @@ Marked in place, not rewritten (the original wording is kept as history):
 * The count "18 failing items" is the coordinator's figure; this rewrite started the verifier and
   stopped it before it finished.
 * Test counts are collected, not passed.
+
+## Box-command gaps before `supports_box_mon()` / `supports_explode_mode()` may flip (2026-10-06; headless Codex cx-532590c0 + Polished peer cx-c0a19d75; code re-read by the coordinator where marked)
+
+Both flags stay **False**. Live (a)(b)(d) PASS proves memory effects of one mon in pokedb bank 1 only; it does not exercise the client ack, the server reaction or partial failure.
+1. **Withdraw never acked (CONFIRMED, fix in flight):** executor returns `true, <table>`, client concatenates it as the settle-note string before `sync_retrieve_done`. Fix = `O.client_boxes` adapter in `polished_overworld.lua`, wrapped in `entry.lua` (claude/pol-boxfix).
+2. **Full party never retries (CONFIRMED, same fix):** `party full (6/6)` vs the client's exact `party full`.
+3. **Post-mutation failures are reported as ordinary refusals (OPEN design):** deposit (stage -> flag/Banks/Entries -> compaction -> count last) and withdraw (record/OT/nick -> count last -> Entries erase -> Banks clear) can all fail AFTER bytes changed; `run_box` then sends `box_mon_failed` / `sync_retrieve_failed`, and `server/state.py` 617-660 assumes the move did NOT happen (restores the party model / drops the rebuild key / re-boxes the partner). There is no `box_mon_done` event. Needs a third outcome (proved complete / proved not complete / uncertain) honoured by both ends, classified from a fresh census plus the exact party block and the permit receipts; a census key list cannot prove an intact party after compaction. No mailbox byte is proposed.
+4. **Memorialize is not composed** (`polished_overworld.lua` refuses by name; NEWBOX specifies box 20 / index 19); withdraw does not exclude the memorial box.
+5. **Last-healthy-mon guard:** the Polished executor guards only `party.count <= 1`, as the vanilla Gen 2 executor does (`lua/gen2/boxes.lua:460,581`); native storage also refuses to leave no healthy mon. Parity decision, not a regression.
+6. **Allocation rollover and bank 2:** no composed deposit proof at entries 167/168, 195/196, 207, bank-1-full -> bank-2, both banks full; flags are retained after withdraw (native `NewStoragePointer` rebuilds them); one live bank-2 deposit/withdraw + native save/reload still owed.
+7. **Egg/mail:** the executor accepts any census match; eggs are off-wire and mail cannot be boxed natively, but there is no executor-level refusal test.
+8. **Retry identity:** a completed withdraw retried without its settle fails `key not boxed`; two byte-identical independent mons collapse on reconcile (documented in WITHDRAW.md).
+9. **Reset durability:** the 73-cut withdraw sweep is in-memory; there is no deposit byte-cut sweep and no emulator reset/native-save scenario.
+10. **Explode:** bench targets and item/switch fallbacks refuse (`polished_explode.lua:183-186`); the five-byte move replacement is tested, the forced death outcome (Damp, action prevention) is not; live battle negatives (c) NOT RUN.
+11. **Evidence is for a past overlay:** the live PASS names `6e43f8d9`; the current overlay differs. Re-run on the frozen cut.
