@@ -92,9 +92,18 @@ class RoundTripBridge(PolishedStateBridge):
         snap["cartridge_count"] = self.rig.count()
         return snap
 
+    def lua_value(self, value):
+        """lupa's table_from is shallow: a nested list/dict would reach Lua as a Python object (IndexError on the
+        client's own indexing). The state's reply dict itself stays untouched; only the value handed in is deep."""
+        if isinstance(value, dict):
+            return self.rig.lua.table_from({k: self.lua_value(v) for k, v in value.items()})
+        if isinstance(value, (list, tuple)):
+            return self.rig.lua.table_from([self.lua_value(v) for v in value])
+        return value
+
     def send_unchanged(self, command):
         before = copy.deepcopy(command)
-        self.rig.send_command(command)
+        self.rig.send_command({k: self.lua_value(v) for k, v in command.items()})
         assert command == before, "state reply dict changed on its way into the client"
         self.drain()
 
