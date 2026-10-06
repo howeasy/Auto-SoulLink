@@ -1,6 +1,9 @@
 # Polished Crystal v3.2.3 PC storage ("newbox"): reader/writer spec
 
-The spec for a BizHawk Lua reader/writer of Polished's PC boxes. Pinned build: `data/polished/build_provenance.json`
+The spec for a BizHawk Lua reader/writer of Polished's PC boxes. **Implementation status (correction 2026-10-06):**
+the reader and write helpers are implemented in `lua/gen2/polished_boxes.lua`; deposit and withdraw are composed
+through `lua/gen2/polished_overworld.lua`; the memorial helper exists, but the composed memorial executor still
+refuses pending the owner ruling (§6.2). This is DEV evidence, not PHYSICAL qualification. Pinned build: `data/polished/build_provenance.json`
 (tag v3.2.3, commit `3fa43192`, ROM sha1 `6930b48a…`). Sources: `F:/slink-work/cache/polished/src` (code wins over
 `docs/newbox_format.md`, which is stale; see §8) and `data/polished/polishedcrystal.sym`. Citations are
 `file:line`; every one appears in the CLAIMS block at the end. Anything not confirmed is marked **UNVERIFIED**.

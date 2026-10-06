@@ -1,6 +1,11 @@
 # Polished Crystal 3.2.3 — porting SLink's Start-menu panel
 
-**Design card. Nothing here is implemented.** It maps SLink's in-game START-MENU panel (the "SLINK"
+**Historical design investigation, since implemented (correction 2026-10-06).** It was written as a
+design card ("Nothing here is implemented"); the panel now exists in `patch/polished/src/panel.asm`,
+opened by the Phone contact bridge `SlinkPhone_CallGate` in `patch/polished/src/slink.asm`. Implementation
+does not establish live qualification: see `LIVE_PANEL.md` for the DEV runs and `RC_TRACKER.md` for the
+current level. Where the body below disagrees with the source (notably the ROM script, see "Current ROM
+rendering and input wait"), the source wins. The body maps SLink's in-game START-MENU panel (the "SLINK"
 entry that opens a partner/link status panel the host paints) from vanilla pokecrystal/GSC onto
 Polished Crystal v3.2.3.
 
@@ -671,21 +676,26 @@ wSlinkMailboxEnd::
 `ds` region outside this section is inside a `SECTION UNION`. A full 4x16 page needs `4*17 = 68`
 bytes of page space (a 107-byte span) and therefore a gate change of its own.
 
-### Why the ROM script needs nothing new
+### Current ROM rendering and input wait
 
-`patch/polished/src/panel.asm:101-108` is six lines of the game's own text vocabulary:
+Correction 2026-10-06: this section used to be titled "Why the ROM script needs nothing new" and described
+a `SlinkPanelScript` (`<RAM>` / `<LNBRK>` / `<RAM>` text-command chain). That symbol no longer exists. The
+chain resumed line 2 at the end of line 1's cursor and wrapped past the box edge (a live finding, recorded
+in the `panel.asm` comment at lines 55-58 and in `LIVE_PANEL.md`). The current source
+(`patch/polished/src/panel.asm`):
 
-```
-SlinkPanelScript:
-	db "<RAM>" / dw wSlinkPanelText
-	db "<LNBRK>"
-	db "<RAM>" / dw wSlinkPanelText + SLINK_PANEL_STRIDE
-	db "@"
-```
+* `SlinkPanelFallback` (line 149) prints `SOUL LINK` / `NO CLIENT` and ends in `done` (line 152), not
+  `prompt`, so `AWAIT` is published (line 49) before the panel waits on anything.
+* On the staged path (line 53 `cp SLINK_PANEL_STAGED`), the ROM forces an `@` terminator on both mailbox
+  rows (lines 65-67) and paints them with two separate `rst PlaceString` calls, at
+  `(TEXTBOX_INNERX, TEXTBOX_INNERY)` and `TEXTBOX_INNERY + 1` (lines 68-73).
+* Both the staged path (`jr .waitkey`, line 79) and the timeout path (`.nostage`, line 80) reach
+  `.WaitForButton` (call at line 88, routine at line 132). It consumes the opening key (the `A` that chose
+  "Call" is still held) and waits for a fresh edge.
+* There is no `SlinkPanelScript` and no chained `<RAM>` / `<LNBRK>` renderer.
+  `tests/unit/test_polished_panel.py` asserts the symbol's absence (line 157).
 
-`<RAM>` is `TextCommand_RAM` (`home/text.asm:594`), which `rst PlaceString`s from a **WRAM** pointer.
-So the host needs no line-break code and the ROM needs no new renderer — and `<LNBRK>` comes from
-the ROM's own charmap, which is why nothing about the page's encoding is duplicated on the Lua side.
+The charmap-safety check below still applies to the bytes the host stages.
 
 **Charmap safety (checked, not assumed):** `PlaceNextChar` (`home/text.asm:184-194`) treats bytes
 below `$5f` as commands/n-grams and the n-gram block is `$0a-$51`, which *overlaps printable ASCII* —
