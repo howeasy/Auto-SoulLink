@@ -727,11 +727,11 @@ def test_live_dry_run_validates_without_creating_lane_or_importing_harness(tmp_p
     route.write_text(json.dumps({"steps": [{"phase": "idle", "frames": 3, "buttons": []}]}), encoding="utf-8")
     monkeypatch.setattr(P, "prepare", lambda: (bytes(0x20000), config["contract"], config["provenance"]))
     before_env, before_modules = dict(os.environ), set(sys.modules)
-    before = {p: p.read_bytes() for p in tmp_path.iterdir()}
+    before = {p: p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
     assert P.main(["--dry-run", "--fixture", str(fixture), "--expected", str(expected),
                    "--route", str(route)]) == 0
     assert json.loads(capsys.readouterr().out)["measurement_verdict"] is None
-    assert {p: p.read_bytes() for p in tmp_path.iterdir()} == before
+    assert {p: p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()} == before
     assert dict(os.environ) == before_env
     assert not any("harness" in name for name in set(sys.modules) - before_modules)
 
@@ -849,14 +849,14 @@ def test_cli_rejects_incompatible_modes_without_side_effects(tmp_path, mode):
     fixture.write_bytes(battery())
     expected.write_text(json.dumps(manifest()), encoding="utf-8")
     route.write_text(json.dumps({"steps": [{"phase": "idle", "frames": 3, "buttons": []}]}), encoding="utf-8")
-    before = {p: p.read_bytes() for p in tmp_path.iterdir()}
+    before = {p: p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
     args = ["--fixture", str(fixture), "--expected", str(expected)]
     if mode == "offline-route":
         args += ["--offline", "--route", str(route)]
     with pytest.raises(SystemExit) as error:
         P.parse_args(args)
     assert error.value.code == 2
-    assert {p: p.read_bytes() for p in tmp_path.iterdir()} == before
+    assert {p: p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()} == before
 
 
 @pytest.mark.parametrize("damage", ["alias", "bad-seal", "invalid-entry", "split-copies"],
