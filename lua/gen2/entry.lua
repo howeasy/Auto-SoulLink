@@ -920,6 +920,10 @@ local function compose_polished(deps, decision)
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
             writes=rival.writes, rival_swap=true, boxes=boxes, safety=explode.safety, battle_hold=explode.battle_hold,
             battle_release_poll=true, battle_hold_entry=explode.entry, battle_species_matches=explode.species_matches,
+            -- F2: the Polished-only OPT-IN active-faint settlement interface (client.lua `settle`); vanilla never gets it.
+            -- Off unless the launcher passes deps.polished_active_faint == true: turning it on moves an in-battle
+            -- force_faint of the active battler from the checkpoint hand-off to the 0f:416A hold (an owner-gated step).
+            active_faint_settlement=deps.polished_active_faint == true and explode.settlement or nil,
             -- the hold site the client hooks (io.on_bus_exec -> at_checkpoint -> run_deferred)
             checkpoint_pc=Overworld.HOLD.pc,
             -- C-WRITE round 2: with no contest_mask in the Polished pack a KO during the Bug Catching Contest

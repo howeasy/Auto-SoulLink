@@ -25,7 +25,8 @@
 --   faint_active_battler (F1) additionally requires a keyed snapshot, actual PC/bank at the hold,
 --   USEMOVE, no pending/deferred switch and no Transform. It zeros both HP/status mirrors and
 --   publishes the player-first faint notification only if none exists. No action byte is changed.
---   The shared client supplies no key yet (F2), so its unkeyed active-faint call still refuses.
+--   The shared client supplies the key only when composed with the opt-in settlement interface below (F2);
+--   without it its unkeyed active-faint call still refuses.
 --
 -- THE BATTLE HOLD (polished_overworld.lua O.battle_checkpoint, kinds battle_faint / battle_bench / explode /
 -- rival): wBattleMode in {1,2}, wLinkMode == 0, wGameLogicPaused == 0, no backup save, and the site bytes
@@ -157,10 +158,10 @@ function E.new(deps)
                and battle.species_id == mon.species_id
     end
 
-    local function wram(label)
+    local function wram(label, offset)
         local row = sym[label]
-        assert(io.bank_valid(row[1], row[2], 1) == true, "read refused: " .. label .. " bank not mapped")
-        return io.read_u8(row[2], "System Bus")
+        assert(io.bank_valid(row[1], row[2] + (offset or 0), 1) == true, "read refused: " .. label .. " bank not mapped")
+        return io.read_u8(row[2] + (offset or 0), "System Bus")
     end
     -- the snapshot polished_writes re-checks, stamped with the site it is being served at
     local function stamped(snapshot, site)
@@ -235,8 +236,38 @@ function E.new(deps)
         if O.BATTLE_KINDS[kind] ~= nil then return battle:check(kind) end
         return overworld_hold:check(kind)
     end}
+    -- F2 (docs/polished/PLAIN_FAINT_F2.md): the OPTIONAL settlement interface compose_polished hands the shared client
+    -- (p.active_faint_settlement). It is read-only evidence the client cannot build itself and is NOT a writer: the
+    -- client still calls the writers above. attempt_mark/attempted_since classify a thrown error by the OPERATION-SCOPED
+    -- permit receipts of both writers (a receipt with attempted > 0 is a write that reached memory; nil = unknowable);
+    -- native() reads the player's battle HP / FAINTED bit / first-faint order for the evidence trail.
+    local function log_length(writer_log)
+        return type(writer_log) == "table" and #writer_log or nil
+    end
+    local settlement = {version = 1, deadline_frames = 1800}
+    function settlement.attempt_mark()
+        return {overworld = log_length(overworld.log), battle = log_length(writer.log)}
+    end
+    function settlement.attempted_since(mark)
+        if type(mark) ~= "table" then return nil end
+        for name, source in pairs({overworld = overworld.log, battle = writer.log}) do
+            local before = mark[name]
+            if before == nil or type(source) ~= "table" or #source < before then return nil end
+            for i = before + 1, #source do
+                if (source[i].attempted or 0) > 0 then return true end
+            end
+        end
+        return false
+    end
+    function settlement.native()
+        local ok, value = pcall(function()
+            return {hp = wram("wBattleMonHP") * 256 + wram("wBattleMonHP", 1), order = wram("wWhichMonFaintedFirst"),
+                    fainted = (wram("wPlayerSubStatus2") & 0x04) ~= 0}
+        end)
+        return ok and value or nil
+    end
     return {writes = self, checkpoint = battle, safety = safety, battle_hold = hold, sym = sym, entry = entry,
-            species_matches = species_matches}
+            species_matches = species_matches, settlement = settlement}
 end
 
 return E
