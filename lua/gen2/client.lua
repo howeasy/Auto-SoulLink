@@ -96,6 +96,12 @@ function Client.new(p)
     local panel = p.panel -- P4.1f panel: lua/gen2/panel.lua, or nil (no panel)
     local phone = p.phone -- P4.5c phone calls: lua/gen2/phone.lua, or nil (no panel)
     local trade = p.trade -- P4.3b native SLINK TRADE: lua/gen2/trade_overlay.lua, or nil (no trade build)
+    -- F2 (docs/polished/PLAIN_FAINT_F2.md): the optional Polished-only active-faint settlement interface, supplied ONLY
+    -- by compose_polished (lua/gen2/entry.lua) from lua/gen2/polished_explode.lua. nil (every vanilla composition):
+    -- every `settle` branch below is dead and the legacy death paths run unchanged.
+    local settle = p.active_faint_settlement
+    assert(settle == nil or (type(settle) == "table" and type(settle.attempt_mark) == "function"
+           and type(settle.attempted_since) == "function"), "active_faint_settlement needs attempt_mark/attempted_since")
     local c = profile.constants
     local arr = json.array -- tag lists so an empty one encodes as [] not {}
     local area_battle_types = AREA_BATTLE_TYPES
@@ -153,6 +159,10 @@ function Client.new(p)
         dead_synced = true,
     }
     self.trade_owed = self.owed.list
+    -- F2 state (nil without the interface): obligations, identity generation, observation/attempt sequence, hold token
+    local FS = settle and { owed = {}, next_id = 0, gen = 0, seq = 0, hold_serial = 0, visit = 0, in_battle = false,
+                            suspended = false, logged = {}, spent = {} } or nil
+    self.faint_settle = FS
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
     local function send(event, fields)
@@ -390,6 +400,7 @@ function Client.new(p)
         -- O-30: a reset/reload leaves the battle; the owed deaths go to the checkpoint (Gen 1 battle_end)
         for _, w in ipairs(self.pending_battle_writes) do defer_held(w) end
         self.pending_battle_writes, self.commanded = {}, {}
+        if settle then FS.boundary(kind) end
         -- P4.3b: Init clears the lease on reset; a reload leaves the Trade Center. The hello resyncs.
         self:trade_forget("the " .. kind .. " boundary")
         -- review m2: a trade report held for the hello is lost with the timeline; the side cannot vouch
@@ -415,6 +426,7 @@ function Client.new(p)
         self.faint_latches, self.deferred = {}, {}
         self.battle, self.pending_safe, self.pending_rescan = nil, false, true
         self.pending_battle_writes, self.commanded = {}, {}
+        if settle then FS.abandon(why) end
         self:rival_close(why)
         self:trade_forget(why)
         -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.
@@ -542,6 +554,7 @@ function Client.new(p)
             phone:request(cmd.phone, cmd.phone_data) -- + PHONE-NAMES
         end
         self.arrivals = self.arrivals + 1 -- Gen 1 parity: every command's arrival order (defer_held)
+        if settle and (c_ == "force_faint" or c_ == "force_explode") then return FS.receive(cmd, c_) end
         if c_ == "force_faint" or c_ == "force_explode" then
             -- W-3: force_explode rides the same queue; only the active battler at the battle hold explodes
             -- (at_battle_hold), a bench mon or a checkpoint death is the plain faint (Gen 1 parity).
@@ -948,9 +961,435 @@ function Client.new(p)
         if not self.dead_synced then return nil end
         for key in pairs(self.dead_keys) do
             local slot, mon = find_party_slot(key)
-            if slot and mon.hp > 0 then return key end
+            if slot and mon.hp > 0 and not (settle and FS.find_owner(key, mon_key(mon))) then return key end
         end
     end
+
+    if FS then -- F2 settlement: defined only when the composition supplied the interface
+    -- ── F2: Polished active-faint settlement (docs/polished/PLAIN_FAINT_F2.md) ─────────────────────────────
+    -- ONLY when the composition supplied p.active_faint_settlement (compose_polished; vanilla never does, so FS is nil
+    -- and every `settle` branch in this file is dead). One OBLIGATION per owed death is owned HERE (FS.owed);
+    -- self.deferred / self.pending_battle_writes carry only scheduling REFERENCES ({ob = obligation}) to it, and a
+    -- reference is borrowed by a hold, never the owner. States: pending (no write landed, retried at the next
+    -- qualified hold), awaiting (an attempt was staged; NEVER retried, no KO shown, waits for a bound native-
+    -- consumption witness), partial / lost (an attempt of unknown or partial effect: quarantined, no retry, no
+    -- completion, no re-zero), stale (the save identity changed under it), done (removed from FS.owed). There is no
+    -- force-faint ACK/NACK on the wire and none is invented here (docs/protocol.md section 5).
+    local function nick_of(ob, mon) return nick_label(ob.key, ob.nickname or (mon and mon.nickname)) end
+    local function note_once(ob, what, text)
+        local k = ob.id .. ":" .. what
+        if FS.logged[k] then return end
+        FS.logged[k] = true
+        log(text)
+    end
+    -- the open owner (current identity only) that names this logical or physical key
+    function FS.find_owner(key, phys)
+        for _, ob in ipairs(FS.owed) do
+            if ob.gen == FS.gen and (ob.key == key or ob.phys == key or (phys and (ob.key == phys or ob.phys == phys))) then
+                return ob
+            end
+        end
+    end
+    function FS.new_owner(fields)
+        FS.next_id = FS.next_id + 1
+        local ob = { id = FS.next_id, gen = FS.gen, epoch = self.epoch, state = "pending", attempts = {}, scheduled = false,
+                     cmd = fields.cmd, key = fields.key, nickname = fields.nickname, arrival = fields.arrival,
+                     quiet = fields.quiet }
+        FS.owed[#FS.owed + 1] = ob
+        return ob
+    end
+    function FS.reference(ob)
+        ob.scheduled = true
+        return { cmd = ob.cmd, key = ob.key, nickname = ob.nickname, arrival = ob.arrival, quiet = ob.quiet, ob = ob }
+    end
+    -- a quiet re-zero (a revived completed death): nil while any open owner already names the key
+    function FS.quiet_entry(key, mon)
+        if FS.find_owner(key, mon and mon_key(mon)) then return nil end
+        local ob = FS.new_owner({ cmd = "force_faint", key = key, quiet = true, arrival = self.arrivals })
+        ob.phys = mon and mon_key(mon) or nil
+        return FS.reference(ob)
+    end
+    function FS.requeue(ob, entry)
+        ob.scheduled = true
+        self.deferred[#self.deferred + 1] = entry
+    end
+    function FS.remove(ob)
+        for i, o in ipairs(FS.owed) do
+            if o == ob then
+                table.remove(FS.owed, i)
+                return
+            end
+        end
+    end
+    function FS.next_seq()
+        FS.seq = FS.seq + 1
+        return FS.seq
+    end
+    function FS.awaiting_any()
+        for _, ob in ipairs(FS.owed) do
+            if ob.gen == FS.gen and ob.state == "awaiting" and ob.kind == "explode" then return true end
+        end
+        return false
+    end
+
+    -- the command's arrival: ONE owner per death; a re-sent command never starts a second attempt
+    function FS.receive(cmd, c_)
+        local slot, mon, party, why = find_party_slot(cmd.key, c_)
+        local phys = mon and mon_key(mon) or nil
+        local ob = FS.find_owner(cmd.key, phys)
+        if ob then
+            if ob.state == "pending" and #ob.attempts == 0 and ob.cmd == "force_faint" and c_ == "force_explode" then
+                ob.cmd = c_ -- an unattempted owner takes the stronger order
+            end
+            note_once(ob, "dup", "[SLink-gen2] " .. c_ .. " already owed (" .. ob.state .. "): " .. tostring(cmd.key))
+            return
+        end
+        if why then log("[SLink-gen2] " .. c_ .. ": " .. why .. " " .. tostring(cmd.key) .. " (retained)") end
+        ob = FS.new_owner({ cmd = c_, key = cmd.key, nickname = cmd.nickname, arrival = self.arrivals })
+        ob.phys = phys
+        local entry = FS.reference(ob)
+        local battle = reads.read_battle()
+        if party and slot and battle and battle.mode ~= 0 and p.battle_hold then
+            self.pending_battle_writes[#self.pending_battle_writes + 1] = entry
+            self.bench_owed = true
+        else
+            self.deferred[#self.deferred + 1] = entry
+        end
+    end
+
+    function FS.complete(ob, mon)
+        ob.state = "done"
+        ob.suppress = nil
+        FS.remove(ob)
+        mark_dead(ob.key, mon)
+        if ob.quiet then
+            log("[SLink-gen2] re-zeroed a revived dead mon " .. ob.key .. " -> " .. mon_key(mon))
+        else
+            hud.show("!! " .. nick_of(ob, mon) .. " KO'd", 255, 80, 80, 360)
+        end
+        -- dead stays dead (facts doc section 2): a native attempt installs the quiet re-zero a landed battle write does
+        local in_battle = false
+        for _, a in ipairs(ob.attempts) do in_battle = in_battle or a.kind ~= "overworld" end
+        if in_battle and not ob.quiet then
+            local e = FS.quiet_entry(ob.key, mon)
+            if e then
+                e.arrival = ob.arrival
+                defer_held(e)
+            end
+        end
+    end
+    -- an attempt of partial or unknown effect: kept as evidence, never retried, never reported done or "not changed"
+    function FS.quarantine(ob, state, kind, err)
+        ob.state, ob.scheduled = state, false
+        ob.evidence = { kind = kind, error = tostring(err), frame = self.frame }
+        log("[SLink-gen2] ACTIVE FAINT " .. string.upper(state) .. " QUARANTINED (no retry, no completion claimed, server not told): "
+            .. tostring(ob.key) .. " " .. tostring(kind) .. ": " .. tostring(err))
+    end
+
+    -- the overworld seam: borrow ONE reference without retiring its owner (docs section 2, central ownership)
+    function FS.overworld(entry)
+        local ob = entry.ob
+        ob.scheduled = false
+        if ob.gen ~= FS.gen or ob.state ~= "pending" then return end -- stale or already settled elsewhere
+        local slot, mon, _, why = find_party_slot(ob.key, ob.cmd)
+        if not slot and not why and contest_masked() then
+            note_once(ob, "contest", "[SLink-gen2] " .. ob.cmd .. " held until the contest returns the party " .. tostring(ob.key))
+            return FS.requeue(ob, entry)
+        end
+        if not slot then
+            note_once(ob, "absent", "[SLink-gen2] " .. ob.cmd .. " retained at the checkpoint: " .. (why or "key not in party")
+                      .. " " .. tostring(ob.key))
+            return FS.requeue(ob, entry)
+        end
+        ob.phys = mon_key(mon)
+        -- already zero: this fresh, exact, keyed read IS the readback (never the legacy unchecked shortcut)
+        if mon.hp == 0 and (ob.quiet or self.dead_keys[ob.key]) then return FS.complete(ob, mon) end
+        local battle = reads.read_battle()
+        local snapshot = battle and { mode = battle.mode, battle_type = battle.battle_type,
+                                      active_slot = battle.active_slot, link_mode = wram_byte("wLinkMode") } or nil
+        local mark = settle.attempt_mark()
+        local ok, err = pcall(function()
+            writes:arm("overworld")
+            writes:faint_party_slot(slot, snapshot)
+            writes:disarm()
+        end)
+        writes:disarm()
+        if not ok then
+            if settle.attempted_since(mark) == false then -- a proved zero-write refusal: still owed
+                note_once(ob, "refused", "[SLink-gen2] " .. ob.cmd .. " refused by the write gate (retained): " .. tostring(err)
+                          .. " " .. tostring(ob.key))
+                if not ob.quiet and not FS.logged[ob.id .. ":hud"] then
+                    FS.logged[ob.id .. ":hud"] = true
+                    hud.show("X KO refused: " .. nick_of(ob, mon), 255, 80, 80, 300)
+                end
+                return FS.requeue(ob, entry)
+            end
+            return FS.quarantine(ob, "partial", "overworld", err)
+        end
+        ob.attempts[#ob.attempts + 1] = { kind = "overworld", seq = FS.next_seq(), epoch = self.epoch, frame = self.frame }
+        local s2, m2, _, w2 = find_party_slot(ob.key, ob.cmd)
+        if s2 and not w2 and mon_key(m2) == ob.phys and m2.hp == 0 and (type(m2.status) ~= "number" or m2.status == 0) then
+            return FS.complete(ob, m2)
+        end
+        FS.quarantine(ob, "partial", "overworld", "keyed readback did not show HP 0 after the write")
+    end
+
+    function FS.track(battle)
+        local now = battle ~= nil and battle.mode ~= 0
+        if now and not FS.in_battle then FS.visit = FS.visit + 1 end
+        if battle then FS.in_battle = now end
+    end
+
+    -- witnessed survival of an Explosion attempt (a LATER turn's hold finds the same mon alive and active)
+    function FS.survival(battle)
+        for _, ob in ipairs(FS.owed) do
+            local a = ob.attempts[#ob.attempts]
+            if ob.gen == FS.gen and ob.state == "awaiting" and ob.kind == "explode" and a.epoch == self.epoch
+               and a.visit == FS.visit and FS.hold_serial > a.serial and io.framecount() > a.frame then
+                local slot, mon, _, why = find_party_slot(ob.key, ob.cmd)
+                local bm = reads.read_battle_mon and reads.read_battle_mon("player")
+                if not why and slot == battle.active_slot and slot == a.slot and mon and mon_key(mon) == ob.phys
+                   and mon.hp > 0 and bm and bm.hp and bm.hp > 0 then
+                    ob.state, ob.fallback = "pending", true
+                    log("[SLink-gen2] Explosion attempt survived (the mon acted on a later turn): plain faint fallback "
+                        .. tostring(ob.key))
+                    self.pending_battle_writes[#self.pending_battle_writes + 1] = FS.reference(ob)
+                end
+            end
+        end
+    end
+    -- one hold = one dispatch token; false while the save identity cannot be verified
+    function FS.begin_hold(battle)
+        if FS.suspended then return false end
+        FS.track(battle)
+        FS.hold_serial = FS.hold_serial + 1
+        FS.survival(battle)
+        return true
+    end
+    -- ONE operation per obligation per hold token: a second dispatch under the same token is refused here
+    function FS.dispatch(ob, kind, fn)
+        if FS.spent[ob.id] == FS.hold_serial then
+            note_once(ob, "token" .. FS.hold_serial, "[SLink-gen2] " .. kind .. " refused: this hold's dispatch token is spent "
+                      .. tostring(ob.key))
+            return false, "dispatch token already spent"
+        end
+        FS.spent[ob.id] = FS.hold_serial
+        return pcall(fn)
+    end
+
+    function FS.active(w, ob, slot, mon, battle, snapshot, target, keep)
+        local species = target("wBattleMonSpecies")
+        local same, matches = species == mon.species_id, p.battle_species_matches
+        if matches then same = matches(mon, species) == true end -- the effective-species compare, as the legacy hold
+        if not same then -- the battle struct is not this slot's: pending, never another slot
+            ob.scheduled = true
+            keep[#keep + 1] = w
+            return
+        end
+        -- a copy per target (never the shared loop snapshot), keyed with the CURRENTLY resolved physical record
+        local snap = {}
+        for k, v in pairs(snapshot) do snap[k] = v end
+        snap.player_action = target("wBattlePlayerAction")
+        snap.key = mon_key(mon)
+        ob.phys = snap.key
+        local explode = ob.cmd == "force_explode" and not ob.explode_spent and snap.player_action == 0
+        local kind = explode and "explode" or "plain"
+        local attempt = { kind = kind, seq = FS.next_seq(), serial = FS.hold_serial, frame = io.framecount(),
+                          visit = FS.visit, slot = slot, epoch = self.epoch,
+                          pre = { hp = mon.hp, native = settle.native and settle.native() } }
+        -- echo suppression is bound to this physical identity/epoch BEFORE a possible native callback
+        local previous = ob.suppress
+        ob.suppress = { phys = snap.key, epoch = self.epoch, gen = FS.gen }
+        local mark = settle.attempt_mark()
+        local ok, err = FS.dispatch(ob, kind, function()
+            writes:arm("battle_hold")
+            if explode then writes:explode_active_battler(slot, snap)
+            else writes:faint_active_battler(slot, snap) end
+        end)
+        writes:disarm()
+        if ok then
+            ob.attempts[#ob.attempts + 1] = attempt
+            ob.state, ob.kind, ob.scheduled = "awaiting", kind, false
+            if kind == "explode" then ob.explode_spent = true end
+            log("[SLink-gen2] active " .. kind .. " attempt staged (awaiting native consumption): " .. tostring(ob.key))
+            return
+        end
+        if settle.attempted_since(mark) == false then
+            ob.suppress = previous
+            note_once(ob, "refused:" .. kind, "[SLink-gen2] active " .. kind .. " refused (retained): " .. tostring(err) .. " "
+                      .. tostring(ob.key))
+            ob.scheduled = true
+            keep[#keep + 1] = w
+            return
+        end
+        ob.attempts[#ob.attempts + 1] = attempt
+        FS.quarantine(ob, "partial", kind, err)
+    end
+
+    function FS.battle_hold(battle, snapshot, target)
+        local keep = {}
+        for _, w in ipairs(self.pending_battle_writes) do
+            local ob = w.ob
+            ob.scheduled = false
+            if ob.gen == FS.gen and ob.state == "pending" then
+                local slot, mon, _, why = find_party_slot(ob.key, ob.cmd)
+                if why then
+                    note_once(ob, "ambiguous", "[SLink-gen2] battle write retained: " .. why .. " " .. tostring(ob.key))
+                    ob.scheduled = true
+                    keep[#keep + 1] = w
+                elseif not slot then
+                    ob.scheduled = true
+                    defer_held(w) -- a contest-hidden or departed mon: the checkpoint decides, the owner stays
+                elseif slot == battle.active_slot then
+                    FS.active(w, ob, slot, mon, battle, snapshot, target, keep)
+                else
+                    -- a bench death: no in-battle writer is composed (immediate enforcement needs its own proof); it
+                    -- waits for the checkpoint after the battle, retained, never consumed
+                    note_once(ob, "bench", "[SLink-gen2] bench death retained for the checkpoint: " .. tostring(ob.key))
+                    ob.scheduled = true
+                    keep[#keep + 1] = w
+                end
+            end
+        end
+        self.pending_battle_writes = keep
+    end
+
+    -- evidence: a party-bearing tick that was actually SENT (a held pre-hello message is not evidence). A `safe` event
+    -- carries no party and never reaches here. F1 itself writes the party HP, so an F1 attempt also needs the bound
+    -- pre-copy observation; an Explosion attempt writes no HP, so a later party HP 0 is the native copy-back.
+    function FS.after_tick(party, in_battle)
+        if FS.suspended then return end
+        local seq = FS.next_seq()
+        local hp_of, dup = {}, {}
+        for _, e in ipairs(party) do
+            if hp_of[e.key] ~= nil then dup[e.key] = true end
+            hp_of[e.key] = e.hp
+        end
+        local list = {}
+        for _, ob in ipairs(FS.owed) do list[#list + 1] = ob end
+        for _, ob in ipairs(list) do
+            local a = ob.attempts[#ob.attempts]
+            if ob.gen == FS.gen and ob.state == "awaiting" and ob.phys and not dup[ob.phys] and a.epoch == self.epoch
+               and seq > a.seq then
+                local hp = hp_of[ob.phys]
+                if hp == 0 then
+                    if a.kind == "explode" or (ob.obs_seq and seq > ob.obs_seq) then
+                        local slot, mon, _, why = find_party_slot(ob.key, ob.cmd)
+                        if slot and not why and mon_key(mon) == ob.phys and mon.hp == 0 then FS.complete(ob, mon) end
+                    end
+                elseif hp ~= nil and hp > 0 and a.kind == "explode" and not in_battle then
+                    ob.state, ob.fallback = "pending", true
+                    log("[SLink-gen2] Explosion attempt survived the battle: plain faint fallback " .. tostring(ob.key))
+                    FS.requeue(ob, FS.reference(ob))
+                end
+            end
+        end
+    end
+    -- the 0f:44c8 pre-copy boundary (kind=observation, site battle_faint): bound to epoch, identity generation, visit,
+    -- slot and sequence. Firing alone proves nothing: the battle struct's HP must read 0 for the attempted slot.
+    function FS.observe(ev)
+        if FS.suspended then return end
+        local b = ev.battle
+        if type(b) ~= "table" then return end
+        if ev.batch_generation ~= nil and ev.batch_generation ~= self.epoch then
+            log("[SLink-gen2] stale battle_faint observation dropped (generation " .. tostring(ev.batch_generation)
+                .. " vs " .. self.epoch .. ")")
+            return
+        end
+        local seq = FS.next_seq()
+        for _, ob in ipairs(FS.owed) do
+            local a = ob.attempts[#ob.attempts]
+            if ob.gen == FS.gen and ob.state == "awaiting" and a.kind == "plain" and a.epoch == self.epoch
+               and a.visit == FS.visit and seq > a.seq and b.slot == a.slot and b.hp == 0 and b.link_mode == 0 then
+                local slot, _, _, why = find_party_slot(ob.key, ob.cmd)
+                if slot == a.slot and not why then ob.obs_seq = ob.obs_seq or seq end
+            end
+        end
+    end
+    -- a commanded death's native faint echo: scoped to the exact physical identity, identity generation and epoch
+    function FS.echo(key)
+        for _, ob in ipairs(FS.owed) do
+            local s = ob.suppress
+            if s and s.phys == key and s.gen == FS.gen and s.epoch == self.epoch then
+                ob.suppress = nil
+                log("[SLink-gen2] faint echo of a commanded death dropped " .. key)
+                return true
+            end
+        end
+        return false
+    end
+    -- once per frame: battle visit, identity-suspension release, one diagnostic for a witness that never came
+    function FS.frame()
+        FS.track(reads.read_battle())
+        -- identity_unavailable suspends every attempt and every settlement; it ends when the SAME identity reads again
+        -- (a different one arrives as identity_changed: invalidated, never resumed). In a battle no new hello can be
+        -- sent (p.hello_unheld waits for the overworld), so waiting for one would suspend the whole battle.
+        local identity = hello_identity()
+        if FS.suspended then
+            if identity ~= nil and identity == FS.resume_identity then FS.suspended = false end
+        elseif identity ~= nil then
+            FS.last_identity = identity
+        end
+        for _, ob in ipairs(FS.owed) do
+            local a = ob.attempts[#ob.attempts]
+            if ob.gen == FS.gen and ob.state == "awaiting" and a and self.frame - a.frame > (settle.deadline_frames or 1800) then
+                note_once(ob, "deadline", "[SLink-gen2] no native-consumption witness for the " .. a.kind .. " attempt after "
+                          .. (self.frame - a.frame) .. " frames: still awaiting (never retried, never completed) "
+                          .. tostring(ob.key))
+            end
+        end
+    end
+
+    -- boundaries
+    function FS.boundary(kind)
+        for _, ob in ipairs(FS.owed) do
+            if ob.gen == FS.gen and ob.state == "awaiting" then
+                FS.quarantine(ob, "lost", ob.kind, "the " .. kind .. " boundary ended the observation of a staged attempt")
+            end
+        end
+    end
+    function FS.abandon(why)
+        for _, ob in ipairs(FS.owed) do
+            if ob.gen == FS.gen then
+                if ob.state == "awaiting" then
+                    FS.quarantine(ob, "lost", ob.kind, why .. " abandoned the timeline of a staged attempt")
+                elseif ob.state == "pending" then
+                    defer_held(FS.reference(ob)) -- the legacy clear dropped the reference; the owner is still owed
+                end
+            end
+        end
+    end
+    function FS.identity_changed()
+        FS.suspended, FS.resume_identity, FS.last_identity = false, nil, nil
+        FS.gen = FS.gen + 1
+        self.epoch = self.epoch + 1 -- every stamp and batch of the old save now fails generation validation
+        if self.signals then self.signals:abandon("identity_changed") end
+        for _, ob in ipairs(FS.owed) do
+            if ob.gen < FS.gen and ob.state ~= "stale" then
+                ob.was, ob.state, ob.scheduled, ob.suppress = ob.state, "stale", false, nil
+                note_once(ob, "stale", "[SLink-gen2] old-identity " .. tostring(ob.cmd) .. " obligation quarantined (was "
+                          .. tostring(ob.was) .. "), not transferred to the new save: " .. tostring(ob.key))
+            end
+        end
+        for _, queue in ipairs({ "deferred", "pending_battle_writes" }) do
+            local kept = {}
+            for _, e in ipairs(self[queue]) do
+                if not e.ob then kept[#kept + 1] = e end
+            end
+            self[queue] = kept
+        end
+    end
+    -- a conflicting box operation on a target whose death is still unsettled: retained, never replied to
+    function FS.guard_box(cmd, phys)
+        if cmd.cmd ~= "box_mon" and cmd.cmd ~= "memorialize" then return false end
+        local ob = FS.find_owner(cmd.key, phys)
+        if not ob then return false end
+        note_once(ob, "box:" .. cmd.cmd, "[SLink-gen2] " .. cmd.cmd .. " retained: the death of " .. tostring(cmd.key)
+                  .. " is unsettled (" .. ob.state .. ")")
+        self.deferred[#self.deferred + 1] = cmd
+        return true
+    end
+    end -- if FS
 
     -- Deferred queue: one command per frame, only at the verified checkpoint, inside the permit.
     function self:run_deferred()
@@ -960,6 +1399,7 @@ function Client.new(p)
            or not net.connected() then return end
         local safe = safety.check(PARTY_HP)
         if not safe then return end
+        if settle and FS.suspended then return end -- the save identity cannot be verified: no attempt, no settlement
         if armed then
             -- one op per hold: the saved party now holds the mon, so its backing copy goes (full-record
             -- match); a reset before the save left it in the box only, and settle is a no-op
@@ -970,9 +1410,15 @@ function Client.new(p)
             return
         end
         local revived = revived_dead()
-        if revived then table.insert(self.deferred, 1, { cmd = "force_faint", key = revived, quiet = true }) end
+        if revived and settle then
+            local e = FS.quiet_entry(revived)
+            if e then table.insert(self.deferred, 1, e) end
+        elseif revived then
+            table.insert(self.deferred, 1, { cmd = "force_faint", key = revived, quiet = true })
+        end
         if #self.deferred == 0 then return end
         local cmd = table.remove(self.deferred, 1)
+        if cmd.ob then return FS.overworld(cmd) end
         if BOX_NACK[cmd.cmd] then return self:run_box(cmd) end
         local slot, mon, _, why = find_party_slot(cmd.key, cmd.cmd)
         if not slot and not why and contest_masked() then
@@ -1067,6 +1513,7 @@ function Client.new(p)
         local _, mon = find_party_slot(cmd.key, cmd.cmd == "memorialize" and cmd.cmd or nil)
         if mon and cmd.cmd == "memorialize" then phys = mon_key(mon) end
         local name = nick_label(cmd.key, cmd.nickname or (mon and mon.nickname))
+        if settle and FS.guard_box(cmd, phys) then return end -- F2: an unsettled death owns the target
         -- INVARIANT (gen2-box-durability, BOX-MEMORIAL-2): a settle already waiting for a key owns it until the next
         -- native save. The server re-sends a command until it is acked, and a duplicate that reached the box executor
         -- would act on the half-done state: a memorial would report done (memorial copy made, volatile active source
@@ -1248,6 +1695,8 @@ function Client.new(p)
             for _, s in ipairs(self.settle) do s.armed = true end
             if self.box_save_pending then log("[SLink-gen2] box edits persisted by the native save") end
             self.box_save_pending = false
+        elseif k == "battle_faint" and settle then
+            FS.observe(ev)
         elseif k == "soft_reset" or k == "new_game" then
             self:boundary("reset", "save_reset")
         elseif k == "continue_confirmed" then
@@ -1266,6 +1715,7 @@ function Client.new(p)
         if k == "capture" then publish_capture(ev)
         elseif k == "whiteout" then announce_whiteout()
         elseif k == "faint" then
+            if settle and FS.echo(m.key) then return end
             if self.commanded[m.key] then
                 -- O-30: HandlePlayerMonFaint after our own battle write; the server commanded this death
                 self.commanded[m.key] = nil
@@ -1404,7 +1854,11 @@ function Client.new(p)
             self.hello_sent = false
             -- Gen 2: another save's identity; what was held belongs to the previous one. A transient
             -- identity_unavailable keeps the queue (the same identity returning is not a change).
+            if settle and reason == "identity_unavailable" and not FS.suspended then
+                FS.suspended, FS.resume_identity = true, FS.last_identity
+            end
             if reason == "identity_changed" then
+                if settle then FS.identity_changed() end
                 self.key_alias, self.retired_alias, self.dead_keys, self.dead_synced = nil, {}, {}, false
                 drop_held("identity change")
             end
@@ -1453,7 +1907,7 @@ function Client.new(p)
         if not had_balls and self.has_pokeballs then announce_nuzlocke_start() end
         local player = reads.read_player()
         local badges = reads.read_badges()
-        send(event or "tick", {
+        local sent = send(event or "tick", {
             party = party, has_pokeballs = self.has_pokeballs, ball_count = ball_count(),
             area_id = area_id, loc_name = loc, in_battle = in_battle,
             -- the packed (class, instance) id, as trainer_battle_start (gen2_gsc.trainer_info decodes it)
@@ -1466,6 +1920,7 @@ function Client.new(p)
             trade_blocked = contest_masked(),
             awaiting_save = awaiting_save_field(), -- BURIAL-VISIBLE: the pair board's "awaiting save"
         })
+        if settle and sent then FS.after_tick(party, in_battle) end -- F2: only a SENT party-bearing tick is HP evidence
         resend_refused_change()
     end
 
@@ -1547,14 +2002,19 @@ function Client.new(p)
             for _, w in ipairs(self.pending_battle_writes) do queued = queued or w.key == key end
             local slot, mon = find_party_slot(key)
             if slot and mon.hp > 0 and not queued then
-                self.pending_battle_writes[#self.pending_battle_writes + 1] = { cmd = "force_faint", key = key, quiet = true,
-                                                                               arrival = self.arrivals }
+                if settle then
+                    local e = FS.quiet_entry(key, mon) -- nil while an open owner already names the key
+                    if e then self.pending_battle_writes[#self.pending_battle_writes + 1] = e end
+                else
+                    self.pending_battle_writes[#self.pending_battle_writes + 1] = { cmd = "force_faint", key = key, quiet = true,
+                                                                                   arrival = self.arrivals }
+                end
             end
         end
     end
     function self:at_battle_hold()
-        if (#self.pending_battle_writes == 0 and #self.deferred == 0 and not (self.dead_synced and next(self.dead_keys)))
-           or not self.writes_enabled then return end
+        if (#self.pending_battle_writes == 0 and #self.deferred == 0 and not (self.dead_synced and next(self.dead_keys))
+            and not (settle and FS.awaiting_any())) or not self.writes_enabled then return end
         -- a bus-exec hit at this PC in another ROM bank is not BattleTurn: cheapest refusal first
         if io.read_u8(profile.ram.hROMBank, "System Bus") ~= p.battle_hold.execution_before.bank then return end
         if not safety.check(BATTLE_FAINT) then return end
@@ -1562,6 +2022,7 @@ function Client.new(p)
         if not current_party() then return end
         local battle, link = reads.read_battle(), wram_byte("wLinkMode")
         if not battle or battle.mode == 0 or link ~= 0 then return end
+        if settle and not FS.begin_hold(battle) then return end -- one dispatch token per hold; Explosion survival check
         lift_deferred_deaths()
         if #self.pending_battle_writes == 0 then return end
         local targets = p.battle_hold.write.targets
@@ -1573,6 +2034,7 @@ function Client.new(p)
         end
         local snapshot = { mode = battle.mode, battle_type = battle.battle_type,
                            active_slot = battle.active_slot, link_mode = link }
+        if settle then return FS.battle_hold(battle, snapshot, target) end
         local keep = {}
         for _, w in ipairs(self.pending_battle_writes) do
             local slot, mon, _, why = find_party_slot(w.key, w.cmd)
@@ -1662,7 +2124,7 @@ function Client.new(p)
                            active_slot = battle.active_slot, link_mode = link }
         for _, w in ipairs(self.pending_battle_writes) do
             local slot, mon, _, why = find_party_slot(w.key, w.cmd)
-            if not w.landed and slot and not why and slot ~= battle.active_slot and mon.hp > 0 then
+            if not w.landed and not w.ob and slot and not why and slot ~= battle.active_slot and mon.hp > 0 then
                 local ok, err = pcall(function()
                     writes:arm(BATTLE_BENCH)
                     writes:faint_party_slot(slot, snapshot)
@@ -1854,6 +2316,7 @@ function Client.new(p)
         self.owed:step(net.connected(), connected == true, send) -- owed reports, after any held messages
         for _, batch in ipairs(self.signals and self.signals:drain() or {}) do
             for _, ev in ipairs(batch.events or {}) do
+                if settle then ev.batch_generation = batch.generation end -- F2: validated at consumption
                 local ok, err = pcall(self.on_event, self, ev)
                 if not ok then log("[SLink-gen2] signal " .. tostring(ev.site_id) .. ": " .. tostring(err)) end
             end
@@ -1876,6 +2339,7 @@ function Client.new(p)
             hud.show("SLINK STOPPED - SEE LOG", 255, 64, 64, 600)
         end
         self:settle_faints()
+        if settle then FS.frame() end
         -- p.rescan_every (Polished only, compose_polished): no engine site, PC event or box number marks a box
         -- arrival there, so a battle end (wBattleMode nonzero -> 0) or the periodic interval re-arms the census,
         -- checked once per tick. nil (vanilla): never entered. The rescan stays read-only and fail-closed.
