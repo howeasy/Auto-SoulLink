@@ -8,6 +8,12 @@ The pure oracle consumes ordered byte writes, not just final mailbox snapshots.
 Exec-hook accounting retains bounded wrong-bank diagnostics without admitting them as
 native milestones; final/complete carry all-callback totals and registered site specs.
 Minimal serializer-failure traces are explicit failures, never gameplay evidence.
+Native milestones are symbol-bound; close requires all three zero stores, and
+the selected OT snapshot must be complete before the first OFFER slot store.
+The runner requires one exact case-qualified completion and budgets the full
+launch/flush/cleanup wall time; an overdue or contradictory PASS is not evidence.
+Each real invocation allocates a new contained numbered attempt beneath its case
+lane and keeps all prior evidence; plan/dry-run never allocates or removes files.
 """
 from __future__ import annotations
 
@@ -19,6 +25,7 @@ import os
 import re
 import shutil
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -45,6 +52,22 @@ HOOK_KINDS = {
     "OWPlayerInput": "OWPlayerInput", "SetInitialOptions.joypad_loop": "SetInitialOptions.joypad_loop",
     "service_return": "service_return",
 }
+ACCEPTED_KINDS = frozenset(HOOK_KINDS) | {
+    "setup", "answer", "rom_write", "host_begin", "host_write", "host_stage_write", "host_end",
+    "staged", "query_answered", "offer_observed", "offer_answered", "apply_published",
+    "done_observed", "release_published", "wrong_bank", "final", "move_start", "move_end", "complete",
+}
+# Pinned native sites for standalone synthetic traces. Production supplies the
+# full symbol table only after checking its digest against overlay provenance.
+MILESTONE_SITES = {
+    "SlinkTradeEntry": [0x7E, 0x4480],
+    "SlinkTradeTimeoutGate": [0x7E, 0x4410],
+    "SelectTradeOrDayCareMon": [0x14, 0x4002],
+    "YesNoBox": [0, 0x18E0],
+}
+# ld a,[addr] (3), cp (2), jr (2), call SlinkTradeEntry (3).
+# The entry is a JP trampoline: RET must resume at the gate's CALL continuation.
+RETURN_DELTA = 10
 
 
 def _hook_accounting(trace, final, complete, symbols, why):
@@ -69,6 +92,15 @@ def _hook_accounting(trace, final, complete, symbols, why):
             expected = symbols.get(name)
             if expected is None or sites[name] != {"bank": expected[0], "addr": expected[1]}:
                 why.append(f"hook_sites: {name} differs from symbols")
+    native = MILESTONE_SITES if symbols is None else symbols
+    for name in MILESTONE_SITES:
+        expected = native.get(name)
+        if expected is None or sites[name] != {"bank": expected[0], "addr": expected[1]}:
+            why.append(f"milestone provenance: {name} differs from native symbols")
+    gate = native.get("SlinkTradeTimeoutGate")
+    continuation = {"bank": gate[0], "addr": gate[1] + RETURN_DELTA} if gate else None
+    if sites["service_return"] != continuation:
+        why.append("milestone provenance: service return is not timeout-gate CALL continuation")
     entry = next(iter(_events(trace, "service_entry")), None)
     if not entry or type(entry.get("return_addr")) is not int or type(entry.get("return_bank")) is not int or (
         sites["service_return"] != {"bank": entry.get("return_bank"), "addr": entry.get("return_addr")}
@@ -278,8 +310,10 @@ def evaluate(case, trace, symbols=None) -> tuple[bool, list[str]]:
         return False, [f"unknown case {case}"]
     if not isinstance(trace, list) or not trace or any(not isinstance(e, dict) for e in trace):
         return False, ["missing/malformed ordered trace"]
-    if _events(trace, "driver_error"):
-        return False, ["driver_error: observation incomplete"]
+    for e in trace:
+        kind = e.get("kind")
+        if not isinstance(kind, str) or kind not in ACCEPTED_KINDS:
+            return False, [f"unaccepted event kind {kind!r}: observation incomplete"]
     required = ("kind", "ord", "frame", "sp", "bank", "vblank", "link", "running", "stack", "count",
                 "party_sum", "ot_tail_sum", "ot0_sum", "ot1_sum", "own0_sum", "lease", "sbank", "spos", "x", "y")
     if any(any(k not in e for k in required) or not _bytes(e.get("lease")) for e in trace):
@@ -292,9 +326,6 @@ def evaluate(case, trace, symbols=None) -> tuple[bool, list[str]]:
     if any(not isinstance(e[k], str) or not re.fullmatch(r"[0-9a-f]{8}", e[k]) for e in trace
            for k in ("party_sum", "ot_tail_sum", "ot0_sum", "ot1_sum", "own0_sum")):
         why.append("checksum evidence missing/malformed")
-    for kind in ("missing_symbol", "gsb_overflow", "driver_error", "instrumentation_error", "deadline", "early_exit"):
-        if _events(trace, kind):
-            why.append(f"{kind}: observation incomplete")
     setup, entry, close, ret, endtext, final, m0, m1, complete = (
         _once(trace, k, why) for k in ("setup", "service_entry", "close", "service_return", "endtext", "final",
                                       "move_start", "move_end", "complete"))
@@ -303,6 +334,13 @@ def evaluate(case, trace, symbols=None) -> tuple[bool, list[str]]:
     chain = [e for e in (setup, entry, close, ret, endtext, final, m0, m1, complete) if e]
     if any(a["ord"] >= b["ord"] for a, b in zip(chain, chain[1:], strict=False)):
         why.append("service/closure/endtext/movement events out of order")
+    if close and ret:
+        # SlinkTradeClose's complete native suffix is C5/10/11, including
+        # idempotent zero stores. Command zero alone does not close eligibility.
+        suffix = [(e.get("offset"), e.get("value")) for e in trace
+                  if e["kind"] == "rom_write" and close["ord"] < e["ord"] < ret["ord"]]
+        if suffix != [(5, 0), (10, 0), (11, 0)]:
+            why.append("close suffix must be exactly zero stores to 5,10,11")
     if setup and (setup.get("case") != case or setup.get("synth") is not True or setup.get("token") != TOKEN):
         why.append("missing SYNTH/test-token setup disclosure")
     if complete and (complete.get("case") != case or complete is not trace[-1]):
@@ -319,6 +357,8 @@ def evaluate(case, trace, symbols=None) -> tuple[bool, list[str]]:
     if final:
         if final["lease"][5] != 0:
             why.append("lease not closed (command != 0)")
+        if final["lease"][10:12] != [0, 0]:
+            why.append("final available/mask must both be zero")
         for key in ("vblank", "link", "running", "stack"):
             if final[key] != 0:
                 why.append(f"final {key} != 0")
@@ -358,27 +398,49 @@ def evaluate(case, trace, symbols=None) -> tuple[bool, list[str]]:
         if entry and ret and not entry["ord"] < begin["ord"] < end["ord"] < ret["ord"]:
             why.append("host transaction outside held service")
     menus = _events(trace, "party_menu")
+    answers = [e for e in _events(trace, "answer") if e.get("which") == "party"]
     want_menu = case not in ("no-eligible", "query-timeout")
     if len(menus) != int(want_menu):
         why.append(f"party menu: expected {int(want_menu)}, observed {len(menus)}")
+    query_end = next((t[2] for t in txs if t[0] == "query"), None)
     if want_menu:
-        query_end = next((t[2] for t in txs if t[0] == "query"), None)
         if menus and (not query_end or menus[0]["ord"] <= query_end["ord"]):
             why.append("party menu opened before QUERY answer")
-        answers = [e for e in _events(trace, "answer") if e.get("which") == "party"]
         if len(answers) != 1 or answers[0].get("btn") != ("B" if case == "cancel-menu" else "A"):
             why.append("native party menu answer missing/incorrect")
         if answers and menus and answers[0]["ord"] <= menus[0]["ord"]:
             why.append("native party input preceded menu milestone")
+        if entry and ret and (not menus or not answers or
+                              not entry["ord"] < menus[0]["ord"] < answers[0]["ord"] < ret["ord"]):
+            why.append("native party menu/input outside held service")
     if case in ("offer-reject", "apply-done1", "apply-invalid"):
-        confirms = [e for e in _events(trace, "answer") if e.get("which") == "confirm" and e.get("btn") == "A"]
+        confirms = [e for e in _events(trace, "answer") if e.get("which") == "confirm"]
         offers = [p[1] for p in pubs if p[0] == "offer"]
-        if len(confirms) != 1 or not offers or confirms[0]["ord"] >= offers[0]["ord"]:
+        native_yesnos = [e for e in _events(trace, "yesno")
+                        if entry and ret and entry["ord"] < e["ord"] < ret["ord"]]
+        offer_start = next((e for e in trace if e["kind"] == "rom_write" and e.get("offset") == 9
+                            and query_end and offers and query_end["ord"] < e["ord"] <= offers[0]["ord"]), None)
+        if len(confirms) != 1 or confirms[0].get("btn") != "A" or not offers or confirms[0]["ord"] >= offers[0]["ord"]:
             why.append("OFFER without prior native YES confirmation")
+        if (not query_end or len(menus) != 1 or len(answers) != 1 or len(native_yesnos) != 1 or
+                len(confirms) != 1 or not offer_start or not offers or
+                not query_end["ord"] < menus[0]["ord"] < answers[0]["ord"] < native_yesnos[0]["ord"] <
+                confirms[0]["ord"] < offer_start["ord"] <= offers[0]["ord"]):
+            why.append("native confirmation order must be QUERY-answer/menu/party/YesNo/confirm/OFFER")
         if entry and final and final["ot1_sum"] != entry["own0_sum"]:
             why.append("OT slot 1 snapshot does not match selected own mon 0")
-    elif entry and final and final["ot1_sum"] != entry["ot1_sum"]:
-        why.append("OT slot 1 changed without an OFFER snapshot")
+        if entry and len(confirms) == 1 and offer_start:
+            # Snapshot copies may have intermediate checksums only after YES
+            # input and before O's first slot store, not until generation.
+            if any(e["ot1_sum"] != entry["ot1_sum"] for e in trace
+                   if entry["ord"] <= e["ord"] <= confirms[0]["ord"]):
+                why.append("snapshot timing: OT slot 1 changed through confirmation boundary")
+            if any(e["ot1_sum"] != entry["own0_sum"] for e in trace
+                   if e["ord"] >= offer_start["ord"]):
+                why.append("snapshot timing: first OFFER store and later rows must retain selected snapshot")
+    elif entry:
+        if any(e["ot1_sum"] != entry["ot1_sum"] for e in trace if e["ord"] >= entry["ord"]):
+            why.append("snapshot timing: OT slot 1 changed without an OFFER snapshot")
     if case.startswith("apply-"):
         staged = _check_staging(trace, why)
         if staged and staged.get("invalid") != (case == "apply-invalid"):
@@ -426,8 +488,10 @@ def parse_args(argv=None):
 
 
 def plan(args, repo=REPO, work=WORK):
+    """Describe the retained case lane without allocating an attempt."""
     base_sha1, overlay_sha1 = read_provenance(repo / "data/polished/overlay_provenance.json")
-    return {"case": args.case, "timeout": args.timeout, "lane": str(work / args.case),
+    return {"case": args.case, "timeout": args.timeout, "case_lane": str(work / args.case), "lane": None,
+            "attempt_policy": "fresh attempt-NNNN subdirectory; retain previous evidence",
             "driver": str(repo / "tools/polished_live/trade_service_probe.lua"),
             "release": str(RELEASE), "fixture": str(FIXTURE), "base_sha1": base_sha1,
             "expected_overlay_sha1": overlay_sha1, "disclosure": SYNTH,
@@ -436,13 +500,26 @@ def plan(args, repo=REPO, work=WORK):
 
 
 def read_symbols(path):
+    return _parse_symbols(path.read_text(encoding="utf-8"))
+
+
+def _parse_symbols(text):
     rows = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         parts = line.split()
         if len(parts) == 2 and re.fullmatch(r"[0-9a-fA-F]+:[0-9a-fA-F]+", parts[0]):
             bank, addr = parts[0].split(":")
             rows.setdefault(parts[1], [int(bank, 16), int(addr, 16)])
     return rows
+
+
+def read_verified_symbols(repo):
+    path = repo / "data/polished/polished_slink.sym"
+    provenance = json.loads((repo / "data/polished/overlay_provenance.json").read_text(encoding="utf-8"))
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != provenance.get("symbols", {}).get(path.name):
+        raise ValueError("symbols differ from overlay provenance")
+    return _parse_symbols(raw.decode("utf-8"))
 
 
 def stage(lane, run_plan):
@@ -465,21 +542,33 @@ def stage(lane, run_plan):
 def main(argv=None):
     args = parse_args(argv)
     run_plan = plan(args)
-    print(json.dumps(run_plan, indent=2), flush=True)
     if args.dry_run:
+        print(json.dumps(run_plan, indent=2), flush=True)
         return 0
-    lane = WORK / args.case
-    if WORK.resolve() not in lane.resolve().parents:
-        raise ValueError(f"refusing lane outside {WORK}: {lane}")
-    if lane.exists():
-        shutil.rmtree(lane)
-    lane.mkdir(parents=True)
+    root = WORK.resolve()
+    case_lane = Path(run_plan["case_lane"])
+    if root not in case_lane.resolve().parents:
+        raise ValueError(f"refusing lane outside {WORK}: {case_lane}")
+    case_lane.mkdir(parents=True, exist_ok=True)
+    attempt = 1
+    while True:
+        lane = case_lane / f"attempt-{attempt:04d}"
+        if root not in lane.resolve().parents:
+            raise ValueError(f"refusing lane outside {WORK}: {lane}")
+        try:
+            lane.mkdir()  # Exclusive allocation; never reuse or erase evidence.
+        except FileExistsError:
+            attempt += 1
+        else:
+            break
+    run_plan["lane"] = str(lane)
+    print(json.dumps(run_plan, indent=2), flush=True)
     os.environ.update(POL_LANE=str(lane), POL_KIND="overlay", POL_FIXTURE=str(FIXTURE))
     # Load a private harness instance: its environment-derived paths must belong to this lane.
     spec = importlib.util.spec_from_file_location("polished_service_probe_harness", REPO / "tools/polished_live/harness.py")
     harness = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(harness)
-    rows = read_symbols(REPO / "data/polished/polished_slink.sym")
+    rows = read_verified_symbols(REPO)
     # Optional code hooks are omitted from syms.json when absent; Lua records missing_symbol, oracle FAILS.
     required = tuple(harness.SYMBOLS) + tuple(s for s in EXTRA_SYMBOLS if s not in HOOKS)
     missing = sorted(set(required) - rows.keys())
@@ -494,10 +583,17 @@ def main(argv=None):
     harness.SRAM.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(FIXTURE, harness.SRAM / harness.SAVE_NAME)
     run = lane / "probe"
+    started = time.monotonic()
     text, pid = harness.launch("tools/polished_live/trade_service_probe.lua", run, {"POL_CASE": args.case}, args.timeout)
+    elapsed = time.monotonic() - started
+    deadline_met = elapsed < args.timeout
     reasons = []
-    if not any(line.startswith("RESULT: PASS trade-service-probe") for line in text.splitlines()):
-        reasons.append("driver failed or exited early/deadline/crash (missing PASS completion)")
+    markers = [line.strip() for line in text.splitlines() if "RESULT:" in line]
+    expected = rf"RESULT: PASS trade-service-probe {re.escape(args.case)} \(0 checks failed\) frame [0-9]+"
+    if len(markers) != 1 or not re.fullmatch(expected, markers[0]):
+        reasons.append("completion marker: require exactly one zero-failure PASS for selected case, no other RESULT")
+    if not deadline_met:
+        reasons.append("wall-clock deadline reached before launch/cleanup completed")
     path = run / "trace.json"
     try:
         trace = json.loads(path.read_text(encoding="utf-8"))
@@ -509,6 +605,7 @@ def main(argv=None):
         print("\n".join(f"#{e.get('ord')} f{e.get('frame')} {e.get('kind')} lease={e.get('lease')}"
                         for e in trace if e.get("kind") != "gsb"))
     result = {**run_plan, "staged_sha1": sha1, "fixture_sha256": digest, "emuhawk_pid": pid,
+              "elapsed_seconds": elapsed, "deadline_seconds": args.timeout, "deadline_met": deadline_met,
               "ok": not reasons, "reasons": reasons}
     (run / "oracle.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result, indent=2))

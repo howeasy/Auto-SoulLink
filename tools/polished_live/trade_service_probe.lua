@@ -196,8 +196,15 @@ local function install()
         local e = snap("service_entry", metadata)
         local target = L.bus(e.sp) | (L.bus(e.sp + 1) << 8)
         e.return_addr, e.return_bank = target, e.bank
-        -- A CALL continuation observes SP AFTER RET; retain the raw and RET-entry boundaries.
-        hook_at("service_return", e.bank, target, function(return_metadata)
+        -- Independently derive the gate's CALL continuation, never trust a
+        -- stack value merely because we can install a matching return hook.
+        local gate = assert(S.SlinkTradeTimeoutGate, "missing timeout gate symbol")
+        local continuation = gate[2] + 10 -- ld a,[addr]; cp; jr; call (3+2+2+3)
+        if target ~= continuation or e.bank ~= gate[1] then
+            die("service return does not match timeout-gate CALL continuation")
+        end
+        -- A CALL continuation observes SP AFTER RET; retain both boundaries.
+        hook_at("service_return", gate[1], continuation, function(return_metadata)
             returned = true
             return_metadata.ret_sp = emu.getregister("SP") - 2
             snap("service_return", return_metadata)

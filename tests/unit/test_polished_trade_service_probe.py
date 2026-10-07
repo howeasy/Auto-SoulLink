@@ -6,9 +6,13 @@ runner pure parts, and actual Lua mock callbacks/serialization (no live emulator
 from __future__ import annotations
 
 import copy
+import hashlib
+import importlib.abc
 import importlib.util
 import json
+import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,12 +20,16 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("trade_service_probe", ROOT / "tools/polished_live/trade_service_probe.py")
 P = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(P)
+CASE_IDS = ["reject", "cancel", "none", "timeout", "done1", "invalid"]
 
 SITES = {name: {"bank": 0x7E, "addr": 0x4500 + i * 16} for i, name in enumerate(P.HOOKS)}
 SITES["SlinkTradeEntry"] = {"bank": 0x7E, "addr": 0x4480}
 SITES["GetScriptByte"] = {"bank": 0x25, "addr": 0x4100}
 SITES["Script_endtext"] = {"bank": 0x25, "addr": 0x4200}
-SITES["service_return"] = {"bank": 0x7E, "addr": 0x4680}
+SITES["SelectTradeOrDayCareMon"] = {"bank": 0x14, "addr": 0x4002}
+SITES["YesNoBox"] = {"bank": 0, "addr": 0x18E0}
+SITES["SlinkTradeTimeoutGate"] = {"bank": 0x7E, "addr": 0x4410}
+SITES["service_return"] = {"bank": 0x7E, "addr": 0x441A}
 
 
 def attach_accounting(trace):
@@ -194,6 +202,7 @@ def good_trace(case):
         t.add("party_menu")
         t.add("answer", which="party", btn="B" if case == "cancel-menu" else "A", slot=0)
         if case != "cancel-menu":
+            t.add("yesno")
             t.add("answer", which="confirm", btn="A")
             t.publish_offer()
             t.offer_reply()
@@ -264,7 +273,7 @@ def generation_early(trace):
     return renumber(out)
 
 
-@pytest.mark.parametrize("case", P.CASES)
+@pytest.mark.parametrize("case", P.CASES, ids=CASE_IDS)
 def test_each_good_scenario_passes(case):
     ok, reasons = P.evaluate(case, good_trace(case))
     assert ok, reasons
@@ -285,15 +294,18 @@ DEFECTS = (
 )
 
 
-@pytest.mark.parametrize("case", P.CASES)
-@pytest.mark.parametrize("_label,defect,reason", DEFECTS, ids=[d[0] for d in DEFECTS])
+@pytest.mark.parametrize("case", P.CASES, ids=CASE_IDS)
+@pytest.mark.parametrize("_label,defect,reason", DEFECTS,
+                         ids=["ret", "party", "lease", "endtext", "success", "generation",
+                              "movement", "vblank", "link", "overflow", "complete"])
 def test_each_single_defect_fails_for_its_own_reason(case, _label, defect, reason):
     ok, reasons = P.evaluate(case, defect(good_trace(case)))
     assert not ok
     assert any(reason in failure for failure in reasons), reasons
 
 
-@pytest.mark.parametrize("case", [c for c in P.CASES if c != "query-timeout"])
+@pytest.mark.parametrize("case", [c for c in P.CASES if c != "query-timeout"],
+                         ids=["reject", "cancel", "none", "done1", "invalid"])
 def test_host_cannot_answer_rom_owned_frame(case):
     trace = good_trace(case)
     begin = next(e for e in trace if e["kind"] == "host_begin")
@@ -313,7 +325,7 @@ def test_timeout_host_cannot_write_unsolicited():
     assert any("host wrote while ROM-owned" in r for r in reasons)
 
 
-@pytest.mark.parametrize("case", P.CASES)
+@pytest.mark.parametrize("case", P.CASES, ids=CASE_IDS)
 def test_missing_symbol_fails_closed(case):
     trace = rekind(good_trace(case), "move_start", "missing_symbol", symbol="SlinkTradeEntry")
     ok, reasons = P.evaluate(case, trace)
@@ -335,7 +347,7 @@ def test_offer_reject_must_not_publish_done():
     assert any("ROM publication order" in r and "done" in r for r in reasons)
 
 
-@pytest.mark.parametrize("case", ["no-eligible", "query-timeout"])
+@pytest.mark.parametrize("case", ["no-eligible", "query-timeout"], ids=["none", "timeout"])
 def test_ineligible_or_unanswered_query_must_not_open_menu(case):
     trace = good_trace(case)
     e = copy.deepcopy(next(e for e in trace if e["kind"] == "close"))
@@ -357,7 +369,7 @@ def test_query_timeout_must_not_close_early():
     assert any("QUERY timeout did not wait 600" in r for r in reasons)
 
 
-@pytest.mark.parametrize("case", ["apply-done1", "apply-invalid"])
+@pytest.mark.parametrize("case", ["apply-done1", "apply-invalid"], ids=["done1", "invalid"])
 def test_apply_staging_must_not_touch_snapshot_slot(case):
     trace = good_trace(case)
     e = next(e for e in trace if e["kind"] == "host_stage_write" and e["symbol"] == "wOTPartyMon1")
@@ -386,14 +398,15 @@ def test_apply_invalid_must_really_have_no_name_terminator():
     assert any("incoming name still has a terminator" in r for r in reasons)
 
 
-@pytest.mark.parametrize("trace", [None, [], [{}], ["not an event"]])
+@pytest.mark.parametrize("trace", [None, [], [{}], ["not an event"]], ids=["null", "empty", "fields", "string"])
 def test_malformed_trace_is_not_evidence(trace):
     assert not P.evaluate("offer-reject", trace)[0]
 
 
 @pytest.mark.parametrize("argv", [[], ["--case", "unknown"], ["--case", "offer-reject", "--timeout", "0"],
                                   ["--case", "offer-reject", "--timeout", "-5"],
-                                  ["--case", "offer-reject", "--timeout", "NaN"]])
+                                  ["--case", "offer-reject", "--timeout", "NaN"]],
+                         ids=["missing", "unknown", "zero", "negative", "nan"])
 def test_invalid_runner_arguments_fail(argv):
     with pytest.raises(SystemExit):
         P.parse_args(argv)
@@ -415,13 +428,13 @@ def test_plan_reads_current_provenance_not_a_pinned_digest(tmp_path):
     path.write_text(json.dumps({"base_sha1": "a" * 40, "output": {"sha1": "b" * 40}}), encoding="utf-8")
     second = P.plan(args, repo=tmp_path, work=tmp_path / "lanes")
     assert second["expected_overlay_sha1"] == "b" * 40
-    assert second["lane"] == str(tmp_path / "lanes/apply-done1")
     assert second["timeout"] == 12
     assert "no cable partner, server, SLink client" in second["disclosure"]
     assert second["cleanup"] == "harness.launch finally kills only its own EmuHawk PID"
 
 
-@pytest.mark.parametrize("base,output", [(None, "2" * 40), ("1" * 40, "bad"), ("z" * 40, "2" * 40)])
+@pytest.mark.parametrize("base,output", [(None, "2" * 40), ("1" * 40, "bad"), ("z" * 40, "2" * 40)],
+                         ids=["no-base", "bad-output", "bad-base"])
 def test_malformed_provenance_fails(base, output, tmp_path):
     with pytest.raises(ValueError, match="provenance"):
         P.read_provenance(provenance(tmp_path, base, output))
@@ -456,7 +469,7 @@ def test_lua55_loads_driver_without_running_it():
 @pytest.mark.parametrize("field,value", [
     ("total", 2), ("qualified", 2), ("wrong_pc", 1), ("wrong_banks", {"9": 1}),
     ("wrong_bank_samples", 1), ("total", True),
-])
+], ids=["total", "qualified", "pc", "banks", "samples", "boolean"])
 def test_missing_or_overstated_hook_counter_fails(field, value):
     trace = good_trace("cancel-menu")
     for e in trace:
@@ -514,10 +527,11 @@ def mock_driver(encoder="good", case="cancel-menu", rom0=False):
         for i, name in ipairs(names) do L.SYM[name] = {0x7e, 0x4500 + i * 16} end
         L.SYM.SlinkTradeEntry = {0x7e, 0x4480}
         L.SYM.GetScriptByte = {0x25, 0x4100}
+        L.SYM.SlinkTradeTimeoutGate = {0x7e, 0x4410}
         L.rombank = function() return current_bank end
         L.bus = function(a)
-            if a == current_sp then return 0x80 end
-            if a == current_sp + 1 then return 0x46 end
+            if a == current_sp then return 0x1a end
+            if a == current_sp + 1 then return 0x44 end
             if a == L.SYM.hScriptBank[2] then return script_bank end
             if a == L.SYM.hScriptPos[2] then return script_pos & 0xff end
             if a == L.SYM.hScriptPos[2] + 1 then return script_pos >> 8 end
@@ -616,10 +630,10 @@ def test_actual_lua_bounds_wrong_bank_samples_per_site_and_keeps_qualified_evide
     # The native entry installed its dynamic continuation; it gets the same bounded accounting.
     for i in range(7001):
         lua.globals().current_bank = 8 + i % 2
-        lua.globals().current_pc = 0x4680
+        lua.globals().current_pc = 0x441A
         lua.globals().callbacks.service_return()
     lua.globals().current_bank = 0x7E
-    lua.globals().current_pc = 0x4680
+    lua.globals().current_pc = 0x441A
     lua.globals().callbacks.service_return()
     trace = stop_driver(lua)
     final = next(e for e in trace if e["kind"] == "final")
@@ -635,7 +649,7 @@ def test_actual_lua_bounds_wrong_bank_samples_per_site_and_keeps_qualified_evide
     assert not validate_hook_counts(trace, final, final["hook_sites"])
 
 
-@pytest.mark.parametrize("encoder", ["nil", "throw"])
+@pytest.mark.parametrize("encoder", ["nil", "throw"], ids=["nil", "throw"])
 def test_actual_lua_encoder_failure_writes_readable_minimal_trace_and_finishes(encoder):
     lua, _ = mock_driver(encoder)
     for _ in range(7001):
@@ -676,11 +690,13 @@ def test_actual_lua_wrong_bank_does_not_consume_gsb_protected_capacity():
     assert final["completed"] is False
 
 
-@pytest.mark.parametrize("case", P.CASES)
+@pytest.mark.parametrize("case", P.CASES, ids=CASE_IDS)
 def test_compressed_wrong_bank_claims_keep_native_and_byte_staging_proof(case):
     trace = good_trace(case)
     samples = []
     for name, site in SITES.items():
+        if site["addr"] < 0x4000:
+            continue  # ROM0 ignores the switchable-bank shadow.
         for _ in range(16):
             e = copy.deepcopy(trace[0])
             e.update(kind="wrong_bank", hook_site=name, hook_addr=site["addr"], pc=site["addr"],
@@ -711,7 +727,7 @@ def test_actual_lua_rom0_matches_any_bank_shadow_but_still_checks_pc():
     assert sum(e["kind"] == "wrong_pc" for e in trace) == 1
 
 
-@pytest.mark.parametrize("encoder", ["nil", "throw"])
+@pytest.mark.parametrize("encoder", ["nil", "throw"], ids=["nil", "throw"])
 def test_actual_lua_completed_dump_encoder_failure_also_finishes(encoder):
     lua, _ = mock_driver(encoder, case="query-timeout")
     fire(lua, "YesNoBox")
@@ -722,7 +738,7 @@ def test_actual_lua_completed_dump_encoder_failure_also_finishes(encoder):
     fire(lua, "GetScriptByte")
     fire(lua, "SlinkTradeEntry")
     lua.globals().current_bank = 0x7E
-    lua.globals().current_pc = 0x4680
+    lua.globals().current_pc = 0x441A
     lua.globals().callbacks.service_return()
     for _ in range(100):
         lua.eval("coroutine.resume(thread)")
@@ -764,3 +780,326 @@ def test_actual_lua_callback_snapshot_failure_records_driver_error_and_finishes(
     assert final["completed"] is False and final["driver_errors"] == 2
     assert final["hook_counts"]["SlinkTradeEntry"]["total"] == 1
     assert not P.evaluate("cancel-menu", trace)[0]
+
+
+def replay_lease(trace):
+    """Keep a mutated trace's ordered store chain internally consistent."""
+    frame = trace[0]["lease"].copy()
+    for e in trace:
+        if e["kind"] in ("rom_write", "host_write"):
+            e["before"] = frame.copy()
+            frame[e["offset"]] = e["value"]
+        e["lease"] = frame.copy()
+    return renumber(trace)
+
+
+@pytest.mark.parametrize("defect", ["missing", "reversed", "available", "mask"],
+                         ids=["missing", "reversed", "available", "mask"])
+def test_close_requires_all_three_zero_stores_in_native_order(defect):
+    trace = good_trace("offer-reject")
+    close = next(e for e in trace if e["kind"] == "close")
+    stores = [e for e in trace if e["kind"] == "rom_write" and e["ord"] > close["ord"]]
+    if defect == "missing":
+        trace = [e for e in trace if e is not stores[1] and e is not stores[2]]
+    elif defect == "reversed":
+        i, j = trace.index(stores[1]), trace.index(stores[2])
+        trace[i], trace[j] = trace[j], trace[i]
+    else:
+        stores[1 if defect == "available" else 2]["value"] = 1
+    ok, reasons = P.evaluate("offer-reject", replay_lease(trace))
+    assert not ok
+    assert any("close suffix" in reason for reason in reasons), reasons
+
+
+@pytest.mark.parametrize("offset", [10, 11], ids=["available", "mask"])
+def test_command_zero_with_live_availability_or_mask_is_not_closed(offset):
+    trace = good_trace("offer-reject")
+    close = next(e for e in trace if e["kind"] == "close")
+    next(e for e in trace if e["kind"] == "rom_write" and e["ord"] > close["ord"]
+         and e["offset"] == offset)["value"] = 1
+    ok, reasons = P.evaluate("offer-reject", replay_lease(trace))
+    assert not ok
+    assert any("final available/mask" in reason for reason in reasons), reasons
+
+
+@pytest.mark.parametrize("milestone", ["party_menu", "service_return"],
+                         ids=["wrong-bank", "wrong-return"])
+def test_self_consistent_hook_claims_cannot_forge_native_milestones(milestone):
+    trace = good_trace("offer-reject")
+    row = next(e for e in trace if e["kind"] == milestone)
+    name = row["hook_site"]
+    field = "bank" if milestone == "party_menu" else "addr"
+    forged = row["bank"] + 1 if field == "bank" else row["pc"] + 1
+    row["bank" if field == "bank" else "pc"] = forged
+    if field == "addr":
+        row["hook_addr"] = forged
+        next(e for e in trace if e["kind"] == "service_entry")["return_addr"] = forged
+    for terminal in trace:
+        if terminal["kind"] in ("final", "complete"):
+            terminal["hook_sites"][name][field] = forged
+    ok, reasons = P.evaluate("offer-reject", trace)
+    assert not ok
+    assert any("milestone provenance" in reason for reason in reasons), reasons
+
+
+@pytest.mark.parametrize("defect", ["no-yesno", "yesno-before-party", "confirm-before-yesno"],
+                         ids=["no-yesno", "early-yesno", "early-confirm"])
+def test_offer_requires_ordered_native_yesno_and_confirmation(defect):
+    trace = good_trace("offer-reject")
+    yesno = next(e for e in trace if e["kind"] == "yesno")
+    if defect == "no-yesno":
+        trace.remove(yesno)
+    else:
+        answer = next(e for e in trace if e["kind"] == "answer"
+                      and e.get("which") == ("party" if defect == "yesno-before-party" else "confirm"))
+        i, j = trace.index(yesno), trace.index(answer)
+        trace[i], trace[j] = trace[j], trace[i]
+    ok, reasons = P.evaluate("offer-reject", attach_accounting(renumber(trace)))
+    assert not ok
+    assert any("native confirmation order" in reason for reason in reasons), reasons
+
+
+def test_service_symbols_must_match_overlay_provenance(tmp_path):
+    path = provenance(tmp_path)
+    sym = tmp_path / "data/polished/polished_slink.sym"
+    sym.write_text("7e:4480 SlinkTradeEntry\n", encoding="utf-8")
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["symbols"] = {sym.name: hashlib.sha256(sym.read_bytes()).hexdigest()}
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert P.read_verified_symbols(tmp_path)["SlinkTradeEntry"] == [0x7E, 0x4480]
+    sym.write_text("7e:4481 SlinkTradeEntry\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="symbols differ from overlay provenance"):
+        P.read_verified_symbols(tmp_path)
+
+
+@pytest.mark.parametrize("boundary", ["party", "confirm", "first-offer", "after-offer"],
+                         ids=["party", "confirm", "first-offer", "after-offer"])
+def test_snapshot_cannot_move_before_confirmation_or_after_offer(boundary):
+    trace = good_trace("offer-reject")
+    confirm = next(e for e in trace if e["kind"] == "answer" and e.get("which") == "confirm")
+    first = next(e for e in trace if e["kind"] == "rom_write" and e.get("offset") == 9)
+    row = (next(e for e in trace if e["kind"] == "party_menu") if boundary == "party" else
+           confirm if boundary == "confirm" else first if boundary == "first-offer" else
+           next(e for e in trace if e["kind"] == "host_begin" and e.get("tx") == "offer"))
+    row["ot1_sum"] = "deadbeef"
+    ok, reasons = P.evaluate("offer-reject", trace)
+    assert not ok
+    assert any("snapshot timing" in reason for reason in reasons), reasons
+
+
+@pytest.mark.parametrize("case", ["cancel-menu", "no-eligible", "query-timeout"],
+                         ids=["cancel", "none", "timeout"])
+def test_non_offer_snapshot_must_not_change_transiently(case):
+    trace = good_trace(case)
+    next(e for e in trace if e["kind"] == "rom_write")["ot1_sum"] = "deadbeef"
+    ok, reasons = P.evaluate(case, trace)
+    assert not ok
+    assert any("snapshot timing" in reason for reason in reasons), reasons
+
+
+def test_partial_snapshot_is_allowed_only_between_confirm_and_first_offer_store():
+    trace = good_trace("offer-reject")
+    confirm = next(e for e in trace if e["kind"] == "answer" and e.get("which") == "confirm")
+    partial = copy.deepcopy(confirm)
+    site = SITES["SlinkTradeCheckHeader"]
+    partial.update(kind="check_header", hook_site="SlinkTradeCheckHeader", hook_addr=site["addr"],
+                   pc=site["addr"], bank=site["bank"], matched=True, qualified=True, ot1_sum="deadbeef")
+    partial.pop("which")
+    partial.pop("btn")
+    trace.insert(trace.index(confirm) + 1, partial)
+    ok, reasons = P.evaluate("offer-reject", attach_accounting(renumber(trace)))
+    assert ok, reasons
+
+
+def test_snapshot_may_already_match_selected_mon_and_rom0_ignores_bank_shadow():
+    trace = good_trace("offer-reject")
+    own = next(e for e in trace if e["kind"] == "service_entry")["own0_sum"]
+    for e in trace:
+        e["ot1_sum"] = own
+        if e["kind"] == "yesno":
+            e["bank"] = 0x7E
+    ok, reasons = P.evaluate("offer-reject", trace)
+    assert ok, reasons
+
+
+@pytest.mark.parametrize("kind", ["future_marker", "native_commit", None, 42, ["future"]],
+                         ids=["future", "commit", "null", "number", "array"])
+def test_unrecognized_event_kind_fails_closed(kind):
+    trace = good_trace("offer-reject")
+    extra = copy.deepcopy(trace[0])
+    extra["kind"] = kind
+    trace.insert(1, extra)
+    ok, reasons = P.evaluate("offer-reject", renumber(trace))
+    assert not ok
+    assert any("unaccepted event kind" in reason for reason in reasons), reasons
+
+
+PASS = "RESULT: PASS trade-service-probe offer-reject (0 checks failed) frame 200"
+
+
+def runner(tmp_path, monkeypatch, text=PASS, elapsed=1, defect=None):
+    """Exercise main's verdict on real oracle traces, replacing only emulator I/O."""
+    path = provenance(tmp_path)
+    sym = path.parent / "polished_slink.sym"
+    sym.write_text("".join(f"{s['bank']:02x}:{s['addr']:04x} {name}\n" for name, s in SITES.items()),
+                   encoding="utf-8")
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["symbols"] = {sym.name: hashlib.sha256(sym.read_bytes()).hexdigest()}
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    fixture = tmp_path / "qualified.SaveRAM"
+    fixture.write_bytes(b"qualified synthetic fixture")
+    work, launches = tmp_path / "lanes", []
+    original_plan = P.plan
+    original_spec = importlib.util.spec_from_file_location
+    monkeypatch.setattr(P, "REPO", tmp_path)
+    monkeypatch.setattr(P, "WORK", work)
+    monkeypatch.setattr(P, "FIXTURE", fixture)
+    monkeypatch.setattr(P, "FIXTURE_SHA256_PREFIX", hashlib.sha256(fixture.read_bytes()).hexdigest())
+    monkeypatch.setattr(P, "EXTRA_SYMBOLS", ())
+    monkeypatch.setattr(P, "plan", lambda args: original_plan(args, repo=tmp_path, work=work))
+    monkeypatch.setattr(P, "stage", lambda lane, _: (lane / "rom.gbc", "2" * 40))
+    times = iter([100, 100 + elapsed] * 10)
+    monkeypatch.setattr(P, "time", SimpleNamespace(monotonic=lambda: next(times)), raising=False)
+    for key in ("POL_LANE", "POL_KIND", "POL_FIXTURE"):
+        monkeypatch.setenv(key, "before-test")
+
+    def launch(_lua, run, env, _timeout):
+        run.mkdir(parents=True, exist_ok=True)
+        trace = good_trace(env["POL_CASE"])
+        if defect is not None:
+            trace = defect(trace)
+        (run / "trace.json").write_text(json.dumps(trace), encoding="utf-8")
+        (run / "result.txt").write_text(text, encoding="utf-8")
+        launches.append(run)
+        return text, 4321
+
+    class Loader(importlib.abc.Loader):
+        def create_module(self, _spec):
+            return None
+
+        def exec_module(self, module):
+            module.SYMBOLS = ()
+            module.SRAM = Path(os.environ["POL_LANE"]) / "sram"
+            module.SAVE_NAME = "probe.SaveRAM"
+            module.launch = launch
+
+    def harness_spec(name, file, *args, **kwargs):
+        if name == "polished_service_probe_harness":
+            return importlib.util.spec_from_loader(name, Loader())
+        return original_spec(name, file, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "spec_from_file_location", harness_spec)
+    return work, launches
+
+
+@pytest.mark.parametrize("text", [
+    PASS.replace("offer-reject", "cancel-menu"),
+    PASS.replace("offer-reject", "offer-reject-extra"),
+    "RESULT: PASS trade-service-probe",
+    PASS + "\nRESULT: FAIL aborted (1 checks failed) frame 201",
+    "RESULT: FAIL aborted (1 checks failed) frame 199\n" + PASS,
+    PASS + "\n" + PASS,
+    PASS + "\n" + PASS.replace("offer-reject", "cancel-menu"),
+    PASS.replace("(0 checks failed)", "(1 checks failed)"),
+], ids=["other-case", "case-suffix", "bare", "pass-fail", "fail-pass", "duplicate", "other-pass", "checks"])
+def test_runner_rejects_ambiguous_or_contradictory_completion(tmp_path, monkeypatch, text):
+    _, launches = runner(tmp_path, monkeypatch, text=text)
+    assert P.main(["--case", "offer-reject", "--timeout", "12"]) == 1
+    result = json.loads((launches[0] / "oracle.json").read_text(encoding="utf-8"))
+    assert any("completion marker" in reason for reason in result["reasons"])
+
+
+@pytest.mark.parametrize("elapsed", [12, 13], ids=["at-deadline", "late"])
+def test_runner_rejects_late_valid_completion_and_records_wall_time(tmp_path, monkeypatch, elapsed):
+    _, launches = runner(tmp_path, monkeypatch, elapsed=elapsed)
+    assert P.main(["--case", "offer-reject", "--timeout", "12"]) == 1
+    result = json.loads((launches[0] / "oracle.json").read_text(encoding="utf-8"))
+    assert result["elapsed_seconds"] == elapsed
+    assert result["deadline_seconds"] == 12
+    assert result["deadline_met"] is False
+    assert any("wall-clock deadline" in reason for reason in result["reasons"])
+
+
+@pytest.mark.parametrize("defect,expected", [
+    (None, 0), (lambda trace: mutate(trace, "final", party_sum="deadbeef"), 1),
+], ids=["good", "bad-trace"])
+def test_runner_requires_both_exact_completion_and_valid_trace(tmp_path, monkeypatch, defect, expected):
+    _, launches = runner(tmp_path, monkeypatch, defect=defect)
+    assert P.main(["--case", "offer-reject", "--timeout", "12"]) == expected
+    result = json.loads((launches[0] / "oracle.json").read_text(encoding="utf-8"))
+    assert result["elapsed_seconds"] == 1
+    assert result["deadline_seconds"] == 12
+    assert result["deadline_met"] is True
+
+
+def old_evidence(case_lane):
+    saved = {}
+    for directory in ("probe", "attempt-0001/probe"):
+        for name in ("result.txt", "trace.json", "oracle.json"):
+            path = case_lane / directory / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            saved[path] = f"old {directory}/{name}".encode()
+            path.write_bytes(saved[path])
+    return saved
+
+
+@pytest.mark.parametrize("text,expected", [(PASS, 0), ("RESULT: FAIL aborted", 1)],
+                         ids=["pass", "fail"])
+def test_repeated_attempts_keep_every_previous_evidence_file(tmp_path, monkeypatch, text, expected):
+    work, launches = runner(tmp_path, monkeypatch, text=text)
+    saved = old_evidence(work / "offer-reject")
+    assert P.main(["--case", "offer-reject", "--timeout", "12"]) == expected
+    first_verdict = (launches[0] / "oracle.json").read_bytes()
+    assert P.main(["--case", "offer-reject", "--timeout", "12"]) == expected
+    assert launches[0] != launches[1]
+    assert (launches[0] / "oracle.json").read_bytes() == first_verdict
+    for run in launches:
+        assert work.resolve() in run.resolve().parents
+        assert run.parent.parent == work / "offer-reject"
+        verdict = json.loads((run / "oracle.json").read_text(encoding="utf-8"))
+        assert Path(verdict["lane"]) == run.parent
+    assert {path: path.read_bytes() for path in saved} == saved
+
+
+def test_preparation_failure_keeps_previous_attempt_and_legacy_evidence(tmp_path, monkeypatch):
+    work, _ = runner(tmp_path, monkeypatch)
+    saved = old_evidence(work / "offer-reject")
+
+    def refuse(_lane, _plan):
+        raise ValueError("bad staging input")
+
+    monkeypatch.setattr(P, "stage", refuse)
+    with pytest.raises(ValueError, match="bad staging input"):
+        P.main(["--case", "offer-reject"])
+    assert {path: path.read_bytes() for path in saved} == saved
+
+
+def test_dry_run_reports_unallocated_attempt_and_preserves_existing_tree(tmp_path, monkeypatch, capsys):
+    work, launches = runner(tmp_path, monkeypatch)
+    saved = old_evidence(work / "offer-reject")
+    before = sorted(path.relative_to(work) for path in work.rglob("*"))
+    assert P.main(["--case", "offer-reject", "--dry-run"]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["lane"] is None
+    assert Path(printed["case_lane"]) == work / "offer-reject"
+    assert sorted(path.relative_to(work) for path in work.rglob("*")) == before
+    assert {path: path.read_bytes() for path in saved} == saved
+    assert launches == []
+
+
+def test_attempt_lane_cannot_follow_case_link_outside_work(tmp_path, monkeypatch):
+    work, launches = runner(tmp_path, monkeypatch)
+    work.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    marker = outside / "evidence.txt"
+    marker.write_bytes(b"keep outside evidence")
+    try:
+        (work / "offer-reject").symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks unavailable")
+    with pytest.raises(ValueError, match="outside"):
+        P.main(["--case", "offer-reject"])
+    assert marker.read_bytes() == b"keep outside evidence"
+    assert sorted(outside.iterdir()) == [marker]
+    assert launches == []
