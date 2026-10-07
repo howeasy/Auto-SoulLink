@@ -353,9 +353,9 @@ def test_two_pair_production_shaped_rebuild_keeps_the_other_key_until_its_own_ac
 
 def tick_without_party():
     """RED: remove ONLY the party field of the client's tick; hello and the executor are unchanged."""
-    old = ('        send(event or "tick", {\n'
+    old = ('        local sent = send(event or "tick", {\n'
            '            party = party, has_pokeballs = self.has_pokeballs, ball_count = ball_count(),\n')
-    new = ('        send(event or "tick", {\n'
+    new = ('        local sent = send(event or "tick", {\n'
            '            has_pokeballs = self.has_pokeballs, ball_count = ball_count(),\n')
     assert CLIENT.count(old) == 1, "mutant tick-payload anchor moved"
     return CLIENT.replace(old, new)
