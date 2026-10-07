@@ -53,6 +53,7 @@ class Binder:
         clock=None,
         profile=None,
         dev=True,
+        test_hooks=False,
         mutation=None,
         validation="built",
     ):
@@ -82,6 +83,7 @@ class Binder:
             {
                 "profile": copy.deepcopy(profile or PROFILE),
                 "dev": dev,
+                "test_hooks": test_hooks,
                 "validation": None if validation == "built" else validation,
             },
             recursive=True,
@@ -215,13 +217,15 @@ def test_generation_wrap(env, gen):
 
 @pytest.mark.parametrize("name", ["party", "ot", "nickname"], ids=["party", "ot", "nick"])
 def test_snapshot_permit_refuses_before_first_byte(env, name):
-    b = Binder(env)
-    w = b.api.writes
-    w.arm()
+    b = Binder(env, test_hooks=True)
+    b.accepted()
+    b.frame += 1
+    before = list(b.writes)
+    w = b.api.test_hooks
     addr = PROFILE["overlay"]["trade"]["snapshot"][name]["addr"]
     with pytest.raises(Exception, match="outside domain bounds"):
         w.write_bytes(w, addr, b.lua.table_from([17]))
-    assert not b.writes
+    assert b.writes == before
 
 
 def real_run(env, mutation=None, gen0=0x10):
@@ -280,17 +284,20 @@ def test_gap_mutant_real_service_closes_without_done(env):
 def test_snapshot_allowlist_mutant_caught(env):
     b = Binder(
         env,
+        test_hooks=True,
         mutation=(
             "for _,s in ipairs(protected) do all[#all+1]=s end",
             "for _,s in ipairs(protected) do all[#all+1]=s; spans[#spans+1]=s end",
         ),
     )
-    w = b.api.writes
-    w.arm()
+    b.accepted()
+    b.frame += 1
+    before = list(b.writes)
+    w = b.api.test_hooks
     addr = PROFILE["overlay"]["trade"]["snapshot"]["party"]["addr"]
     w.write_bytes(w, addr, b.lua.table_from([17]))
     with pytest.raises(AssertionError):
-        assert not b.writes
+        assert b.writes == before
 
 
 def test_staging_span_mutant_caught(env):
@@ -623,3 +630,285 @@ def test_all_future_capabilities_still_do_not_advertise(env):
     assert b.call("advertised") is False
     b = Binder(env, profile=profile, dev=False)
     assert b.api is None and "disabled" in b.error
+
+
+def diagnostic_write(b, addr, values):
+    hooks = b.api.test_hooks
+    assert hooks is not None, "explicit dev test hooks required"
+    return hooks.write_bytes(hooks, addr, b.lua.table_from(values))
+
+
+def test_test_hooks_are_explicit_and_refused_without_dev(env):
+    b = Binder(env)
+    assert b.api.test_hooks is None and b.api.writes is None
+    disabled = Binder(env, dev=False, test_hooks=True)
+    assert disabled.api is None and "disabled" in disabled.error
+    assert not disabled.writes
+
+
+def test_raw_writer_cannot_bypass_same_frame_offer_real_service(env):
+    rig = svc.Rig(env)
+    observed = {}
+
+    def host(h):
+        b = Binder(env, machine=h.m, clock=lambda: rig.frame, test_hooks=True)
+        observed["binder"] = b
+        while not b.call("poll_query"):
+            yield
+        q = b.call("poll_query")
+        assert b.call("answer_query", q.gen, 4, list(svc.TOKEN)) is True
+        while not b.call("poll_offer"):
+            yield
+        o = b.call("poll_offer")
+        assert b.call("answer_offer", o.gen, True) is True
+        before = list(b.writes)
+        # Exercise the old exploit if a raw writer ever leaks again.
+        legacy = b.api.writes
+        if legacy is not None:
+            legacy.arm()
+            legacy.write_bytes(legacy, rig.lease + 5, b.lua.table_from([5, (o.gen + 1) % 256]))
+        assert b.writes == before
+        blocked = diagnostic_write(b, rig.lease + 5, [5, (o.gen + 1) % 256])
+        assert blocked[1:] == ("PENDING", "OFFER frame gap required")
+        assert b.writes == before
+        yield
+        gen = b.apply()
+        assert isinstance(gen, int)
+        while not b.call("poll_done"):
+            yield
+        assert b.call("poll_done").disposition == "NOT_PERFORMED"
+        assert b.call("release", gen) is True
+
+    run = rig.run(host)
+    svc.common(rig, run, "QOADC")
+    assert svc.snapshot_matches(rig, run)
+    assert observed["binder"].call("disposition")[0] == "NOT_PERFORMED"
+
+
+def test_diagnostic_requires_accepted_offer_and_consumes_one_attempt(env):
+    b = Binder(env, test_hooks=True)
+    addr = PROFILE["overlay"]["trade"]["staging"]["party"]["addr"]
+    assert diagnostic_write(b, addr, [17])[1] == "PENDING"
+    assert not b.writes
+    b.accepted()
+    before = list(b.writes)
+    assert diagnostic_write(b, addr, [17])[1:] == ("PENDING", "OFFER frame gap required")
+    assert b.writes == before
+    b.frame += 1
+    assert diagnostic_write(b, addr, [17]) is True
+    assert b.read(addr) == 17
+    after = list(b.writes)
+    assert diagnostic_write(b, addr, [18])[1] == "PENDING"
+    assert b.apply()[1] == "PENDING"
+    assert b.writes == after
+
+
+@pytest.mark.parametrize("path", ["query", "offer", "apply", "release", "diagnostic"],
+                         ids=["query", "offer", "apply", "release", "diag"])
+def test_partial_diagnostic_exception_poisons_every_write_path_and_reset(env, path):
+    b = Binder(env, test_hooks=True)
+    b.accepted()
+    b.frame += 1
+    addr = PROFILE["overlay"]["trade"]["staging"]["party"]["addr"]
+    b.fail_at = len(b.writes) + 2
+    with pytest.raises(Exception, match="injected write failure"):
+        diagnostic_write(b, addr, [17, 18])
+    assert b.read(addr) == 17
+    state, reason = b.call("disposition")
+    assert state == "UNCERTAIN" and "injected write failure" in reason
+    before = list(b.writes)
+    b.fail_at = None
+    actions = {
+        "query": lambda: b.call("answer_query", 42, 4, list(svc.TOKEN)),
+        "offer": lambda: b.call("answer_offer", 43, True),
+        "apply": b.apply,
+        "release": lambda: b.call("release", 44),
+        "diagnostic": lambda: diagnostic_write(b, addr, [19]),
+    }
+    assert actions[path]()[1:] == ("UNCERTAIN", reason)
+    assert b.writes == before
+    assert b.call("poll_query") is None and b.call("poll_offer") is None
+    lease = PROFILE["overlay"]["trade"]["lease"]
+    b.put(lease["base"] + lease["fields"]["command"], 0)
+    assert b.call("closed") is True
+    assert b.call("reset")[1] == "UNCERTAIN"
+    assert b.call("disposition") == ("UNCERTAIN", reason)
+    assert b.writes == before
+
+
+@pytest.mark.parametrize("publication,events", [
+    ("query", "QC"), ("offer", "QOC"), ("apply", "QOC"), ("release", "QOADC"),
+], ids=["query-ack", "offer-ack", "apply-gen", "release"])
+def test_silently_dropped_lease_publication_is_uncertain_real_service(env, publication, events):
+    rig = svc.Rig(env)
+    observed = {}
+
+    def host(h):
+        b = Binder(env, machine=h.m, clock=lambda: rig.frame)
+        observed["binder"] = b
+
+        def refuse_success(callback, offset, wanted):
+            address = rig.lease + offset
+            old = b.read(address)
+            assert old != wanted
+
+            def drop(a, value):
+                if (a, value) != (address, wanted):
+                    b.write(a, value)
+
+            b.lua.globals().pywrite = drop
+            result = callback()
+            assert result[0] is None and result[1] == "UNCERTAIN"
+            expected = f"lease readback mismatch at ${address:04X}: expected ${wanted:02X}, observed ${old:02X}"
+            assert expected in result[2]
+            assert b.call("disposition") == ("UNCERTAIN", result[2])
+            observed["reason"] = result[2]
+            b.lua.globals().pywrite = b.write
+
+        while not b.call("poll_query"):
+            yield
+        q = b.call("poll_query")
+        if publication == "query":
+            refuse_success(lambda: b.call("answer_query", q.gen, 4, list(svc.TOKEN)), 7, q.gen)
+            return
+        assert b.call("answer_query", q.gen, 4, list(svc.TOKEN)) is True
+        while not b.call("poll_offer"):
+            yield
+        o = b.call("poll_offer")
+        if publication == "offer":
+            refuse_success(lambda: b.call("answer_offer", o.gen, True), 7, o.gen)
+            return
+        assert b.call("answer_offer", o.gen, True) is True
+        yield
+        if publication == "apply":
+            refuse_success(b.apply, 6, (o.gen + 1) % 256)
+            return
+        gen = b.apply()
+        assert isinstance(gen, int)
+        while not b.call("poll_done"):
+            yield
+        assert b.call("poll_done").disposition == "NOT_PERFORMED"
+        refuse_success(lambda: b.call("release", gen), 5, 8)
+
+    run = rig.run(host)
+    svc.common(rig, run, events)
+    if publication != "query":
+        assert svc.snapshot_matches(rig, run)
+    b, reason = observed["binder"], observed["reason"]
+    assert b.call("closed") is True
+    assert b.call("poll_done").disposition == "UNCERTAIN"
+    assert b.call("reset")[1:] == ("UNCERTAIN", reason)
+    before = list(b.writes)
+    assert b.apply()[1:] == ("UNCERTAIN", reason)
+    assert b.writes == before
+
+
+def test_query_ack_readback_also_verifies_previously_written_payload(env):
+    b = Binder(env)
+    b.frame_image("QUERY")
+    lease = PROFILE["overlay"]["trade"]["lease"]
+    base, fields = lease["base"], lease["fields"]
+
+    def corrupt(a, value):
+        b.write(a, value)
+        if a == base + fields["ack"]:
+            b.put(base + fields["available"], 0)
+
+    b.lua.globals().pywrite = corrupt
+    result = b.call("answer_query", 42, 4, list(svc.TOKEN))
+    assert result[0] is None and result[1] == "UNCERTAIN"
+    assert (f"at ${base + fields['available']:04X}: expected $01, observed $00") in result[2]
+    assert b.call("disposition") == ("UNCERTAIN", result[2])
+
+
+@pytest.mark.parametrize("unexpected", [0, 2, 3, 4], ids=["zero", "two", "three", "bad-byte"])
+def test_unexpected_done_cannot_be_erased_by_result_one_real_service(env, unexpected):
+    rig = svc.Rig(env)
+    observed = {}
+    commands = PROFILE["overlay"]["trade"]["commands"]
+
+    def host(h):
+        b = Binder(env, machine=h.m, clock=lambda: rig.frame, test_hooks=True)
+        observed["binder"] = b
+        while not b.call("poll_query"):
+            yield
+        q = b.call("poll_query")
+        assert b.call("answer_query", q.gen, 4, list(svc.TOKEN)) is True
+        while not b.call("poll_offer"):
+            yield
+        o = b.call("poll_offer")
+        assert b.call("answer_offer", o.gen, True) is True
+        yield
+        gen = b.apply()
+        assert isinstance(gen, int)
+        while not h.header(commands["DONE"]):
+            yield
+        assert h.rd(6) == h.rd(7) == gen
+        h.wr(8, unexpected)  # Fault injection on a real, matching native DONE.
+        done = b.call("poll_done")
+        assert done.result == unexpected and done.disposition == "UNCERTAIN"
+        reason = done.reason
+        observed["reason"] = reason
+        before = list(b.writes)
+        h.wr(8, 1)
+        assert b.call("poll_done").disposition == "UNCERTAIN"
+        assert b.call("disposition") == ("UNCERTAIN", reason)
+        assert b.call("release", gen)[1:] == ("UNCERTAIN", reason)
+        assert b.call("reset")[1:] == ("UNCERTAIN", reason)
+        addr = PROFILE["overlay"]["trade"]["staging"]["party"]["addr"]
+        assert diagnostic_write(b, addr, [17])[1:] == ("UNCERTAIN", reason)
+        assert b.writes == before
+        # No RELEASE: let the actual service's bounded hold close its lease.
+
+    run = rig.run(host)
+    svc.common(rig, run, "QOADC")
+    assert svc.snapshot_matches(rig, run)
+    b, reason = observed["binder"], observed["reason"]
+    assert b.call("closed") is True
+    assert b.call("poll_done").disposition == "UNCERTAIN"
+    assert b.call("release", (rig.gen0 + 3) % 256)[1:] == ("UNCERTAIN", reason)
+    assert b.call("reset")[1:] == ("UNCERTAIN", reason)
+    assert b.call("disposition") == ("UNCERTAIN", reason)
+
+
+def test_foreign_bad_done_result_does_not_poison_current_visit(env):
+    b = Binder(env)
+    b.accepted()
+    b.frame += 1
+    gen = b.apply()
+    lease = PROFILE["overlay"]["trade"]["lease"]
+    b.frame_image("DONE", gen=(gen + 1) % 256, ack=(gen + 1) % 256)
+    b.put(lease["base"] + lease["fields"]["result"], 4)
+    assert b.call("poll_done") is None
+    assert b.call("disposition")[0] == "PENDING"
+    b.frame_image("DONE", gen=gen, ack=gen)
+    b.put(lease["base"] + lease["fields"]["result"], 1)
+    assert b.call("poll_done").disposition == "NOT_PERFORMED"
+    assert b.call("release", gen) is True
+    b.put(lease["base"] + lease["fields"]["command"], 0)
+    assert b.call("reset") is True
+
+
+def test_silently_partial_diagnostic_write_poisons_visit(env):
+    b = Binder(env, test_hooks=True)
+    b.accepted()
+    b.frame += 1
+    addr = PROFILE["overlay"]["trade"]["staging"]["party"]["addr"]
+
+    def drop_second(address, value):
+        if address != addr + 1:
+            b.write(address, value)
+
+    b.lua.globals().pywrite = drop_second
+    with pytest.raises(Exception, match="readback mismatch"):
+        diagnostic_write(b, addr, [17, 18])
+    assert b.read(addr) == 17 and b.read(addr + 1) != 18
+    disposition, reason = b.call("disposition")
+    assert disposition == "UNCERTAIN"
+    before = list(b.writes)
+    b.lua.globals().pywrite = b.write
+    assert b.apply()[1:] == ("UNCERTAIN", reason)
+    lease = PROFILE["overlay"]["trade"]["lease"]
+    b.put(lease["base"] + lease["fields"]["command"], 0)
+    assert b.call("reset")[1:] == ("UNCERTAIN", reason)
+    assert b.writes == before

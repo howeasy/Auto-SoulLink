@@ -157,7 +157,19 @@ end
 -- SlinkTradeValidateIncomingStaged, which remains the native acceptance authority.
 -- No server events are emitted. disposition() returns PENDING / NOT_PERFORMED /
 -- UNCERTAIN plus a reason. A write exception latches UNCERTAIN; do not retry it.
+-- Every lease publication is read back before success, including its last ACK/
+-- generation byte. A mismatch records the exact address/expected/observed bytes
+-- and poisons the visit just like an attempted write exception.
 -- reset() starts another visit only after a closed, proved NOT_PERFORMED visit.
+-- Any matching DONE result other than 1 irreversibly poisons this visit, even
+-- if a later frame says result 1 or the native service closes the lease.
+-- T.writes is deliberately absent; write_log contains diagnostic receipts only.
+-- Tests may opt into spec.test_hooks=true (still requires spec.dev=true).
+-- T.test_hooks:write_bytes(addr,bytes) shares APPLY's accepted-offer, frame-gap,
+-- lease-identity, attempted and poison checks. Any emission consumes the attempt.
+-- Guard refusals return nil/disposition/reason; scoped write exceptions rethrow
+-- only after permit cleanup and the same partial-emission poison latch.
+-- Diagnostic bytes are also read back; silent partial writes poison the visit.
 local function integer(n) return type(n) == "number" and n % 1 == 0 end
 local function clone(t)
     if type(t) ~= "table" then return t end
@@ -274,7 +286,7 @@ function PT.compose(spec)
         local function window(a,n)
             for _,s in ipairs(spans) do if a >= s.addr and a+n <= s.addr+s.size then return s end end
         end
-        local emitted, poisoned = 0, nil
+        local emitted, poisoned, lease_written = 0, nil, nil
         local permit = Permit.new({write_u8=function(a,b,dom)
             emitted=emitted+1; return io.write_u8(a,b,dom)
         end, domains={['System Bus']={
@@ -283,7 +295,33 @@ function PT.compose(spec)
             pointer_stable=function() return true end,
         }}, lifetime={capture=frame,valid=function(token) return token == frame() end},
         provenance=function(dom,a,n,why) return {domain=dom,addr=a,n=n,why=why,frame=frame()} end})
-        local writes = {write_bytes=function(_,a,b) return permit:write_bytes('System Bus',a,b) end}
+        local writes = {write_bytes=function(_,a,b)
+            assert(lease_written, 'lease write outside binder scope')
+            -- Retain each publication's final value at every written lease
+            -- address; APPLY overwrites its preimage generation LAST.
+            for i=1,#b do
+                local address=a+i-1
+                if address >= l.base and address < l.base+l.size then lease_written[address-l.base+1]=b[i] end
+            end
+            return permit:write_bytes('System Bus',a,b)
+        end}
+        local function verify_lease(expected)
+            for offset=0,l.size-1 do
+                local address=l.base+offset
+                local wanted=expected[offset+1]
+                if wanted ~= nil then
+                    local ok,observed=pcall(io.read_u8,address)
+                    if not ok or observed ~= wanted then
+                        local text=ok and tostring(observed) or ('unreadable: '..tostring(observed))
+                        if ok and integer(observed) and observed >= 0 and observed <= 255 then
+                            text=string.format('$%02X',observed)
+                        end
+                        error(string.format('lease readback mismatch at $%04X: expected $%02X, observed %s',
+                                            address,wanted,text),0)
+                    end
+                end
+            end
+        end
         local function text(bytes, first, n)
             for i=first,first+n-1 do
                 if bytes[i] == p.overlay.panel.terminator then return true end
@@ -326,7 +364,14 @@ function PT.compose(spec)
         local function scoped(fn,...)
             if poisoned then return nil,'UNCERTAIN',poisoned end
             local before=emitted
-            local out=table.pack(pcall(function(...) return permit:scope('trade',nil,fn,...) end,...))
+            local expected={}
+            lease_written=expected
+            local out=table.pack(pcall(function(...)
+                local result=table.pack(permit:scope('trade',nil,fn,...))
+                verify_lease(expected) -- all written fields, not just the publication byte
+                return table.unpack(result,1,result.n)
+            end,...))
+            lease_written=nil
             if not out[1] then
                 if emitted > before then poisoned=tostring(out[2]); return nil,'UNCERTAIN',poisoned end
                 return nil,'PENDING',tostring(out[2])
@@ -338,12 +383,14 @@ function PT.compose(spec)
         function T:poll_query() if not poisoned and not attempted then return raw:poll_query() end end
         function T:poll_offer() if not poisoned and not attempted then return raw:poll_offer() end end
         function T:answer_query(gen,mask,visit)
+            if poisoned then return nil,'UNCERTAIN',poisoned end
             if attempted then return nil,'PENDING','APPLY already attempted' end
             local yes,a,b=scoped(raw.answer_query,raw,gen,mask,visit)
             if yes then token=clone(visit); offered=nil; answered_at=nil; disposition=nil; reason=nil; return yes end
             return yes,a,b
         end
         function T:answer_offer(gen,accept)
+            if poisoned then return nil,'UNCERTAIN',poisoned end
             if attempted or offered then return nil,'PENDING','OFFER already answered' end
             local offer=raw:poll_offer()
             local yes,a,b=scoped(raw.answer_offer,raw,gen,accept)
@@ -354,7 +401,7 @@ function PT.compose(spec)
             end
             return yes,a,b
         end
-        function T:arm(command,slot,visit,payload)
+        local function apply_ready(command,slot,visit)
             if poisoned then return nil,'UNCERTAIN',poisoned end
             if command ~= t.commands.APPLY then return nil,'PENDING','proposer APPLY only' end
             if attempted or not offered or not offered.accepted then return nil,'PENDING','accepted OFFER required' end
@@ -368,20 +415,48 @@ function PT.compose(spec)
             if bytes[l.fields.version+1] ~= l.version or bytes[l.fields.command+1] ~= t.commands.OFFER or
                bytes[l.fields.generation+1] ~= offered.gen or bytes[l.fields.ack+1] ~= offered.gen or
                bytes[l.fields.slot+1] ~= slot or bytes[l.fields.result+1] ~= 0 then return nil,'PENDING','offer lease changed' end
+            return true
+        end
+        function T:arm(command,slot,visit,payload)
+            local ready,a,b=apply_ready(command,slot,visit)
+            if not ready then return nil,a,b end
             local gen,a,b=scoped(raw.arm,raw,command,slot,clone(visit),clone(payload))
             if gen then attempted=true; return gen end
             return gen,a,b
         end
+        local function matching_done_result()
+            -- Preserve the shared helper's header/gen/ACK/slot/token binding,
+            -- but do not ignore an out-of-enum result and later accept result 1.
+            local expected=raw.expected
+            if not expected then return nil end
+            local bytes=io.read_range(l.base,l.size)
+            if not Lease.valid_bytes(bytes,l.size) then return nil end
+            for i=1,5 do if bytes[i] ~= expected[i] then return nil end end
+            local generation=expected[l.fields.generation+1]
+            if bytes[l.fields.command+1] ~= t.commands.DONE or
+               bytes[l.fields.generation+1] ~= generation or bytes[l.fields.ack+1] ~= generation or
+               bytes[l.fields.slot+1] ~= expected[l.fields.slot+1] then return nil end
+            for i=1,4 do if bytes[l.fields.token+i] ~= expected[l.fields.token+i] then return nil end end
+            return bytes[l.fields.result+1]
+        end
         function T:poll_done()
             if poisoned then return {disposition='UNCERTAIN',reason=poisoned} end
-            local done=raw:poll_done(); if not done then return nil end
-            disposition=done.result == 1 and 'NOT_PERFORMED' or 'UNCERTAIN'
-            reason=done.result == 1 and 'commit disabled' or 'unexpected DONE result'
-            return {result=done.result,disposition=disposition,reason=reason}
+            local result=matching_done_result(); if result == nil then return nil end
+            raw.phase='done'
+            if result ~= 1 then
+                poisoned='unexpected DONE result '..tostring(result)
+                disposition,reason='UNCERTAIN',poisoned
+            else
+                disposition,reason='NOT_PERFORMED','commit disabled'
+            end
+            return {result=result,disposition=disposition,reason=reason}
         end
         function T:release(gen)
+            if poisoned then return nil,'UNCERTAIN',poisoned end
             local done=self:poll_done()
-            if not done or done.disposition ~= 'NOT_PERFORMED' then return nil,'UNCERTAIN','not a safe DONE' end
+            if not done or done.disposition ~= 'NOT_PERFORMED' then
+                return nil,'UNCERTAIN',poisoned or 'not a safe DONE'
+            end
             return scoped(raw.release,raw,gen)
         end
         function T:closed() return io.read_u8(l.base+l.fields.command) == 0 end
@@ -392,7 +467,8 @@ function PT.compose(spec)
             return 'PENDING','awaiting native service'
         end
         function T:reset()
-            if poisoned or (attempted and disposition ~= 'NOT_PERFORMED') then
+            if poisoned then return nil,'UNCERTAIN',poisoned end
+            if attempted and disposition ~= 'NOT_PERFORMED' then
                 return nil,'UNCERTAIN','unsettled visit cannot reset'
             end
             if not self:closed() then return nil,'PENDING','lease must close before reset' end
@@ -400,9 +476,29 @@ function PT.compose(spec)
             raw.expected,raw.phase,raw.visit_token,raw.entry_observed=nil,nil,nil,false
             return true
         end
-        -- Diagnostic permit seam: callers cannot widen the scope or obtain raw IO.
-        T.writes={arm=function() permit:arm('trade') end,disarm=function() permit:disarm() end,
-                  write_bytes=writes.write_bytes,log=permit.log}
+        if spec.test_hooks == true then
+            T.test_hooks={write_bytes=function(_,a,bytes)
+                local ready,kind,why=apply_ready(t.commands.APPLY,offered and offered.slot,token)
+                if not ready then return nil,kind,why end
+                local before=emitted
+                local yes,disposition,reason=scoped(function()
+                    local stable=clone(bytes)
+                    writes:write_bytes(a,stable)
+                    local observed=io.read_range(a,#stable)
+                    assert(Lease.valid_bytes(observed,#stable), 'diagnostic readback malformed')
+                    for i=1,#stable do
+                        if observed[i] ~= stable[i] then
+                            error(string.format('diagnostic readback mismatch at $%04X: expected $%02X, observed $%02X',
+                                                a+i-1,stable[i],observed[i]),0)
+                        end
+                    end
+                    return true
+                end)
+                if emitted > before then attempted=true end
+                if not yes then error(reason or disposition,0) end
+                return true
+            end}
+        end
         return T
     end)
     if not ok then return nil, tostring(result) end
