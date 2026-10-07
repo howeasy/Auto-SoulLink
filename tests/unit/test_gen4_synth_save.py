@@ -1210,9 +1210,12 @@ def test_the_place_docstring_explains_the_five_locations_and_warp_id():
 def test_lead12_independent_title_literals(title, profile, filename, species, hp, stats):
     from tools import gen4_pins
 
+    rom = gen4_pins.default_locations().roms[title]
+    if not rom.exists():
+        pytest.skip(f"absent input: {rom}")
     source = (SAVES / filename).read_bytes()
     out, _ = synth.build_lead_level(
-        source, profile, gen4_pins.default_locations().roms[title], 12, title=title
+        source, profile, rom, 12, title=title
     )
     mon = codec.parse_save(out, profile).party()[0]
     assert (mon["species"], mon["level"], mon["exp"], mon["hp"], mon["max_hp"], mon["stats"]) == (
@@ -1229,6 +1232,9 @@ def test_lead12_independent_title_literals(title, profile, filename, species, hp
 def test_hge_override_low_bit_refused():
     from tools import gen4_pins
 
+    rom = gen4_pins.default_locations().roms["heartgold_hge"]
+    if not rom.exists():
+        pytest.skip(f"absent input: {rom}")
     source = _owner("hge")
     p = codec.PROFILES["hge"]
 
@@ -1244,7 +1250,7 @@ def test_hge_override_low_bit_refused():
         synth.build_lead_level(
             bad,
             "hge",
-            gen4_pins.default_locations().roms["heartgold_hge"],
+            rom,
             12,
             title="heartgold_hge",
         )

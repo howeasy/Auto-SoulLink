@@ -70,10 +70,17 @@ def run_tool(mod, argv: list[str], monkeypatch, capsys) -> tuple[int, str]:
 # ── --check mode: regenerate in memory, diff vs committed ────────────────────────────────────────
 
 
+def _skip_absent_rom(rc: int, err: str) -> None:
+    absent = re.fullmatch(r"OPEN: absent input (?:heartgold|heartgold_hge): (.+)\n?", err)
+    if rc == 2 and absent:
+        pytest.skip(f"absent input: {absent[1]}")
+
+
 @pytest.mark.parametrize("tool", sorted(TOOLS))
 def test_check_mode_matches_committed(tool, clone, monkeypatch, capsys):
     mod, files = TOOLS[tool]
     rc, err = run_tool(mod, ["--check", "--pret", str(clone)], monkeypatch, capsys)
+    _skip_absent_rom(rc, err)
     assert rc == 0, f"{tool} drifted from the committed JSON: {err}"
 
 
@@ -88,6 +95,7 @@ def test_check_mode_detects_drift(tool, clone, monkeypatch, capsys, tmp_path):
     text = victim.read_text(encoding="utf-8")
     victim.write_text(text.replace('"commit": "' + PIN, '"commit": "' + "0" * 40, 1), encoding="utf-8")
     rc, err = run_tool(mod, ["--check", "--pret", str(clone), "--out-dir", str(tmp_path)], monkeypatch, capsys)
+    _skip_absent_rom(rc, err)
     assert rc == 1 and "DRIFT" in err and files[0] in err
 
 
