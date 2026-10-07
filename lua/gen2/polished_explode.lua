@@ -262,6 +262,7 @@ function E.new(deps)
     function settlement.native()
         local ok, value = pcall(function()
             return {hp = wram("wBattleMonHP") * 256 + wram("wBattleMonHP", 1), order = wram("wWhichMonFaintedFirst"),
+                    status = wram("wBattleMonStatus"),
                     fainted = (wram("wPlayerSubStatus2") & 0x04) ~= 0}
         end)
         return ok and value or nil

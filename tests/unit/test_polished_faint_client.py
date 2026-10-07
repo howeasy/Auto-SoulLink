@@ -1,4 +1,4 @@
-"""F2a: the CLIENT settlement of a Polished active faint (docs/polished/PLAIN_FAINT_F2.md, lua/gen2/client.lua `settle`).
+"""F2b: fail-closed CLIENT settlement of a Polished active faint (lua/gen2/client.lua `settle`).
 
 Real composed Polished Rig (the overlay ROM, the real facade/permit/F1 writer, the real client), driven through the
 same hold callback the emulator uses. The opt-in interface is switched on with deps.polished_active_faint; every test
@@ -8,10 +8,11 @@ assertions, which must fail.
 Proved here (MODEL, no emulator, no physical evidence): obligation ownership, exactly-one-operation per hold token,
 Explosion-first with a witnessed-survival plain fallback, COMPLETE only after bound evidence, zero-write PENDING retention
 (battle and overworld), PARTIAL quarantine without retry, identity-change invalidation, central suppression of echoes and
-of dead_keys / lift re-introduction, and vanilla isolation (a differential against the pre-F2 client.lua, interface absent).
+of dead_keys / lift re-introduction, and Polished flag-off isolation (a differential against the pre-F2 client.lua).
 
-NOT proved: that the 0f:44c8 pre-copy site fires in a live battle, a post-copy witness (0f:44cd is a separate observer
-card), any server-side hold for PARTIAL (the protocol has none), native animation or save durability.
+The post-copy positive is injected MODEL evidence. No producer is composed; the existing 0f:44c8 pre-copy site
+cannot complete F1. NOT proved: a native post-copy witness (0f:44cd is a separate observer card), actual vanilla
+Crystal/Gold/Silver parity, any server-side PARTIAL hold, native animation or save durability.
 """
 from __future__ import annotations
 
@@ -39,13 +40,17 @@ HUD_NEW = ("local hud = {show=function(t) log.hud = log.hud or {} log.hud[#log.h
 DEPS_OLD = 'local deps = {root=ROOTDIR, title="polished", io=io, net=net, hud=hud, player="a", rom_size=#rom,'
 
 
-def build(*, interface=True, **kwargs):
+def build(*, interface=True, initial_identity_unavailable=False, **kwargs):
     """pf.setup() (an F1-ready battle image) over a harness that records HUD text and opts in to the interface."""
     harness = battle_rig.HARNESS_HOOKS
     assert harness.count(HUD_OLD) == 1 and harness.count(DEPS_OLD) == 1
     harness = harness.replace(HUD_OLD, HUD_NEW)
     if interface:
         harness = harness.replace(DEPS_OLD, DEPS_OLD + " polished_active_faint=true,")
+    if initial_identity_unavailable:
+        harness = harness.replace("function io.read_u8(a, d)",
+                                  "function io.read_u8(a, d)\n"
+                                  f"    if d ~= 'ROM' and a == {SYM['wPlayerID'][1]} and io.frame < 10 then return nil end\n")
     with patch.object(battle_rig, "HARNESS_HOOKS", harness):
         return pf.setup(**kwargs)
 
@@ -131,7 +136,36 @@ def lifecycle(overrides=None):
     observe(rig, generation=epoch - 1)                                    # a batch of another generation
     tick(rig)
     assert ob.obs_seq is None and ob.state == "awaiting", "an unbound observation was accepted"
-    observe(rig)                                                          # bound: slot, visit, epoch, HP 0
+    observe(rig)                                                          # pre-copy HP is still F1's own write
+    tick(rig)
+    assert ob.obs_seq is None and ob.state == "awaiting" and ko(rig) == []
+    assert not rig.client.dead_keys[key]
+    return rig
+
+
+def test_active_faint_awaits_then_completes_only_on_bound_evidence():
+    lifecycle()
+
+
+def witness(rig):
+    """Future observer contract, injected MODEL evidence, never claimed as a live native execution."""
+    ob = owner(rig)
+    attempt = ob.attempts[len(ob.attempts)]
+    return event(rig, kind="observation", site_id="battle_faint", phase="after_party_copyback",
+                 batch_generation=rig.client.epoch,
+                 capture={"identity": ob.identity, "generation": ob.gen, "epoch": attempt.epoch,
+                          "visit": attempt.visit, "key": ob.phys, "attempt_seq": attempt.seq,
+                          "seq": FS(rig).next_seq()},
+                 battle={"slot": attempt.slot, "hp": 0, "status": 0, "mode": 1, "link_mode": 0,
+                         "fainted": True})
+
+
+def completed_lifecycle(overrides=None):
+    rig = lifecycle(overrides)
+    ob, key = owner(rig), owner(rig).key
+    start = len(rig.writes())
+    rig.put("wPlayerSubStatus2", 4)                                       # injected native-FAINTED witness
+    rig.client.on_event(rig.client, witness(rig))
     assert ob.obs_seq is not None and ob.state == "awaiting"
     tick(rig)                                                             # a LATER party-bearing tick
     assert ob.state == "done" and owed(rig) == 1 and owner(rig).quiet and owner(rig).state == "pending"
@@ -144,20 +178,80 @@ def lifecycle(overrides=None):
     return rig
 
 
-def test_active_faint_awaits_then_completes_only_on_bound_evidence():
-    lifecycle()
+def test_injected_post_copy_native_witness_then_sent_tick_completes_once():
+    completed_lifecycle()
 
 
 @pytest.mark.parametrize("name,mutant", [
     ("tick-alone", mutate(("if a.kind == \"explode\" or (ob.obs_seq and seq > ob.obs_seq) then", "if true then"))),
     ("writer-return-is-a-ko", mutate(("ob.state, ob.kind, ob.scheduled = \"awaiting\", kind, false",
                                       "ob.state, ob.kind, ob.scheduled = \"awaiting\", kind, false\n            FS.complete(ob, mon)"))),
-    ("slot-unchecked", mutate(("b.slot == a.slot and", "true and"))),
-    ("generation-unchecked", mutate(("if ev.batch_generation ~= nil and ev.batch_generation ~= self.epoch then", "if false then"))),
 ])
 def test_red_control_witness_guards(name, mutant):
     with pytest.raises(AssertionError):
         lifecycle(mutant)
+
+
+WITNESS_GUARDS = [
+    ("phase", 'ev.phase == "after_party_copyback"'),
+    ("identity", "captured.identity == a.identity and captured.identity == ob.identity"),
+    ("generation", "captured.generation == ob.gen"),
+    ("epoch", "captured.epoch == a.epoch"),
+    ("visit", "captured.visit == a.visit"),
+    ("key", "captured.key == ob.phys"),
+    ("attempt_seq", "captured.attempt_seq == a.seq"),
+    ("old_seq", "captured.seq > a.seq"),
+    ("future_seq", "captured.seq <= FS.seq"),
+    ("slot", "b.slot == a.slot"),
+    ("hp", "b.hp == 0"),
+    ("status", "b.status == 0"),
+    ("link_mode", "b.link_mode == 0"),
+    ("fainted", "b.fainted == true"),
+    ("native_fainted", "native.fainted == true"),
+    ("native_hp", "native.hp == 0"),
+    ("native_status", "native.status == 0"),
+    ("batch", "if ev.batch_generation ~= self.epoch then"),
+]
+
+
+@pytest.mark.parametrize("bad,guard", WITNESS_GUARDS, ids=[p[0] for p in WITNESS_GUARDS])
+def test_post_copy_capture_binding_and_native_evidence_are_required(bad, guard):
+    def check(overrides=None):
+        rig, mons = build(overrides=overrides)
+        order(rig, "force_faint", mons)
+        at_hold(rig)
+        ob = owner(rig)
+        rig.put("wPlayerSubStatus2", 4)
+        ev = witness(rig)
+        if bad == "phase":
+            ev.phase = "before_party_copyback"
+        elif bad in ("identity", "key"):
+            ev.capture[bad] = "another-save-or-mon"
+        elif bad in ("generation", "epoch", "visit", "attempt_seq"):
+            ev.capture[bad] += 1
+        elif bad == "old_seq":
+            ev.capture.seq = ob.attempts[1].seq
+        elif bad == "future_seq":
+            ev.capture.seq = FS(rig).seq + 1
+        elif bad == "native_fainted":
+            rig.put("wPlayerSubStatus2", 0)
+        elif bad == "native_hp":
+            rig.put("wBattleMonHP", 1, 1)
+        elif bad == "native_status":
+            rig.put("wBattleMonStatus", 8)
+        elif bad == "batch":
+            ev.batch_generation -= 1
+        else:
+            ev.battle[bad] = False if bad == "fainted" else 1
+        before = FS(rig).seq
+        rig.client.on_event(rig.client, ev)
+        assert FS(rig).seq == before, "draining an observation minted fresh capture evidence"
+        tick(rig)
+        assert ob.state == "awaiting" and ob.obs_seq is None and ko(rig) == []
+    check()
+    replacement = "if false then" if bad == "batch" else "true"
+    with pytest.raises(AssertionError):
+        check(mutate((guard, replacement)))
 
 
 def test_the_resolved_physical_key_not_the_command_key_reaches_f1():
@@ -356,6 +450,22 @@ def test_partial_is_quarantined_with_one_log_line_and_never_retried():
         partial_flow(mutate(requeue))
 
 
+def retrieval_held(overrides=None):
+    rig, mons, key = partial_flow(overrides)
+    before = len(rig.writes())
+    rig.client.handle_command(rig.client, event(rig, cmd="party_mon", key=key))
+    rig.frame(4)
+    assert owner(rig).state == "partial" and len(rig.writes()) == before
+    assert not rig.sent("sync_retrieve_done") and not rig.sent("sync_retrieve_failed")
+    assert any(e.cmd == "party_mon" for e in rig.client.deferred.values())
+
+
+def test_partial_retrieval_stays_held_without_a_definite_reply():
+    retrieval_held()
+    with pytest.raises(AssertionError):
+        retrieval_held(mutate((' and cmd.cmd ~= "party_mon" then return false end', ' then return false end')))
+
+
 def test_central_suppression_of_dead_keys_and_lift_while_an_obligation_is_open():
     def check(overrides=None):
         rig, mons, key = partial_flow()
@@ -386,6 +496,97 @@ def test_central_suppression_of_dead_keys_and_lift_while_an_obligation_is_open()
 def change_identity(rig):
     rig.mem[SYM["wPlayerID"][1]] = 0x12                                   # another save's OT id
     rig.frame(3)
+
+
+@pytest.mark.parametrize("seam", ["battle", "overworld"])
+@pytest.mark.parametrize("identity", ["changed", "unavailable"])
+def test_identity_is_checked_at_the_write_seam_before_frame_end(seam, identity):
+    def check(overrides=None):
+        rig, mons = build(overrides=overrides) if seam == "battle" else overworld_rig(overrides=overrides)
+        order(rig, "force_faint", mons)
+        ob = owner(rig)
+        assert ob.identity == rig.client.hello_session.status(rig.client.hello_session).identity
+        if identity == "changed":
+            rig.mem[SYM["wPlayerID"][1]] = 0x12
+        else:
+            rig.parts.reads.read_player = rig.lua.eval("function() return nil end")
+        if seam == "battle":
+            at_hold(rig)
+        else:
+            rig.client.run_deferred(rig.client)
+        assert rig.writes() == [], "an old/unverifiable identity reached the write permit"
+        assert ob.state == "stale" and ko(rig) == []
+    check()
+    with pytest.raises(AssertionError):
+        check(mutate(('    function FS.check_identity(ob)\n', '    function FS.check_identity(ob)\n        if true then return true end\n')))
+
+
+@pytest.mark.parametrize("seam", ["battle", "overworld"])
+def test_identity_is_rechecked_after_target_reads_before_permit(seam):
+    rig, mons = build() if seam == "battle" else overworld_rig()
+    order(rig, "force_faint", mons)
+    # Change identity during target resolution, after begin_hold / the first overworld identity check.
+    swap = rig.lua.eval("""function(read, mem, addr, nth)
+        local calls = 0
+        return function(...)
+            local result = table.pack(read(...))
+            calls = calls + 1
+            if calls == nth then mem[addr] = 0x12 end
+            return table.unpack(result, 1, result.n)
+        end
+    end""")
+    rig.parts.reads.read_party = swap(rig.parts.reads.read_party, rig.mem, SYM["wPlayerID"][1],
+                                     2 if seam == "battle" else 1)
+    if seam == "battle":
+        at_hold(rig)
+    else:
+        rig.client.run_deferred(rig.client)
+    assert rig.writes() == [] and owner(rig).state == "stale"
+
+
+def test_an_unaccepted_identity_cannot_authorize_or_block_the_new_hello():
+    rig, mons = build()
+    order(rig, "force_faint", mons)
+    change_identity(rig)
+    assert not rig.client.hello_session.status(rig.client.hello_session).ready
+    order(rig, "force_faint", mons)                                      # stale server traffic before the new hello
+    unaccepted = owner(rig, 2)
+    at_hold(rig)
+    assert rig.writes() == [] and unaccepted.state == "stale"
+    rig.put("wBattleMode", 0)
+    rig.put("hROMBank", 0x25)
+    rig.frame(30)
+    assert rig.client.hello_session.status(rig.client.hello_session).ready
+    order(rig, "force_faint", mons)                                      # new-identity server order
+    rig.frame(3)
+    assert unaccepted.state == "stale" and rig.hp(0) == 0 and len(ko(rig)) == 1
+
+
+def test_initial_unavailable_identity_recovers_only_after_accepted_hello():
+    rig, mons = build(initial_identity_unavailable=True)
+    assert rig.client.hello_session.status(rig.client.hello_session).ready
+    assert not FS(rig).suspended
+    order(rig, "force_faint", mons)
+    at_hold(rig)
+    assert owner(rig).state == "awaiting" and rig.hp(0) == 0
+    assert owner(rig).identity == owner(rig).attempts[1].identity == FS(rig).last_identity
+
+
+def test_synchronous_identity_quarantine_preserves_partial_write_evidence():
+    rig, mons = build(faults=True)
+    rig.io.f1_at, rig.io.f1_fault = pf.addresses()[6], "swallow"
+    order(rig, "force_faint", mons)
+    at_hold(rig)
+    ob = owner(rig)
+    assert ob.state == "partial"
+    evidence = dict(ob.evidence.items())
+    rig.io.f1_fault = None
+    order(rig, "force_faint", mons, slot=1)
+    rig.mem[SYM["wPlayerID"][1]] = 0x12
+    before = len(rig.writes())
+    at_hold(rig)
+    assert ob.state == "stale" and ob.was == "partial" and len(rig.writes()) == before
+    assert dict(ob.evidence.items()) == evidence
 
 
 def identity_flow(overrides=None):
@@ -480,7 +681,8 @@ def test_a_box_only_safe_is_never_hp_evidence():
     order(rig, "force_faint", mons)
     at_hold(rig)
     ob = owner(rig)
-    observe(rig)
+    rig.put("wPlayerSubStatus2", 4)
+    rig.client.on_event(rig.client, witness(rig))
     rig.put("wBattleMode", 0)
     rig.put("hROMBank", 0x25)
     rig.client.on_event(rig.client, event(rig, kind="observation", site_id="battle_end", refused_acquisitions=0))
@@ -497,11 +699,46 @@ def test_a_held_tick_is_not_evidence():
     order(rig, "force_faint", mons)
     at_hold(rig)
     ob = owner(rig)
-    observe(rig)
+    rig.put("wPlayerSubStatus2", 4)
+    rig.client.on_event(rig.client, witness(rig))
     rig.client.hello_session.invalidate(rig.client.hello_session, "identity_unavailable")   # not ready: the tick is held, not sent
     rig.frame(1)
     rig.client.send_tick(rig.client, "tick")
     assert ob.state == "awaiting"
+
+
+def resumed_witness(consumed, overrides=None):
+    rig, mons = build(overrides=overrides)
+    order(rig, "force_faint", mons)
+    at_hold(rig)
+    ob = owner(rig)
+    rig.put("wPlayerSubStatus2", 4)
+    old = witness(rig)
+    if consumed:
+        rig.client.on_event(rig.client, old)
+    rig.client.hello_session.invalidate(rig.client.hello_session, "identity_unavailable")
+    rig.frame(1)
+    if not consumed:
+        rig.client.on_event(rig.client, old)
+    # Invalidating hello while in battle also holds ticks. Restore normal hello readiness at the
+    # overworld gate so the negative exercises a SENT tick, not merely an unavailable transport.
+    rig.put("wBattleMode", 0)
+    rig.put("hROMBank", 0x25)
+    rig.frame(30)
+    tick(rig)
+    assert ob.obs_seq is None and ob.state == "awaiting" and ko(rig) == []
+    rig.client.on_event(rig.client, witness(rig))
+    tick(rig)
+    assert ob.state == "done" and len(ko(rig)) == 1
+
+
+@pytest.mark.parametrize("consumed", [False, True], ids=["captured-before-suspension", "consumed-before-suspension"])
+def test_identity_resumption_requires_a_fresh_native_witness(consumed):
+    resumed_witness(consumed)
+    removed = (("ob.obs_seq = nil end", "ob.obs_seq = ob.obs_seq end") if consumed else
+               ("and captured.seq > (FS.evidence_floor or 0)", "and true"))
+    with pytest.raises(AssertionError):
+        resumed_witness(consumed, mutate(removed))
 
 
 # ── 7. vanilla isolation: the interface absent ────────────────────────────────────────────────────────────
