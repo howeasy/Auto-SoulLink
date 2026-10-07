@@ -890,10 +890,11 @@ def test_the_new_files_are_fixed_sections_in_bank_7e_included_last():
     assert "_GOLD" not in snap_src + val_src and "_SILVER" not in snap_src + val_src
     slink = (SRC / "slink.asm").read_text(encoding="utf-8")
     assert slink.index("trade_gate.asm") < slink.index("trade_snapshot.asm") < slink.index("trade_validate.asm")
-    # the responder dispatcher (card D1/D2) is included after them, then the held proposer service (card C1a), last
+    # the responder dispatcher (card D1/D2) is included after them, then the held proposer service (card C1a), then
+    # the held responder service (card C6), last
     assert slink.index("trade_validate.asm") < slink.index('INCLUDE "engine/slink/trade_dispatch.asm"')
-    assert slink.index("trade_dispatch.asm") < slink.index("trade_service.asm")
-    assert slink.rstrip().endswith('INCLUDE "engine/slink/trade_service.asm"')
+    assert slink.index("trade_dispatch.asm") < slink.index("trade_service.asm") < slink.index("trade_responder.asm")
+    assert slink.rstrip().endswith('INCLUDE "engine/slink/trade_responder.asm"')
 
 
 def test_the_new_sections_do_not_overlap_the_gates(syms):

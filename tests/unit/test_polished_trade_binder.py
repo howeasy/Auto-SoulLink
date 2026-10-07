@@ -571,6 +571,8 @@ def test_missing_whole_family(env):
         "prompt",
         "service",
         "service-end",
+        "responder",
+        "responder-end",
         "timeout",
         "wait",
         "stage-nick",

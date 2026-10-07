@@ -1,8 +1,8 @@
 ; SLink companion overlay -- Polished Crystal trade card D1/D2: the RESPONDER DISPATCHER (port of
-; patch/gen2/src/trade_dispatch.asm; docs/polished/TRADE.md sections 10, 12 and 18). INERT: the call from
-; SlinkService is in the overlay, but `SlinkTradePromptEntry` below is a bare `ret` stub that never
-; touches the lease, so even an accepted frame changes nothing. Production trade stays OFF until the
-; responder service replaces that stub and a binder publishes a PROMPT.
+; patch/gen2/src/trade_dispatch.asm; docs/polished/TRADE.md sections 10, 12 and 18). The call from
+; SlinkService is in the overlay; `SlinkTradePromptEntry` below is a `jp` into the held responder service
+; (trade_responder.asm, card C6, commit DISABLED). It was a bare `ret` stub until C6. Production trade stays
+; OFF: no binder publishes a PROMPT and the profile keeps `production: false`.
 ;
 ; WHAT IT IS. SlinkService runs on EVERY patched DelayFrame (the bridge, patch/polished/src/slink.asm).
 ; This routine decides whether THIS DelayFrame is the idle overworld's own frame wait, the only place
@@ -133,11 +133,11 @@ SlinkTradeDispatchCodeEnd::
 
 ASSERT @ <= $4780, "the dispatcher overran its $4700-$477F slot"
 
-; STUB: the responder service (vanilla patch/gen2/src/trade_service.asm :135-209) REPLACES this section's
-; body. Until then an accepted PROMPT frame returns at once and, deliberately, does NOT touch the lease
-; (no ACK, no DONE, no close): the dispatcher is simply not exercised until a binder publishes a PROMPT,
-; and production trade stays off. Do not "complete" this by writing the lease here.
+; The responder service (patch/polished/src/trade_responder.asm, commit DISABLED) is entered through this fixed
+; 3-byte trampoline: a `jp`, never a `call`, so the dispatcher's `push de / call SlinkTradePromptEntry` frame
+; is the ONLY frame under the service and the service returns straight to the dispatcher. Do not add a
+; frame, a register write or an early `ret` here: the dispatcher already checked every guard.
 SECTION "SLink Trade Prompt Entry", ROMX[$4780], BANK[SLINK_SERVICE_BANK]
 SlinkTradePromptEntry::
-	ret
+	jp SlinkTradeResponderService
 SlinkTradeDispatchEnd::

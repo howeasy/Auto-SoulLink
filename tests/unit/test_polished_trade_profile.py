@@ -23,7 +23,8 @@ def inputs():
 def assert_schema(trade):
     assert trade["schema"] == "polished-trade-v1"
     assert trade["production"] is False
-    assert trade["capabilities"] == {"proposer_service": True, "responder_service": False, "commit": False}
+    # C6 landed the responder service (commit still disabled): its start/End pair is now in the sym, production stays off
+    assert trade["capabilities"] == {"proposer_service": True, "responder_service": True, "commit": False}
     lease = trade["lease"]
     assert (lease["base"], lease["offset"], lease["size"], lease["bank"]) == (0xC619, 14, 16, 0)
     assert lease["fields"] == {"magic": 0, "version": 4, "command": 5, "generation": 6, "ack": 7,
@@ -35,7 +36,7 @@ def assert_schema(trade):
         'glyph_floor': 0x5F, 'nature_count': 25, 'species_low_max': 0xFE,
         'items': {'symbol':'SlinkTradeAllowedItems','bank':0x7E,'addr':0x428F,'size':256},
     }
-    assert set(trade["entries"]) == set(gp.TRADE_ENTRIES)
+    assert set(trade["entries"]) == set(gp.TRADE_ENTRIES) | {"SlinkTradeResponderService", "SlinkTradeResponderServiceEnd"}
     assert trade["dispatcher_stack_pin_names"] == ["NextOverworldFrame", "DelayFrame",
         "NextOverworldFrame.gfx_done", "HandleMap", "OverworldLoop.loop"]
     for group, expected in (("staging", {"party": (0xD28B, 48), "ot": (0xD3AB, 11),
@@ -63,8 +64,34 @@ def test_schema_and_generated_family(inputs):
         assert (row["bank"], row["addr"]) == inputs[0][row["symbol"]]
 
 
-@pytest.mark.parametrize("name,cap", [("SlinkTradeResponderService", "responder_service"),
-                                    ("SlinkTradeCommit", "commit")], ids=["responder", "commit"])
+def test_the_responder_pair_is_present_and_a_half_pair_is_refused(inputs):
+    symbols, prov = inputs
+    for name in ("SlinkTradeResponderService", "SlinkTradeResponderServiceEnd"):
+        assert name in symbols
+    trade = gp.trade_block(symbols, prov)
+    assert trade["capabilities"]["responder_service"] is True and trade["production"] is False
+    assert trade["capabilities"]["commit"] is False
+    assert trade["entries"]["SlinkTradeResponderService"]["addr"] == 0x5000
+    del symbols["SlinkTradeResponderServiceEnd"]
+    with pytest.raises(ValueError, match="incomplete component"):
+        gp.trade_block(symbols, prov)
+
+
+def test_responder_capability_follows_the_symbol_pair_not_a_constant(inputs):
+    symbols, prov = inputs
+    for name in ("SlinkTradeResponderService", "SlinkTradeResponderServiceEnd"):
+        del symbols[name]
+    assert gp.trade_block(symbols, prov)["capabilities"]["responder_service"] is False
+    text = inspect.getsource(gp.trade_block)
+    old = '"responder_service": component("SlinkTradeResponderService")'
+    assert old in text
+    namespace = dict(gp.__dict__)
+    exec(text.replace(old, '"responder_service": True'), namespace)        # a hard-coded capability is the mutant
+    with pytest.raises(AssertionError):
+        assert namespace["trade_block"](symbols, prov)["capabilities"]["responder_service"] is False
+
+
+@pytest.mark.parametrize("name,cap", [("SlinkTradeCommit", "commit")], ids=["commit"])
 def test_future_component_pair_flips_only_its_presence(inputs, name, cap):
     symbols, prov = inputs
     assert name not in symbols and "SlinkTradePromptEntry" in symbols
@@ -92,12 +119,13 @@ def test_complete_symbols_do_not_grant_production(inputs):
     assert trade["production"] is False
 
 
-def test_prompt_stub_as_responder_mutant_is_caught(inputs):
+def test_prompt_entry_alone_is_not_the_commit_capability(inputs):
+    """PromptEntry is a jp trampoline now (C6), but it is still not evidence of a commit: that pair is absent."""
     text = inspect.getsource(gp.trade_block)
-    old = '"responder_service": component("SlinkTradeResponderService")'
+    old = '"commit": component("SlinkTradeCommit")'
     assert old in text
     namespace = dict(gp.__dict__)
-    exec(text.replace(old, '"responder_service": "SlinkTradePromptEntry" in symbols'), namespace)
+    exec(text.replace(old, '"commit": "SlinkTradePromptEntry" in symbols'), namespace)
     with pytest.raises(AssertionError):
         assert_schema(namespace["trade_block"](*inputs))
 

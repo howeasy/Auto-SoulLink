@@ -220,8 +220,9 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
                                                 sfx_hi[1], new["SlinkVersionFieldEnd"][1],
                                 new["SlinkTradeAllowedItemsEnd"][1], new["SlinkTradeGatesEnd"][1],
                                 new["SlinkTradeSnapshotEnd"][1], new["SlinkTradeValidateEnd"][1],
-                                max(new["SlinkTradeDispatchEnd"][1], new["SlinkTradeProposerServiceEnd"][1]))),
-                f"bank ${SERVICE_BANK:02X} service + panel + sound + version + trade frame/items/gates/snapshot/validate/dispatch/service"),
+                                max(new["SlinkTradeDispatchEnd"][1], new["SlinkTradeProposerServiceEnd"][1],
+                                    new["SlinkTradeResponderServiceEnd"][1]))),
+                f"bank ${SERVICE_BANK:02X} service + panel + sound + version + trade frame/items/gates/snapshot/validate/dispatch/proposer/responder"),
                (HEADER_CHECKSUMS.start, HEADER_CHECKSUMS.stop, "header checksums")]
     # TRADE slice 1: the inert frame + item-policy code links after the version field, in the same bank
     if any(new[n][0] != SERVICE_BANK or new[n][1] < new["SlinkVersionFieldEnd"][1] or new[n][1] > 0x8000
@@ -231,7 +232,8 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
                  "SlinkTradeValidateRecord", "SlinkTradeValidateText", "SlinkTradeValidateIncoming",
                  "SlinkTradeValidateIncomingStaged", "SlinkTradeValidateEnd",
                  "SlinkTradeDispatch", "SlinkTradeDispatchCodeEnd", "SlinkTradePromptEntry", "SlinkTradeDispatchEnd",
-                 "SlinkTradeProposerService", "SlinkTradeProposerServiceEnd")):
+                 "SlinkTradeProposerService", "SlinkTradeProposerServiceEnd",
+                 "SlinkTradeResponderService", "SlinkTradeResponderServiceEnd")):
         raise RuntimeError("the trade frame/item/gate/snapshot/validate/dispatch/service code must link in bank $7E, after the version field")
     panel_bank, panel = new["SlinkPanel"]
     if panel_bank != SERVICE_BANK or panel < new["SlinkServiceEnd"][1]:

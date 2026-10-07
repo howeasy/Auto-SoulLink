@@ -231,8 +231,10 @@ def test_the_built_routine_is_exactly_the_independent_byte_model(world):
     # then the lease (header, command, generation)
     assert [g for g, _ in guards][:9] == [f"p{p}" for p in PINNED]
     assert len(guards) == 9 + 1 + 4 + 5 + 3 == 22
-    # the stub is a bare ret and nothing else lives in the stub section
-    assert w.rom[flat(BANK7E, w.stub):flat(BANK7E, w.end)] == b"\xc9" and w.end == w.stub + 1
+    # the entry is a 3-byte `jp SlinkTradeResponderService` trampoline (C6; it was a bare ret stub) and nothing else
+    # lives in its section: a `jp`, not a `call`, so the dispatcher's own push de / call frame is the only one under it
+    assert w.rom[flat(BANK7E, w.stub):flat(BANK7E, w.end)] == b"\xc3" + w.syms["SlinkTradeResponderService"][1].to_bytes(
+        2, "little") and w.end == w.stub + 3
     assert w.stub >= w.code_end
 
 
@@ -313,17 +315,22 @@ def test_the_positive_vector_calls_the_entry_once_with_de_preserved_and_writes_n
     assert not any(w.lease <= a < w.lease + 16 for _p, a, _v in r.writes)
 
 
-def test_the_stub_neither_acks_nor_closes_the_lease(world):
-    """With the REAL stub (no trap) an accepted frame still leaves every lease byte as published."""
+def test_the_prompt_entry_is_the_responder_not_an_inert_stub(world):
+    """C6: with the REAL entry (no trap) an accepted frame runs the responder service. Nothing is staged here, so the
+    incoming-mon predicate refuses BEFORE the pickup ACK and any native UI: the lease is closed (command 0), the ACK
+    byte is untouched, no DONE is published, DE is preserved and the stack is balanced. (The full responder flow is
+    tests/unit/test_polished_trade_responder.py.)"""
     w = world
     m = w.machine()
     mem = dict(w.state())
     mem.update({SENT_SP + p: v for p, v in w.stack().items()})
     r = m.call_routine(w.entry, {"de": 0x4321}, sp=ENTRY_SP, mem=mem, bank=BANK7E)
-    before = bytes(m.peek(w.lease, 16))
+    after = bytes(m.peek(w.lease, 16))
     assert r.sp_delta == 0 and r.de == 0x4321
-    assert before[4:8] == bytes([w.version, w.prompt, 5, 4])           # version, PROMPT, generation 5, ack 4
-    assert all(addr < SENT_SP for _pc, addr, _v in r.writes)
+    assert after[4:8] == bytes([w.version, 0, 5, 4]), after[4:8].hex()      # version, CLOSED, generation 5, ack still 4
+    assert after[8] == 0                                                    # no DONE result was published
+    assert any(a == w.lease + 5 and v == 0 for _pc, a, v in r.writes)       # the close itself
+    assert not any(a == w.lease + 7 for _pc, a, _v in r.writes)             # no ACK
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -611,8 +618,8 @@ def test_the_builder_allows_the_dispatch_span_and_refuses_one_byte_past_the_comb
     # contiguous empty-bank allowance), so the byte just past the dispatch end is no longer refused ...
     data[last] ^= 0xFF
     pc.verify_overlay(clean_rom, bytes(data), csyms, nsyms)
-    # ... and the first byte past the SERVICE end is
-    past = flat(BANK7E, nsyms["SlinkTradeProposerServiceEnd"][1])
+    # ... and the first byte past the RESPONDER service end (the last bank-$7E section) is
+    past = flat(BANK7E, nsyms["SlinkTradeResponderServiceEnd"][1])
     data[past] ^= 0xFF
     with pytest.raises(RuntimeError, match=r"unexpected change at"):
         pc.verify_overlay(clean_rom, bytes(data), csyms, nsyms)

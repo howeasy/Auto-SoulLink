@@ -5,7 +5,7 @@
 
 Nothing is rebuilt. The staged ROM is the pinned release with the committed
 patch/dist/SLink-Polished.ups applied, and it is refused unless its sha1 is the integrated
-overlay `add6c944…` (the same figure lanes/g2int-ov/drv/mkrom.py produces). The save fixture is
+overlay `6e0062aa…` (the same figure lanes/g2int-ov/drv/mkrom.py produces). The save fixture is
 copied into this lane and its sha256 printed, so another card rewriting its own lane cannot move
 this run's inputs.
 
@@ -50,7 +50,7 @@ UPS = REPO / "patch/dist/SLink-Polished.ups"
 # Stage under the harness's own name.
 STAGED = LANE / "rom" / "pol_overlay.gbc"
 # the integrated overlay sha1, as staged by lanes/g2int-ov/drv/mkrom.py
-INTEGRATED_SHA1 = "add6c9440d3485839996525052cf34d5d04963d1"
+INTEGRATED_SHA1 = "6e0062aa1089d6d461f46d33b7353f84ffa9c699"
 
 
 def stage() -> str:

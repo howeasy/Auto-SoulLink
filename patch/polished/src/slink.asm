@@ -236,3 +236,7 @@ INCLUDE "engine/slink/trade_dispatch.asm"
 
 ; TRADE card C1a: the held PROPOSER-ONLY service (commit disabled), behind the SlinkTradeEntry trampoline.
 INCLUDE "engine/slink/trade_service.asm"
+
+; TRADE card C6: the held RESPONDER service (commit disabled) behind the SlinkTradePromptEntry trampoline.
+; After the proposer service: it reuses its helpers and the SLINK_TRADE_* constants it defines.
+INCLUDE "engine/slink/trade_responder.asm"
