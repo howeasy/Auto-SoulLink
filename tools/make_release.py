@@ -171,6 +171,8 @@ _LUA_GEN2 = [
     "polished_writes.lua",  # C-EXPLODE: polished_explode.lua dofiles the W-3/W-4 battle writers (the shared Permit is injected, not loaded)
     "polished_sounds.lua",  # POL-SOUNDS: wraps panel.lua's binder; dofiles ../write_permit.lua and ../gb_panel.lua
     "polished_stats.lua",  # POL-WDLUA: pure savemon->party reconstruction; a future composition loads it by path
+    "polished_rival.lua",  # C-RIVAL: entry.lua compose_polished loads the rival-swap writer by path
+    "polished_trade.lua",  # C3/C4: entry.lua loads the dev-only trade binder by path (deps.polished_trade_dev)
 ]
 
 # lua/gen4/ — the rewritten Gen 4 client (HGSS + hg-engine). run.lua is what lua/slink.lua's Gen 4

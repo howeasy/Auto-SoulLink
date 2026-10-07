@@ -127,6 +127,7 @@ def test_the_rom_types_that_still_ride_the_game_id_fallback_are_exactly_gen1_and
         "Red", "Blue", "Yellow", "red", "blue", "yellow", "red_ap", "blue_ap",
         "PureRed", "PureBlue", "PureGreen", "purered", "pureblue", "puregreen",
         "pokemon_black", "pokemon_white", "pokemon_black_2", "pokemon_white_2",
+        "polished_crystal",  # one Polished pack and one layout: its game_id IS its layout (gen2_polished)
     ])
 
 
