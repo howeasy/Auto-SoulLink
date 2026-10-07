@@ -21,7 +21,7 @@
 ;   Polished predicates, no mail), staged incoming mon (SlinkTradeValidateIncomingStaged) -> pickup ACK (the
 ;   PROMPT generation, last of the entry checks and BEFORE any native UI) -> OpenText, offer text, YesNoBox ->
 ;     NO / B: DONE result 1 (decline), bounded 90-frame RELEASE wait, close.
-;     YES:    wait text -> re-check held frame / own slot -> SlinkTradeSnapshot (ONLY after every native menu
+;     YES:    wait text -> re-check held frame / own slot / party count -> SlinkTradeSnapshot (ONLY after every native menu
 ;             has returned) -> DONE result 0 = CONSENT ONLY, never a completed trade (the commit does not
 ;             exist in this build) -> one 3600-frame wait shared by (1) the host's RELEASE of the PROMPT
 ;             generation and (2) its fresh APPLY (generation previous+1, ACK = previous, same token, same slot;
@@ -103,6 +103,10 @@ SlinkTradeResponderService::
 	ld a, [hl]
 	call SlinkTradeCheckOwnSlot
 	jp c, SlinkTradeResponderExit
+	ld hl, sp + 8
+	ld a, [wPartyCount]
+	cp [hl]
+	jp nz, SlinkTradeResponderExit ; the party changed under the native menus: refuse BEFORE snapshot and consent DONE
 	ld hl, sp + 4
 	ld a, [hl]
 	call SlinkTradeSnapshot ; only after every native menu has returned
