@@ -1,9 +1,9 @@
 {
  "count": 27,
  "schema": "polished-overlay-beacon-v1",
- "sha256": "dedccb92e0f689d53014eb3e45b2955b262b3458df3c00c7aed314d5035f2030",
+ "sha256": "bc7faa0d7f4d49f37442ca61ace6b3c796e18697e74eb7397a5dbd19ed81da25",
  "source": {
-  "canonical_sha1": "f8256e8dc524de405d474cc6c8421b8df8f1604c",
+  "canonical_sha1": "8c7ca0fa85d5056950c80eb3ebc66b26bb873ac6",
   "canonical_spans": [
    {
     "length": 2,
@@ -40,10 +40,10 @@
    2064771
   ],
   "generator": "tools/gen_polished_beacon.py",
-  "overlay_sha1": "6e0062aa1089d6d461f46d33b7353f84ffa9c699",
+  "overlay_sha1": "57f039b6e80effff564e9fa9ac483f40f095b990",
   "rom_size": 2097152,
   "ups_file": "patch/dist/SLink-Polished.ups",
-  "ups_sha256": "fc12d018446348d969ce15a8509ea573d31514c2054cda2ab84e4bcb73edd19a",
+  "ups_sha256": "acd23510f403c44992bf578cdd87b3d3d324c30461b522ce9a109290b08e03dd",
   "version_slot": {
    "length": 20,
    "offset": 2064752
@@ -155,10 +155,10 @@
    "offset": 2067139
   },
   {
-   "length": 384,
+   "length": 393,
    "offset": 2068480
   }
  ],
  "title": "polished",
- "total": 2516
+ "total": 2525
 }

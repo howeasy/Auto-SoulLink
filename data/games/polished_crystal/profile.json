@@ -10,9 +10,9 @@
     "generator": "tools/gen_polished_profile.py",
     "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
     "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
-    "overlay_provenance_sha256": "eb1e0d0a565700adae798e26cf1125e6f9d94149310182f4e3030cf479b26033",
-    "overlay_sha1": "6e0062aa1089d6d461f46d33b7353f84ffa9c699",
-    "overlay_sym_sha256": "2f5c8f7482b0dc165730d50c05a70f3d0b07e83a7c46f815db0b27559f17cf36",
+    "overlay_provenance_sha256": "f69d1432463161a824082eecf79f7733468d08963485a71a7e2a721af0f2ae15",
+    "overlay_sha1": "57f039b6e80effff564e9fa9ac483f40f095b990",
+    "overlay_sym_sha256": "da20ad9d8dcdfe0b86b1f74559622ed0d285542b3e042ef700671d3a1c7bf30c",
     "repo": "https://github.com/Rangi42/polishedcrystal",
     "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
     "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
@@ -561,7 +561,7 @@
         "abi": 3,
         "artifact": "polished_overlay",
         "base_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
-        "md5": "55333f76904e742157884babe7f6f2c2",
+        "md5": "f0b3c3df43cc4622617a811796cf7ec3",
         "panel": {
           "base": 50733,
           "line_max": 16,
@@ -576,7 +576,7 @@
           "wSlinkPanelText": 50733,
           "wTilemap": 49568
         },
-        "rom_sha1": "6e0062aa1089d6d461f46d33b7353f84ffa9c699",
+        "rom_sha1": "57f039b6e80effff564e9fa9ac483f40f095b990",
         "sfx": {
           "caps": [
             "SLINK_CAP_SFX",
@@ -605,7 +605,7 @@
           ]
         },
         "sym": "polished_slink.sym",
-        "sym_sha256": "2f5c8f7482b0dc165730d50c05a70f3d0b07e83a7c46f815db0b27559f17cf36",
+        "sym_sha256": "da20ad9d8dcdfe0b86b1f74559622ed0d285542b3e042ef700671d3a1c7bf30c",
         "trade": {
           "capabilities": {
             "commit": false,
@@ -659,7 +659,7 @@
               "symbol": "SlinkTradeResponderService"
             },
             "SlinkTradeResponderServiceEnd": {
-              "addr": 20864,
+              "addr": 20873,
               "bank": 126,
               "symbol": "SlinkTradeResponderServiceEnd"
             },

@@ -637,6 +637,36 @@ def sc_menu_party_changes(env, rom=None):
         assert run.snap_first is None, label
 
 
+def sc_menu_count_changes(env, rom=None):
+    """TRADE_COMMIT_RESPONDER.md 4(3): the party COUNT differs from the context capture after the native menus return
+    (the selected slot is still valid): refuse BEFORE the snapshot and BEFORE the consent DONE -> AC, no DONE at all."""
+    for newcount in (5, 3, 6):                                  # slot 2 stays valid for every one of these
+        rig = Rig(env, rom=rom, party=4)
+        done = []
+
+        def on_native(h, what, newcount=newcount, done=done):
+            if what == "yesno" and not done:
+                done.append(1)
+                h.m.poke(h.rig.a("wPartyCount"), newcount)
+        rig.on_native = on_native
+        run = rig.run(host_consent())                           # a host that would consent: the service must not get there
+        common(rig, run, "AC", calls=CONSENT_CALLS, results=[])
+        assert run.snap_first is None, newcount
+        assert run.res.sp_delta == 0, newcount
+    # control: the same hook with the count unchanged takes the normal consent path to the end
+    rig = Rig(env, rom=rom, party=4)
+    done = []
+
+    def same_count(h, what, done=done):
+        if what == "yesno" and not done:
+            done.append(1)
+            h.m.poke(h.rig.a("wPartyCount"), 4)
+    rig.on_native = same_count
+    run = rig.run(host_consent())
+    common(rig, run, "ADADC", calls=CONSENT_CALLS, results=[0, 1])
+    assert run.snap_first is not None
+
+
 def sc_entry_refusals(env, rom=None):
     """Own slot / own record / contest / incoming staging refused BEFORE the pickup ACK and any native UI."""
     for kw in ({"contest": 1}, {"party": 0}, {"party": 7}, {"party": 255}):
@@ -875,7 +905,7 @@ SCENARIOS: dict[str, Callable] = {
     "consent_yes": sc_consent_yes, "consent_no": sc_consent_no, "b_escapes": sc_b_escapes,
     "prompt_then_timeout": sc_prompt_then_timeout, "apply_window": sc_apply_window,
     "release_before_apply": sc_release_before_apply, "token_generation_drift": sc_token_generation_drift,
-    "snapshot_after_menus": sc_snapshot_after_menus, "menu_party_changes": sc_menu_party_changes,
+    "snapshot_after_menus": sc_snapshot_after_menus, "menu_party_changes": sc_menu_party_changes, "menu_count_changes": sc_menu_count_changes,
     "entry_refusals": sc_entry_refusals, "invalid_incoming": sc_invalid_incoming,
     "good_incoming": sc_good_incoming_boundaries, "own_record_flip": sc_own_record_flip,
     "party_count_changes": sc_party_count_changes, "hvblank": sc_hvblank, "stack_balance": sc_stack_balance,
@@ -1069,8 +1099,15 @@ def mutant_held_frame_check_dropped(env):
 
 
 def mutant_count_check_dropped(env):
+    # the post-APPLY compare (the second of the two identical `ld hl,sp+8 / ld a,[wPartyCount] / cp [hl] / jp nz` runs)
     old = b"\xf8\x08\xfa" + le(env, "wPartyCount") + b"\xbe\xc2" + le(env, "SlinkTradeResponderExit")
-    return patch(env.rom, find(env, old), old, old[:-3] + b"\x00\x00\x00")
+    return patch(env.rom, find(env, old, 1), old, old[:-3] + b"\x00\x00\x00")
+
+
+def mutant_count_check_after_menu_dropped(env):
+    # the post-menu compare (the first run): before the snapshot and the consent DONE
+    old = b"\xf8\x08\xfa" + le(env, "wPartyCount") + b"\xbe\xc2" + le(env, "SlinkTradeResponderExit")
+    return patch(env.rom, find(env, old, 0), old, old[:-3] + b"\x00\x00\x00")
 
 
 def mutant_private_slot_check_dropped(env):
@@ -1128,6 +1165,7 @@ MUTANTS = [
     ("own-slot recheck at APPLY dropped", mutant_own_slot_recheck_at_apply_dropped, ("party_count_changes",)),
     ("held-frame check dropped", mutant_held_frame_check_dropped, ("token_generation_drift",)),
     ("party count check dropped", mutant_count_check_dropped, ("party_count_changes",)),
+    ("party count check after the menu dropped", mutant_count_check_after_menu_dropped, ("menu_count_changes",)),
     ("private slot check dropped", mutant_private_slot_check_dropped, ("token_generation_drift",)),
     ("APPLY generation previous+1 check dropped", mutant_generation_plus_one_dropped, ("token_generation_drift",)),
     ("entry generation != ACK guard dropped", mutant_entry_generation_guard_dropped, ("token_generation_drift",)),
