@@ -1103,3 +1103,27 @@ def test_attempt_lane_cannot_follow_case_link_outside_work(tmp_path, monkeypatch
     assert marker.read_bytes() == b"keep outside evidence"
     assert sorted(outside.iterdir()) == [marker]
     assert launches == []
+
+
+# ---- every kind the recorder can emit is either accepted or a NAMED failure (coordinator regression) --------------
+def lua_emitted_kinds():
+    import re
+    import pathlib
+    src = (pathlib.Path(P.__file__).with_suffix(".lua")).read_text(encoding="utf-8")
+    kinds = set(re.findall(r'(?:snap|rec|append|emit|event)\(\s*"([a-z_]+)"', src))
+    return kinds | set(re.findall(r'kind\s*=\s*"([a-z_]+)"', src))
+
+
+def test_every_recorder_kind_is_accepted_or_a_named_failure():
+    unknown = lua_emitted_kinds() - set(P.ACCEPTED_KINDS) - set(P.FAILURE_KINDS) - {"gsb"}
+    assert not unknown, f"the oracle would reject healthy/failing recorder output generically: {sorted(unknown)}"
+
+
+@pytest.mark.parametrize("kind", sorted(P.FAILURE_KINDS), ids=sorted(P.FAILURE_KINDS))
+def test_each_recorder_failure_kind_fails_with_its_own_name(kind):
+    trace = good_trace("cancel-menu")
+    extra = copy.deepcopy(next(e for e in trace if e["kind"] == "move_start"))
+    extra["kind"] = kind
+    ok, reasons = P.evaluate("cancel-menu", renumber(trace[:2] + [extra] + trace[2:]))
+    assert not ok
+    assert any(kind in r for r in reasons), reasons

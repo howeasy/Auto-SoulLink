@@ -57,6 +57,11 @@ ACCEPTED_KINDS = frozenset(HOOK_KINDS) | {
     "staged", "query_answered", "offer_observed", "offer_answered", "apply_published",
     "done_observed", "release_published", "wrong_bank", "final", "move_start", "move_end", "complete",
 }
+# Kinds the recorder emits to REPORT a failure (trade_service_probe.lua): they are not part of a healthy trace, so
+# they are not in ACCEPTED_KINDS, but each must still produce its own named reason (never the generic unknown-kind one).
+FAILURE_KINDS = frozenset({
+    "wrong_pc", "missing_symbol", "gsb_overflow", "driver_error", "instrumentation_error", "deadline", "early_exit",
+})
 # Pinned native sites for standalone synthetic traces. Production supplies the
 # full symbol table only after checking its digest against overlay provenance.
 MILESTONE_SITES = {
@@ -312,6 +317,9 @@ def evaluate(case, trace, symbols=None) -> tuple[bool, list[str]]:
         return False, ["missing/malformed ordered trace"]
     for e in trace:
         kind = e.get("kind")
+        if isinstance(kind, str) and kind in FAILURE_KINDS:
+            why.append(f"{kind}: observation incomplete")  # reported by name, never silently accepted
+            continue
         if not isinstance(kind, str) or kind not in ACCEPTED_KINDS:
             return False, [f"unaccepted event kind {kind!r}: observation incomplete"]
     required = ("kind", "ord", "frame", "sp", "bank", "vblank", "link", "running", "stack", "count",
