@@ -985,7 +985,8 @@ function Client.new(p)
     -- the open owner (current identity only) that names this logical or physical key
     function FS.find_owner(key, phys)
         for _, ob in ipairs(FS.owed) do
-            if ob.gen == FS.gen and (ob.key == key or ob.phys == key or (phys and (ob.key == phys or ob.phys == phys))) then
+            if ob.gen == FS.gen and ob.identity == FS.last_identity
+               and (ob.key == key or ob.phys == key or (phys and (ob.key == phys or ob.phys == phys))) then
                 return ob
             end
         end
@@ -993,6 +994,7 @@ function Client.new(p)
     function FS.new_owner(fields)
         FS.next_id = FS.next_id + 1
         local ob = { id = FS.next_id, gen = FS.gen, epoch = self.epoch, state = "pending", attempts = {}, scheduled = false,
+                     identity = FS.last_identity,
                      cmd = fields.cmd, key = fields.key, nickname = fields.nickname, arrival = fields.arrival,
                      quiet = fields.quiet }
         FS.owed[#FS.owed + 1] = ob
@@ -1086,11 +1088,37 @@ function Client.new(p)
             .. tostring(ob.key) .. " " .. tostring(kind) .. ": " .. tostring(err))
     end
 
+    -- CPU callbacks run before the next hello poll. Epoch alone cannot bind a write to the accepted save.
+    function FS.check_identity(ob)
+        local ok, identity = pcall(hello_identity)
+        local expected = FS.last_identity
+        if ob then expected = ob.identity end -- nil is unaccepted, never adopt a later hello for this owner
+        if not ok or identity == nil or expected == nil or identity ~= expected then
+            for _, o in ipairs(FS.owed) do
+                if o.gen == FS.gen and o.state ~= "stale" and (not ob or o == ob) then
+                    o.was, o.suppress = o.state, nil
+                    local previous_evidence = o.evidence
+                    FS.quarantine(o, "stale", "identity", "save changed or unreadable at settlement seam")
+                    o.identity_evidence = o.evidence
+                    o.evidence = previous_evidence or o.identity_evidence -- retain the original partial-write receipt
+                end
+            end
+            return false
+        end
+        -- A transient unreadable poll need not re-hello inside battle. Only the same previously accepted
+        -- identity can resume; identity_changed clears last_identity until the new hello is ready.
+        return not FS.suspended and FS.last_identity == expected
+    end
+
     -- the overworld seam: borrow ONE reference without retiring its owner (docs section 2, central ownership)
     function FS.overworld(entry)
         local ob = entry.ob
         ob.scheduled = false
         if ob.gen ~= FS.gen or ob.state ~= "pending" then return end -- stale or already settled elsewhere
+        if not FS.check_identity(ob) then
+            if ob.state == "pending" then FS.requeue(ob, entry) end
+            return
+        end
         local slot, mon, _, why = find_party_slot(ob.key, ob.cmd)
         if not slot and not why and contest_masked() then
             note_once(ob, "contest", "[SLink-gen2] " .. ob.cmd .. " held until the contest returns the party " .. tostring(ob.key))
@@ -1108,6 +1136,10 @@ function Client.new(p)
         local snapshot = battle and { mode = battle.mode, battle_type = battle.battle_type,
                                       active_slot = battle.active_slot, link_mode = wram_byte("wLinkMode") } or nil
         local mark = settle.attempt_mark()
+        if not FS.check_identity(ob) then
+            if ob.state == "pending" then FS.requeue(ob, entry) end
+            return
+        end
         local ok, err = pcall(function()
             writes:arm("overworld")
             writes:faint_party_slot(slot, snapshot)
@@ -1126,7 +1158,8 @@ function Client.new(p)
             end
             return FS.quarantine(ob, "partial", "overworld", err)
         end
-        ob.attempts[#ob.attempts + 1] = { kind = "overworld", seq = FS.next_seq(), epoch = self.epoch, frame = self.frame }
+        ob.attempts[#ob.attempts + 1] = { kind = "overworld", seq = FS.next_seq(), epoch = self.epoch,
+                                         identity = ob.identity, frame = self.frame }
         local s2, m2, _, w2 = find_party_slot(ob.key, ob.cmd)
         if s2 and not w2 and mon_key(m2) == ob.phys and m2.hp == 0 and (type(m2.status) ~= "number" or m2.status == 0) then
             return FS.complete(ob, m2)
@@ -1161,6 +1194,7 @@ function Client.new(p)
     -- one hold = one dispatch token; false while the save identity cannot be verified
     function FS.begin_hold(battle)
         if FS.suspended then return false end
+        if not FS.check_identity() then return false end
         FS.track(battle)
         FS.hold_serial = FS.hold_serial + 1
         FS.survival(battle)
@@ -1195,12 +1229,17 @@ function Client.new(p)
         local explode = ob.cmd == "force_explode" and not ob.explode_spent and snap.player_action == 0
         local kind = explode and "explode" or "plain"
         local attempt = { kind = kind, seq = FS.next_seq(), serial = FS.hold_serial, frame = io.framecount(),
-                          visit = FS.visit, slot = slot, epoch = self.epoch,
+                          visit = FS.visit, slot = slot, epoch = self.epoch, identity = ob.identity,
                           pre = { hp = mon.hp, native = settle.native and settle.native() } }
         -- echo suppression is bound to this physical identity/epoch BEFORE a possible native callback
         local previous = ob.suppress
         ob.suppress = { phys = snap.key, epoch = self.epoch, gen = FS.gen }
         local mark = settle.attempt_mark()
+        if not FS.check_identity(ob) then
+            ob.suppress = nil
+            if ob.state == "pending" then ob.scheduled = true; keep[#keep + 1] = w end
+            return
+        end
         local ok, err = FS.dispatch(ob, kind, function()
             writes:arm("battle_hold")
             if explode then writes:explode_active_battler(slot, snap)
@@ -1255,8 +1294,8 @@ function Client.new(p)
     end
 
     -- evidence: a party-bearing tick that was actually SENT (a held pre-hello message is not evidence). A `safe` event
-    -- carries no party and never reaches here. F1 itself writes the party HP, so an F1 attempt also needs the bound
-    -- pre-copy observation; an Explosion attempt writes no HP, so a later party HP 0 is the native copy-back.
+    -- carries no party and never reaches here. F1 itself writes both HP mirrors: only a bound AFTER-copy witness
+    -- can settle it. No such producer is composed yet. Explosion writes no HP, so its later HP 0 rule is unchanged.
     function FS.after_tick(party, in_battle)
         if FS.suspended then return end
         local seq = FS.next_seq()
@@ -1270,7 +1309,7 @@ function Client.new(p)
         for _, ob in ipairs(list) do
             local a = ob.attempts[#ob.attempts]
             if ob.gen == FS.gen and ob.state == "awaiting" and ob.phys and not dup[ob.phys] and a.epoch == self.epoch
-               and seq > a.seq then
+               and seq > a.seq and FS.check_identity(ob) then
                 local hp = hp_of[ob.phys]
                 if hp == 0 then
                     if a.kind == "explode" or (ob.obs_seq and seq > ob.obs_seq) then
@@ -1285,24 +1324,36 @@ function Client.new(p)
             end
         end
     end
-    -- the 0f:44c8 pre-copy boundary (kind=observation, site battle_faint): bound to epoch, identity generation, visit,
-    -- slot and sequence. Firing alone proves nothing: the battle struct's HP must read 0 for the attempted slot.
+    -- Reserved consumer contract for the future, separately pinned AFTER-copy observer. The existing 0f:44c8
+    -- pre-copy event has no capture binding and can never settle F1. A producer must allocate capture.seq from
+    -- FS.next_seq AT CAPTURE (the same clock as attempt/tick), and freeze identity/gen/epoch/visit/key/attempt_seq
+    -- there. Never manufacture these fields or a fresh sequence when an old batch is drained.
     function FS.observe(ev)
         if FS.suspended then return end
-        local b = ev.battle
-        if type(b) ~= "table" then return end
-        if ev.batch_generation ~= nil and ev.batch_generation ~= self.epoch then
+        local b, captured = ev.battle, ev.capture
+        if type(b) ~= "table" or type(captured) ~= "table" then return end
+        if ev.batch_generation ~= self.epoch then
             log("[SLink-gen2] stale battle_faint observation dropped (generation " .. tostring(ev.batch_generation)
                 .. " vs " .. self.epoch .. ")")
             return
         end
-        local seq = FS.next_seq()
         for _, ob in ipairs(FS.owed) do
             local a = ob.attempts[#ob.attempts]
             if ob.gen == FS.gen and ob.state == "awaiting" and a.kind == "plain" and a.epoch == self.epoch
-               and a.visit == FS.visit and seq > a.seq and b.slot == a.slot and b.hp == 0 and b.link_mode == 0 then
-                local slot, _, _, why = find_party_slot(ob.key, ob.cmd)
-                if slot == a.slot and not why then ob.obs_seq = ob.obs_seq or seq end
+               and a.visit == FS.visit and FS.check_identity(ob)
+               and ev.phase == "after_party_copyback"
+               and captured.identity == a.identity and captured.identity == ob.identity
+               and captured.generation == ob.gen and captured.epoch == a.epoch
+               and captured.visit == a.visit and captured.key == ob.phys and captured.attempt_seq == a.seq
+               and type(captured.seq) == "number" and captured.seq % 1 == 0
+               and captured.seq > a.seq and captured.seq <= FS.seq and captured.seq > (FS.evidence_floor or 0)
+               and b.slot == a.slot and b.hp == 0 and b.status == 0 and b.link_mode == 0 and b.fainted == true then
+                local native = settle.native and settle.native()
+                local slot, mon, _, why = find_party_slot(ob.key, ob.cmd)
+                if native and native.fainted == true and native.hp == 0 and native.status == 0
+                   and slot == a.slot and not why and mon_key(mon) == ob.phys and mon.hp == 0 and mon.status == 0 then
+                    ob.obs_seq = ob.obs_seq or captured.seq
+                end
             end
         end
     end
@@ -1318,6 +1369,11 @@ function Client.new(p)
         end
         return false
     end
+    function FS.suspend()
+        FS.suspended, FS.resume_identity = true, FS.last_identity
+        FS.evidence_floor = FS.next_seq()
+        for _, ob in ipairs(FS.owed) do ob.obs_seq = nil end
+    end
     -- once per frame: battle visit, identity-suspension release, one diagnostic for a witness that never came
     function FS.frame()
         FS.track(reads.read_battle())
@@ -1325,10 +1381,16 @@ function Client.new(p)
         -- (a different one arrives as identity_changed: invalidated, never resumed). In a battle no new hello can be
         -- sent (p.hello_unheld waits for the overworld), so waiting for one would suspend the whole battle.
         local identity = hello_identity()
+        local accepted = self.hello_session:status()
+        local renewed = identity ~= nil and accepted.ready and accepted.identity == identity
         if FS.suspended then
-            if identity ~= nil and identity == FS.resume_identity then FS.suspended = false end
-        elseif identity ~= nil then
-            FS.last_identity = identity
+            if identity ~= nil and (identity == FS.resume_identity or (FS.resume_identity == nil and renewed)) then
+                if FS.resume_identity == nil then FS.last_identity = accepted.identity end
+                FS.evidence_floor = FS.next_seq() -- samples captured while identity was unavailable are stale too
+                FS.suspended = false
+            end
+        elseif renewed then
+            FS.last_identity = accepted.identity
         end
         for _, ob in ipairs(FS.owed) do
             local a = ob.attempts[#ob.attempts]
@@ -1381,7 +1443,7 @@ function Client.new(p)
     end
     -- a conflicting box operation on a target whose death is still unsettled: retained, never replied to
     function FS.guard_box(cmd, phys)
-        if cmd.cmd ~= "box_mon" and cmd.cmd ~= "memorialize" then return false end
+        if cmd.cmd ~= "box_mon" and cmd.cmd ~= "memorialize" and cmd.cmd ~= "party_mon" then return false end
         local ob = FS.find_owner(cmd.key, phys)
         if not ob then return false end
         note_once(ob, "box:" .. cmd.cmd, "[SLink-gen2] " .. cmd.cmd .. " retained: the death of " .. tostring(cmd.key)
@@ -1855,7 +1917,7 @@ function Client.new(p)
             -- Gen 2: another save's identity; what was held belongs to the previous one. A transient
             -- identity_unavailable keeps the queue (the same identity returning is not a change).
             if settle and reason == "identity_unavailable" and not FS.suspended then
-                FS.suspended, FS.resume_identity = true, FS.last_identity
+                FS.suspend()
             end
             if reason == "identity_changed" then
                 if settle then FS.identity_changed() end
