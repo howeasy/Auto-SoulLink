@@ -1051,8 +1051,9 @@ def test_source_shape():
     gate = (REPO / "patch/polished/src/trade_gate.asm").read_text(encoding="utf-8")
     assert "jp SlinkTradeProposerService\n\tnop\nSlinkTradeGatesEnd::" in gate
     slink = (REPO / "patch/polished/src/slink.asm").read_text(encoding="utf-8")
-    assert slink.index("trade_validate.asm") < slink.index("trade_service.asm") and slink.rstrip().endswith(
-        'INCLUDE "engine/slink/trade_service.asm"')
+    # the proposer service precedes the C6 responder service, which is the last include
+    assert slink.index("trade_validate.asm") < slink.index("trade_service.asm") < slink.index("trade_responder.asm")
+    assert slink.rstrip().endswith('INCLUDE "engine/slink/trade_responder.asm"')
 
 
 def test_report_the_stack_budgets(env, capsys):

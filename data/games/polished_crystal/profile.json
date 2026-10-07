@@ -10,9 +10,9 @@
     "generator": "tools/gen_polished_profile.py",
     "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
     "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
-    "overlay_provenance_sha256": "5b6e5c49992205f6695d2463ace1faea34bc2d1b1f266199462a3ab6e9261dc4",
-    "overlay_sha1": "add6c9440d3485839996525052cf34d5d04963d1",
-    "overlay_sym_sha256": "9a9c7ce1cdf5eb8c743b481c2337ffd7e1dfbac7f0e12281dae97110d73692fd",
+    "overlay_provenance_sha256": "eb1e0d0a565700adae798e26cf1125e6f9d94149310182f4e3030cf479b26033",
+    "overlay_sha1": "6e0062aa1089d6d461f46d33b7353f84ffa9c699",
+    "overlay_sym_sha256": "2f5c8f7482b0dc165730d50c05a70f3d0b07e83a7c46f815db0b27559f17cf36",
     "repo": "https://github.com/Rangi42/polishedcrystal",
     "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
     "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
@@ -561,7 +561,7 @@
         "abi": 3,
         "artifact": "polished_overlay",
         "base_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
-        "md5": "b4805519aa952724c66f7f83ab7bf764",
+        "md5": "55333f76904e742157884babe7f6f2c2",
         "panel": {
           "base": 50733,
           "line_max": 16,
@@ -576,7 +576,7 @@
           "wSlinkPanelText": 50733,
           "wTilemap": 49568
         },
-        "rom_sha1": "add6c9440d3485839996525052cf34d5d04963d1",
+        "rom_sha1": "6e0062aa1089d6d461f46d33b7353f84ffa9c699",
         "sfx": {
           "caps": [
             "SLINK_CAP_SFX",
@@ -605,12 +605,12 @@
           ]
         },
         "sym": "polished_slink.sym",
-        "sym_sha256": "9a9c7ce1cdf5eb8c743b481c2337ffd7e1dfbac7f0e12281dae97110d73692fd",
+        "sym_sha256": "2f5c8f7482b0dc165730d50c05a70f3d0b07e83a7c46f815db0b27559f17cf36",
         "trade": {
           "capabilities": {
             "commit": false,
             "proposer_service": true,
-            "responder_service": false
+            "responder_service": true
           },
           "commands": {
             "APPLY": 5,
@@ -652,6 +652,16 @@
               "addr": 19696,
               "bank": 126,
               "symbol": "SlinkTradeProposerServiceEnd"
+            },
+            "SlinkTradeResponderService": {
+              "addr": 20480,
+              "bank": 126,
+              "symbol": "SlinkTradeResponderService"
+            },
+            "SlinkTradeResponderServiceEnd": {
+              "addr": 20864,
+              "bank": 126,
+              "symbol": "SlinkTradeResponderServiceEnd"
             },
             "SlinkTradeTimeoutGate": {
               "addr": 17424,

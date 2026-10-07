@@ -46810,7 +46810,7 @@
 7e:4700 SlinkTradeDispatch
 7e:477a SlinkTradeDispatchCodeEnd
 7e:4780 SlinkTradePromptEntry
-7e:4781 SlinkTradeDispatchEnd
+7e:4783 SlinkTradeDispatchEnd
 7e:4a00 SlinkTradeProposerService
 7e:4af7 SlinkTradeWaitApply
 7e:4afc SlinkTradeWaitApply.next
@@ -46848,6 +46848,18 @@
 7e:4cce SlinkTradeConfirmText
 7e:4cdb SlinkTradeWaitText
 7e:4cf0 SlinkTradeProposerServiceEnd
+7e:5000 SlinkTradeResponderService
+7e:5090 SlinkTradeResponderService.decline
+7e:5098 SlinkTradeResponderWait
+7e:509d SlinkTradeResponderWait.next
+7e:50a3 SlinkTradeResponderWait.wait
+7e:50da SlinkTradeResponderWait.applyPhase
+7e:512b SlinkTradeResponderRelease
+7e:512e SlinkTradeResponderRelease.wait
+7e:515b SlinkTradeResponderExit
+7e:516a SlinkTradeResponderExit.closed
+7e:516d SlinkTradeResponderOfferText
+7e:5180 SlinkTradeResponderServiceEnd
 00:8000 vTiles0
 00:8800 vTiles1
 00:9000 vTiles2

@@ -250,7 +250,8 @@ def trade_block(symbols: dict, provenance: dict) -> dict:
 
     Numeric DEFs are not exported by this build's sym. Read only sources whose
     bytes match the build receipt; all addresses and record sizes come from sym.
-    PromptEntry is deliberately NOT a responder capability: v7 exports a ret stub.
+    Capabilities are keyed on the paired start/End markers of each component, never on PromptEntry (a jp
+    trampoline since C6). `responder_service` is true from C6 on (commit still disabled); `production` stays false.
     `staging` is the host payload allowlist; `snapshot` is ROM-owned and must never
     be included in the host write permit. Neither grants authority outside a lease.
     """
