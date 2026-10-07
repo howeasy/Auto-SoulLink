@@ -39,6 +39,8 @@ POLISHED = {
     "lua/gen2/polished_writes.lua",  # polished_explode.lua dofiles it
     "lua/gen2/polished_sounds.lua",
     "lua/gen2/polished_stats.lua",
+    "lua/gen2/polished_rival.lua",  # compose_polished loads the rival-swap writer by path
+    "lua/gen2/polished_trade.lua",  # dev-only trade binder (deps.polished_trade_dev)
 }
 
 
