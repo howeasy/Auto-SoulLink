@@ -96,6 +96,7 @@ function Client.new(p)
     local panel = p.panel -- P4.1f panel: lua/gen2/panel.lua, or nil (no panel)
     local phone = p.phone -- P4.5c phone calls: lua/gen2/phone.lua, or nil (no panel)
     local trade = p.trade -- P4.3b native SLINK TRADE: lua/gen2/trade_overlay.lua, or nil (no trade build)
+    local dev_trade -- C4b: separate, explicit Polished dev interface; never aliases p.trade.
     -- F2 (docs/polished/PLAIN_FAINT_F2.md): the optional Polished-only active-faint settlement interface, supplied ONLY
     -- by compose_polished (lua/gen2/entry.lua) from lua/gen2/polished_explode.lua. nil (every vanilla composition):
     -- every `settle` branch below is dead and the legacy death paths run unchanged.
@@ -403,6 +404,7 @@ function Client.new(p)
         if settle then FS.boundary(kind) end
         -- P4.3b: Init clears the lease on reset; a reload leaves the Trade Center. The hello resyncs.
         self:trade_forget("the " .. kind .. " boundary")
+        if dev_trade then dev_trade.forget("the " .. kind .. " boundary", true) end
         -- review m2: a trade report held for the hello is lost with the timeline; the side cannot vouch
         for _, m in ipairs(self.held) do
             if m.event == "trade_done" and m.fields and m.fields.token then
@@ -429,6 +431,7 @@ function Client.new(p)
         if settle then FS.abandon(why) end
         self:rival_close(why)
         self:trade_forget(why)
+        if dev_trade then dev_trade.forget(why, true) end
         -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.
         self.key_alias, self.retired_alias = nil, {}
         drop_held(why)
@@ -546,6 +549,7 @@ function Client.new(p)
 
     function self:handle_command(cmd)
         local c_ = cmd.cmd
+        if dev_trade and dev_trade.command(cmd) then return end
         if c_ == "noop" then return end
         -- P4.5c: an optional "phone" tag rides force_faint/msgbox; phone.lua drops it off a phone build
         -- Phone calls are their own run switch, default ON (owner 2026-10-02), not native_messages:
@@ -950,6 +954,275 @@ function Client.new(p)
             end
         end
     end
+
+    -- C4b (docs/polished/TRADE_PUMP.md): optional commit-disabled driver. Entry builds the
+    -- binder AFTER this client, so it may install {binder, charmap} once, before start().
+    -- No hooks, hello flags, lease writes or vanilla state are borrowed by this interface.
+    function self:install_dev_trade_pump(spec)
+        assert(dev_trade == nil and trade == nil, "ambiguous trade composition")
+        assert(self.foundation == "gen2_polished" and self.artifact_kind == "overlay",
+               "dev trade requires admitted Polished overlay")
+        local binder, charmap = assert(spec.binder), assert(spec.charmap)
+        for _, name in ipairs({"poll_query", "poll_offer", "poll_done", "phase", "disposition",
+                               "answer_query", "answer_offer", "arm", "release", "closed", "reset"}) do
+            assert(type(binder[name]) == "function", "dev trade missing " .. name)
+        end
+        assert(type(charmap.encoding) == "table" and charmap.terminator == profile.overlay.panel.terminator,
+               "dev trade requires admitted charmap")
+        local family = profile.overlay.trade
+        local visit, serial, stopped, last_token = nil, 0, false, nil
+        local D = {}
+        local function call(name, ...)
+            local ok, a, b, why = pcall(binder[name], binder, ...)
+            if not ok then return nil, "UNCERTAIN", tostring(a) end
+            return a, b, why
+        end
+        local function report(event, fields) owe(event, fields) end
+        local function finish(why, uncertain, after_reset)
+            local v = visit
+            if not v or v.terminal then return end
+            v.terminal, v.prepare, v.apply = true, nil, nil
+            last_token = v.server_token or last_token
+            log("[SLink-gen2] dev trade " .. tostring(why))
+            if not v.server_token then return end
+            if v.attempted or v.apply_received then
+                local fields = {token=v.server_token}
+                if uncertain and v.attempted then
+                    fields.uncertain, fields.after_reset = true, after_reset or nil
+                else
+                    fields.slot, fields.new_key, fields.new_species = v.slot, v.old_key, 0
+                end
+                report("trade_done", fields)
+            else
+                report("menu_result", {token=v.server_token, choice=0,
+                                      withdraw=v.role == "proposer" or nil})
+            end
+        end
+        function D.forget(why, after_reset)
+            finish(why, true, after_reset)
+            -- A poisoned/unsettled binder has no host cancel API. Retire this visit forever;
+            -- the ROM watchdog owns closure. In particular, never release/reset poison.
+            if visit then visit.retired = true end
+        end
+        function D.busy()
+            return (visit ~= nil and not visit.terminal) or call("closed") ~= true
+        end
+        local function begin(role)
+            serial = serial + 1
+            visit = {role=role, serial=serial, epoch=self.epoch, identity=hello_identity(),
+                     token=new_token(), deadline=self.frame + family.timeouts.QUERY}
+            return visit
+        end
+        local function current(v)
+            return not v.terminal and not v.retired and v.epoch == self.epoch
+                   and v.identity ~= nil and v.identity == hello_identity()
+        end
+        local function slot_key(slot)
+            local party = current_party()
+            for _, mon in ipairs(party and party.mons or {}) do
+                if mon.slot == slot then return mon_key(mon) end
+            end
+        end
+        local function payload(cmd)
+            if type(cmd.blob_hex) ~= "string" or #cmd.blob_hex ~= 140
+               or not cmd.blob_hex:match("^%x+$") then return nil end
+            local blob, sender = hex_bytes(cmd.blob_hex), {}
+            local size, term = family.staging.sender.size, charmap.terminator
+            if cmd.partner_name ~= nil and cmd.partner_name ~= "" then
+                if type(cmd.partner_name) ~= "string" then return nil end
+                for ch in cmd.partner_name:gmatch(utf8.charpattern) do
+                    local byte = charmap.encoding[ch]
+                    if type(byte) ~= "number" or byte < family.validation.glyph_floor or byte > 255 then return nil end
+                    if #sender < size - 1 then sender[#sender + 1] = byte end
+                end
+            else
+                -- PROMPT has no partner_name: use ONLY OT text, never its three metadata bytes.
+                for i=1,profile.derived.player_name_length do
+                    local byte = blob[family.staging.party.size+i]
+                    if byte == term then break end
+                    sender[#sender+1] = byte
+                end
+            end
+            while #sender < size do sender[#sender+1] = term end
+            return {blob=blob, sender=sender}
+        end
+        local function matching(v, cmd)
+            return current(v) and v.accepted and cmd.token == v.server_token
+                   and cmd.slot == v.slot and cmd.old_key == v.old_key
+                   and find_party_slot(cmd.old_key) == v.slot and not contest_masked()
+        end
+        local function ready(v)
+            if not matching(v, {token=v.server_token, slot=v.slot, old_key=v.old_key}) then return false end
+            local role, phase = call("phase")
+            if role ~= v.role or phase ~= (v.role == "proposer" and "offer" or "released") then return false end
+            local l, f = family.lease, family.lease.fields
+            local bytes = io.read_range(l.base, l.size)
+            if type(bytes) ~= "table" or #bytes ~= l.size then return false end
+            for i=1,4 do
+                if bytes[f.magic+i] ~= l.magic[i] or bytes[f.token+i] ~= v.token[i] then return false end
+            end
+            return bytes[f.version+1] == l.version and bytes[f.generation+1] == v.gen
+                   and bytes[f.ack+1] == v.gen and bytes[f.slot+1] == v.slot and bytes[f.result+1] == 0
+                   and bytes[f.command+1] == (v.role == "proposer" and family.commands.OFFER or family.commands.RELEASE)
+        end
+        function D.command(cmd)
+            local name, v = cmd.cmd, visit
+            if name == "trade_mask" then
+                if v and current(v) and v.phase == "query" then
+                    local mask = cmd.mask
+                    if type(mask) ~= "number" or mask % 1 ~= 0 or mask < 0 or mask > 63 then
+                        finish("invalid query mask"); return true
+                    end
+                    if contest_masked() then mask = 0 end
+                    local ok, kind, why = call("answer_query", v.gen, mask, v.token)
+                    if not ok then finish(why or kind); v.retired = kind == "UNCERTAIN"
+                    elseif mask == 0 then finish("no eligible pair")
+                    else v.phase = "picking" end
+                end
+            elseif name == "trade_offer_ack" then
+                if v and current(v) and v.phase == "offer" then
+                    local accept = cmd.ok == true and type(cmd.token) == "string" and cmd.token ~= ""
+                    v.server_token = accept and cmd.token or nil
+                    local ok, kind, why = call("answer_offer", v.gen, accept)
+                    if not ok then finish(why or kind); v.retired = kind == "UNCERTAIN"
+                    elseif not accept then finish("offer declined")
+                    else
+                        v.accepted, v.phase, v.gap = true, "accepted", io.framecount()
+                        v.deadline = self.frame + family.timeouts.APPLY
+                    end
+                end
+            elseif name == "show_menu" and (cmd.blob_hex ~= nil or cmd.slot ~= nil) then
+                if cmd.token ~= nil and cmd.token == last_token then return true end
+                if v then
+                    if cmd.token ~= v.server_token then report("menu_result", {token=cmd.token, choice=0}) end
+                    return true
+                end
+                local data = payload(cmd)
+                if stopped or not data or type(cmd.token) ~= "string" or cmd.token == ""
+                   or not slot_key(cmd.slot) or contest_masked() or call("closed") ~= true then
+                    report("menu_result", {token=cmd.token, choice=0}); return true
+                end
+                v = begin("responder")
+                v.server_token, v.slot, v.old_key = cmd.token, cmd.slot, slot_key(cmd.slot)
+                v.deadline, v.phase = self.frame + family.timeouts.APPLY, "prompt"
+                local gen, kind, why = call("arm", PROMPT, v.slot, v.token, data)
+                if gen == nil then finish(why or kind); v.retired = kind == "UNCERTAIN"
+                else v.gen = gen end
+            elseif name == "apply_prepare" or name == "apply_trade" then
+                -- Foreign tokens never cancel or redirect the active visit.
+                if not v or cmd.token ~= v.server_token then return true end
+                if v.terminal or v.retired then return true end
+                if name == "apply_trade" then v.apply_received = true end
+                if not matching(v, cmd) then
+                    if name == "apply_prepare" then report("apply_ready", {token=cmd.token, ok=false}) end
+                    finish("trade identity mismatch", v.attempted); return true
+                end
+                if name == "apply_prepare" then
+                    if not v.prepared and not v.attempted then v.prepare = true end
+                else
+                    local data = payload(cmd)
+                    if not data then finish("malformed incoming payload", v.attempted); return true end
+                    local fingerprint = cmd.blob_hex:lower() .. ":" .. table.concat(data.sender, ",")
+                    if v.fingerprint then
+                        if v.fingerprint ~= fingerprint then finish("conflicting APPLY", v.attempted); v.retired = true end
+                        return true
+                    end
+                    v.fingerprint, v.apply_received, v.apply = fingerprint, true, data
+                end
+            elseif name == "withdraw_trade" then
+                if v and cmd.token == v.server_token and not v.attempted then finish("server withdrew visit") end
+                -- Once attempted, the binder alone decides DONE/uncertainty; never fabricate withdrawal.
+            else return false end
+            return true
+        end
+        function D.tick()
+            local v = visit
+            if v then
+                if not current(v) and not v.terminal then D.forget("visit identity/epoch changed", true) end
+                if not net.connected() and not v.terminal then D.forget("disconnected") end
+                if v.retired and call("disposition") == "UNCERTAIN" then return end
+                if v.terminal then
+                    if call("closed") == true then
+                        local ok = call("reset")
+                        if ok then visit = nil; self.pending_rescan = true else v.retired = true end
+                    end
+                    return
+                end
+                local done, kind, why = call("poll_done")
+                local role, phase = call("phase")
+                if kind == "UNCERTAIN" or (done and done.disposition == "UNCERTAIN") then
+                    finish(why or (done and done.reason) or kind, v.attempted); v.retired = true; return
+                end
+                if done and v.phase == "prompt" and role == "responder"
+                   and (phase == "consented" or phase == "declined") then
+                    local ok, disposition, reason = call("release", v.gen)
+                    if not ok then finish(reason or disposition); v.retired = disposition == "UNCERTAIN"; return end
+                    if done.disposition == "CONSENTED" then
+                        v.accepted, v.phase, v.gap = true, "accepted", io.framecount()
+                        report("menu_result", {token=v.server_token, choice=1})
+                    else finish("prompt declined") end
+                    return
+                end
+                if done and v.attempted then
+                    if done.disposition ~= "NOT_PERFORMED" then
+                        finish("unexpected APPLY disposition", true); v.retired = true; return
+                    end
+                    local ok, disposition, reason = call("release", v.gen)
+                    if not ok then finish(reason or disposition, true); v.retired = true; return end
+                    finish("NOT_PERFORMED (commit disabled)")
+                    return
+                end
+                local disposition, reason = call("disposition")
+                if disposition == "UNCERTAIN" or disposition == nil then
+                    finish(reason or "binder unavailable", v.attempted); v.retired = true; return
+                end
+                if call("closed") == true or self.frame > v.deadline then
+                    finish("visit closed or expired", v.attempted); return
+                end
+                -- Never answer OFFER / RELEASE PROMPT and publish APPLY in the same frame end.
+                if v.accepted and io.framecount() > v.gap and (v.prepare or v.apply) then
+                    local valid = ready(v)
+                    if v.prepare then
+                        v.prepare, v.prepared = nil, true
+                        report("apply_ready", {token=v.server_token, ok=valid})
+                    end
+                    if not valid then finish("parked trade identity changed"); return end
+                    if v.apply then
+                        local data = v.apply
+                        v.apply, v.attempted = nil, true
+                        local gen, state, problem = call("arm", APPLY, v.slot, v.token, data)
+                        if gen == nil then
+                            if state == "PENDING" then v.attempted = false end -- binder proves no emitted writes
+                            finish(problem or state, v.attempted); v.retired = state == "UNCERTAIN"
+                        else v.gen, v.phase = gen, "apply" end
+                    end
+                    return
+                end
+            end
+            if stopped or (visit and visit.terminal) then return end
+            local q = call("poll_query")
+            if q and not visit then
+                v = begin("proposer")
+                v.phase, v.gen = "query", q.gen
+                if not send_now("trade_query", {}) then
+                    call("answer_query", q.gen, 0, v.token); finish("offline query")
+                end
+                return
+            end
+            local offer = call("poll_offer")
+            v = visit
+            if offer and v and v.phase == "picking" then
+                v.phase, v.gen, v.slot, v.old_key = "offer", offer.gen, offer.slot, slot_key(offer.slot)
+                v.deadline = self.frame + family.timeouts.OFFER
+                if not v.old_key or not send_now("trade_offer", {slot=offer.slot}) then
+                    call("answer_offer", offer.gen, false); finish("offline offer")
+                end
+            end
+        end
+        function D.stop() stopped = true; D.forget("shutdown") end
+        dev_trade = D
+    end
+    if p.dev_trade_pump ~= nil then self:install_dev_trade_pump(p.dev_trade_pump) end
 
     -- MINOR-7: a landed death is remembered under the server's key and the key the mon holds now (an
     -- evolved match), so the exact-key sweep below needs no evolution fallback (and logs nothing per frame)
@@ -1455,6 +1728,7 @@ function Client.new(p)
 
     -- Deferred queue: one command per frame, only at the verified checkpoint, inside the permit.
     function self:run_deferred()
+        if dev_trade and dev_trade.busy() then return end
         local armed
         for i, s in ipairs(self.settle) do if s.armed then armed = armed or i end end
         if (#self.deferred == 0 and not armed and not (self.dead_synced and next(self.dead_keys))) or not self.writes_enabled
@@ -1768,6 +2042,8 @@ function Client.new(p)
 
     function self:on_event(ev)
         local k = ev.kind
+        if dev_trade and dev_trade.busy() and (k == "capture" or k == "key_change"
+           or k == "party_to_box" or k == "box_to_party") then return end
         local m = ev.mon
         if m and m.is_egg and k ~= "capture" then
             -- PC ops may move an egg (allow_egg); an egg never goes on the wire (O-15)
@@ -1914,6 +2190,7 @@ function Client.new(p)
         clock_rewind = "keep", callback_error = "raise", -- Gen 1 parity
         on_invalidate = function(reason)
             self.hello_sent = false
+            if dev_trade then dev_trade.forget("hello " .. tostring(reason)) end
             -- Gen 2: another save's identity; what was held belongs to the previous one. A transient
             -- identity_unavailable keeps the queue (the same identity returning is not a change).
             if settle and reason == "identity_unavailable" and not FS.suspended then
@@ -2431,6 +2708,10 @@ function Client.new(p)
             local tok, terr = pcall(self.trade_tick, self)
             if not tok then log("[SLink-gen2] trade: " .. tostring(terr)) end
         end
+        if dev_trade then
+            local ok, why = pcall(dev_trade.tick)
+            if not ok then dev_trade.forget(tostring(why)) end
+        end
         if self.frame % Client.BURIAL_NAG_FRAMES == 0 and burial_waiting() then show_burial() end
         self.replies:step()
         self:land_bench_deaths() -- O-32: a bench death lands the frame its command arrived (replies:step)
@@ -2440,6 +2721,7 @@ function Client.new(p)
     end
 
     function self:stop()
+        if dev_trade then dev_trade.stop() end
         if self.checkpoint_hook then io.unregister(self.checkpoint_hook); self.checkpoint_hook = nil end
         if self.battle_hook then io.unregister(self.battle_hook); self.battle_hook = nil end
         for _, id in ipairs(self.trade_hooks or {}) do io.unregister(id) end
