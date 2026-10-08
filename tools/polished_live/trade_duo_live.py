@@ -31,6 +31,12 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def probe_symbols(syms):
+    from tools.polished_live import harness
+    # The full ~70k-label SYM exceeds json_codec's 100k-value bound (each row is an array).
+    return {name: syms[name] for name in (*harness.SYMBOLS, "NoYesBox")}
+
+
 def party(data):
     ds = duo._derive_save()
     duo.fixture_identity(data)
@@ -168,7 +174,7 @@ def run(args):
         if not cold:
             duo.stage_side(p, rom, run_dir/f"before-{role}.SaveRAM")
         write_run_config(BIZHAWK_CONFIG, p["config"], saveram_dir=p["sram_dir"], purergb=True)
-        Path(p["run"], "syms.json").write_text(json.dumps(syms))
+        Path(p["run"], "syms.json").write_text(json.dumps(probe_symbols(syms)))
         env = dict(os.environ, **duo.side_env(p, role, "127.0.0.1", port))
         env.update(SLINK_ROOT=root.as_posix(), POL_DRIVER_ROOT=ROOT.as_posix(), POL_COLD="1" if cold else "0")
         proc = subprocess.Popen([EMUHAWK, "--lua="+(ROOT/"tools/polished_live/trade_duo_live.lua").as_posix(),

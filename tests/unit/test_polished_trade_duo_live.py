@@ -76,3 +76,18 @@ def test_lua55_syntax():
     lua = LuaRuntime()
     for name in ("tools/polished_live/trade_duo_live.lua", "lua/gen2/polished_trade.lua", "lua/gen2/client.lua"):
         assert lua.eval("function(s) return assert(load(s)) ~= nil end")((t.ROOT/Path(name)).read_text())
+
+
+def test_symbol_contract_fits_real_json_decoder_and_full_sym_is_red_control():
+    import json
+
+    from lupa.lua55 import LuaRuntime
+
+    from tools.build_gen2_companion import _symbols
+    syms = _symbols(t.ROOT/"data/polished/polished_slink.sym")
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    codec = lua.execute((t.ROOT/"lua/json_codec.lua").read_text())
+    old, why = codec.decode(json.dumps(syms))
+    assert old is None and "too many JSON values" in why
+    decoded = codec.decode(json.dumps(t.probe_symbols(syms)))
+    assert decoded.NoYesBox[2] == syms["NoYesBox"][1]
