@@ -636,3 +636,83 @@ The writer is composed and refuses because `client.lua` only polls at a frame en
 **Minimal client change (optional, Polished-only; vanilla frame-end flow unchanged):** register one `io.on_bus_exec` hook at the gate (bank checked FIRST, a wrong-bank hit consumes nothing); keep the frame-end announcement and blob parsing but do NOT drain or clear `pending` there; at the FIRST qualified initial send-out consume the pending command once (a late reply never applies at a later send-out), read the live index in the callback, call the proxy `arm("rival_swap")` / `write_enemy_party` / `disarm` inside `pcall`, report from the next frame end; no logging, network or UI in the callback; do not borrow the explode hook token. The write is 71..421 bytes plus read-back (n = 1..6): timing inside an exec callback is UNMEASURED.
 **Cards:** P0 a read-only probe (exec hook at 0f:47DD recording the callback-observed PC register, bank, frame, class/id, selected index; zero writes) falsifies the 'PC reads the instruction address' assumption; P1 the optional client callback state machine + tests (first falsifier: drained at frame end, FF required, double write, wrong-bank hit closes the window, late reply applies at a later send-out); P2 only if P0 needs a hook witness instead of raw PC equality; P3 the class policy wiring after your ruling; P4 the live consumed-write proof (the post-480D enemy battle record equals the staged record; n=1 and n=6 timing; rollback).
 **Owner decisions:** (1) which classes count as rival: the five class values are RIVAL0 $1B, RIVAL1 $1C, RIVAL2 $1D, LYRA1 $1E, LYRA2 $1F; the server adapter ALREADY treats all five as rivals (`gen2_polished.py` `_rival_ids`) while the writer's set is empty by default, so the policy is currently inconsistent; (2) whether a SYNTH-forced trainer battle (a script/engine setup, as the special-entry probe used for the receptionist) is authorised for P0, or a played route to a trainer is required: writing `wOtherTrainerClass/ID` alone does not construct a battle; candidates near the Route 29 fixture are the Cherrygrove rival trigger (33,6)/(33,7) and Route 30 trainers, reachability from the fixture UNVERIFIED.
+
+
+## Native rival exec-window composition (2026-10-08, g2p-rivalhook)
+
+This supersedes the earlier claim that the composed client can only drain the
+rival command at frame end. It is **MODEL-tested runtime wiring**, not a live
+swap-consumption receipt or a capability flip. Source base `5c6377bc1`.
+
+- `polished_rival.lua:241-255` exposes a Polished-only window interface when a
+  nonempty rival class set was supplied at composition. It reads generated
+  profile/symbol coordinates: actual bank/PC, trainer mode, hBattleTurn=1,
+  configured class, composite trainer ID matching the bound visit, no link,
+  and equal valid wCurOTMon/wCurPartyMon. The existing plan independently
+  rechecks its guards, including required trainer ID and side; those plan
+  assertions and the array/count write sequence are unchanged.
+- `client.lua:2554-2588` supplies `authority.rival_write_window` only for that
+  armed interface. `signals.lua:1397-1405,1447-1452,1541-1548` adds the existing
+  `rival_swap_gate` pack row and dispatches through the authority callback.
+  The existing bank/PC/ROM-byte binding and epoch authority remain in force.
+  Nil/vanilla/unconfigured compositions register no extra rival hook. No entry
+  or pack change was needed; class policy remains configurable, not fixture1B/03.
+- Frame end still announces the bound trainer visit, applies the 240-frame
+  deadline and rejects replies after the send-out. For the native interface it
+  now keeps the pending command at FF for the exec callback; vanilla/non-native
+  composition retains the old frame-end path. At the first bank-qualified gate,
+  the callback consumes the visit even if no command arrived, so a late reply
+  cannot apply at a later send-in. Wrong-bank callbacks do not consume it.
+- With a pending command, callback preflight checks the operation predicate,
+  then arms and calls `write_enemy_party` synchronously before CPU execution
+  continues. The per-visit `gate_used` latch prevents a second callback from
+  writing. The pending/result record is retained until frame-end reply flush;
+  `rival_close` also flushes a completed callback result before closing a visit.
+  Success/refusal uses existing `rival_team_replaced`; no network call occurs in
+  the exec callback. No owed command is silently discarded on a preflight refusal.
+- **Preflight** refusals write zero bytes. Post-emission I/O faults still use
+  the existing read-back/rollback/TORN ENEMY PARTY behavior; this card does not
+  claim that an arbitrary I/O failure is atomic or emits zero bytes.
+
+The composed rig maps the executed overlay's gate bytes into its System Bus and
+invokes the registered hook. Its positive result is exactly **141 writes** for
+two complete records/OTs/nicknames with count last; enemy image equals the plan.
+A second callback before frame end adds no writes. Wild mode, player side, stale
+trainer identity and writes-disabled cases all produce a named error on the next
+frame end and zero writes. The once-latch source mutant performs 282 writes and
+turns the duplicate test red. The callback-side mutant reaches writer arm and
+turns the callback-rejection test red, while the independent unchanged writer
+side guard still prevents mutation. It would be misleading to claim removing
+only that redundant callback guard makes the player-side write succeed.
+
+### Live proof handoff (NOT RUN in this card)
+
+There is **no existing honest live-swap command**: `rival_gate_probe.py` is
+read-only, runs no SLink client/server and cannot inject a pending replacement.
+The coordinator explicitly deferred a client-composed live-swap driver to the
+next card. Do not relabel its read-only PASS as a swap. Reuse only these inputs,
+with SYNTH ancestry disclosed and new overlay/source pins checked at launch:
+
+- Fixture `F:/slink-work/lanes/pol-rival-live/fixture/rival.SaveRAM`, SHA256
+  `030c62ff898050d81d80dea19677e8520e2f707dae0c35f873d87e79cf7ac1ae`.
+- Disclosure `F:/slink-work/lanes/pol-rival-live/out/disclosure.json`.
+- Recorded native route `F:/slink-work/lanes/pol-rival-live/out/synth-pdm83y_x/probe/route.json`,
+  SHA256 `898bd855d8711cbb7207b08dbcc9d83858c1c5223f9fcde86c51b13adc1117f2`;
+  fixed-frame reuse across RNG/RTC remains unqualified.
+- The retained probe recorded trainer mode at frame8945 and gate at9125 (180
+  frames). That is compatible with the 240-frame deadline, but proves neither
+  server command arrival nor the write. The next driver must compose the real
+  client with a declared class policy, deliver a bound command before the first
+  gate, preserve whole-party before/after and count-last receipts, observe the
+  native post-480D battle image, and assert one reply/one write per visit.
+
+No emulator, Manager option flip, release claim or pack regeneration occurred.
+Entry/polished_explode were not edited: the dedicated rival proxy already owns
+this writer. Gen2 CODE_DIGEST is stale after these Lua edits and needs the
+coordinated freeze. Default empty classes and Manager capability gates remain
+separate prerequisites for enabling Rival Team Swap in the RC.
+
+Verification: requested rival/explode/client/pump/Lua suites **214 passed, 2 skipped**
+(absent Crystal ROM inputs); additional battle-site/capture-site suites **29 passed**.
+Lua 5.5 compiles all three changed runtime modules; Ruff and diff checks clean.
+Original writer plan/guards and client bytes outside the rival block compare identical.

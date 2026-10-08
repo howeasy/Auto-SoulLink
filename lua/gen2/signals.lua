@@ -1394,7 +1394,15 @@ function S.new_polished(options)
         -- guard and the PC/byte re-check at fire time are gb_hook_binding's, unchanged.
         local battle_ids, battle_sites, registered_sites = {}, {}, {}
         registered_sites[1] = {id=S.POLISHED_SITE}
-        for _, id in ipairs(o.battle_sites or {}) do
+        local requested = {}
+        for _, id in ipairs(o.battle_sites or {}) do requested[#requested+1] = id end
+        local rival_window = callable(authority.rival_write_window) and authority.rival_write_window or nil
+        if rival_window then
+            local found = false
+            for _, id in ipairs(requested) do if id == "rival_swap_gate" then found = true end end
+            if not found then requested[#requested+1] = "rival_swap_gate" end
+        end
+        for _, id in ipairs(requested) do
             assert(type(id)=="string" and S.POLISHED_BATTLE_SITES[id] ~= nil,"unknown Polished battle site: "..tostring(id))
             assert(battle_sites[id] == nil,"duplicate Polished battle site: "..id)
             local row = type(data.sites) == "table" and data.sites[id]
@@ -1438,7 +1446,8 @@ function S.new_polished(options)
         local WINDOWS = {explode_hold="battle_hold",rival_swap_gate="rival_swap"}
         for id in pairs(WINDOWS) do
             if battle_sites[id] ~= nil then
-                assert(callable(o.on_write_window),id..": an on_write_window callback is required for a write window")
+                assert((id == "rival_swap_gate" and rival_window ~= nil) or callable(o.on_write_window),
+                       id..": an on_write_window callback is required for a write window")
             end
         end
         local function wram(name, span)
@@ -1530,7 +1539,9 @@ function S.new_polished(options)
         -- A write window fires on EVERY turn / every send-out. Silence is the normal outcome: the wiring layer
         -- answers nil when nothing is owed, and only a landed write is published.
         local function write_window(prepared, context, held)
-            local outcome = o.on_write_window(prepared.id,context)
+            local outcome
+            if prepared.id == "rival_swap_gate" and rival_window then outcome = rival_window(context)
+            else outcome = o.on_write_window(prepared.id,context) end
             if outcome == nil then return nil end
             assert(type(outcome) == "table" and outcome.ok == true and type(outcome.result) == "table",
                    prepared.id..": a write-window outcome must be {ok=true, result={...}}")

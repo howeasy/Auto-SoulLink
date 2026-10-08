@@ -15,9 +15,9 @@ Proved here (model only; no cartridge):
   * through the composed client the swap is refused by default and from the frame-end poll (PC never at 0f:47DD there)
   * mutants of the real module, each shown RED against a named test (docstring of each)
 
-NOT proved: that the CPU ever reaches 0f:47DD while a client hook asks (no such hook exists), that BizHawk's PC register
-reads the instruction's own address inside an exec callback, the closing edge (0f:480d), and which trainer classes are
-rivals (OWNER DECISION: the classes used here are test inputs, not a ruling).
+The registered native callback is exercised below over the real ROM's mapped gate bytes (MODEL).
+NOT proved here: live swap consumption, callback timing or the closing edge at 0f:480d. Configured
+trainer classes in this rig are test inputs, not a policy ruling.
 """
 from __future__ import annotations
 
@@ -364,19 +364,15 @@ def client_swap(rig):
     return [m["error"] for m in rig.sent("rival_team_replaced")]
 
 
-def test_the_client_poll_cannot_land_the_swap_even_with_a_class_set_and_the_pc_forged():
-    """rival_tick polls at a frame end while wCurOTMon == 0xFF: the PC is not 0f:47DD there, and with the PC forged
-    the selected index 0xFF is outside the new party. Either way: refused, nothing written."""
+def test_native_composition_parks_at_ff_and_keeps_the_frame_end_deadline():
     rig = ready(pc_=0, fresh=True)
-    rig.fill_enemy()
     before = rig.block()
-    errors = client_swap(rig)
-    assert len(errors) == 1 and "not at the SendInUserPkmn rival gate" in errors[0]
-    assert rig.block() == before and not [w for w in rig.writes() if MONS - 1 <= w["addr"] < END]
-    rig = ready(pc_=RIVAL_PC, fresh=True)
-    before = rig.block()
-    errors = client_swap(rig)
-    assert len(errors) == 1 and "outside the new party" in errors[0] and rig.block() == before
+    assert client_swap(rig) == []
+    assert rig.client.rival.pending is not None and rig.block() == before
+    rig.client.frame += 241
+    rig.client.rival_tick(rig.client)
+    assert rig.sent("rival_team_replaced")[-1]["error"] == "late_reply"
+    assert rig.writes() == []
 
 
 def test_the_default_composition_carries_the_blob_constants_and_an_empty_rival_set():
@@ -604,7 +600,7 @@ def test_rival_module_compiles_in_lua55():
 
 
 @pytest.mark.parametrize("drift", [False, True], ids=["bound-id", "ram-drift-after-read"])
-def test_client_caller_forwards_bound_rival_id_but_still_refuses_window(drift):
+def test_native_caller_forwards_bound_id_and_refuses_ram_drift(drift):
     rig = ready(pc_=RIVAL_PC, fresh=True)
     captured = []
     rig.lua.globals().caller_capture = lambda tid: captured.append(tid)
@@ -620,22 +616,27 @@ def test_client_caller_forwards_bound_rival_id_but_still_refuses_window(drift):
             return original(self,mons,ctx)
         end
     end""")(rig.rival.writes, rig.mem, addr("wOtherTrainerID"), drift)
+    pending_native_swap(rig)
     before = rig.block()
-    errors = client_swap(rig)
+    fire_native_rival(rig)
+    rig.frame(1)
+    errors = [m.get("error") for m in rig.sent("rival_team_replaced")]
     assert captured == [TID]
-    assert len(errors) == 1 and ("stale battle" if drift else "outside the new party") in errors[0]
-    assert rig.block() == before and rig.writes() == []
+    if drift:
+        assert "stale battle" in errors[0] and rig.block() == before and rig.writes() == []
+    else:
+        assert errors == [None] and rig.mem[COUNT] == 2 and len(rig.writes()) == 141
 
 
 def test_drop_bound_trainer_id_caller_mutant_turns_spy_red():
     from pathlib import Path
 
     source = (Path(ROOT) / "lua/gen2/client.lua").read_text()
-    anchor = "trainer_id = r.trainer_id })"
+    anchor = "ctx.trainer_id = r.trainer_id"
     assert source.count(anchor) == 1
     rig = ready(
         pc_=RIVAL_PC,
-        overrides={"lua/gen2/client.lua": source.replace(anchor, "trainer_id = nil })")},
+        overrides={"lua/gen2/client.lua": source.replace(anchor, "ctx.trainer_id = nil")},
     )
     captured = []
     rig.lua.globals().caller_capture = lambda tid: captured.append(tid)
@@ -646,9 +647,191 @@ def test_drop_bound_trainer_id_caller_mutant_turns_spy_red():
             return original(self,mons,ctx)
         end
     end""")(rig.rival.writes)
+    pending_native_swap(rig)
     before = rig.block()
-    errors = client_swap(rig)
+    fire_native_rival(rig)
+    rig.frame(1)
+    errors = [m.get("error") for m in rig.sent("rival_team_replaced")]
     with pytest.raises(AssertionError):
         assert captured == [TID]
     assert captured == [None] and "bound trainer identity required" in errors[0]
     assert rig.block() == before and rig.writes() == []
+
+
+RIVAL_HOOK = "SLink-gen2-polished:rival_swap_gate"
+
+
+def pending_native_swap(rig):
+    enter_battle(rig, party(), mode=2)
+    rig.put("hBattleTurn", 1)
+    rig.put("wOtherTrainerClass", RIVAL_CLASS)
+    rig.put("wOtherTrainerID", RIVAL_ID)
+    rig.put("wCurOTMon", 0xFF)
+    rig.frame(3)
+    blobs = ["".join(f"{b:02x}" for b in m["record"] + m["ot"] + m["nick"]) for m in py_party(2)]
+    rig.client.handle_command(
+        rig.client,
+        rig.lua.table_from(
+            {"cmd": "replace_rival_team", "trainer_id": TID, "blobs_hex": rig.lua.table_from(blobs)}
+        ),
+    )
+    rig.frame(1)  # receipt is parked across the old FF frame-end opportunity
+    assert rig.client.rival.pending is not None
+    rig.put("wCurOTMon", 0)
+    rig.put("wCurPartyMon", 0)
+    # Map the pinned real ROM bytes into the rig's System Bus at the callback.
+    rom = overlay()[1]
+    for i in range(3):
+        rig.mem[RIVAL_PC + i] = rom[FRAME_BANK * 0x4000 + RIVAL_PC - 0x4000 + i]
+    return rig
+
+
+def fire_native_rival(rig):
+    hook = rig.log.hook_fn[RIVAL_HOOK]
+    assert hook is not None, "composed rival hook missing"
+    hook()
+
+
+def test_native_rival_callback_lands_exact_image_once():
+    rig = pending_native_swap(ready(fresh=True))
+    fire_native_rival(rig)
+    assert rig.mem[COUNT] == 2 and len(rig.writes()) == 141
+    assert rig.sent("rival_team_replaced") == []  # callback never sends on the network
+    for start, field in [(MONS, "record"), (OTS, "ot"), (NICKS, "nick")]:
+        want = [b for m in py_party(2) for b in m[field]]
+        assert [rig.mem[start + i] for i in range(len(want))] == want
+    before = rig.writes()
+    fire_native_rival(rig)  # same callback visit, before frame-end reply flushing
+    assert rig.writes() == before
+    rig.frame(1)
+    replies = rig.sent("rival_team_replaced")
+    assert len(replies) == 1 and replies[0].get("error") is None
+
+
+@pytest.mark.parametrize(
+    "case,reason",
+    [
+        ("wild", "rival callback: not trainer"),
+        ("player", "rival callback: not enemy"),
+        ("stale", "rival callback: stale trainer"),
+        ("unarmed", "rival callback: writes disabled"),
+    ],
+    ids=["wild", "player", "stale-id", "unarmed"],
+)
+def test_native_rival_callback_refuses_before_write(case, reason):
+    rig = pending_native_swap(ready(fresh=True))
+    if case == "wild":
+        rig.put("wBattleMode", 1)
+    elif case == "player":
+        rig.put("hBattleTurn", 0)
+    elif case == "stale":
+        rig.put("wOtherTrainerID", RIVAL_ID + 1)
+    else:
+        rig.client.writes_enabled = False
+    before = rig.block()
+    fire_native_rival(rig)
+    assert rig.block() == before and rig.writes() == []
+    rig.frame(1)
+    assert reason in rig.sent("rival_team_replaced")[0]["error"]
+
+
+def test_second_callback_mutant_repeats_real_writes():
+    source = (LUA / "client.lua").read_text()
+    old = "if not r or r.gate_used then return nil end"
+    assert source.count(old) == 1
+    rig = pending_native_swap(
+        ready(
+            overrides={"lua/gen2/client.lua": source.replace(old, "if not r then return nil end")}
+        )
+    )
+    fire_native_rival(rig)
+    before = rig.writes()
+    fire_native_rival(rig)
+    with pytest.raises(AssertionError):
+        assert rig.writes() == before
+    assert len(before) == 141 and len(rig.writes()) == 282
+
+
+def test_callback_side_mutant_reaches_writer_but_writer_still_refuses():
+    old = 'assert(io.read_u8(profile.hram.hBattleTurn, "System Bus") == 1, "rival callback: not enemy")'
+    assert RIVAL.count(old) == 1
+    for changed in (False, True):
+        rig = pending_native_swap(
+            ready(
+                overrides=mutant(RIVAL.replace(old, 'assert(true, "rival callback: not enemy")'))
+                if changed
+                else None,
+                fresh=True,
+            )
+        )
+        arms = []
+        rig.lua.globals().capture_arm = lambda arms=arms: arms.append(True)
+        rig.lua.execute("""return function(w)
+            local arm=w.arm
+            w.arm=function(self,...) capture_arm(); return arm(self,...) end
+        end""")(rig.rival.writes)
+        rig.put("hBattleTurn", 0)
+        before = rig.block()
+        fire_native_rival(rig)
+        rig.frame(1)
+        assert rig.writes() == [] and rig.block() == before
+        if changed:
+            with pytest.raises(AssertionError):
+                assert (
+                    arms == []
+                )  # callback brake removed; independent plan brake still protects RAM
+            assert arms == [True]
+            assert "not an enemy send-in" in rig.sent("rival_team_replaced")[0]["error"]
+        else:
+            assert arms == []
+            assert "rival callback: not enemy" in rig.sent("rival_team_replaced")[0]["error"]
+
+
+def test_unarmed_polished_composition_registers_no_rival_hook():
+    rig = ready(classes=(), fresh=True)
+    assert RIVAL_HOOK not in list(rig.log.hooks.values())
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"], ids=["crystal", "gold", "silver"])
+def test_vanilla_composition_registers_no_polished_rival_hook(title):
+    from pathlib import Path
+
+    from tests.unit import test_gen2_client as vanilla
+
+    root = Path(ROOT)
+    profile = json.loads((root / f"data/games/gen2_{title}/profile.json").read_text())["titles"][
+        title
+    ]
+    repo = "pokecrystal" if title == "crystal" else "pokegold"
+    if not (root / f".cache/gen2-build/{repo}/{profile['artifact']}.gbc").exists():
+        pytest.skip("vanilla ROM input absent")
+    world = vanilla.World(title)
+    assert all("rival_swap_gate" not in name for name in world.emu.callbacks)
+
+
+def test_wrong_bank_does_not_consume_native_visit():
+    rig = pending_native_swap(ready(fresh=True))
+    rig.put("hROMBank", 0x25)
+    fire_native_rival(rig)
+    assert rig.writes() == [] and not rig.client.rival.gate_used
+    rig.put("hROMBank", 0x0F)
+    fire_native_rival(rig)
+    assert len(rig.writes()) == 141
+
+
+def test_first_gate_without_pending_closes_late_reply_window():
+    rig = pending_native_swap(ready(fresh=True))
+    cmd = rig.client.rival.pending.cmd
+    rig.client.rival.pending = None
+    fire_native_rival(rig)
+    rig.client.handle_command(rig.client, cmd)
+    assert rig.sent("rival_team_replaced")[-1]["error"] == "late_reply"
+    assert rig.writes() == []
+
+
+def test_changed_rival_modules_compile_in_lua55():
+    from lupa.lua55 import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    for name in ("client.lua", "signals.lua", "polished_rival.lua"):
+        assert lua.eval("function(s) return assert(load(s)) ~= nil end")((LUA / name).read_text())

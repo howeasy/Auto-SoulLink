@@ -2551,8 +2551,45 @@ function Client.new(p)
     local function rival_reply(cmd, ids, err)
         send("rival_team_replaced", { trainer_id = cmd.trainer_id, species_ids = ids or arr({}), error = err })
     end
+    local native_rival_window = p.rival_swap and writes and type(writes.rival_gate_enabled) == "function"
+                                and writes:rival_gate_enabled()
+    local function flush_rival_reply(r)
+        if r and r.callback_reply then
+            local reply = r.callback_reply
+            r.callback_reply, r.pending = nil, nil
+            rival_reply(reply.cmd, reply.ids, reply.error) -- network stays outside the exec callback
+        end
+    end
+    if native_rival_window then
+        authority.rival_write_window = function()
+            local r = self.rival
+            if not r or r.gate_used then return nil end
+            r.gate_used, r.closed = true, true -- the first send-in consumes this battle visit, even if no reply arrived
+            local pend = r.pending
+            if not pend then return nil end
+            local ok, err = pcall(function()
+                assert(self.writes_enabled, "rival callback: writes disabled")
+                assert(r.epoch == self.epoch, "rival callback: stale visit")
+                local ctx = writes:rival_gate_context(r.trainer_id)
+                ctx.trainer_id = r.trainer_id
+                writes:arm("rival_swap")
+                writes:write_enemy_party(pend.mons, ctx)
+            end)
+            writes:disarm()
+            local ids
+            if ok then
+                r.applied, ids = true, arr({})
+                for i, mon in ipairs(pend.mons) do ids[i] = mon.record[c.MON_SPECIES + 1] end
+            end
+            r.callback_reply = {cmd=pend.cmd, ids=ids, error=not ok and tostring(err) or nil}
+            -- Keep pending until frame-end flush; gate_used is the once-per-visit fence between callbacks.
+            if ok then return {ok=true, result={reason="rival_swap", count=#pend.mons}} end
+            return nil
+        end
+    end
     function self:rival_close(why)
         local r = self.rival
+        flush_rival_reply(r)
         self.rival = nil
         if r and r.pending then
             log("[SLink-gen2] rival swap closed unanswered: " .. tostring(why))
@@ -2599,6 +2636,7 @@ function Client.new(p)
     end
 
     function self:rival_tick()
+        flush_rival_reply(self.rival)
         local battle = reads.read_battle()
         if not battle then return end
         if battle.mode == 0 then return self:rival_close("battle over") end
@@ -2609,7 +2647,7 @@ function Client.new(p)
         if not r or r.trainer_id ~= id then
             if cur ~= 0xFF then return end -- joined after the send-out: no window to announce
             self:rival_close("another trainer battle")
-            r = { trainer_id = id, frame = self.frame }
+            r = { trainer_id = id, frame = self.frame, epoch = self.epoch }
             self.rival = r
             send("trainer_battle_start", { trainer_id = id })
         end
@@ -2626,6 +2664,7 @@ function Client.new(p)
             end
             return
         end
+        if native_rival_window then return end -- preserve the parked command for the native exec window
         if not r.pending or not self.writes_enabled or not safety.check(BATTLE_BENCH) then return end
         local pend = r.pending
         r.pending = nil
