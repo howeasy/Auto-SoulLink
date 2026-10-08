@@ -20,15 +20,15 @@
 --     deps.rival_classes / :set_classes() supply wOtherTrainerClass values and the default is none)
 --   * the battle hold (polished_overworld.lua O.battle_checkpoint kind "rival": a battle, no link, no native save, no
 --     backup save, the 0f:47DD site bytes re-read from the executed ROM), wBattleMode == TRAINER_BATTLE
---   * the CPU at 0f:47DD: hROMBank == 0x0F AND the PC register == 0x47DD (io.register("PC")). UNVERIFIED live that
---     BizHawk's PC register reads the instruction's own address inside an exec callback; until then every write attempted
---     at a frame end (client.lua rival_tick) is refused here, which is the safe direction
+--   * the CPU at 0f:47DD: hROMBank == 0x0F AND the PC register == 0x47DD (io.register("PC")). The native-window
+--     interface below is registered only for a composition with configured classes. The callback predicate and
+--     plan each check the live engine state; model composition is not a live consumed-write receipt.
 --   * the class of the trainer being fought is in the rival set; hBattleTurn is enemy (1), and required ctx.trainer_id names it (stale battle)
 --   * ctx.cur_ot_mon is what wCurOTMon AND wCurPartyMon read (committed at 0f:47cc), inside the NEW party, and that mon
 --     has HP (the engine copies it next, §10); count 1..6; every record complete, a known species, not an egg, level
 --     1..MAX_LEVEL
--- The write is only valid before 0f:480d (§10.3). WHETHER the hold at 0f:47DD is ever reached by a client hook is NOT
--- composed: client.lua only polls at a frame end, so through the client every attempt is refused (PC) -- see the doc.
+-- The write is only valid before 0f:480d (§10.3). The client parks a command for the native window; frame end
+-- announces the visit and reports its result. Live swap consumption and callback timing remain separate evidence.
 local R = {}
 
 local function integer(value, low, high)
@@ -236,6 +236,23 @@ function R.new(deps)
         if type(value) == "function" then return function(_, ...) return value(facade, ...) end end
         return value
     end})
+    -- Polished-only synchronous window interface. The client owns visit/command lifetime;
+    -- this module owns ROM-specific predicate bytes. plan() independently rechecks every guard.
+    function proxy:rival_gate_enabled() return next(classes) ~= nil end
+    function proxy:rival_gate_context(bound_trainer)
+        assert(io.read_u8(profile.hram.hROMBank, "System Bus") == site.bank and io.register("PC") == site.pc,
+               "rival callback: wrong bank/PC")
+        assert(ram("wBattleMode") == c.TRAINER_BATTLE, "rival callback: not trainer")
+        assert(io.read_u8(profile.hram.hBattleTurn, "System Bus") == 1, "rival callback: not enemy")
+        local class, id = ram("wOtherTrainerClass"), ram("wOtherTrainerID")
+        assert(classes[class] == true, "rival callback: class not configured")
+        assert(bound_trainer ~= nil and bound_trainer == class * 256 + id, "rival callback: stale trainer")
+        local link, cur = ram("wLinkMode"), wram(bank_of.wCurOTMon, at.wCurOTMon)
+        assert(link == 0, "rival callback: link active")
+        assert(integer(cur, 0, P - 1) and wram(bank_of.wCurPartyMon, at.wCurPartyMon) == cur,
+               "rival callback: inconsistent selected index")
+        return {mode=c.TRAINER_BATTLE, link_mode=link, cur_ot_mon=cur}
+    end
     function proxy:arm(reason, extra)
         if reason ~= "rival_swap" then return facade:arm(reason, extra) end
         assert(extra == nil or type(extra) == "function", "allow must be a predicate")
