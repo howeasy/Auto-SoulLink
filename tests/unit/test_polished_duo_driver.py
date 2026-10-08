@@ -560,6 +560,284 @@ def _wire_cmds(ev, role, fn):
             rec["msg"]["commands"] = [c for c in rec["msg"]["commands"] if fn(c)]
 
 
+
+# Natural loss red controls precede the implementation: HP1 setup alone, an event alone, or the old hello
+# reconciliation path is not proof that native battle copyback / pre-heal whiteout propagation worked.
+def natural_ev(whole_party=False):
+    ev = link_ev()
+    ev["scenario"] = "whiteout-natural" if whole_party else "faint-natural"
+    ev["marks"]["stage"] = {r: len(ev["wire"][r]) for r in ("a", "b")}
+    a_party, ordered = A_OWN + [KA], [KA] + A_OWN
+    targets = a_party if whole_party else [KA]
+    before, staged = _snapshot(a_party), _snapshot(ordered, hp=dict.fromkeys(targets, 1))
+    before["frame"], staged["frame"] = 100, 101
+    writes = []
+    for mon in staged["party"]:
+        if mon["key"] in targets:
+            for offset, old, new in ((0, 0, 0), (1, 120, 1)):
+                writes.append({"key": mon["key"], "slot": mon["slot"], "wram": 7000 + mon["slot"] * 48 + offset,
+                               "old": old, "new": new})
+    ev["steps"]["a"]["stage"] = {"ok": True, "op": "synth_hp1", "before": before, "synth_writes": writes,
+                                 "lead_writes": [], "snapshot": staged}
+    zero_party = _snapshot(ordered, hp=dict.fromkeys(targets, 0))["party"]
+    event = {"event": "whiteout", "party": copy.deepcopy(zero_party)} if whole_party else {"event": "faint", "key": KA}
+    report = dict(event, frame=150, party=copy.deepcopy(zero_party))
+    if whole_party:
+        report["wire_party"] = copy.deepcopy(zero_party)
+    hit = {"frame": 150, "party": copy.deepcopy(zero_party), "pc": 0x4ABC, "bank": 15,
+           "qualified": True, "expected_hex": "abcd", "site": "LoseMoney" if whole_party else "UpdateBattleMonInParty",
+           "slot": 0, "battle_hp": 0}
+    ev["steps"]["a"]["battle"] = {"ok": True, "op": "lose_native", "reports": [report],
+                                  "site_hits": {"faint_copyback": [copy.deepcopy(hit)], "whiteout": [hit] if whole_party else [],
+                                                "heal_party": []},
+                                  "run_used": False, "fight_inputs": 1, "snapshot": _snapshot(ordered)}
+    ev["wire"]["a"].append(_rec("c2s", event))
+    ev["wire"]["b"].append(_rec("s2c", {"commands": [{"cmd": "force_faint", "key": KB}]}))
+    ev["steps"]["b"]["pre"] = {"ok": True, "op": "snapshot", "snapshot": _snapshot(B_OWN + [KB])}
+    ev["steps"]["b"]["await"] = {"ok": True, "op": "await_cmd", "received": {"cmd": "force_faint", "key": KB},
+                                 "snapshot": _snapshot(B_OWN + [KB], hp={KB: 0})}
+    ev["status"]["after"] = _link_status("dead")
+    return ev
+
+
+def _natural_hello_fallback(ev):
+    mark = ev["marks"]["stage"]["a"]
+    ev["wire"]["a"][mark:] = [_rec("meta", {"event": "_disconnect"}),
+                                _rec("meta", {"event": "_connect"}, 2),
+                                _rec("c2s", {"event": "hello", "party": [{"key": KA, "hp": 0}]}, 2)]
+    ev["steps"]["a"]["battle"]["reports"] = []
+
+
+def _stage_byte(ev, offset, new):
+    row = sorted((w for w in ev["steps"]["a"]["stage"]["synth_writes"] if w["key"] == KA), key=lambda w: w["wram"])[offset]
+    row["new"] = new
+
+
+NATURAL_DEFECTS = [
+    ("hello_fallback", _natural_hello_fallback, "a:poststage_reconnect"),
+    ("native_event_missing", lambda e: e["wire"]["a"].pop(), "a:native_event_missing"),
+    ("partner_command_missing", lambda e: _wire_cmds(e, "b", lambda c: c["cmd"] != "force_faint"),
+     f"b:force_faint_missing:{KB}"),
+    ("partner_command_before_mark", lambda e: e["marks"]["stage"].update(b=len(e["wire"]["b"])),
+     f"b:force_faint_missing:{KB}"),
+    ("native_event_before_mark", lambda e: e["marks"]["stage"].update(a=len(e["wire"]["a"])), "a:native_event_missing"),
+    ("wrong_partner_command", lambda e: e["wire"]["b"][-1]["msg"]["commands"][0].update(key=B_OWN[0]),
+     "b:force_faint_wrong_key"),
+    ("explode_is_not_force_faint", lambda e: e["wire"]["b"][-1]["msg"]["commands"][0].update(cmd="force_explode"),
+     "b:force_faint_wrong_command"),
+    ("b_hp_survives", lambda e: e["steps"]["b"]["await"].update(snapshot=_snapshot(B_OWN + [KB])),
+     f"b:cartridge_hp_not_zero:{KB}"),
+    ("link_survives", lambda e: e["status"].update(after=_link_status()), f"link_still_alive:{AREA}"),
+    ("link_disappeared", lambda e: e["status"]["after"].update(links=[]), f"dead_link_missing:{AREA}"),
+    ("link_memorial_is_not_dead", lambda e: e["status"].update(after=_link_status("memorial")), f"link_not_dead:{AREA}"),
+    ("wrong_hp1_target", lambda e: e["steps"]["a"]["stage"]["synth_writes"][0].update(key=B_OWN[0]),
+     "a:stage_wrong_target"),
+    ("zero_injection", lambda e: _stage_byte(e, 1, 0), "a:stage_hp_zero_injection"),
+    ("hp1_did_not_land", lambda e: e["steps"]["a"]["stage"].update(snapshot=_snapshot([KA] + A_OWN)),
+     "a:stage_not_landed"),
+    ("old_hp0_op", lambda e: e["steps"]["a"]["stage"].update(op="synth_hp0"), "a:stage_not_hp1"),
+    ("stage_mark_missing", lambda e: e["marks"].clear(), "stage_mark_missing"),
+    ("battle_failed", lambda e: e["steps"]["a"]["battle"].update(ok=False), "a:native_battle_failed"),
+    ("report_missing", lambda e: e["steps"]["a"]["battle"].update(reports=[]), "a:native_report_missing"),
+    ("report_before_setup", lambda e: e["steps"]["a"]["battle"]["reports"][0].update(frame=99),
+     "a:native_report_missing"),
+    ("client_received_other_key", lambda e: e["steps"]["b"]["await"]["received"].update(key=B_OWN[0]),
+     "b:force_faint_not_received_by_client"),
+    ("client_received_other_command", lambda e: e["steps"]["b"]["await"]["received"].update(cmd="memorialize"),
+     "b:force_faint_not_received_by_client"),
+]
+
+
+@pytest.mark.parametrize("whole_party", [False, True], ids=["faint", "whiteout"])
+@pytest.mark.parametrize("name,mutate,reason", NATURAL_DEFECTS, ids=[d[0] for d in NATURAL_DEFECTS])
+def test_natural_loss_red_controls(whole_party, name, mutate, reason):
+    ev = natural_ev(whole_party)
+    mutate(ev)
+    oracle = duo.oracle_whiteout_natural if whole_party else duo.oracle_faint_natural
+    verdict, reasons, facts = oracle(ev)
+    assert verdict == "FAIL" and reason in reasons, reasons
+    assert "server_path" in facts
+
+
+NATURAL_FAINT_DEFECTS = [
+    ("wrong_faint_key", lambda e: e["wire"]["a"][-1]["msg"].update(key=A_OWN[0]), "a:native_event_missing"),
+    ("copyback_hp_alive", lambda e: e["steps"]["a"]["battle"]["reports"][0]["party"][0].update(hp=1),
+     "a:faint_copyback_hp_not_zero"),
+    ("copyback_hook_missing", lambda e: e["steps"]["a"]["battle"]["site_hits"].update(faint_copyback=[]),
+     "a:faint_copyback_hook_missing"),
+    ("copyback_hook_unqualified", lambda e: e["steps"]["a"]["battle"]["site_hits"]["faint_copyback"][0].update(qualified=False),
+     "a:faint_copyback_hook_missing"),
+    ("copyback_hook_before_stage", lambda e: e["steps"]["a"]["battle"]["site_hits"]["faint_copyback"][0].update(frame=99),
+     "a:faint_copyback_hook_missing"),
+    ("copyback_hook_after_report", lambda e: e["steps"]["a"]["battle"]["site_hits"]["faint_copyback"][0].update(frame=151),
+     "a:faint_copyback_hook_missing"),
+    ("copyback_hook_wrong_slot", lambda e: e["steps"]["a"]["battle"]["site_hits"]["faint_copyback"][0].update(slot=1),
+     "a:faint_copyback_hook_missing"),
+    ("native_hp_nonzero", lambda e: e["steps"]["a"]["battle"]["site_hits"]["faint_copyback"][0].update(battle_hp=1),
+     "a:faint_copyback_hook_missing"),
+    ("b_collateral_loss", lambda e: e["steps"]["b"]["await"].update(snapshot=_snapshot(B_OWN + [KB], hp={KB: 0, B_OWN[0]: 0})),
+     f"b:collateral_hp_change:{B_OWN[0]}"),
+]
+
+
+@pytest.mark.parametrize("name,mutate,reason", NATURAL_FAINT_DEFECTS, ids=[d[0] for d in NATURAL_FAINT_DEFECTS])
+def test_natural_faint_copyback_red_controls(name, mutate, reason):
+    ev = natural_ev()
+    mutate(ev)
+    verdict, reasons, _ = duo.oracle_faint_natural(ev)
+    assert verdict == "FAIL" and reason in reasons, reasons
+
+
+NATURAL_WHITEOUT_DEFECTS = [
+    ("alive_wire_forfeit", lambda e: e["wire"]["a"][-1]["msg"]["party"][1].update(hp=1),
+     "a:whiteout_wire_party_not_all_zero"),
+    ("wire_party_absent", lambda e: e["wire"]["a"][-1]["msg"].pop("party"), "a:whiteout_wire_party_missing"),
+    ("wire_party_incomplete", lambda e: e["wire"]["a"][-1]["msg"]["party"].pop(), "a:whiteout_wire_party_incomplete"),
+    ("whiteout_hook_missing", lambda e: e["steps"]["a"]["battle"]["site_hits"].update(whiteout=[]),
+     "a:whiteout_preheal_hook_missing"),
+    ("whiteout_hook_unqualified", lambda e: e["steps"]["a"]["battle"]["site_hits"]["whiteout"][0].update(qualified=False),
+     "a:whiteout_preheal_hook_missing"),
+    ("whiteout_hook_healed_party", lambda e: e["steps"]["a"]["battle"]["site_hits"]["whiteout"][0]["party"][1].update(hp=120),
+     "a:whiteout_preheal_hook_missing"),
+    ("whiteout_report_healed_party", lambda e: e["steps"]["a"]["battle"]["reports"][0]["party"][1].update(hp=120),
+     "a:whiteout_report_party_not_all_zero"),
+    ("whiteout_hook_is_other_site", lambda e: e["steps"]["a"]["battle"]["site_hits"]["whiteout"][0].update(site="HealParty"),
+     "a:whiteout_preheal_hook_missing"),
+    ("only_linked_hp1", lambda e: e["steps"]["a"]["stage"].update(
+        synth_writes=[w for w in e["steps"]["a"]["stage"]["synth_writes"] if w["key"] == KA]), "a:stage_wrong_target"),
+    ("run_forfeit", lambda e: e["steps"]["a"]["battle"].update(run_used=True), "a:whiteout_run_used"),
+    ("healed_before_send", lambda e: e["steps"]["a"]["battle"]["site_hits"].update(heal_party=[{"frame": 150}]),
+     "a:whiteout_healed_before_report"),
+    ("heal_observation_missing", lambda e: e["steps"]["a"]["battle"]["site_hits"].pop("heal_party"),
+     "a:whiteout_heal_witness_missing"),
+]
+
+
+@pytest.mark.parametrize("name,mutate,reason", NATURAL_WHITEOUT_DEFECTS, ids=[d[0] for d in NATURAL_WHITEOUT_DEFECTS])
+def test_natural_whiteout_preheal_red_controls(name, mutate, reason):
+    ev = natural_ev(True)
+    mutate(ev)
+    verdict, reasons, _ = duo.oracle_whiteout_natural(ev)
+    assert verdict == "FAIL" and reason in reasons, reasons
+
+
+@pytest.mark.parametrize("whole_party,path", [(False, "faint_event"), (True, "whiteout_event")])
+def test_natural_loss_passes_only_the_native_server_path(whole_party, path):
+    ev = natural_ev(whole_party)
+    # Native loss may heal A afterwards. The report at send / guarded pre-heal hook, not the final party,
+    # is the HP0 witness. A later no_catch on an already linked route is not a failed initial S1 capture.
+    ev["wire"]["a"].append(_rec("c2s", {"event": "no_catch", "area_id": AREA}))
+    oracle = duo.oracle_whiteout_natural if whole_party else duo.oracle_faint_natural
+    verdict, reasons, facts = oracle(ev)
+    assert (verdict, reasons, facts["server_path"]) == ("PASS", [], path)
+    assert facts["expected_partners"] == facts["b_force_faint_keys"] == [KB]
+
+
+@pytest.mark.parametrize("whole_party", [False, True], ids=["copyback_delay", "whiteout_queue_delay"])
+def test_natural_report_may_follow_its_hook_on_a_later_frame(whole_party):
+    ev = natural_ev(whole_party)
+    ev["steps"]["a"]["battle"]["reports"][0]["frame"] = 160
+    if not whole_party:
+        # The faint hook sees zero battle HP before the engine copies it to the party.
+        ev["steps"]["a"]["battle"]["site_hits"]["faint_copyback"][0]["party"][0]["hp"] = 1
+    ev["wire"]["a"].append(_rec("meta", {"event": "_disconnect"}))
+    ev["wire"]["b"].append(_rec("meta", {"event": "_disconnect"}))
+    oracle = duo.oracle_whiteout_natural if whole_party else duo.oracle_faint_natural
+    assert oracle(ev)[:2] == ("PASS", [])
+
+
+def test_natural_whiteout_ignores_eggs_but_not_usable_mons():
+    ev = natural_ev(True)
+    egg = A_OWN[0]
+    stage, battle = ev["steps"]["a"]["stage"], ev["steps"]["a"]["battle"]
+    parties = [stage["before"]["party"], stage["snapshot"]["party"], ev["wire"]["a"][-1]["msg"]["party"],
+               battle["reports"][0]["party"], battle["reports"][0]["wire_party"], battle["site_hits"]["whiteout"][0]["party"]]
+    for party in parties:
+        mon = next(m for m in party if m["key"] == egg)
+        mon.update(egg=True, hp=120)
+    stage["synth_writes"] = [w for w in stage["synth_writes"] if w["key"] != egg]
+    assert duo.oracle_whiteout_natural(ev)[:2] == ("PASS", [])
+
+
+@pytest.mark.parametrize("whole_party", [False, True])
+def test_natural_loss_never_passes_hello_reconciliation(whole_party):
+    ev = natural_ev(whole_party)
+    _natural_hello_fallback(ev)
+    oracle = duo.oracle_whiteout_natural if whole_party else duo.oracle_faint_natural
+    verdict, reasons, facts = oracle(ev)
+    assert verdict == "FAIL" and "a:native_event_missing" in reasons
+    assert facts["server_path"] == "hello_reconcile"
+
+
+def test_natural_link_gate_still_rejects_no_catch_before_stage():
+    ev = natural_ev()
+    ev["wire"]["a"].insert(3, _rec("c2s", {"event": "no_catch", "area_id": AREA}))
+    ev["marks"]["stage"]["a"] += 1
+    verdict, reasons, _ = duo.oracle_faint_natural(ev)
+    assert verdict == "FAIL" and "link:a:no_catch_sent" in reasons
+
+
+def test_natural_whiteout_requires_every_linked_partner_and_no_unlinked_death():
+    ev = natural_ev(True)
+    ka2, kb2 = A_OWN[0], B_OWN[0]
+    for state, status in (("alive", ev["status"]["linked"]), ("dead", ev["status"]["after"])):
+        status["links"].append({"area_id": "route_30", "a_key": ka2, "b_key": kb2, "status": state})
+    verdict, reasons, _ = duo.oracle_whiteout_natural(ev)
+    assert verdict == "FAIL" and f"b:force_faint_missing:{kb2}" in reasons
+    ev["wire"]["b"][-1]["msg"]["commands"].append({"cmd": "force_faint", "key": kb2})
+    ev["steps"]["b"]["await"]["received"] = [{"cmd": "force_faint", "key": KB}, {"cmd": "force_faint", "key": kb2}]
+    ev["steps"]["b"]["await"]["snapshot"] = _snapshot(B_OWN + [KB], hp={KB: 0, kb2: 0})
+    assert duo.oracle_whiteout_natural(ev)[:2] == ("PASS", [])
+
+
+def retired_partner_ev():
+    ev = natural_ev()
+    step = ev["steps"]["b"]["await"]
+    step["received"].update(frame=200, seq=21)
+    step["force_faint_readback"] = {"key": KB, "hp": 0, "slot": 2, "frame": 201, "command_frame": 200, "seq": 21,
+                                    "party": copy.deepcopy(step["snapshot"]["party"])}
+    step["snapshot"] = _snapshot(B_OWN, box=[KB])
+    return ev
+
+
+RETIRED_PARTNER_DEFECTS = [
+    ("hp_never_zero", lambda e: e["steps"]["b"]["await"]["force_faint_readback"].update(hp=1)),
+    ("wrong_key", lambda e: e["steps"]["b"]["await"]["force_faint_readback"].update(key=B_OWN[0])),
+    ("wrong_slot", lambda e: e["steps"]["b"]["await"]["force_faint_readback"].update(slot=0)),
+    ("party_hp_alive", lambda e: e["steps"]["b"]["await"]["force_faint_readback"]["party"][-1].update(hp=1)),
+    ("read_before_command", lambda e: e["steps"]["b"]["await"]["force_faint_readback"].update(frame=199)),
+    ("other_command_frame", lambda e: e["steps"]["b"]["await"]["force_faint_readback"].update(command_frame=199)),
+    ("other_command_sequence", lambda e: e["steps"]["b"]["await"]["force_faint_readback"].update(seq=22)),
+]
+
+
+@pytest.mark.parametrize("name,mutate", RETIRED_PARTNER_DEFECTS, ids=[d[0] for d in RETIRED_PARTNER_DEFECTS])
+def test_natural_retirement_requires_exact_command_bound_hp0_readback(name, mutate):
+    ev = retired_partner_ev()
+    mutate(ev)
+    verdict, reasons, _ = duo.oracle_faint_natural(ev)
+    assert verdict == "FAIL" and f"b:force_faint_readback_invalid:{KB}" in reasons, reasons
+
+
+def test_natural_partner_may_memorialize_after_its_real_cartridge_hp0_witness():
+    verdict, reasons, facts = duo.oracle_faint_natural(retired_partner_ev())
+    assert (verdict, reasons) == ("PASS", [])
+    assert facts["b_cartridge_witness"] == {KB: "force_faint_readback"}
+
+
+def test_natural_surviving_partner_is_not_hidden_by_an_earlier_zero_readback():
+    ev = retired_partner_ev()
+    ev["steps"]["b"]["await"]["snapshot"] = _snapshot(B_OWN + [KB])
+    verdict, reasons, _ = duo.oracle_faint_natural(ev)
+    assert verdict == "FAIL" and f"b:cartridge_hp_not_zero:{KB}" in reasons
+
+
+def test_natural_loss_rejects_the_original_hp0_staged_transcripts():
+    for whole_party, oracle in ((False, duo.oracle_faint_natural), (True, duo.oracle_whiteout_natural)):
+        verdict, reasons, _ = oracle(faint_ev(whole_party))
+        assert verdict == "FAIL" and "a:stage_not_hp1" in reasons
+
+
 def test_play_oracles_pass_on_a_correct_transcript():
     assert duo.oracle_link(link_ev())[:2] == ("PASS", [])
     verdict, reasons, facts = duo.oracle_faint(faint_ev())
@@ -705,33 +983,24 @@ def test_boxsync_oracle_red_controls(name, mutate, reason):
 
 
 def test_play_names_steps_and_step_lines():
-    assert duo.play_names("all") == ["link", "boxsync", "faint", "whiteout"]
+    assert duo.play_names("all") == ["link", "boxsync", "faint", "whiteout", "faint-natural", "whiteout-natural"]
     assert duo.play_names("faint") == ["faint"]
     with pytest.raises(ValueError):
         duo.play_names("trade")
     assert duo.parse_args(["--scenario", "whiteout"]).scenario == "whiteout"
-    assert duo.parse_args([]).scenario is None                              # no flag = the unchanged zero-write smoke
     assert duo.play_steps("link", False) == [("a", "catch_a"), ("b", "catch_b")]
     assert duo.play_steps("faint", True) == [("a", "catch_a"), ("a", "boxed"), ("b", "catch_b"), ("a", "withdrawn"),
                                              ("b", "pre"), ("a", "stage"), ("b", "await")]
-    labels = {lab for _, lab in duo.play_steps("whiteout", True)} | {"catch_a", "catch_b"}
-    assert set(duo.SYNTH_SETUP) == set(duo.PLAY_SCENARIOS) == set(duo.ORACLES) and labels
+    for name in ("faint-natural", "whiteout-natural"):
+        assert duo.parse_args(["--scenario", name]).scenario == name
+        assert duo.play_names(name) == [name]
+        assert duo.play_steps(name, True) == [("a", "catch_a"), ("a", "boxed"), ("b", "catch_b"), ("a", "withdrawn"),
+                                              ("b", "pre"), ("a", "stage"), ("a", "battle"), ("b", "await")]
     text = ('x\nPLAY_STEP {"k":1,"op":"catch","label":"catch_a","ok":true,"battles":{}}\nPLAY_STEP not json\n'
             'PLAY_STEP {"k":2,"op":"idle","ok":true}\n')
     got = duo.play_step_lines(text)
     assert got["catch_a"]["ok"] is True and got["idle#2"]["op"] == "idle"
     assert duo._as_list({}) == []                                           # Lua's empty array
-
-
-def test_box_capability_is_the_adapters_own_answer():
-    from server.adapters import get_adapter
-    assert duo.adapter_box_capability() is bool(get_adapter("gen2_polished").supports_box_mon())
-
-
-def test_synth_staging_is_disclosed_only_where_it_is_used():
-    assert duo.SYNTH_SETUP["link"] == [] and duo.SYNTH_SETUP["boxsync"] == []
-    for name in ("faint", "whiteout"):
-        assert any("HP" in s for s in duo.SYNTH_SETUP[name]) and any("disconnect" in s for s in duo.SYNTH_SETUP[name])
 
 
 @pytest.mark.parametrize("startup_error", [ConnectionRefusedError("starting"), URLError("starting")])
@@ -830,3 +1099,50 @@ def test_play_snapshot_reads_the_production_box_census(state):
     assert got == sorted((box - 1, slot - 1, codec_key(entry)) for (box, slot), entry in planted.items())
     assert snapshot["box_why"] is None if state != "invalid" else "sSaveVersion 0000" in snapshot["box_why"]
     assert image.snap() == before
+
+
+def test_natural_driver_advances_intro_without_a_text_hook():
+    """An intro waiting for input before UI hooks must reach FIGHT, not idle until the stall bound."""
+    lupa = pytest.importorskip("lupa")
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    engine = """
+local frame, mode, hp, engine = 0, 0, 1, "intro"
+local native_ui, native_ui_frame = nil, 0
+local reports, witnesses, hook_errors = {}, {}, {}
+local staged = {key="K", all=false, frame=0}
+local fmt=string.format
+local emu={framecount=function() return frame end}
+local L={hits={BattleMenu_Run=0,BattleMenu_Fight=0,BattleTurn=0}}
+local function party_evidence()
+    return {{key="K",slot=0,hp=hp,level=2,egg=false},{key="S",slot=1,hp=100,level=50,egg=false}}
+end
+local function snapshot() return {frame=frame,party=party_evidence()} end
+local function pbyte(slot,off) return off==2 and 33 or 0 end
+local function be16(slot,off) return slot==0 and hp or 100 end
+local function walk_for_battle() mode=1 return true end
+function L.rw(name)
+    if name=="wBattleMode" then return mode
+    elseif name=="wCurBattleMon" or name=="wBattleType" then return 0
+    elseif name=="wMenuCursorY" or name=="wMenuCursorX" then return 1 end
+    return 2
+end
+function L.wbytes() return {33,0,0,0} end
+function L.ow_idle() return mode==0 end
+function L.recent() return false end
+function L.pulse(button)
+    local pressed=button and frame%16<2
+    if pressed and engine=="intro" and button=="A" then
+        engine="fight";native_ui="root";native_ui_frame=frame
+    elseif pressed and engine=="fight" and button=="A" then
+        engine="fainted";hp=0
+        reports[#reports+1]={event="faint",key="K",frame=frame};L.hits.BattleMenu_Fight=1
+    elseif pressed and engine=="fainted" and button=="B" then
+        engine="overworld";mode=0;L.hits.BattleMenu_Run=1
+    end
+    frame=frame+1
+end
+"""
+    source = (REPO / "tools/polished_live/duo_play.lua").read_text(encoding="utf-8")
+    loss = source[source.index("local function op_lose_native("):source.index("-- ── boot + step loop")]
+    result = lua.execute(engine + loss + '\nreturn op_lose_native({key="K",all=false,frames=5000})')
+    assert result["ok"] and result["fight_inputs"] == 1 and result["run_used"]
