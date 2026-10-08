@@ -33,6 +33,9 @@ fresh run (lane play-<name>/) driven by duo_play.lua through numbered step files
 Production Polished has no faint observer or whiteout site (lua/gen2/entry.lua compose_polished), so the oracles
 report which server path carried the HP 0 (hello_reconcile / faint_event / whiteout_event). Evidence + disclosure:
 <lane>/play-<name>/evidence.json; one `RESULT: PASS|FAIL|SKIPPED polished-duo-play-<name>` line per scenario.
+PLAY startup HTTP readiness has a 40-second bound; a child not listening yet is not a rule failure.
+The native disclosure lists scenario paths, not evidence that every path ran; steps and PLAY_FINAL
+are the witnesses (S1 without box capability can finish with zero client writes).
 """
 from __future__ import annotations
 
@@ -46,6 +49,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -967,9 +971,16 @@ def play_run(args, name: str, fixtures: dict, ident: dict, box_capable: bool) ->
     def mark(label: str) -> None:
         ev["marks"][label] = {r: len(wire(r)) for r in ("a", "b")}
 
+
+    def server_ready() -> bool:
+        """A not-yet-listening child remains inside the existing bounded startup wait."""
+        try:
+            return bool(http_json(http, "/api/status"))
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            return False
     verdict, reasons, facts = "FAIL", ["driver_error"], {}
     try:
-        wait("server http", lambda: bool(http_json(http, "/api/status")), 40)
+        wait("server http", server_ready, 40)
         for role in ("a", "b"):
             env = dict(os.environ, **side_env(paths[role], role, "127.0.0.1", port))
             lua = (REPO / "tools/polished_live/duo_play.lua").as_posix()
