@@ -23,8 +23,8 @@
 --   See docs/polished/TRADE.md §8.2 and server/adapters/polished_codec.py, which is the byte-for-byte
 --   twin of this module and whose tests/unit/test_polished_trade_codec.py pins both against the sym.
 --
---   C3 adds a DEV-ONLY proposer binder over the shared GB lease. C4 composition,
---   responder pickup, commit and production admission remain separate cards.
+--   C3/H1 provide DEV-ONLY proposer and responder phases over the shared GB lease.
+--   Commit, the client pump and production admission remain separate cards.
 local module_dir = debug.getinfo(1, "S").source:match("^@(.+[/\\])[^/\\]+$")
 local Lease = dofile(assert(module_dir, "polished_trade.lua must be loaded by path") .. "../gb_trade_lease.lua")
 local Permit = dofile(module_dir .. "../write_permit.lua")
@@ -156,12 +156,17 @@ end
 -- This validation is ADVISORY pre-screening only; passing stages a request for
 -- SlinkTradeValidateIncomingStaged, which remains the native acceptance authority.
 -- No server events are emitted. disposition() returns PENDING / NOT_PERFORMED /
--- UNCERTAIN plus a reason. A write exception latches UNCERTAIN; do not retry it.
+-- CONSENTED / DECLINED / UNCERTAIN plus a reason; COMPLETE is impossible.
+-- A responder PROMPT's DONE 0 is consent, never a completed trade. Its RELEASE
+-- must remain observable for a frame before APPLY. Any APPLY DONE other than 1
+-- poisons the visit. phase() returns role, phase for a future, separately owned pump.
+-- A write exception latches UNCERTAIN; do not retry it.
 -- Every lease publication is read back before success, including its last ACK/
 -- generation byte. A mismatch records the exact address/expected/observed bytes
 -- and poisons the visit just like an attempted write exception.
--- reset() starts another visit only after a closed, proved NOT_PERFORMED visit.
--- Any matching DONE result other than 1 irreversibly poisons this visit, even
+-- reset() requires closure and no poison/unsettled APPLY. A pre-APPLY responder
+-- can close on B/timeout without claiming a trade; no role switch occurs before reset.
+-- Any matching APPLY DONE result other than 1 irreversibly poisons this visit, even
 -- if a later frame says result 1 or the native service closes the lease.
 -- T.writes is deliberately absent; write_log contains diagnostic receipts only.
 -- Tests may opt into spec.test_hooks=true (still requires spec.dev=true).
@@ -360,6 +365,7 @@ function PT.compose(spec)
         end
         local raw=Lease.new({lease=l.base,party_capacity=d.party_capacity,check=check,stage=stage},io,writes)
         local offered, answered_at, token, attempted, disposition, reason
+        local role, phase, prompt_visit, prompt_result, released_at
         local T={hooks=clone(entries),spans=clone(st),timeouts=clone(t.timeouts),write_log=permit.log}
         local function scoped(fn,...)
             if poisoned then return nil,'UNCERTAIN',poisoned end
@@ -379,23 +385,30 @@ function PT.compose(spec)
             if out[2] == nil then return nil,'PENDING',tostring(out[3]) end
             return table.unpack(out,2,out.n)
         end
-        function T:advertised() return false end -- C3 is proposer-only even with future component labels.
-        function T:poll_query() if not poisoned and not attempted then return raw:poll_query() end end
-        function T:poll_offer() if not poisoned and not attempted then return raw:poll_offer() end end
+        function T:advertised() return false end -- H1 is dev-only, including with future component labels.
+        function T:phase() return role,phase end
+        function T:poll_query() if not poisoned and not attempted and role ~= 'responder' then return raw:poll_query() end end
+        function T:poll_offer() if not poisoned and not attempted and role ~= 'responder' then return raw:poll_offer() end end
         function T:answer_query(gen,mask,visit)
             if poisoned then return nil,'UNCERTAIN',poisoned end
+            if role == 'responder' then return nil,'PENDING','responder visit active' end
             if attempted then return nil,'PENDING','APPLY already attempted' end
             local yes,a,b=scoped(raw.answer_query,raw,gen,mask,visit)
-            if yes then token=clone(visit); offered=nil; answered_at=nil; disposition=nil; reason=nil; return yes end
+            if yes then
+                role,phase='proposer','query'
+                token=clone(visit); offered=nil; answered_at=nil; disposition=nil; reason=nil; return yes
+            end
             return yes,a,b
         end
         function T:answer_offer(gen,accept)
             if poisoned then return nil,'UNCERTAIN',poisoned end
+            if role == 'responder' then return nil,'PENDING','responder visit active' end
             if attempted or offered then return nil,'PENDING','OFFER already answered' end
             local offer=raw:poll_offer()
             local yes,a,b=scoped(raw.answer_offer,raw,gen,accept)
             if yes then
                 offered=clone(offer); offered.accepted=accept; answered_at=frame()
+                phase='offer'
                 if not accept then disposition='NOT_PERFORMED'; reason='offer rejected' end
                 return yes
             end
@@ -404,6 +417,26 @@ function PT.compose(spec)
         local function apply_ready(command,slot,visit)
             if poisoned then return nil,'UNCERTAIN',poisoned end
             if command ~= t.commands.APPLY then return nil,'PENDING','proposer APPLY only' end
+            if role == 'responder' then
+                if attempted or phase ~= 'released' or prompt_result ~= 0 then
+                    return nil,'PENDING','consent RELEASE required'
+                end
+                if frame() <= released_at then return nil,'PENDING','RELEASE frame gap required' end
+                if slot ~= prompt_visit.slot or not Lease.valid_bytes(visit,4) then
+                    return nil,'PENDING','prompt slot/token mismatch'
+                end
+                for i=1,4 do if visit[i] ~= token[i] then return nil,'PENDING','visit token mismatch' end end
+                local bytes=io.read_range(l.base,l.size)
+                if not Lease.valid_bytes(bytes,l.size) then return nil,'PENDING','unreadable lease' end
+                for i=1,4 do if bytes[l.fields.token+i] ~= token[i] or bytes[l.fields.magic+i] ~= l.magic[i] then
+                    return nil,'PENDING','lease identity changed' end end
+                if bytes[l.fields.version+1] ~= l.version or bytes[l.fields.command+1] ~= t.commands.RELEASE or
+                   bytes[l.fields.generation+1] ~= prompt_visit.gen or bytes[l.fields.ack+1] ~= prompt_visit.gen or
+                   bytes[l.fields.slot+1] ~= slot or bytes[l.fields.result+1] ~= 0 then
+                    return nil,'PENDING','consent release lease changed'
+                end
+                return true
+            end
             if attempted or not offered or not offered.accepted then return nil,'PENDING','accepted OFFER required' end
             if frame() <= answered_at then return nil,'PENDING','OFFER frame gap required' end
             if slot ~= offered.slot or not Lease.valid_bytes(visit,4) then return nil,'PENDING','offer slot/token mismatch' end
@@ -418,10 +451,24 @@ function PT.compose(spec)
             return true
         end
         function T:arm(command,slot,visit,payload)
+            if poisoned then return nil,'UNCERTAIN',poisoned end
+            if command == t.commands.PROMPT then
+                if role ~= nil then return nil,'PENDING','visit already active; reset after closure' end
+                if not t.capabilities.responder_service then return nil,'PENDING','responder service absent' end
+                if not self:closed() then return nil,'PENDING','lease must close before PROMPT' end
+                local gen,a,b=scoped(raw.arm,raw,command,slot,clone(visit),clone(payload))
+                if gen then
+                    role,phase='responder','prompt'
+                    token=clone(visit); prompt_visit={gen=gen,slot=slot}
+                    prompt_result,released_at,attempted,disposition,reason=nil,nil,nil,nil,nil
+                    return gen
+                end
+                return gen,a,b
+            end
             local ready,a,b=apply_ready(command,slot,visit)
             if not ready then return nil,a,b end
             local gen,a,b=scoped(raw.arm,raw,command,slot,clone(visit),clone(payload))
-            if gen then attempted=true; return gen end
+            if gen then attempted=true; phase='apply'; disposition=nil; reason=nil; return gen end
             return gen,a,b
         end
         local function matching_done_result()
@@ -443,25 +490,46 @@ function PT.compose(spec)
             if poisoned then return {disposition='UNCERTAIN',reason=poisoned} end
             local result=matching_done_result(); if result == nil then return nil end
             raw.phase='done'
-            if result ~= 1 then
+            if role == 'responder' and (phase == 'prompt' or phase == 'consented' or phase == 'declined') then
+                if (result ~= 0 and result ~= 1) or (prompt_result ~= nil and result ~= prompt_result) then
+                    poisoned='unexpected or changed PROMPT result '..tostring(result)
+                    disposition,reason='UNCERTAIN',poisoned
+                else
+                    prompt_result=result
+                    phase=result == 0 and 'consented' or 'declined'
+                    disposition=result == 0 and 'CONSENTED' or 'DECLINED'
+                    reason=result == 0 and 'prompt consent only; no trade performed' or 'prompt declined'
+                end
+            elseif result ~= 1 then
                 poisoned='unexpected DONE result '..tostring(result)
                 disposition,reason='UNCERTAIN',poisoned
             else
                 disposition,reason='NOT_PERFORMED','commit disabled'
+                phase='done'
             end
             return {result=result,disposition=disposition,reason=reason}
         end
         function T:release(gen)
             if poisoned then return nil,'UNCERTAIN',poisoned end
             local done=self:poll_done()
-            if not done or done.disposition ~= 'NOT_PERFORMED' then
+            local prompt_done=role == 'responder' and (phase == 'consented' or phase == 'declined')
+            if not done or (done.disposition ~= 'NOT_PERFORMED' and not prompt_done) then
                 return nil,'UNCERTAIN',poisoned or 'not a safe DONE'
             end
-            return scoped(raw.release,raw,gen)
+            local yes,a,b=scoped(raw.release,raw,gen)
+            if yes then
+                if prompt_done then phase='released'; released_at=frame() end
+                return yes
+            end
+            return yes,a,b
         end
         function T:closed() return io.read_u8(l.base+l.fields.command) == 0 end
         function T:disposition()
             if poisoned then return 'UNCERTAIN',poisoned end
+            if role == 'responder' and not attempted and self:closed() then
+                if disposition == 'DECLINED' then return disposition,reason end
+                return 'NOT_PERFORMED','responder closed before APPLY'
+            end
             if disposition then return disposition,reason end
             if self:closed() then return attempted and 'UNCERTAIN' or 'NOT_PERFORMED','lease closed' end
             return 'PENDING','awaiting native service'
@@ -473,6 +541,7 @@ function PT.compose(spec)
             end
             if not self:closed() then return nil,'PENDING','lease must close before reset' end
             offered,answered_at,token,attempted,disposition,reason=nil,nil,nil,nil,nil,nil
+            role,phase,prompt_visit,prompt_result,released_at=nil,nil,nil,nil,nil
             raw.expected,raw.phase,raw.visit_token,raw.entry_observed=nil,nil,nil,false
             return true
         end
