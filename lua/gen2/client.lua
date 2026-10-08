@@ -1597,6 +1597,34 @@ function Client.new(p)
             end
         end
     end
+    -- The post-copy producer borrows only this read-only authority, never an owner or the FS clock.
+    -- Select and bind synchronously at the CPU callback; drain must not refresh an old sample.
+    function FS.capture_faint(b, held)
+        if FS.suspended or type(held) ~= "table" or held.generation ~= self.epoch
+           or type(b) ~= "table" or (b.mode ~= 1 and b.mode ~= 2)
+           or b.hp ~= 0 or b.status ~= 0 or b.link_mode ~= 0 or b.fainted ~= true then return nil end
+        local candidate
+        for _, ob in ipairs(FS.owed) do
+            local a = ob.attempts[#ob.attempts]
+            if ob.gen == FS.gen and ob.state == "awaiting" and a and a.kind == "plain"
+               and a.epoch == self.epoch and a.visit == FS.visit and a.slot == b.slot then
+                if candidate then return nil end -- no ambiguous attempt selection
+                candidate = ob
+            end
+        end
+        if not candidate then return nil end
+        local ob, a = candidate, candidate.attempts[#candidate.attempts]
+        if not FS.check_identity(ob) or ob.identity ~= a.identity or ob.identity ~= FS.last_identity then return nil end
+        local slot, mon, _, why = find_party_slot(ob.key, ob.cmd)
+        if why or slot ~= a.slot or not mon or mon.is_egg ~= false or mon_key(mon) ~= ob.phys
+           or mon.hp ~= 0 or mon.status ~= 0 then return nil end
+        if not FS.check_identity(ob) or ob.gen ~= FS.gen or ob.state ~= "awaiting"
+           or a.epoch ~= self.epoch or a.visit ~= FS.visit then return nil end
+        local seq = FS.next_seq()
+        if seq <= a.seq or seq <= (FS.evidence_floor or 0) then return nil end
+        return {identity=ob.identity, generation=ob.gen, epoch=a.epoch, visit=a.visit,
+                key=ob.phys, attempt_seq=a.seq, seq=seq}
+    end
     -- Reserved consumer contract for the future, separately pinned AFTER-copy observer. The existing 0f:44c8
     -- pre-copy event has no capture binding and can never settle F1. A producer must allocate capture.seq from
     -- FS.next_seq AT CAPTURE (the same clock as attempt/tick), and freeze identity/gen/epoch/visit/key/attempt_seq
@@ -2271,6 +2299,9 @@ function Client.new(p)
         capture = function() return { generation = self.epoch, operation = "epoch-" .. self.epoch } end,
         valid = function(stamp) return type(stamp) == "table" and stamp.generation == self.epoch end,
     }
+    if settle then
+        authority.capture_faint = function(battle, held) return FS.capture_faint(battle, held) end
+    end
 
     function self:start()
         if self.signals then

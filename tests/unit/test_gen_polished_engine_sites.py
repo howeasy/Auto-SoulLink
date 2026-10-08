@@ -229,7 +229,7 @@ def test_capture_party_carries_the_cpu_instruction_proof_signals_lua_demands(sit
     sym = gen.read_sym(gen.SYMPATH)
     assert site["point_symbols"] == {n: {"bank": sym[n][0], "addr": sym[n][1]}
                                      for n in ("wPartyCount", "wBattleType", "wBattleScriptFlags", "wMapGroup", "wMapNumber")}
-    assert [k for k, v in sites.items() if "instructions" in v] == ["capture_party"]
+    assert [k for k, v in sites.items() if "instructions" in v] == ["battle_faint_copyback_return", "capture_party"]
 
 
 def test_an_instruction_proof_that_does_not_encode_the_rom_bytes_aborts(monkeypatch):

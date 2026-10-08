@@ -16,8 +16,8 @@
   "evidence_level": "SOURCE",
   "runtime_admission": "NOT_GRANTED",
   "f3_complete": false,
-  "site_count": 53,
-  "resolved_count": 41,
+  "site_count": 54,
+  "resolved_count": 42,
   "unresolved_count": 12,
   "companion_overlay_spans": [
     {
@@ -178,6 +178,57 @@
           "expected_hex": "CDB034",
           "hex_len": 3,
           "find_hex": "CDB034",
+          "sym_anchor": "ResolveFaints.no_fainted_mons"
+        },
+        "battle_faint_copyback_return": {
+          "id": "battle_faint_copyback_return",
+          "signal": "player_faint",
+          "kind": "CPU_INSTRUCTION",
+          "symbol": "ResolveFaints.no_fainted_mons",
+          "status": "RESOLVED",
+          "phase": "after_party_copyback",
+          "semantics": "The instruction immediately after call UpdateBattleMonInParty returns: call UpdateEnemyMonInParty. Player HP/status copyback has executed on the pinned native path. This is not faint-only: a bound awaiting plain attempt, native player FAINTED and keyed zero HP/status are still required. Observation only; never a write window. docs/polished/FAINT_OBSERVER.md section 2.",
+          "event_role": "OBSERVATION",
+          "maturity": "SOURCE_CANDIDATE",
+          "physical_firing": "OPEN",
+          "runtime_enabled": false,
+          "guards": {},
+          "symbol_offset": 6,
+          "bank": 15,
+          "addr": 17613,
+          "rom_offset": 246989,
+          "expected_hex": "CDC334",
+          "hex_len": 3,
+          "find_hex": "CDC334",
+          "instructions": [
+            "call UpdateEnemyMonInParty"
+          ],
+          "point_symbols": {
+            "wBattleMode": {
+              "bank": 1,
+              "addr": 53811
+            },
+            "wCurBattleMon": {
+              "bank": 1,
+              "addr": 53466
+            },
+            "wLinkMode": {
+              "bank": 0,
+              "addr": 52929
+            },
+            "wBattleMonHP": {
+              "bank": 0,
+              "addr": 50360
+            },
+            "wBattleMonStatus": {
+              "bank": 0,
+              "addr": 50358
+            },
+            "wPlayerSubStatus2": {
+              "bank": 0,
+              "addr": 50402
+            }
+          },
           "sym_anchor": "ResolveFaints.no_fainted_mons"
         },
         "battle_end": {
