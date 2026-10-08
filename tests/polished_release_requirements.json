@@ -441,7 +441,7 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "force_faint and box_mon: the Polished write sink has no armed battle_faint or overworld plan yet, so a linked mon cannot be killed or deposited",
-      "blocker": "no armed writes.lua plan for gen2_polished; every live run so far recorded 0 Lua-originated memory writes",
+      "blocker": "composed in the tree (deposit/withdraw executors, F1 plain-faint writer, opt-in F2 settlement, default-OFF classifier) with live box_mon/force_faint driver receipts only on OLDER overlays (LIVE_WRITES.md); not re-qualified on the current overlay 877a477a; supports_box_mon stays False; no PHYSICAL player-faint receipt",
       "manager_row": null,
       "manager_row_note": "no Manager option governs the write sink; the consistency check binds only named options",
       "evidence": "F:/slink-work/lanes/pol-phone/live_stageA/result.txt:68 'no Lua-originated memory write during the whole run (client included) -- 0'; docs/polished/BATTLE_FLOW.md F6"
@@ -452,7 +452,7 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "Explode Mode and Rival Team Swap writers exist as pure Lua modules but are not wired for Polished",
-      "blocker": "the writers are unwired; the Manager refuses both options for gen2_polished",
+      "blocker": "writers composed but inert (plain-faint opt-in OFF, rival facade refuses by default); the Manager still refuses both options for gen2_polished; rival gate proven at PROBE level only on 877a477a (LIVE_RESULTS.md 2026-10-08), no swap write live",
       "manager_options": ["explode_mode", "rival_team_swap"],
       "evidence": "server/manager.py OPTION_SUPPORT['explode_mode']['gen2_polished'] ok=False; docs/polished/EXPLODE_RIVAL.md"
     },
@@ -462,7 +462,7 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "the title-screen SLink splash is specified but not landed",
-      "blocker": "no implementation in the tree; docs/polished/TITLE.md is a spec",
+      "blocker": "no Polished title code on the integration branch (the pol-title2 port was never built green); docs/polished/TITLE.md is a spec",
       "manager_row": null,
       "manager_row_note": "the title splash is a client feature; OPTION_SUPPORT['overworld_presence'] has no gen2_polished row",
       "evidence": "docs/polished/TITLE.md; no lua/gen2 file reads the title screen for SLink"
@@ -473,7 +473,7 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "the in-game panel pages (docs/polished/PANEL.md, PANEL_SLOT.md) are specified but not landed",
-      "blocker": "the client sends panel=false in every hello recorded so far",
+      "blocker": "panel pages landed and passed C0-C5 live on a LANE overlay (LIVE_PANEL.md); not qualified on the current overlay 877a477a and no hello receipt with panel=true is bound to it",
       "manager_row": null,
       "manager_row_note": "the panel pages are a client feature; battle_calc's refusal is about calculator DATA, a separate obligation",
       "evidence": "F:/slink-work/lanes/pol-phone/live_stageA/result.txt:12 hello carries 'panel false'"
@@ -484,7 +484,7 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "the in-game trade at the Cable Club receptionist has no hooked dispatch",
-      "blocker": "the receptionist stack is measured but no hook is armed; the native path stops at WaitForLinkedFriend",
+      "blocker": "receptionist dispatch is hooked (SpecialsPointers entries into the bank-$7E held services), C6 responder and C5 commit landed with commit compile-DISABLED (7e:573B=0), host binder/pump DEV-only and never advertised; no duo trade and no enabled commit on any overlay",
       "manager_options": ["pc_trade_npc"],
       "evidence": "F:/slink-work/lanes/pol-live2/x/explore_B/result.txt:10 'the native link wait ran and timed out (no cable)'; docs/polished/TRADE.md"
     }
