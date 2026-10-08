@@ -2,6 +2,15 @@
 """Read-only Polished rival gate callback-PC probe; authoring does not authorize a live run.
 
     python tools/polished_live/rival_gate_probe.py --setup played --fixture SAVE --route route.json
+    python tools/polished_live/rival_gate_probe.py --setup synth --disclosure D.json --fixture SAVE --route route.json         [--expect rival|wild]
+
+--setup played: the fixture is native SaveRAM and the generic callback-PC oracle applies, unchanged.
+--setup synth (O-33): the fixture is a tool-built SYNTH derivative (tools/polished_live/derive_rival_save.py) and
+--disclosure is that builder's disclosure JSON; its SHA-256 must name the fixture (as its output = the staged scene
+save, or as its input = the control run on the declared source) and its file hash is written into the trace
+and checked by the oracle. Synth refuses to run without it. Only the setup is synthetic: the battle runs natively.
+  --expect rival (default): the stronger rival-card oracle (evaluate_rival).
+  --expect wild: the wild-battle control (evaluate_wild_control).
 
 The fixture is native SaveRAM. The route starts at emulator boot and must include any
 CONTINUE/menu input needed to reach a real trainer battle. No route means bounded idle.
@@ -28,6 +37,14 @@ WORK = Path("F:/slink-work/lanes/pol-rival-probe")
 RELEASE = Path("F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc")
 BANK, GATE, NEXT, LAST = 0x0F, 0x47DD, 0x47E0, 0x480D
 PINNED_BYTES = bytes.fromhex("218BD2")
+PINNED_SITE_HEX = "218bd2fa0cd1"     # all six release bytes at 0f:47DD (flat 0x3C7DD), compared in full by the rival oracle
+# trainerclass RIVAL0, RIVAL1, RIVAL2, LYRA1, LYRA2 (src/constants/trainer_constants.asm:95-127). Trainer IDs are NOT
+# class constants and are never tested against this set.
+RIVAL_CLASSES = frozenset({0x1B, 0x1C, 0x1D, 0x1E, 0x1F})
+# docs/polished/RIVAL_STAGING.md section 4: Cherrygrove RIVAL0 trainer 3 fields RATTATA + TOTODILE.
+FIXTURE_EXPECT = {"trainer_class": 0x1B, "trainer_id": 3, "enemy_party": 2}
+SETUPS = ("played", "synth")
+EXPECTATIONS = ("rival", "wild")
 BUTTONS = frozenset(("A", "B", "Start", "Select", "Up", "Down", "Left", "Right"))
 EXTRA_SYMBOLS = (
     "SendInUserPkmn", "SendInUserPkmn.got_partymon", "wOtherTrainerClass",
@@ -36,16 +53,15 @@ EXTRA_SYMBOLS = (
 HOOKS = {"gate": GATE, "next": NEXT, "last": LAST}
 
 
-def evaluate(trace) -> tuple[bool, list[str]]:
-    """PASS requires a complete, uncensored recording and at least one qualified gate hit.
+def _scan(trace):
+    """Recording-integrity and per-row checks shared by every oracle: (reasons, gates).
 
-    Wrong-bank callbacks retain only their first 16 rows per site; mandatory totals
-    account for every callback without consuming protected trace capacity.
-    Wrong-PC rows retain full diagnostics and never count as qualified hits.
+    `gates` is None for a malformed trace, else a list of (row, clean) for every bank-and-PC-qualified gate row, where
+    `clean` means that row produced no reason of its own. The caller decides what zero or many gates mean.
     """
     why: list[str] = []
     if not isinstance(trace, list) or any(not isinstance(e, dict) for e in trace):
-        return False, ["INVALID_TRACE: expected a list of event objects"]
+        return ["INVALID_TRACE: expected a list of event objects"], None
     finals = [e for e in trace if e.get("kind") == "final"]
     if len(finals) != 1 or trace[-1] is not finals[0] or finals[0].get("completed") is not True:
         why.append("INCOMPLETE_TRACE: missing unique completed final event at end")
@@ -69,6 +85,7 @@ def evaluate(trace) -> tuple[bool, list[str]]:
         why.append("DRIVER_ERROR: final driver error counter is not zero")
     qualified_gates = []
     for e in trace:
+        before = len(why)
         kind = e.get("kind")
         if kind in ("guest_write", "cpu_change", "overflow", "driver_error"):
             code = {"guest_write": "GUEST_WRITE", "cpu_change": "CPU_CHANGE",
@@ -85,8 +102,6 @@ def evaluate(trace) -> tuple[bool, list[str]]:
         if matched is not True or bank != BANK:
             continue
         if kind == "gate":
-            if e.get("qualified") is True:
-                qualified_gates.append(e)
             if e.get("pc") != GATE:
                 code = "PC_IS_NEXT_INSTRUCTION" if e.get("pc") == NEXT else "PC_OTHER"
                 pc = e.get("pc")
@@ -109,14 +124,153 @@ def evaluate(trace) -> tuple[bool, list[str]]:
             observed_bytes = b""
         if len(observed_bytes) != 6 or observed_bytes[:3] != PINNED_BYTES:
             why.append(f"SITE_BYTES_MISMATCH: gate ROM bytes={site!r}, expected six bytes beginning 218bd2")
-    if not qualified_gates:
+        if kind == "gate" and e.get("qualified") is True:
+            qualified_gates.append((e, len(why) == before))
+    return why, qualified_gates
+
+
+def evaluate(trace) -> tuple[bool, list[str]]:
+    """PASS requires a complete, uncensored recording and at least one qualified gate hit.
+
+    Wrong-bank callbacks retain only their first 16 rows per site; mandatory totals
+    account for every callback without consuming protected trace capacity.
+    Wrong-PC rows retain full diagnostics and never count as qualified hits.
+    """
+    why, gates = _scan(trace)
+    if gates is None:
+        return False, why
+    if not gates:
         why.append("NO_GATE_HIT: OPEN; no bank-and-PC-qualified 0f:47DD callback (not a PASS)")
     return not why, why
 
 
+def _is_hex64(value) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _is_site_hex(value) -> bool:
+    return isinstance(value, str) and len(value) == 12 and all(c in "0123456789abcdef" for c in value)
+
+
+def _binding_reasons(trace, disclosure_sha256) -> list[str]:
+    """The trace must itself say it was recorded as a SYNTH run bound to exactly this disclosure file."""
+    final = next((e for e in trace if e.get("kind") == "final"), {})
+    if not _is_hex64(disclosure_sha256):
+        return [f"SETUP_BINDING: no valid disclosure sha256 supplied ({disclosure_sha256!r})"]
+    if final.get("setup") != "synth" or final.get("disclosure_sha256") != disclosure_sha256:
+        return [f"SETUP_BINDING: trace final says setup={final.get('setup')!r} "
+                f"disclosure_sha256={final.get('disclosure_sha256')!r}, this run is synth/{disclosure_sha256}"]
+    return []
+
+
+def _rival_row_reasons(e, expected, site_hex) -> list[str]:
+    """Rival-card requirements for one matched row (gate, next or last), beyond the generic row checks."""
+    kind, out = e.get("kind"), []
+    site = e.get("site_bytes")
+    if site != site_hex and isinstance(site, str) and len(site) == 12:
+        out.append(f"SITE_BYTES_NOT_PINNED: {kind} ROM bytes={site!r} != staged {site_hex!r} (all six bytes compared)")
+    if kind != "gate":
+        return out
+    klass, tid = e.get("trainer_class"), e.get("trainer_id")
+    if type(klass) is not int or klass not in RIVAL_CLASSES:
+        out.append(f"NOT_RIVAL_CLASS: wOtherTrainerClass={klass!r} not in {{1B,1C,1D,1E,1F}}")
+    if type(tid) is not int or not 0 <= tid <= 255:
+        out.append(f"BAD_TRAINER_ID: wOtherTrainerID={tid!r} is not a byte")
+    if expected is not None and type(klass) is int and klass in RIVAL_CLASSES and type(tid) is int and 0 <= tid <= 255:
+        got = (klass, tid, e.get("ot_party_count"))
+        want = (expected["trainer_class"], expected["trainer_id"], expected["enemy_party"])
+        if got != want:
+            out.append(f"FIXTURE_IDENTITY_MISMATCH: class {got[0]:02X} id {got[1]:02X} enemy party {got[2]!r} != "
+                       f"the staged fixture class {want[0]:02X} id {want[1]:02X} enemy party {want[2]}")
+    return out
+
+
+def _witness_reasons(trace, gate, site_hex) -> list[str]:
+    """gate -> next -> last for the initial send-out: later, same battle identity, same selected indices."""
+    start = next(i for i, e in enumerate(trace) if e is gate)
+    identity = ("trainer_class", "trainer_id", "ot_party_count", "cur_ot_mon", "cur_party_mon")
+    out, position = [], start
+    for kind in ("next", "last"):
+        found = None
+        for i in range(position + 1, len(trace)):
+            e = trace[i]
+            if (e.get("kind") == kind and e.get("matched") is True and e.get("qualified") is True
+                    and e.get("bank") == BANK):
+                found, position = e, i
+                break
+        if found is None:
+            out.append(f"WITNESS_MISSING: no bank-and-PC-qualified {kind} callback after the initial 0f:47DD gate "
+                       f"(ordered gate -> next -> last required)")
+            return out
+        differs = [k for k in identity if found.get(k) != gate.get(k)]
+        if found.get("mode") != 2:
+            differs.append("mode")
+        if differs:
+            out.append(f"WITNESS_MISMATCH: {kind} callback differs from the gate in {differs} "
+                       f"(identity and selected indices must be unchanged through the send-out)")
+    return out
+
+
+def evaluate_rival(trace, *, disclosure_sha256, expected=FIXTURE_EXPECT, site_hex=PINNED_SITE_HEX):
+    """The rival-card oracle (docs/polished/RIVAL_STAGING.md section 4), strictly stronger than `evaluate`.
+
+    A qualified rival gate is a bank-0F, PC==47DD, mode-2 callback with trainer class in {1B..1F}, a byte trainer id,
+    equal valid selected indices and all six site bytes equal to the staged overlay's; with `expected` the fixture
+    identity (class 1B, id 03, two enemy mons) is required too. The first such gate needs an ordered next and last
+    witness of the same identity. Wrong-bank rows are counted and excluded; zero gate hits stay OPEN.
+    """
+    if not _is_site_hex(site_hex):
+        raise ValueError(f"site_hex must be six lowercase hex bytes, got {site_hex!r}")
+    why, gates = _scan(trace)
+    if gates is None:
+        return False, why
+    why += _binding_reasons(trace, disclosure_sha256)
+    if not gates:
+        why.append("NO_GATE_HIT: OPEN; no bank-and-PC-qualified 0f:47DD callback (not a PASS)")
+        return False, why
+    rival = []
+    for row, clean in gates:
+        extra = _rival_row_reasons(row, expected, site_hex)
+        why += extra
+        if clean and not extra:
+            rival.append(row)
+    for row in trace:
+        if row.get("kind") in ("next", "last") and row.get("matched") is True and row.get("bank") == BANK:
+            why += _rival_row_reasons(row, expected, site_hex)
+    if not rival:
+        why.append("NO_RIVAL_GATE: OPEN; qualified 0f:47DD callbacks exist but none is a clean rival trainer send-out")
+    else:
+        why += _witness_reasons(trace, rival[0], site_hex)
+    return not why, why
+
+
+def evaluate_wild_control(trace, *, disclosure_sha256):
+    """The wild-battle control: a complete recording, an observed native wild battle (a mode row with wBattleMode==1)
+    and NO bank-and-PC-qualified gate callback at all. Wrong-bank rows are counted and excluded."""
+    why, gates = _scan(trace)
+    if gates is None:
+        return False, why
+    why += _binding_reasons(trace, disclosure_sha256)
+    modes = [e.get("mode") for e in trace if e.get("kind") == "mode"]
+    if gates:
+        why.append(f"WILD_QUALIFIED_HIT: {len(gates)} qualified 0f:47DD callback(s) in a wild-battle control")
+    if 2 in [m for m in modes if type(m) is int]:
+        why.append("CONTROL_TRAINER_BATTLE: the control run entered a trainer battle (wBattleMode==2)")
+    if not any(type(m) is int and m == 1 for m in modes):
+        why.append("WILD_NOT_OBSERVED: OPEN; no wBattleMode==1 transition row, so no wild battle is established")
+    return not why, why
+
+
+def require_pinned_site(site: str) -> str:
+    """The rival card compares all six site bytes; a staged overlay that differs from the release bytes is refused."""
+    if site != PINNED_SITE_HEX:
+        raise ValueError(f"staged 0f:47DD ROM bytes {site!r} != pinned six-byte site {PINNED_SITE_HEX}")
+    return site
+
+
 def verdict(reasons: list[str]) -> str:
     """Keep PC findings and zero-hit OPEN distinguishable from generic failures."""
-    for code in ("PC_IS_NEXT_INSTRUCTION", "PC_OTHER", "NO_GATE_HIT"):
+    for code in ("PC_IS_NEXT_INSTRUCTION", "PC_OTHER", "NO_GATE_HIT", "WILD_NOT_OBSERVED"):
         if any(r.startswith(code + ":") for r in reasons):
             return code
     return "FAIL" if reasons else "PASS"
@@ -146,10 +300,43 @@ def parse_route(path: Path | None, frame_cap: int) -> list[dict]:
     return steps
 
 
+def load_disclosure(path: Path, fixture_bytes: bytes) -> dict:
+    """Read a derive_rival_save disclosure and bind it to this fixture, or raise ValueError.
+
+    role "derivative": the fixture is the disclosure output; role "source": it is the declared input (the control run).
+    The returned sha256 is of the disclosure FILE, and is what the Lua trace repeats and the oracle checks.
+    """
+    try:
+        raw = Path(path).read_bytes()
+        doc = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"disclosure {path}: unreadable or not JSON ({exc})") from exc
+    if not isinstance(doc, dict):
+        raise ValueError(f"disclosure {path}: expected a JSON object")
+    if doc.get("synth") is not True:
+        raise ValueError(f"disclosure {path}: synth is not true")
+    statement = doc.get("statement")
+    if not isinstance(statement, str) or "SYNTH" not in statement:
+        raise ValueError(f"disclosure {path}: statement must declare SYNTH")
+    out_sha, in_sha = doc.get("output_sha256"), doc.get("input_sha256")
+    if not _is_hex64(out_sha) or not _is_hex64(in_sha):
+        raise ValueError(f"disclosure {path}: input_sha256 and output_sha256 must be lowercase sha256 hex")
+    fixture_sha = hashlib.sha256(fixture_bytes).hexdigest()
+    if fixture_sha == out_sha:
+        role = "derivative"
+    elif fixture_sha == in_sha:
+        role = "source"
+    else:
+        raise ValueError(f"disclosure {path} names neither output {out_sha} nor input {in_sha} for fixture {fixture_sha}")
+    return {"role": role, "sha256": hashlib.sha256(raw).hexdigest(), "fixture_sha256": fixture_sha, "document": doc}
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--setup", choices=("played",), required=True)
-    ap.add_argument("--fixture", type=Path, required=True, help="native SaveRAM, copied unchanged")
+    ap.add_argument("--setup", choices=SETUPS, required=True)
+    ap.add_argument("--disclosure", type=Path, help="synth only: derive_rival_save disclosure JSON naming --fixture")
+    ap.add_argument("--expect", choices=EXPECTATIONS, help="synth only: rival (default) or wild control oracle")
+    ap.add_argument("--fixture", type=Path, required=True, help="SaveRAM, copied unchanged")
     ap.add_argument("--route", type=Path, help="timed native input from emulator boot; optional for idle observation")
     ap.add_argument("--frames", type=int, default=12000, help="total observation frames, including route")
     ap.add_argument("--trace-cap", type=int, default=4096, help="maximum bank-matched hook rows; overflow fails the oracle")
@@ -160,6 +347,19 @@ def parse_args(argv=None):
             ap.error(f"--{name.replace('_', '-')} must be positive")
     if not args.fixture.is_file():
         ap.error(f"fixture does not exist: {args.fixture}")
+    args.disclosure_info = args.disclosure_sha256 = None
+    if args.setup == "played":
+        if args.disclosure is not None or args.expect is not None:
+            ap.error("--disclosure and --expect belong to --setup synth; played runs the generic oracle")
+    else:
+        if args.disclosure is None:
+            ap.error("--setup synth requires --disclosure (a SYNTH run must be bound to its disclosure)")
+        args.expect = args.expect or "rival"
+        try:
+            args.disclosure_info = load_disclosure(args.disclosure, args.fixture.read_bytes())
+        except ValueError as exc:
+            ap.error(str(exc))
+        args.disclosure_sha256 = args.disclosure_info["sha256"]
     try:
         args.steps = parse_route(args.route, args.frames)
     except (OSError, ValueError) as exc:
@@ -201,7 +401,30 @@ def check_pack_facts() -> None:
         raise ValueError("pinned SendInUserPkmn/next/hROMBank symbols differ from this probe")
 
 
-def stage(lane: Path) -> tuple[Path, str, str]:
+def lane_prefix(setup: str) -> str:
+    return f"{setup}-"
+
+
+def setup_line(args, fixture_digest: str) -> str:
+    """The header line that tells a reader exactly how the fixture came to be. Never calls a SYNTH run played."""
+    if args.setup == "played":
+        return f"[probe] setup played; no synthetic guest setup; fixture {args.fixture} sha256 {fixture_digest}"
+    info = args.disclosure_info
+    return (f"[probe] setup SYNTH (O-33), fixture is the {info['role']} of the disclosed Cherrygrove-scene derivation; "
+            f"disclosure {args.disclosure} sha256 {args.disclosure_sha256}; fixture {args.fixture} sha256 {fixture_digest}; "
+            f"the battle under test runs natively; the probe itself performs no guest or CPU writes; oracle {args.expect}")
+
+
+def run_oracle(args, trace, site: str):
+    """played -> the generic oracle (unchanged); synth -> the rival-card oracle or the wild control, bound to the disclosure."""
+    if args.setup == "played":
+        return evaluate(trace)
+    if args.expect == "wild":
+        return evaluate_wild_control(trace, disclosure_sha256=args.disclosure_sha256)
+    return evaluate_rival(trace, disclosure_sha256=args.disclosure_sha256, site_hex=site)
+
+
+def stage(lane: Path, full_site: bool = False) -> tuple[Path, str, str]:
     check_pack_facts()
     provenance = json.loads((REPO / "data/polished/overlay_provenance.json").read_text(encoding="utf-8"))
     clean = RELEASE.read_bytes()
@@ -215,6 +438,8 @@ def stage(lane: Path) -> tuple[Path, str, str]:
     if sha1 != provenance["output"]["sha1"]:
         raise ValueError(f"staged overlay sha1 {sha1} differs from provenance output.sha1")
     site = check_site_bytes(data)
+    if full_site:
+        require_pinned_site(site)
     rom = lane / "rom/pol_overlay.gbc"  # harness SAVE_NAME is pol overlay.SaveRAM
     rom.parent.mkdir(parents=True)
     rom.write_bytes(data)
@@ -235,8 +460,8 @@ def recording_reasons(text: str, elapsed: float = 0, timeout: float = float("inf
 def main(argv=None) -> int:
     args = parse_args(argv)
     WORK.mkdir(parents=True, exist_ok=True)
-    lane = Path(tempfile.mkdtemp(prefix="played-", dir=WORK))
-    rom, sha1, site = stage(lane)
+    lane = Path(tempfile.mkdtemp(prefix=lane_prefix(args.setup), dir=WORK))
+    rom, sha1, site = stage(lane, full_site=args.setup == "synth")
     os.environ.update(POL_LANE=str(lane), POL_KIND="overlay", POL_FIXTURE=str(args.fixture.resolve()))
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import harness
@@ -249,8 +474,11 @@ def main(argv=None) -> int:
     run = lane / "probe"
     run.mkdir()
     config = run / "input.json"
-    config.write_text(json.dumps({"steps": args.steps, "frames": args.frames, "trace_cap": args.trace_cap}), encoding="utf-8")
-    header = [f"[probe] setup played; no synthetic guest setup; fixture {args.fixture} sha256 {fixture_digest}",
+    settings = {"steps": args.steps, "frames": args.frames, "trace_cap": args.trace_cap, "setup": args.setup}
+    if args.setup == "synth":
+        settings["disclosure_sha256"] = args.disclosure_sha256
+    config.write_text(json.dumps(settings), encoding="utf-8")
+    header = [setup_line(args, fixture_digest),
               f"[probe] overlay sha1 {sha1}; gate 0f:47DD ROM bytes {site}",
               f"[probe] native route {args.route}; canonical input {config}; frames {args.frames}; cap {args.trace_cap}"]
     print("\n".join(header), flush=True)
@@ -261,13 +489,14 @@ def main(argv=None) -> int:
     reasons = recording_reasons(text, time.monotonic() - started, args.timeout)
     try:
         trace = json.loads((run / "trace.json").read_text(encoding="utf-8"))
-        _, oracle_reasons = evaluate(trace)
+        _, oracle_reasons = run_oracle(args, trace, site)
         reasons.extend(oracle_reasons)
     except (OSError, ValueError) as exc:
         reasons.append(f"INVALID_TRACE: {exc}")
     finding = verdict(reasons)
     rows = header + [f"  [FAIL] {r}" for r in reasons]
-    rows.append(f"RESULT: {finding} rival-gate-probe (played, EmuHawk pid {pid}, {len(reasons)} reasons)")
+    label = args.setup if args.setup == "played" else f"synth/{args.expect}"
+    rows.append(f"RESULT: {finding} rival-gate-probe ({label}, EmuHawk pid {pid}, {len(reasons)} reasons)")
     with (run / "result.txt").open("a", encoding="utf-8") as fh:
         fh.write("\n" + "\n".join(rows) + "\n")
     print("\n".join(rows))
