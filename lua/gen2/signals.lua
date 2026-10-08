@@ -1501,14 +1501,37 @@ function S.new_polished(options)
         end
         -- before_party_copyback: the battle struct is authoritative and the party record is stale (BATTLE_FLOW
         -- 1.3), so the fact is read from the battle struct and stamped by the client, never from the party.
+        local faint_seen, faint_generation = {}, nil
         local function faint_boundary(prepared, context, held)
             local mode = wram("wBattleMode")
             need(mode == 1 or mode == 2,"OPEN: not in a battle at the copyback boundary")
             local slot = wram("wCurBattleMon")
             need(slot <= (assert(profile.constants).PARTY_LENGTH - 1),"OPEN: active battle slot out of range")
-            return batch({observation(prepared.id,battle_sites[prepared.id],
-                                     {battle={slot=slot,hp=wram("wBattleMonHP",2),max_hp=wram("wBattleMonMaxHP",2),
-                                              mode=mode,link_mode=wram("wLinkMode")}})},context,held)
+            local hp, link = wram("wBattleMonHP",2), wram("wLinkMode")
+            local events = {observation(prepared.id,battle_sites[prepared.id],
+                                       {battle={slot=slot,hp=hp,max_hp=wram("wBattleMonMaxHP",2),mode=mode,link_mode=link}})}
+            if faint_generation ~= held.generation then faint_seen, faint_generation = {}, held.generation end
+            -- Keep the observation contract; natural notification needs authoritative battle HP zero.
+            -- Zero is endian-independent. Party HP may still be positive until native copyback.
+            if hp == 0 and link == 0 then
+                local party, why = reads.read_party()
+                need(party and integer(slot,0,party.count-1),"OPEN: faint party slot unavailable: "..tostring(why))
+                local mon = copy(party.mons[slot+1])
+                need(type(mon) == "table" and mon.is_egg == false,"OPEN: faint party mon unavailable or egg")
+                mon.key = key(mon) -- Polished decoder/key function owns the 48-byte and 9-bit/form layout
+                need(authority.valid(held) == true,"OPEN: faint observation epoch changed")
+                if faint_seen[mon.key] == nil then
+                    events[#events+1] = {kind="faint",site_id=prepared.id,cause="battle",slot=slot,mon=mon,
+                                         phase=battle_sites[prepared.id].phase}
+                    faint_seen[mon.key] = slot
+                end
+            elseif hp ~= 0 then
+                -- A live boundary for this slot starts a new HP-zero episode; repeated zero callbacks do not.
+                for seen_key, seen_slot in pairs(faint_seen) do
+                    if seen_slot == slot then faint_seen[seen_key] = nil end
+                end
+            end
+            return batch(events,context,held)
         end
         -- This instruction is after the unconditional player copyback CALL, not its entry.
         -- Point reads are bank-checked on both sides; native HP is BIG-endian.
