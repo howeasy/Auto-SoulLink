@@ -52,6 +52,7 @@ class Pump(wp.Rig):
         self.connected = True
         self.inbox = []
         self.arm_trace = []
+        self.cancel_trace = []
         g = self.lua.globals()
         g.pump_read = lambda a: self.machine.peek(a)[0] if self.machine else (self.mem[a] or 0)
         g.pump_write = self._write
@@ -74,8 +75,11 @@ class Pump(wp.Rig):
         g.PUMP_IO = self.io
         self.binder, why = _pair(pt.compose(spec))
         assert why is None, why
+        g.pump_cancel = lambda why: self.cancel_trace.append(why)
         g.pump_arm = lambda cmd, frame: self.arm_trace.append((cmd, frame))
         self.lua.execute('''return function(b,io)
+            local cancel=b.cancel
+            b.cancel=function(self,why) pump_cancel(why); return cancel(self,why) end
             local arm=b.arm
             b.arm=function(self,cmd,...) pump_arm(cmd,io.framecount()); return arm(self,cmd,...) end
         end''')(self.binder, self.io)
@@ -89,6 +93,9 @@ class Pump(wp.Rig):
     def _write(self, a, value, domain):
         self.log.writes[len(self.log.writes) + 1] = self.lua.table_from(
             {"addr": a, "value": value, "domain": domain, "frame": self.io.frame})
+        if getattr(self, "fail_once_address", None) == a:
+            self.fail_once_address = None
+            raise RuntimeError("one-shot arm fault")
         if getattr(self, "fail_write", False):
             raise RuntimeError("injected write fault")
         if self.machine:
@@ -287,8 +294,9 @@ def test_invalid_apply_never_arms(field, value):
         p.frame(2)
         assert len(p.arm_trace) == 1
     else:
-        reports = p.sent("trade_done")
-        assert len(reports) == 1 and reports[0]["new_key"] == p.apply_command()["old_key"]
+        reports = p.sent("menu_result")
+        assert len(reports) == 1 and reports[0]["choice"] == 0 and reports[0]["withdraw"] is True
+        assert not p.sent("trade_done")
 
 
 def test_preapply_poison_is_one_cancellation_and_cannot_resurrect():
@@ -462,7 +470,7 @@ def test_client_guard_mutants_are_killed(before, after, case):
         # The remaining independent guards can still prevent arm; the wrong-token
         # mutant is killed by its improper terminal cancellation of the current visit.
         if case == "token":
-            assert len(p.sent("trade_done")) == 1
+            assert len(p.sent("menu_result")) == 1
         elif case == "slot":
             assert len(p.arm_trace) == 1
     elif case == "duplicate":
@@ -568,6 +576,211 @@ def test_vanilla_nil_interface_differential(title):
         w.reply({"cmd": "config", "native_sounds": False}, {"cmd": "trade_mask", "mask": 4},
                 {"cmd": "apply_prepare", "token": "same", "slot": 0, "old_key": "2AAA:1234:19"})
         w.frames(3)
-        traces.append((w.sent(), list(w.logs.values()), [list(row.values()) for row in w.emu.writes.values()],
-                       w.lua.eval("function(c) return #c.deferred,#c.held end")(w.client)))
+        traces.append(
+            (
+                w.sent(),
+                list(w.logs.values()),
+                [list(row.values()) for row in w.emu.writes.values()],
+                w.lua.eval("function(c) return #c.deferred,#c.held end")(w.client),
+            )
+        )
     assert traces[0] == traces[1]
+
+
+@pytest.mark.parametrize(
+    "action",
+    ["withdraw", "disconnect", "identity", "epoch", "shutdown", "deadline", "parked", "mask"],
+    ids=[
+        "withdraw",
+        "disconnect",
+        "identity",
+        "epoch",
+        "shutdown",
+        "deadline",
+        "parked-key",
+        "query-mask",
+    ],
+)
+def test_caller_cancels_each_preapply_abandonment_once(action):
+    p = Pump()
+    if action == "mask":
+        p.image("QUERY")
+        p.frame()
+        p.command({"cmd": "trade_mask", "mask": 64})
+        p.frame()
+    else:
+        p.accepted(p.apply_command())
+        if action == "withdraw":
+            p.client.handle_command(
+                p.client, p.lua.table_from({"cmd": "withdraw_trade", "token": "test"})
+            )
+        elif action == "disconnect":
+            p.connected = False
+        elif action == "identity":
+            p.mem[wp.SYM["wPlayerID"][1]] += 1
+        elif action == "epoch":
+            p.client.epoch += 1
+        elif action == "shutdown":
+            p.client.stop(p.client)
+        elif action == "deadline":
+            p.io.frame += 3601
+            p.client.last_frame = p.io.frame
+        elif action == "parked":
+            p.put(9, 1)  # bound slot no longer matches
+        if action != "shutdown":
+            p.frame(2)
+    p.connected = True
+    if action != "shutdown":
+        p.frame(4)
+    assert len(p.cancel_trace) == 1, p.cancel_trace
+    assert not p.arm_trace and not p.sent("trade_done")
+    if action != "mask":
+        reports = [m for m in p.sent("menu_result") if m.get("choice") == 0]
+        if action == "identity":
+            assert reports == []  # existing drop_held discards the old identity's queued report
+            assert any("identity_changed" in line for line in p.log.lines.values())
+        else:
+            assert len(reports) == 1 and reports[0].get("withdraw") is True
+        assert p.binder.disposition(p.binder)[0] == "NOT_PERFORMED"
+    else:
+        assert not p.sent(
+            "menu_result"
+        )  # no server token or binder visit exists before QUERY answer
+
+
+def responder_accepted(p):
+    cmd = p.apply_command()
+    p.command(dict(cmd, cmd="show_menu"))
+    p.frame()
+    gen = p.mem[p.parts.profile.overlay.trade.lease.base + 6]
+    p.put(5, 7)
+    p.put(7, gen)
+    p.put(8, 0)
+    p.frame()  # consent RELEASE
+    assert p.sent("menu_result")[-1]["choice"] == 1
+    p.command(cmd)
+
+
+@pytest.mark.parametrize("role", ["proposer", "responder"], ids=["proposer", "responder"])
+@pytest.mark.parametrize("published", [False, True], ids=["before-publication", "after-command"])
+def test_caller_uses_binder_arm_fault_disposition(role, published):
+    p = Pump()
+    if role == "proposer":
+        p.accepted(p.apply_command())
+    else:
+        responder_accepted(p)
+    family = p.parts.profile.overlay.trade
+    p.fail_once_address = family.lease.base + 6 if published else family.staging.party.addr
+    p.frame(3)
+    if published:
+        assert len(p.sent("trade_done")) == 1 and p.sent("trade_done")[0]["uncertain"] is True
+        assert p.cancel_trace == []
+    else:
+        assert p.sent("trade_done") == []
+        reports = [m for m in p.sent("menu_result") if m.get("choice") == 0]
+        assert len(reports) == 1
+        assert reports[0].get("withdraw", False) == (role == "proposer")
+        assert p.binder.disposition(p.binder)[0] == "NOT_PERFORMED"
+        base = family.lease.base
+        assert [p.mem[base + i] for i in range(12, 16)] == [0, 0, 0, 0]
+
+
+@pytest.mark.parametrize(
+    "action", ["withdraw", "disconnect", "shutdown"], ids=["withdraw", "disconnect", "shutdown"]
+)
+def test_caller_never_cancels_attempted_apply(action):
+    p = Pump()
+    p.accepted(p.apply_command())
+    p.frame()
+    assert p.arm_trace[-1][0] == 5
+    if action == "withdraw":
+        p.command({"cmd": "withdraw_trade", "token": "test"})
+        p.frame()
+    elif action == "disconnect":
+        p.connected = False
+        p.frame()
+    else:
+        p.client.stop(p.client)
+    assert not p.cancel_trace
+
+
+@pytest.mark.parametrize(
+    "role", ["proposer", "responder"], ids=["offer-declined", "prompt-declined"]
+)
+def test_caller_does_not_cancel_terminal_decline(role):
+    p = Pump()
+    if role == "proposer":
+        p.offered()
+        p.command({"cmd": "trade_offer_ack", "ok": False})
+        p.frame()
+    else:
+        p.command(dict(p.apply_command(), cmd="show_menu"))
+        p.frame()
+        gen = p.mem[p.parts.profile.overlay.trade.lease.base + 6]
+        p.put(5, 7)
+        p.put(7, gen)
+        p.put(8, 1)
+        p.frame()
+    assert not p.cancel_trace
+
+
+def test_cancel_uncertainty_retires_without_reset_or_repeat():
+    p = Pump()
+    p.accepted()
+    p.fail_write = True
+    p.command({"cmd": "withdraw_trade", "token": "test"})
+    p.frame()
+    p.fail_write = False
+    resets = []
+    p.lua.globals().cancel_reset = lambda: resets.append(True)
+    p.lua.execute("""return function(b)
+        b.closed=function() return true end
+        b.reset=function() cancel_reset(); return nil end
+    end""")(p.binder)
+    before = p.writes()
+    p.frame(4)
+    assert len(p.cancel_trace) == 1 and p.writes() == before and resets == []
+    assert p.binder.disposition(p.binder)[0] == "UNCERTAIN"
+    assert not p.sent("trade_done")
+
+
+@pytest.mark.parametrize("kind", ["cancel", "attempt"], ids=["drop-cancel", "pre-arm-attempted"])
+def test_client_caller_mutants_turn_contract_red(kind):
+    source = CLIENT.read_text()
+    if kind == "cancel":
+        old = 'local _, kind = call("cancel", why)'
+        new = 'local _, kind = nil, "PENDING"'
+    else:
+        old = (
+            "v.apply = nil\n"
+            '                        local gen, state, problem = call("arm", APPLY, v.slot, v.token, data)\n'
+            '                        v.attempted = gen ~= nil or state == "UNCERTAIN" -- no proof of non-publication stays held'
+        )
+        new = (
+            "v.apply, v.attempted = nil, true\n"
+            '                        local gen, state, problem = call("arm", APPLY, v.slot, v.token, data)'
+        )
+    assert source.count(old) == 1
+    p = Pump(source=source.replace(old, new))
+    if kind == "cancel":
+        p.accepted()
+        p.command({"cmd": "withdraw_trade", "token": "test"})
+        p.frame()
+        with pytest.raises(AssertionError):
+            assert len(p.cancel_trace) == 1
+        assert p.cancel_trace == [] and p.binder.phase(p.binder)[1] == "offer"
+    else:
+        p.accepted(p.apply_command())
+        p.fail_once_address = p.parts.profile.overlay.trade.staging.party.addr
+        p.frame(3)
+        assert p.binder.disposition(p.binder)[0] == "NOT_PERFORMED"
+        with pytest.raises(AssertionError):
+            assert p.sent("trade_done") == []
+        assert p.sent("trade_done")[0]["uncertain"] is True
+
+
+def test_client_source_compiles_in_lua55():
+    from lupa.lua55 import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    assert lua.eval("function(s) return assert(load(s)) ~= nil end")(CLIENT.read_text())

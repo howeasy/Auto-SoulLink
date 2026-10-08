@@ -366,7 +366,7 @@ def client_swap(rig):
 
 def test_the_client_poll_cannot_land_the_swap_even_with_a_class_set_and_the_pc_forged():
     """rival_tick polls at a frame end while wCurOTMon == 0xFF: the PC is not 0f:47DD there, and with the PC forged
-    the legacy poll omits the newly required bound trainer identity. Either way: refused, nothing written."""
+    the selected index 0xFF is outside the new party. Either way: refused, nothing written."""
     rig = ready(pc_=0, fresh=True)
     rig.fill_enemy()
     before = rig.block()
@@ -376,7 +376,7 @@ def test_the_client_poll_cannot_land_the_swap_even_with_a_class_set_and_the_pc_f
     rig = ready(pc_=RIVAL_PC, fresh=True)
     before = rig.block()
     errors = client_swap(rig)
-    assert len(errors) == 1 and "bound trainer identity required" in errors[0] and rig.block() == before
+    assert len(errors) == 1 and "outside the new party" in errors[0] and rig.block() == before
 
 
 def test_the_default_composition_carries_the_blob_constants_and_an_empty_rival_set():
@@ -601,3 +601,54 @@ def test_rival_module_compiles_in_lua55():
     from lupa.lua55 import LuaRuntime
     lua = LuaRuntime(unpack_returned_tuples=True)
     assert lua.eval("function(s) return assert(load(s)) ~= nil end")(RIVAL)
+
+
+@pytest.mark.parametrize("drift", [False, True], ids=["bound-id", "ram-drift-after-read"])
+def test_client_caller_forwards_bound_rival_id_but_still_refuses_window(drift):
+    rig = ready(pc_=RIVAL_PC, fresh=True)
+    captured = []
+    rig.lua.globals().caller_capture = lambda tid: captured.append(tid)
+    rig.lua.execute("""return function(writes,mem,id_addr,drift)
+        local original,arm = writes.write_enemy_party,writes.arm
+        writes.arm=function(self,...)
+            local result=arm(self,...)
+            if drift then mem[id_addr]=mem[id_addr]+1 end
+            return result
+        end
+        writes.write_enemy_party=function(self,mons,ctx)
+            caller_capture(ctx.trainer_id)
+            return original(self,mons,ctx)
+        end
+    end""")(rig.rival.writes, rig.mem, addr("wOtherTrainerID"), drift)
+    before = rig.block()
+    errors = client_swap(rig)
+    assert captured == [TID]
+    assert len(errors) == 1 and ("stale battle" if drift else "outside the new party") in errors[0]
+    assert rig.block() == before and rig.writes() == []
+
+
+def test_drop_bound_trainer_id_caller_mutant_turns_spy_red():
+    from pathlib import Path
+
+    source = (Path(ROOT) / "lua/gen2/client.lua").read_text()
+    anchor = "trainer_id = r.trainer_id })"
+    assert source.count(anchor) == 1
+    rig = ready(
+        pc_=RIVAL_PC,
+        overrides={"lua/gen2/client.lua": source.replace(anchor, "trainer_id = nil })")},
+    )
+    captured = []
+    rig.lua.globals().caller_capture = lambda tid: captured.append(tid)
+    rig.lua.execute("""return function(writes)
+        local original=writes.write_enemy_party
+        writes.write_enemy_party=function(self,mons,ctx)
+            caller_capture(ctx.trainer_id)
+            return original(self,mons,ctx)
+        end
+    end""")(rig.rival.writes)
+    before = rig.block()
+    errors = client_swap(rig)
+    with pytest.raises(AssertionError):
+        assert captured == [TID]
+    assert captured == [None] and "bound trainer identity required" in errors[0]
+    assert rig.block() == before and rig.writes() == []

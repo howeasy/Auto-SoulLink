@@ -1,6 +1,6 @@
 # C4b: Polished trade client pump specification
 
-Status: DESIGN ONLY; production trade OFF. No runtime change or qualification is claimed.
+Status 2026-10-08: DEV pump and pre-APPLY cancel/arm-disposition caller wiring implemented; production trade OFF. The status supersedes the historical design wording below. The rival caller forwards its bound trainer identity, but a real swap still needs native 0F:47DD exec-hook integration and remains refused end-to-end. No live qualification is claimed.
 
 ## Evidence cut and scope
 

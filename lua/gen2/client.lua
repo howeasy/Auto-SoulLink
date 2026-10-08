@@ -964,7 +964,7 @@ function Client.new(p)
                "dev trade requires admitted Polished overlay")
         local binder, charmap = assert(spec.binder), assert(spec.charmap)
         for _, name in ipairs({"poll_query", "poll_offer", "poll_done", "phase", "disposition",
-                               "answer_query", "answer_offer", "arm", "release", "closed", "reset"}) do
+                               "answer_query", "answer_offer", "arm", "release", "closed", "reset", "cancel"}) do
             assert(type(binder[name]) == "function", "dev trade missing " .. name)
         end
         assert(type(charmap.encoding) == "table" and charmap.terminator == profile.overlay.panel.terminator,
@@ -983,9 +983,13 @@ function Client.new(p)
             if not v or v.terminal then return end
             v.terminal, v.prepare, v.apply = true, nil, nil
             last_token = v.server_token or last_token
+            if not v.attempted and v.gen ~= nil and why ~= "offer declined" and why ~= "prompt declined" then
+                local _, kind = call("cancel", why)
+                if kind == "UNCERTAIN" then v.retired = true end
+            end
             log("[SLink-gen2] dev trade " .. tostring(why))
             if not v.server_token then return end
-            if v.attempted or v.apply_received then
+            if v.attempted then
                 local fields = {token=v.server_token}
                 if uncertain and v.attempted then
                     fields.uncertain, fields.after_reset = true, after_reset or nil
@@ -1000,8 +1004,8 @@ function Client.new(p)
         end
         function D.forget(why, after_reset)
             finish(why, true, after_reset)
-            -- A poisoned/unsettled binder has no host cancel API. Retire this visit forever;
-            -- the ROM watchdog owns closure. In particular, never release/reset poison.
+            -- Cancel pre-APPLY visits above; an attempted/poisoned visit remains owned by the ROM.
+            -- Never release/reset poison; a verified closed cancelled visit may reset normally.
             if visit then visit.retired = true end
         end
         function D.busy()
@@ -1075,7 +1079,7 @@ function Client.new(p)
                     end
                     if contest_masked() then mask = 0 end
                     local ok, kind, why = call("answer_query", v.gen, mask, v.token)
-                    if not ok then finish(why or kind); v.retired = kind == "UNCERTAIN"
+                    if not ok then finish(why or kind); v.retired = v.retired or kind == "UNCERTAIN"
                     elseif mask == 0 then finish("no eligible pair")
                     else v.phase = "picking" end
                 end
@@ -1084,7 +1088,7 @@ function Client.new(p)
                     local accept = cmd.ok == true and type(cmd.token) == "string" and cmd.token ~= ""
                     v.server_token = accept and cmd.token or nil
                     local ok, kind, why = call("answer_offer", v.gen, accept)
-                    if not ok then finish(why or kind); v.retired = kind == "UNCERTAIN"
+                    if not ok then finish(why or kind); v.retired = v.retired or kind == "UNCERTAIN"
                     elseif not accept then finish("offer declined")
                     else
                         v.accepted, v.phase, v.gap = true, "accepted", io.framecount()
@@ -1106,7 +1110,7 @@ function Client.new(p)
                 v.server_token, v.slot, v.old_key = cmd.token, cmd.slot, slot_key(cmd.slot)
                 v.deadline, v.phase = self.frame + family.timeouts.APPLY, "prompt"
                 local gen, kind, why = call("arm", PROMPT, v.slot, v.token, data)
-                if gen == nil then finish(why or kind); v.retired = kind == "UNCERTAIN"
+                if gen == nil then finish(why or kind); v.retired = v.retired or kind == "UNCERTAIN"
                 else v.gen = gen end
             elseif name == "apply_prepare" or name == "apply_trade" then
                 -- Foreign tokens never cancel or redirect the active visit.
@@ -1156,7 +1160,7 @@ function Client.new(p)
                 if done and v.phase == "prompt" and role == "responder"
                    and (phase == "consented" or phase == "declined") then
                     local ok, disposition, reason = call("release", v.gen)
-                    if not ok then finish(reason or disposition); v.retired = disposition == "UNCERTAIN"; return end
+                    if not ok then finish(reason or disposition); v.retired = v.retired or disposition == "UNCERTAIN"; return end
                     if done.disposition == "CONSENTED" then
                         v.accepted, v.phase, v.gap = true, "accepted", io.framecount()
                         report("menu_result", {token=v.server_token, choice=1})
@@ -1189,11 +1193,11 @@ function Client.new(p)
                     if not valid then finish("parked trade identity changed"); return end
                     if v.apply then
                         local data = v.apply
-                        v.apply, v.attempted = nil, true
+                        v.apply = nil
                         local gen, state, problem = call("arm", APPLY, v.slot, v.token, data)
+                        v.attempted = gen ~= nil or state == "UNCERTAIN" -- no proof of non-publication stays held
                         if gen == nil then
-                            if state == "PENDING" then v.attempted = false end -- binder proves no emitted writes
-                            finish(problem or state, v.attempted); v.retired = state == "UNCERTAIN"
+                            finish(problem or state, v.attempted); v.retired = v.retired or state == "UNCERTAIN"
                         else v.gen, v.phase = gen, "apply" end
                     end
                     return
@@ -2627,7 +2631,8 @@ function Client.new(p)
         r.pending = nil
         local ok, err = pcall(function()
             writes:arm("rival_swap")
-            writes:write_enemy_party(pend.mons, { mode = battle.mode, link_mode = link, cur_ot_mon = cur })
+            writes:write_enemy_party(pend.mons, { mode = battle.mode, link_mode = link, cur_ot_mon = cur,
+                                                 trainer_id = r.trainer_id })
         end)
         writes:disarm()
         if ok then
