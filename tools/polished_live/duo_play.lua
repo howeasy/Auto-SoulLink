@@ -10,7 +10,7 @@
 --                               Run: a fled battle would send no_catch and dead-zone the area). Result: the client's
 --                               own `capture` line (key, area_id) and the capture-site hit count.
 --     snapshot                  cartridge read-back: party (slot, key, species, HP/MaxHP big-endian, status) read
---                               from WRAM, and the box census keys read from CartRAM.
+--                               from WRAM, and box/slot/key census from CartRAM via read_storage_box(...).mons.
 --     await_cmd {cmd,key,frames} wait until the SERVER's reply delivered `cmd` (for `key`), let the client run it at
 --                               its overworld hold, then snapshot. The command is never executed by this driver.
 --     synth_hp0 {keys|all}      SYNTH SETUP (disclosed): poke current HP to 0 in the named party records (WRAM),
@@ -118,7 +118,7 @@ local function snapshot()
         for b = 0, 19 do
             local list, w = P.reads.read_storage_box(b)
             if not list then box_why = tostring(w) return end
-            for _, m in ipairs(list) do
+            for _, m in ipairs(list.mons) do
                 local k = m.key
                 if k == nil and PM then local okk, kk = pcall(PM.mon_key, m) k = okk and kk or nil end
                 box[#box + 1] = {box = b, slot = m.slot, key = k}
