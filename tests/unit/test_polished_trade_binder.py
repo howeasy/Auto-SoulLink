@@ -914,3 +914,18 @@ def test_silently_partial_diagnostic_write_poisons_visit(env):
     b.put(lease["base"] + lease["fields"]["command"], 0)
     assert b.call("reset")[1:] == ("UNCERTAIN", reason)
     assert b.writes == before
+
+
+def test_proposer_phase_is_explicit_and_still_cannot_become_a_responder(env):
+    b = Binder(env)
+    b.accepted()
+    assert b.call("phase") == ("proposer", "offer")
+    before = list(b.writes)
+    out = b.call("arm", PROFILE["overlay"]["trade"]["commands"]["PROMPT"], 2, list(svc.TOKEN), payload())
+    assert out[0] is None and out[1] == "PENDING" and b.writes == before
+    b.frame += 1
+    gen = b.apply()
+    assert b.call("phase") == ("proposer", "apply")
+    b.frame_image("DONE", gen=gen, ack=gen)
+    b.put(PROFILE["overlay"]["trade"]["lease"]["base"] + 8, 0)
+    assert b.call("poll_done").disposition == "UNCERTAIN"
