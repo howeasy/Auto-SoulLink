@@ -343,18 +343,19 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
         self._tables = self._presentation_tables()
 
         # trainer_id = class * 256 + instance (trainers.json id_packing; wOtherTrainerClass/wOtherTrainerID).
-        # Rivals: every instance of all five rival classes the pack names -- RIVAL0 $1B, RIVAL1 $1C,
-        # RIVAL2 $1D, LYRA1 $1E, LYRA2 $1F (constants/trainer_constants.asm:95-127, RAM.md §4.3).
+        # Rivals (owner ruling 2026-10-08): every instance of RIVAL0 $1B, RIVAL1 $1C, RIVAL2 $1D ONLY. LYRA1 $1E and
+        # LYRA2 $1F are named by the pack (constants/trainer_constants.asm:95-127, RAM.md §4.3) but are NOT Rival Team
+        # Swap battles. The three are selected by NAME from trainers.json, never by number.
         trainers = load("trainers", "polished-trainers-v1")
         self._trainer_classes = {int(k): v for k, v in trainers["classes"].items()}
         self._trainer_names = {(int(cls), int(inst)): row.get("name", "")
                                for cls, rows in trainers["parties"].items() for inst, row in rows.items()}
         _require(all(_integer(c, 1, 255) and _integer(i, 1, 255) for c, i in self._trainer_names),
                  "trainer (class, instance) outside a byte")
-        rivals = set(trainers["rival_classes"].values())
         _require(trainers["rival_classes"].keys() == {"RIVAL0", "RIVAL1", "RIVAL2", "LYRA1", "LYRA2"}
                  and all(trainers["class_constants"][str(c)] == k for k, c in trainers["rival_classes"].items()),
                  "rival classes missing or inconsistent")
+        rivals = {trainers["rival_classes"][name] for name in ("RIVAL0", "RIVAL1", "RIVAL2")}
         self._rival_ids = frozenset(c * 256 + i for c, i in self._trainer_names if c in rivals)
         self._artifact_kind, self.randomized, self._rom_adopted = "clean", False, False
         if artifact_kind is not None:
@@ -363,6 +364,10 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
     @property
     def game_id(self):
         return "gen2_polished"
+
+    def rival_trainer_ids(self):
+        # RIVAL0/1/2 only (owner 2026-10-08); a fresh set so a caller can never mutate the adapter's own.
+        return set(self._rival_ids)
 
     # One title: a hello can never need its own per-player adapter.
     def per_player_key(self, rom_type):

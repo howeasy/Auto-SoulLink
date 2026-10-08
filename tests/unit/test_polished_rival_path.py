@@ -78,7 +78,8 @@ class RivalRig(BattleRig):
         self.img = seal_save(Image())
         deps, self.io, self.log = self.lua.execute(HARNESS_HOOKS.replace("ROOTDIR", json.dumps(ROOT)))(
             overlay()[1], self.mem, self.img)
-        deps["rival_classes"] = self.lua.table_from(list(classes))
+        if classes is not None:        # None = deps.rival_classes ABSENT: the module default (RIVAL0/1/2)
+            deps["rival_classes"] = self.lua.table_from(list(classes))
         if overrides:
             self.lua.globals().SLINK_OVERRIDES = self.lua.table_from(overrides)
             self.lua.execute(OVERRIDE)
@@ -375,12 +376,62 @@ def test_native_composition_parks_at_ff_and_keeps_the_frame_end_deadline():
     assert rig.writes() == []
 
 
-def test_the_default_composition_carries_the_blob_constants_and_an_empty_rival_set():
+def test_an_explicitly_empty_rival_set_still_refuses():
+    """An explicit deps.rival_classes (even empty) overrides the default; only an ABSENT one takes RIVAL0/1/2."""
     rig = ready(classes=(), fresh=True)
     c = rig.parts.profile.constants
     assert (c.PARTYMON_STRUCT_LENGTH, c.MON_HP, c.MON_SPECIES) == (48, 34, 0)
     errors = client_swap(rig)
     assert len(errors) == 1 and "no rival trainer classes configured" in errors[0]
+
+
+def _default_class_rig(trainer_class, overrides=None):
+    """A fresh composition with deps.rival_classes ABSENT, fighting `trainer_class` (the real module unless `overrides`)."""
+    rig = ready(classes=None, fresh=True, overrides=overrides)
+    rig.put("wOtherTrainerClass", trainer_class)
+    return rig
+
+
+def test_the_default_rival_set_is_rival0_1_2_matching_the_pack_by_name():
+    """Owner ruling 2026-10-08. R.DEFAULT_RIVAL_CLASSES is pinned in Lua (the profile has no trainer-class constants), so
+    it is held equal BY NAME to the pack the server computes its ids from; LYRA1/LYRA2 ($1E/$1F) are refused."""
+    import re
+    from pathlib import Path
+
+    pack = json.loads((Path(ROOT) / "data/games/polished_crystal/trainers.json").read_text(encoding="utf-8"))
+    classes = pack["rival_classes"]
+    assert [classes[n] for n in ("RIVAL0", "RIVAL1", "RIVAL2")] == [0x1B, 0x1C, 0x1D]
+    assert [classes[n] for n in ("LYRA1", "LYRA2")] == [0x1E, 0x1F]
+    declared = re.search(r"R\.DEFAULT_RIVAL_CLASSES = \{([^}]*)\}", RIVAL).group(1)
+    assert sorted(int(x, 16) for x in declared.replace(" ", "").split(",")) == sorted(
+        classes[n] for n in ("RIVAL0", "RIVAL1", "RIVAL2"))
+    rig = _default_class_rig(classes["RIVAL0"])
+    assert rig.rival.writes.rival_gate_enabled(rig.rival.writes) is True       # the native gate is enabled by default
+    for name in ("RIVAL0", "RIVAL1", "RIVAL2"):
+        rig = _default_class_rig(classes[name])
+        ok, why = swap(rig, trainer_id=classes[name] * 256 + RIVAL_ID)
+        assert ok is True, (name, why)
+    for name in ("LYRA1", "LYRA2"):
+        refused(_default_class_rig(classes[name]), "is not a configured rival class",
+                trainer_id=classes[name] * 256 + RIVAL_ID)
+
+
+def test_red_control_an_empty_default_fails_the_default_test():
+    """Mutant: the pre-ruling default (none). The enabling assertions above must go red under it."""
+    rig = _default_class_rig(0x1B, mutant(mutate(
+        RIVAL, "self:set_classes(deps.rival_classes == nil and R.DEFAULT_RIVAL_CLASSES or deps.rival_classes)",
+        "self:set_classes(deps.rival_classes)")))
+    assert rig.rival.writes.rival_gate_enabled(rig.rival.writes) is False
+    ok, why = swap(rig)
+    assert ok is False and "no rival trainer classes configured" in why
+
+
+def test_red_control_including_lyra_in_the_default_fails_the_exclusion():
+    """Mutant: LYRA1/LYRA2 added to the default. The $1E/$1F refusal above must go red under it."""
+    rig = _default_class_rig(0x1E, mutant(mutate(
+        RIVAL, "R.DEFAULT_RIVAL_CLASSES = {0x1B, 0x1C, 0x1D}", "R.DEFAULT_RIVAL_CLASSES = {0x1B, 0x1C, 0x1D, 0x1E, 0x1F}")))
+    ok, why = swap(rig, trainer_id=0x1E * 256 + RIVAL_ID)
+    assert ok is True, why                     # the mutant accepts a LYRA fight: the real default refuses it
 
 
 def test_the_constants_are_derived_from_the_party_struct_not_invented():
