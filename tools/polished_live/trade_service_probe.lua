@@ -172,21 +172,46 @@ local function rec(kind)
     return function(metadata) snap(kind, metadata) end
 end
 
--- Write observations retain the supplied bus value, not a timing-dependent read of the destination.
+-- GBHawk supplies zero placeholders to bus-write callbacks. Its SM83 PC has
+-- advanced past the store, while A is unchanged. Admit only native A stores;
+-- never invent a byte from a timing-dependent read of the destination.
+local function native_store_value(address)
+    local pc = emu.getregister("PC")
+    if L.rombank() ~= S.SlinkTradeEntry[1] or pc < 0x4003 or pc >= 0x8000 then
+        return nil, "lease write outside native ROM bank"
+    end
+    local opcode = L.bus(pc - 1)
+    if opcode ~= 0x12 and opcode ~= 0x22 and opcode ~= 0x32 and opcode ~= 0x77 then
+        opcode = L.bus(pc - 3)
+        if opcode ~= 0xEA or (L.bus(pc - 2) | (L.bus(pc - 1) << 8)) ~= address then
+            return nil, "lease write is not a proven SM83 A store"
+        end
+    end
+    local value = emu.getregister("A")
+    if type(value) ~= "number" or value < 0 or value > 255 or value ~= math.floor(value) then
+        return nil, "native accumulator unavailable"
+    end
+    return value, opcode
+end
 -- Manual host accounting suppresses any callback triggered by Lua's debugger writes.
 local function install()
     shadow = lease_bytes()
     for off = 0, 15 do
         local offset = off
-        event.on_bus_write(function(_, value)
+        event.on_bus_write(function(address, callback_value)
             if host_active or finished then return end
             local ok, why = pcall(function()
-                if type(value) ~= "number" then
-                    snap("instrumentation_error", {reason="bus write callback supplied no value"}) return
+                if address ~= base + offset then
+                    snap("instrumentation_error", {reason="lease write callback address mismatch"}) return
+                end
+                local value, opcode = native_store_value(address)
+                if value == nil then
+                    snap("instrumentation_error", {reason=opcode}) return
                 end
                 local before = copy(shadow)
-                shadow[offset + 1] = value & 0xFF
-                snap("rom_write", {offset=offset, value=value & 0xFF, before=before, lease=copy(shadow)})
+                shadow[offset + 1] = value
+                snap("rom_write", {offset=offset, value=value, before=before, lease=copy(shadow),
+                    source="SM83 A store", opcode=opcode, callback_value=callback_value})
             end)
             if not ok then die(why) end
         end, base + offset, "pol_service_lease_" .. offset, "System Bus")
@@ -282,7 +307,7 @@ end
 local binder = Lease.new({lease=base, party_capacity=6, check=check_payload, stage=stage},
     {read_u8=function(a) return L.rw("wSlinkMailbox", a - S.wSlinkMailbox[2]) end,
      read_range=function(a, n) return L.wbytes("wSlinkMailbox", a - S.wSlinkMailbox[2], n) end},
-    {write_bytes=host_write})
+    {write_bytes=function(_, address, bytes) return host_write(address, bytes) end})
 local function transaction(name, fn)
     assert(not host_active)
     host_tx = name snap("host_begin", {tx=name, pump="onframeend"}) host_active = true

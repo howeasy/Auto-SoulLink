@@ -505,7 +505,7 @@ def test_bad_pc_sample_does_not_satisfy_native_lifecycle():
     assert any("wrong_pc" in reason for reason in reasons)
 
 
-def mock_driver(encoder="good", case="cancel-menu", rom0=False):
+def mock_driver(encoder="good", case="cancel-menu", rom0=False, real_lease=False):
     """Run the actual driver in a paused Lua coroutine; invoke its registered CPU callbacks."""
     from lupa.lua55 import LuaRuntime
 
@@ -559,7 +559,7 @@ def mock_driver(encoder="good", case="cancel-menu", rom0=False):
                end}
         event = {
             on_bus_exec=function(fn, _, name) callbacks[name:sub(5)] = fn return name end,
-            on_bus_write=function() end,
+            on_bus_write=function(fn, _, name) callbacks[name] = fn end,
             onframeend=function(fn) frame_end = fn end
         }
         memory = {write_u8=function() end}
@@ -595,6 +595,14 @@ def mock_driver(encoder="good", case="cancel-menu", rom0=False):
         lua.execute("primary_encode = function() return nil, 'encoder unavailable' end")
     else:
         lua.execute('primary_encode = function() error(\'bad "encoder"\\nthrow\') end')
+    if real_lease:
+        lua.globals().lease_source = (ROOT / "lua/gb_trade_lease.lua").read_text(encoding="utf-8")
+        lua.execute("""
+            local real = assert(load(lease_source))()
+            dofile = function(path)
+                if path:find("pol_lib", 1, true) then return L else return real end
+            end
+        """)
     if rom0:
         lua.execute("L.SYM.OWPlayerInput = {0, 0x1234}")
     source = (ROOT / "tools/polished_live/trade_service_probe.lua").read_text(encoding="utf-8")
@@ -602,6 +610,37 @@ def mock_driver(encoder="good", case="cancel-menu", rom0=False):
     lua.execute('thread = coroutine.create(assert(load(driver_source, "@trade_service_probe.lua")))')
     assert lua.eval("coroutine.resume(thread)") == (True, "frame")
     return lua, convert
+
+
+def test_live_host_query_acknowledges_real_lease_method_contract():
+    lua, convert = mock_driver(real_lease=True)
+    lua.execute("""
+        live_lease = {0x53, 0x4c, 0x54, 0x31, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+        local old_r = L.rw
+        L.rw = function(name, offset)
+            if name == "wPartyCount" then return 1 end
+            if name == "wSlinkMailbox" then return live_lease[offset - 14 + 1] end
+            return old_r(name, offset)
+        end
+        L.wbytes = function(name, offset, n)
+            local t = {}
+            for i = 1, n do
+                t[i] = name == "wSlinkMailbox" and live_lease[offset - 14 + i] or 0
+            end
+            if name == "wPartyMon1" then t[1], t[32], t[36] = 25, 50, 20 end
+            return t
+        end
+        L.ww = function(name, offset, value)
+            assert(name == "wSlinkMailbox")
+            live_lease[offset - 14 + 1] = value
+        end
+    """)
+    fire(lua, "SlinkTradeEntry")
+    lua.globals().frame_end()
+    frame = list(convert(lua.globals().live_lease))
+    assert frame[7] == 1  # matching QUERY generation acknowledged
+    assert frame[10:12] == [1, 1]  # slot 0 available and eligible
+    assert sum(frame[12:16]) > 0  # usable nonzero visit token
 
 
 def fire(lua, name, bank=None, pc=None):
@@ -617,6 +656,42 @@ def stop_driver(lua):
     assert lua.globals().exited
     assert not lua.globals().stop_ok
     return json.loads(lua.globals().writes[1])
+
+
+@pytest.mark.parametrize("opcode", [0x12, 0x22, 0x32, 0x77, 0xEA])
+def test_native_lease_store_observes_accumulator_not_gbhawk_zero_placeholder(opcode):
+    lua, _ = mock_driver()
+    lua.globals().store_opcode = opcode
+    lua.execute("""
+        current_pc = 0x4bb3
+        local old_bus, old_register = L.bus, emu.getregister
+        local target = L.SYM.wSlinkMailbox[2]  -- mocked lease offset is zero
+        L.bus = function(a)
+            if store_opcode == 0xea then
+                if a == current_pc - 3 then return 0xea end
+                if a == current_pc - 2 then return target & 0xff end
+                if a == current_pc - 1 then return target >> 8 end
+            elseif a == current_pc - 1 then return store_opcode end
+            return old_bus(a)
+        end
+        emu.getregister = function(name)
+            if name == "A" then return 0x53 end
+            return old_register(name)
+        end
+        callbacks.pol_service_lease_0(target, 0)
+    """)
+    trace = stop_driver(lua)
+    row = next(e for e in trace if e["kind"] == "rom_write")
+    assert row["value"] == 0x53
+    assert row["before"][0] == 0 and row["lease"][0] == 0x53
+
+
+def test_native_lease_store_unknown_instruction_fails_closed():
+    lua, _ = mock_driver()
+    lua.execute("callbacks.pol_service_lease_0(L.SYM.wSlinkMailbox[2], 0)")
+    trace = stop_driver(lua)
+    assert not any(e["kind"] == "rom_write" for e in trace)
+    assert any(e["kind"] == "instrumentation_error" for e in trace)
 
 
 def test_actual_lua_bounds_wrong_bank_samples_per_site_and_keeps_qualified_evidence():
