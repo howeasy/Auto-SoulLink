@@ -543,3 +543,44 @@ def test_real_native_faint_stack_runs_post_copy_observer_and_settles_once():
     assert rig.sent("faint") == []
     fc.tick(rig)
     assert len(fc.ko(rig)) == 1
+
+
+def _calibrated_route(tmp_path, result_text, calibration=True):
+    probe = tmp_path / "probe"
+    probe.mkdir()
+    (probe / "route.json").write_text('{"steps": []}')
+    if calibration:
+        (probe / "calibration.json").write_text("[]")
+    if result_text is not None:
+        (probe / "result.txt").write_text(result_text)
+    return probe / "route.json"
+
+
+def test_route_calibration_overlay_must_match_before_any_emulator_run(tmp_path):
+    from tools.polished_live.rival_swap_live import check_route_calibration
+
+    new, old = "6" * 40, "a" * 40
+    line = "[probe] overlay sha1 %s gate 0f:47DD ROM bytes 218bd2fa0cd1\n"
+    assert check_route_calibration(_calibrated_route(tmp_path, line % new), new) == new
+    other = tmp_path / "other"
+    other.mkdir()
+    with pytest.raises(ValueError, match="recalibrate"):
+        check_route_calibration(_calibrated_route(other, line % old), new)
+
+
+def test_route_calibration_present_but_unverifiable_fails_and_absent_skips(tmp_path):
+    from tools.polished_live.rival_swap_live import check_route_calibration
+
+    sha = "6" * 40
+    # A calibrated route (calibration.json present) whose overlay cannot be read is refused.
+    for n, text in enumerate((None, "no sha here\n", "overlay sha1 %s\noverlay sha1 %s\n" % (sha, "b" * 40))):
+        d = tmp_path / f"c{n}"
+        d.mkdir()
+        with pytest.raises(ValueError, match="cannot verify"):
+            check_route_calibration(_calibrated_route(d, text), sha)
+    # A hand-authored route has no calibration.json: nothing to judge.
+    d = tmp_path / "hand"
+    d.mkdir()
+    assert check_route_calibration(_calibrated_route(d, None, calibration=False), sha) is None
+    # The committed explode route is hand-authored and must stay admitted.
+    assert check_route_calibration(live.ROUTE, live.OVERLAY) is None

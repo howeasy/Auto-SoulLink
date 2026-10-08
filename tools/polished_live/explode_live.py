@@ -166,6 +166,9 @@ def prepare(case, fixture=FIXTURE, route=ROUTE):
     contract = derive(symbols, rom, explosion)
     mons = saved_party(raw, symbols)
     slot = 2 if case == "bench-faint" else 0
+    from tools.polished_live.rival_swap_live import check_route_calibration
+
+    check_route_calibration(route, OVERLAY)
     steps = parse_route(Path(route), 20000)
     proof.update(
         contract_sha256=sha(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()),
@@ -256,6 +259,7 @@ def evaluate(trace, config):
         allowed = {
             "begin",
             "route",
+            "route_tail",
             "command",
             "operation",
             "scope_begin",

@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -29,7 +30,7 @@ from tools.polished_live import duo, rival_gate_probe as probe  # noqa: E402
 SHA1 = "688945795e2656019247f5aaceb7b1d8791e900a"
 FIXTURE = Path("F:/slink-work/lanes/pol-rival-live/fixture/rival.SaveRAM")
 DISCLOSURE = Path("F:/slink-work/lanes/pol-rival-live/out/disclosure.json")
-ROUTE = Path("F:/slink-work/lanes/pol-rival-live/out/synth-pdm83y_x/probe/route.json")
+ROUTE = Path("F:/slink-work/lanes/pol-rival-live/out/calib-68894579/synth-o562jtrj/probe/route.json")
 SYMBOLS = ("wOTPartyCount", "wOTPartyMons", "wOTPartyMonOTs", "wOTPartyMonNicknames",
            "wOTPartyDataEnd", "hBattleTurn", "wOtherTrainerClass", "wOtherTrainerID",
            "wCurOTMon", "wCurPartyMon", "wEnemyMonSpecies", "wEnemyMonForm",
@@ -38,6 +39,27 @@ SYMBOLS = ("wOTPartyCount", "wOTPartyMons", "wOTPartyMonOTs", "wOTPartyMonNickna
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def check_route_calibration(route, overlay_sha1=SHA1):
+    """Fail fast when a probe-calibrated route was calibrated on a different overlay.
+
+    A route written by rival_gate_probe --calibrate sits beside calibration.json and the probe's
+    result.txt, which names the overlay it ran ("[probe] overlay sha1 <40 hex>"). Boot timing (title
+    screen) moves with the overlay, so a route calibrated elsewhere burns a full emulator run to come
+    back OPEN. Hand-authored routes have no calibration.json and are not judged here (absent skips);
+    a calibrated route whose overlay cannot be read, or differs, is refused (present-but-wrong fails).
+    """
+    route = Path(route)
+    if not (route.parent / "calibration.json").is_file():
+        return None
+    result = route.parent / "result.txt"
+    found = re.findall(r"overlay sha1 ([0-9a-f]{40})", result.read_text(errors="replace")) if result.is_file() else []
+    if len(set(found)) != 1:
+        raise ValueError(f"calibrated route {route} has no single overlay sha1 in {result.name}: cannot verify")
+    if found[0] != overlay_sha1.lower():
+        raise ValueError(f"route {route} was calibrated on overlay {found[0]}, not {overlay_sha1}: recalibrate")
+    return found[0]
 
 
 def symbols():
@@ -244,6 +266,9 @@ def main(argv=None):
     p.add_argument("--out", type=Path, default=Path("F:/slink-work/lanes/pol-rivalswaplive/out"))
     p.add_argument("--frames", type=int, default=18000)
     p.add_argument("--timeout", type=int, default=600)
+    p.add_argument("--fixed-route", action="store_true",
+                   help="replay the route file's frame steps verbatim (desyncs on random wild encounters once the "
+                        "client is live); default is WRAM-verified feedback navigation inside the client session")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--rejudge", type=Path, help="existing run directory; original receipts are untouched")
     args = p.parse_args(argv)
@@ -257,6 +282,7 @@ def main(argv=None):
         p.error("frames/timeout outside bounded limits")
     data = args.fixture.read_bytes()
     probe.load_disclosure(args.disclosure, data)
+    check_route_calibration(args.route)
     # Earlier Lua route files encode an empty array as {}; accept ONLY that empty object.
     route = json.loads(args.route.read_text())
     if set(route) != {"steps"}:
@@ -275,7 +301,7 @@ def main(argv=None):
                 "disclosure_sha256": digest(args.disclosure.read_bytes()), "rom_sha1": SHA1,
                 "partner": "SYNTH second save identity; scripted TCP hello/tick, no second emulator",
                 "partner_disclosure": partner_disclosure, "native": "buttons, trainer battle, real client/server, writer, send-in",
-                "steps": steps, "frames": args.frames, "spans": spans, "symbols": symbols()}
+                "steps": steps, "feedback": not args.fixed_route, "frames": args.frames, "spans": spans, "symbols": symbols()}
     manifest["source_head"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     manifest["source_sha256"] = {f: digest((ROOT/f).read_bytes()) for f in (
         "lua/gen2/client.lua", "lua/gen2/entry.lua", "lua/gen2/signals.lua", "lua/gen2/polished_rival.lua",

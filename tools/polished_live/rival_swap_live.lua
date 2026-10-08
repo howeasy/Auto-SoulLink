@@ -4,6 +4,7 @@ local L = dofile(assert(os.getenv("SLINK_ROOT")).."/tools/polished_live/pol_lib.
 local J = L.json
 local config = J.decode(L.slurp(assert(os.getenv("POL_SWAP_CONFIG"))))
 local trace, overflow, writes, calls = {}, 0, 0, 0
+local pos_rows = {}
 local active, post_seen, continued = false, false, false
 local function emit(kind, fields)
     if #trace >= 5000 then overflow=overflow+1 return end
@@ -34,7 +35,8 @@ end
 local raw_memory, raw_emu = memory, emu
 memory=setmetatable({}, {__index=function(_,name)
     local fn=raw_memory[name]
-    if type(name)=="string" and name:match("^write") and type(fn)=="function" then
+    -- BizHawk API members are userdata here, not Lua functions; a type()=="function" test never audits any write.
+    if type(name)=="string" and name:match("^write") and (type(fn)=="function" or type(fn)=="userdata") then
         return function(addr,value,domain,...)
             writes=writes+1
             local c=context()
@@ -114,14 +116,71 @@ local ok,err=pcall(function()
         emit("continued",c)
     end)
     local elapsed=0
-    for _,step in ipairs(config.steps) do
-        local buttons={}
-        for _,b in ipairs(step.buttons) do buttons[b]=true end
-        for _=1,step.frames do
-            L.frame(buttons) elapsed=elapsed+1
+    -- Diagnostic only (never part of the oracle trace): where the native route actually is.
+    local pos=pos_rows
+    local function sample()
+        if elapsed%30==0 and #pos<1500 then
+            pos[#pos+1]={elapsed=elapsed,frame=emu.framecount(),group=L.rw("wMapGroup"),map=L.rw("wMapNumber"),
+                         x=L.rw("wXCoord"),y=L.rw("wYCoord"),mode=L.rw("wBattleMode")}
+        end
+    end
+    local function frame(button)
+        L.frame(button and {[button]=true} or {}) elapsed=elapsed+1 sample()
+    end
+    if config.feedback then
+        -- Feedback navigation INSIDE the client session. A fixed-frame replay of a route calibrated by the
+        -- probe (no SLink client) desyncs on the first wild encounter (random encounters differ once the
+        -- companion/client is live). Same source-derived tile route as rival_gate_probe.lua calibrate();
+        -- every target is verified from WRAM, battles are pulsed through, nothing is written.
+        local function bounded(predicate,action,label)
+            local start=elapsed
+            while not predicate() and not continued do
+                if elapsed-start>=1800 then error("1800-frame stall: "..label) end
+                action()
+            end
+        end
+        local function pulse() frame(elapsed%16<2 and "A" or nil) end
+        local function idle(n) for _=1,n do frame() end end
+        local function wild()
+            bounded(function() return L.rw("wBattleMode")==0 and L.ow_idle() end,pulse,"wild ended")
+            idle(30)
+        end
+        L.hook("OWPlayerInput")
+        bounded(function() return L.ow_idle() and L.rw("wMapGroup")==24 and L.rw("wMapNumber")==3 end,pulse,"boot Route29")
+        idle(30)
+        assert(L.rw("wXCoord")==48 and L.rw("wYCoord")==12,"unexpected fixture coordinates")
+        local route={{"Left",4},{"Down",2},{"Left",6},{"Down",2},{"Left",7},{"Up",6},
+            {"Right",5},{"Up",3},{"Left",13},{"Up",1},{"Left",2},{"Up",2},{"Left",5},
+            {"Down",2},{"Left",5},{"Down",4},{"Left",7},{"Up",3},{"Left",11}}
+        local dirs={Left={-1,0},Right={1,0},Up={0,-1},Down={0,1}}
+        for seg,row in ipairs(route) do
+            for tile=1,row[2] do
+                if L.rw("wBattleMode")==1 then wild() end
+                local x,y=L.rw("wXCoord"),L.rw("wYCoord")
+                local tx,ty=x+dirs[row[1]][1],y+dirs[row[1]][2]
+                local group,map=L.rw("wMapGroup"),L.rw("wMapNumber")
+                if tx==-1 then group,map,tx=26,4,39 end
+                bounded(function()
+                    return L.rw("wMapGroup")==group and L.rw("wMapNumber")==map
+                        and L.rw("wXCoord")==tx and L.rw("wYCoord")==ty
+                end,function()
+                    if L.rw("wBattleMode")==1 then wild() else frame(row[1]) end
+                end,"segment "..seg.." tile "..tile)
+                idle(24)
+            end
+        end
+        -- Rival encounter: pulse A until the production writer and LoadBattleMenu hooks have fired.
+        bounded(function() return continued end,pulse,"rival continued")
+    else
+        for _,step in ipairs(config.steps) do
+            local buttons={}
+            for _,b in ipairs(step.buttons) do buttons[b]=true end
+            for _=1,step.frames do
+                L.frame(buttons) elapsed=elapsed+1 sample()
+                if continued then break end
+            end
             if continued then break end
         end
-        if continued then break end
     end
     -- One bounded attempt only; no alternate route, memory staging or retry.
     local idle=0
@@ -132,6 +191,11 @@ local ok,err=pcall(function()
     for _=1,120 do L.frame() end
 end)
 if not ok then emit("error",{error=tostring(err)}) end
+pcall(function()
+    local f=assert(io.open(L.RUN.."/positions.json","wb"))
+    f:write(J.encode(pos_rows or {}))
+    f:close()
+end)
 -- Final is retained even if the bounded row cap was reached; overflow is never PASS.
 trace[#trace+1]={kind="final",ord=#trace+1,frame=emu.framecount(),completed=ok,writes=writes,overflow=overflow}
 local dumped,dump_error=pcall(function()
