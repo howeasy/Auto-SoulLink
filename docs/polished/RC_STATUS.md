@@ -186,7 +186,7 @@ Run these two on the build host, sequentially, and clear the cache first if the 
 | `OPEN-WRITE-PATH` | none (no Manager option governs the write sink) | overworld half live on `68894579` (`LIVE-WRITES-OVERWORLD`) and `supports_box_mon` is True since `8c1b841e2`; still no in-battle (active battler) / PHYSICAL faint receipt and no (c) negatives under a real battle |
 | `OPEN-EXPLODE-RIVAL` | `explode_mode`, `rival_team_swap` | both writers exist as pure Lua modules and neither is wired |
 | `OPEN-TITLE-SPLASH` | none | **CLOSED** 2026-10-08 by `LIVE-TITLE-SPLASH` |
-| `OPEN-PANEL-PAGES` | none | paging live on `68894579` (ROM half, hello `panel=true`, real-host paging); rows unreadable on the 16-glyph ROM panel (`Gen2PolishedAdapter` inherits `info_panel_width()==0`), fix in flight (`pol-panelfix`) |
+| `OPEN-PANEL-PAGES` | none | paging live on `68894579` (ROM half, hello `panel=true`, real-host paging); rows unreadable on the 16-glyph ROM panel (`Gen2PolishedAdapter` inherits `info_panel_width()==0`). Fix `66bad891f` is on `claude/gen2-integration`, not this tree; its re-run `pol-panelfix/run/oracle.json` (sha256 `feee691c…`) PASS is receipt-ready at the frozen RC cut |
 | `OPEN-IN-GAME-TRADE` | `pc_trade_npc` | the receptionist stack is measured, but no dispatch is armed; the native path stops at `Special_WaitForLinkedFriend` |
 
 Where an item names a Manager row, the verifier cross-checks that the row is **still refused**.
