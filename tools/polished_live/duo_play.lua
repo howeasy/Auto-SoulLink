@@ -236,7 +236,20 @@ local function snapshot()
         end
     end)
     if not okb then box_why = tostring(err) end
-    return {frame = emu.framecount(), party_count = L.rw("wPartyCount"), party = mons,
+    local diagnostic
+    if L.SYM and L.SYM.wSlinkMailbox then
+        local fs=P.client and P.client.faint_settle
+        local owed={}
+        if fs then for _,o in ipairs(fs.owed) do owed[#owed+1]={key=o.key,state=o.state,kind=o.kind} end end
+        diagnostic={pc=emu.getregister("PC"),sp=emu.getregister("SP"),rom_bank=L.rombank(),svbk=L.bus(0xff70),
+            battle_mode=L.rw("wBattleMode"),battle_turn=L.bus(L.SYM.hBattleTurn[2]),
+            game_paused=L.rw("wGameLogicPaused"),script_running=L.rw("wScriptRunning"),
+            menu_x=L.rw("wMenuCursorX"),menu_y=L.rw("wMenuCursorY"),
+            menu_flags=L.rw("wBattleMenuFlags"),menu_buffer=L.rw("wBattleMenuCursorBuffer"),
+            mailbox_hex=L.hex(L.wbytes("wSlinkMailbox",0,64)),
+            fs_owed=owed,client_writes=#client_writes}
+    end
+    return {frame = emu.framecount(), diagnostic=diagnostic, party_count = L.rw("wPartyCount"), party = mons,
             party_why = party == nil and tostring(why) or nil, box = box, box_why = box_why}
 end
 local function slot_of(snap, key)
@@ -496,8 +509,10 @@ local function op_lose_native(step)
         local btn, action
         if native_ui == "root" and emu.framecount() - native_ui_frame >= 8 then
             if not step.all and has_report("faint", step.key) then
-                -- Normal wild menu: B quick Run is legal ONLY after the actual own faint wire.
-                btn, action = "B", "run-after-linked-faint"
+                -- Native 2x2 menu RUN (bottom-right), only after the actual own faint wire.
+                local y,x=L.rw("wMenuCursorY"),L.rw("wMenuCursorX")
+                btn=y~=2 and "Down" or (x~=2 and "Right" or "A")
+                action="select-run-after-linked-faint"
             elseif step.all and #strong > 0 then
                 target = nil
                 for _, m in ipairs(strong) do if m.slot ~= active then target = m.slot break end end

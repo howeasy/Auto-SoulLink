@@ -1120,12 +1120,12 @@ def test_play_snapshot_reads_the_production_box_census(state):
     assert image.snap() == before
 
 
-def test_natural_driver_advances_intro_without_a_text_hook():
+def test_natural_driver_advances_intro_and_runs_through_real_menu_inputs():
     """An intro waiting for input before UI hooks must reach FIGHT, not idle until the stall bound."""
     lupa = pytest.importorskip("lupa")
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     engine = """
-local frame, mode, hp, engine = 0, 0, 1, "intro"
+local frame, mode, hp, engine, x, y = 0, 0, 1, "intro", 1, 1
 local native_ui, native_ui_frame = nil, 0
 local reports, witnesses, hook_errors = {}, {}, {}
 local staged = {key="K", all=false, frame=0}
@@ -1142,7 +1142,8 @@ local function walk_for_battle() mode=1 return true end
 function L.rw(name)
     if name=="wBattleMode" then return mode
     elseif name=="wCurBattleMon" or name=="wBattleType" then return 0
-    elseif name=="wMenuCursorY" or name=="wMenuCursorX" then return 1 end
+    elseif name=="wMenuCursorY" then return y
+    elseif name=="wMenuCursorX" then return x end
     return 2
 end
 function L.wbytes() return {33,0,0,0} end
@@ -1155,8 +1156,9 @@ function L.pulse(button)
     elseif pressed and engine=="fight" and button=="A" then
         engine="fainted";hp=0
         reports[#reports+1]={event="faint",key="K",frame=frame};L.hits.BattleMenu_Fight=1
-    elseif pressed and engine=="fainted" and button=="B" then
-        engine="overworld";mode=0;L.hits.BattleMenu_Run=1
+    elseif pressed and engine=="fainted" then
+        if button=="Down" then y=2 elseif button=="Right" then x=2
+        elseif button=="A" and x==2 and y==2 then engine="overworld";mode=0;L.hits.BattleMenu_Run=1 end
     end
     frame=frame+1
 end
