@@ -795,3 +795,12 @@ Card `g2p-reloadlive` (OMP 21080; no code change). Overlay `cf03f53accefbc5f3fee
 | live cold, wrong slot-0 key (red control) `cold-ghrg2v6_` | MISSING_RECEIVED | same route/ROM/fixture; the oracle rejects it, never PASS |
 
 Bounded: empty referenced storage, main-copy acceptance only. Not exercised: occupied boxes / banked PokeDB, backup-copy fallback, a corrupt save, a reload after a trade or a box write.
+
+## D3 dispatcher and F3 natural-faint probes re-bound to the current overlay (2026-10-08, SYNTH fixture, DEV). PASS (probe-level)
+
+Card `g2p-probes2` (OMP 21080; dispatch-probe admission fix `286c8068`, merged `48476717d`). Overlay `cf03f53a...`, both launched ROM copies sha1-checked; bank `$0F` byte-identical to the clean release (sha256 `a1364601...`). Fixture: the same qualified SYNTH save `75c7a5dc...` as the 2026-10-06 runs, now admitted at its full 32790 bytes (RTC footer kept), unchanged after the runs. Evidence root `F:/slink-work/lanes/pol-probes2`.
+
+- **D3** `dispatch/played-dcrx2f5k` (trace `f6e2218c...`): `RESULT: PASS dispatch-probe (0 reasons)`. The probe's admission check still required the pre-C6 inert `ret` at `7e:4780`; it now requires the `jp` to the linked `SlinkTradeResponderService` (red test first). Same route (1498 frames), 1551 dispatcher hits, 0 prompt hits, 0 guest writes. Per-phase entries / nine-pin matches / engine-clean / accepted: idle 360/360/330/330, walking 96/96/2/2, start menu 101/0/0/0, NPC talk 204/0/0/0: identical to the 2026-10-06 table. Raw negative stack images differ slightly (16 vs 17 walking images; minimum SP `$C0B6` vs `$C0B8`), cause not established; acceptance and guard totals are unchanged.
+- **F3** `faint/played-pdhky12_` (trace `051f0831...`): verdict PASS, one qualified pre-copy pass (not animation qualification). The six qualified rows (frames 1390/1460: resolve `44af`, FaintUserPokemon `4cd2` x2, pre_copy `44c8`, copy_call `44ca`, copy_return `44cd`) and every per-site total and wrong-bank count match the 2026-10-06 run exactly (6666 callbacks, 0 wrong PC).
+
+Not shown: a player-mon faint, whiteout, animation safety, a lease/prompt publication.
