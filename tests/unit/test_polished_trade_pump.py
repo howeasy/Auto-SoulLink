@@ -59,8 +59,11 @@ class Pump(wp.Rig):
         g.pump_receive = lambda: self.inbox.pop(0) if self.inbox else None
         self.lua.execute('''return function(io, net)
             local read=io.read_u8
+            local write=io.write_u8
             io.read_u8=function(a,d) if d == nil or d == 'System Bus' then return pump_read(a) end return read(a,d) end
-            io.write_u8=function(a,v,d) return pump_write(a,v,d) end
+            -- System Bus only, like the read side: the overworld gate looks io.write_u8 up per write (box observer),
+            -- so a blanket override would strand CartRAM/WRAM deposits in mem while read-backs read the image.
+            io.write_u8=function(a,v,d) if d == nil or d == 'System Bus' then return pump_write(a,v,d) end return write(a,v,d) end
             net.connected=function() return pump_connected() end
             net.receive=function() return pump_receive() end
         end''')(self.io, self.deps.net)

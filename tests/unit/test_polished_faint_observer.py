@@ -558,7 +558,8 @@ def test_generated_site_census_adjacent_calls_proof_and_overlay_points():
     rom = overlay()[1]
     assert rom[row["rom_offset"] - 3:row["rom_offset"] + 3] == bytes.fromhex("CDB034CDC334")
     call = PACK["titles"]["polished_crystal"]["sites"]["battle_faint_copyback_call"]
-    assert call["addr"] + 3 == row["addr"] and len(PACK["companion_overlay_spans"]) == 28
+    # 28 spans before the C5 commit helper; its bank-$7E body (7e:5300..573c) adds two.
+    assert call["addr"] + 3 == row["addr"] and len(PACK["companion_overlay_spans"]) == 30
 
 
 @pytest.mark.parametrize("change", ["intervening", "player-bank", "enemy-bank", "proof"])
