@@ -1,12 +1,15 @@
 -- Read-only Polished exec-callback PC probe; wrong banks retain at most 16 rows per site.
--- Setup is PLAYED: the supplied route includes native boot/CONTINUE/battle input.
--- No client, synthetic battle, warp, guest-memory write, or CPU/register mutation.
+-- Setup is declared by the config (played, or synth = a disclosed tool-built SaveRAM, O-33); either way the supplied
+-- route is native boot/CONTINUE/battle input. No client, synthetic battle, warp, guest-memory write, or CPU/register
+-- mutation. Battle-mode transitions are logged as separate bounded "mode" rows (read-only evidence of a wild battle).
 local L = dofile(assert(os.getenv("SLINK_ROOT")) .. "/tools/polished_live/pol_lib.lua")
 local config
 local trace, hits, protected_hits, elapsed = {}, 0, 0, 0
 local guest_writes, cpu_changes, driver_errors = 0, 0, 0
 local wrong_bank_sample_limit = 16
 local hook_counts = {}
+local mode_row_limit = 64
+local mode_prev, mode_rows, mode_changes, mode_rows_dropped = 0, 0, 0, 0
 for _, site in ipairs({"gate", "next", "last"}) do
     hook_counts[site] = {total = 0, qualified = 0, wrong_pc = 0,
                          wrong_banks = {}, wrong_bank_samples = 0}
@@ -81,6 +84,24 @@ local function recorder(kind, addr)
     end
 end
 
+-- Log wBattleMode transitions (nothing -> battle, battle -> nothing, wild <-> trainer). Own cap: never consumes the
+-- protected hook capacity, and an unbounded flicker is counted rather than stored.
+local function observe_mode()
+    local mode = L.rw("wBattleMode")
+    if mode == mode_prev then return end
+    mode_prev = mode
+    mode_changes = mode_changes + 1
+    if mode_rows >= mode_row_limit then
+        mode_rows_dropped = mode_rows_dropped + 1
+        return
+    end
+    mode_rows = mode_rows + 1
+    append("mode", {
+        mode = mode, trainer_class = L.rw("wOtherTrainerClass"), trainer_id = L.rw("wOtherTrainerID"),
+        ot_party_count = L.rw("wOTPartyCount"),
+    })
+end
+
 local function play()
     config = L.json.decode(L.slurp(assert(os.getenv("POL_PROBE_CONFIG"))))
     L.hook_at("rival_probe_gate", 0x0F, 0x47DD, recorder("gate", 0x47DD))
@@ -93,11 +114,13 @@ local function play()
         for _ = 1, step.frames do
             L.frame(buttons)
             elapsed = elapsed + 1
+            observe_mode()
         end
     end
     while elapsed < config.frames do
         L.frame()
         elapsed = elapsed + 1
+        observe_mode()
     end
 end
 
@@ -108,7 +131,10 @@ if not ok then
 end
 local final = {completed = ok, elapsed = elapsed, guest_writes = guest_writes,
                cpu_changes = cpu_changes, hook_hits = hits, driver_errors = driver_errors,
-               wrong_bank_sample_limit = wrong_bank_sample_limit, hook_counts = hook_counts}
+               wrong_bank_sample_limit = wrong_bank_sample_limit, hook_counts = hook_counts,
+               mode_row_limit = mode_row_limit, mode_changes = mode_changes, mode_rows_dropped = mode_rows_dropped,
+               setup = config and config.setup or nil,
+               disclosure_sha256 = config and config.disclosure_sha256 or nil}
 append("final", final)
 final = trace[#trace]
 
@@ -149,7 +175,7 @@ local dump_ok, dump_err = pcall(function()
     f:close()
     assert(write_ok, write_err)
 end)
-L.check("played route completed without probe mutations",
+L.check(((config and config.setup) or "played") .. " route completed without probe mutations",
         ok and dump_ok and guest_writes == 0 and cpu_changes == 0,
         not dump_ok and tostring(dump_err) or (ok and ("recorded " .. hits .. " hooks") or tostring(err)))
 -- Driver PASS means complete recording only. Python alone decides PASS / NO_GATE_HIT / PC findings.

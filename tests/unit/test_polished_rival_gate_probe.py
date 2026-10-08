@@ -6,6 +6,7 @@ callback-PC semantics remain OPEN until an owner-authorized played run produces 
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -296,8 +297,9 @@ def _lua_value(value):
 
 MOCK_DRIVER = r"""
 local frame, bank, pc = 0, 15, 0x47DD
+cur_mode = 2
 local hooks = {}
-output, finished, recording_ok = nil, false, nil
+output, finished, recording_ok, recording_name = nil, false, nil, nil
 os.getenv = function() return "mock" end
 emu = {
     framecount = function() return frame end,
@@ -314,7 +316,7 @@ local L = {
     slurp = function() return "config" end,
     bus = function() return bank end,
     rw = function(name)
-        if name == "wBattleMode" then return 2 end
+        if name == "wBattleMode" then return cur_mode end
         if name == "wOTPartyCount" then return 3 end
         return 0
     end,
@@ -327,11 +329,15 @@ local L = {
         assert(expected_bank == 15)
         hooks[#hooks + 1] = {addr = addr, callback = callback}
     end,
-    check = function(_, ok) recording_ok = ok end,
+    check = function(name, ok) recording_ok, recording_name = ok, name end,
     finish = function() finished = true end,
 }
 L.json = {
-    decode = function() return {steps = {}, frames = 1, trace_cap = mock_cap} end,
+    decode = function()
+        return {steps = route_frames and {{frames = route_frames, buttons = {}}} or {},
+                frames = mock_frames or 1, trace_cap = mock_cap,
+                setup = mock_setup, disclosure_sha256 = mock_disc}
+    end,
     encode = function(trace)
         if encoder_mode == "nil" then return nil end
         if encoder_mode == "throw" then error('encoder "failed"\nagain', 0) end
@@ -340,6 +346,7 @@ L.json = {
 }
 L.frame = function()
     frame = frame + 1
+    if mode_script and mode_script[frame] ~= nil then cur_mode = mode_script[frame] end
     for _, hook in ipairs(hooks) do
         for i = 1, wrong_callbacks do
             bank, pc = (i % 2 == 0 and 16 or 17), 0x1234
@@ -368,7 +375,8 @@ end
 """
 
 
-def run_mock_driver(*, encoder="normal", callbacks=7001, wrong_pc=False, cap=5, frame_error=False):
+def run_mock_driver(*, encoder="normal", callbacks=7001, wrong_pc=False, cap=5, frame_error=False,
+                    frames=1, modes=None, setup=None, disclosure=None, with_name=False, route_frames=None):
     from lupa.lua55 import LuaRuntime
 
     lua = LuaRuntime(unpack_returned_tuples=True)
@@ -378,11 +386,17 @@ def run_mock_driver(*, encoder="normal", callbacks=7001, wrong_pc=False, cap=5, 
     globals_.wrong_pc = wrong_pc
     globals_.mock_cap = cap
     globals_.frame_error = frame_error
+    globals_.mock_frames = frames
+    globals_.route_frames = route_frames
+    globals_.mode_script = lua.table_from(modes) if modes else None
+    globals_.mock_setup = setup
+    globals_.mock_disc = disclosure
     globals_.encode_trace = lambda value: json.dumps(_lua_value(value))
     lua.execute(MOCK_DRIVER)
     lua.execute((REPO / "tools/polished_live/rival_gate_probe.lua").read_text(encoding="utf-8"))
     assert globals_.finished is True
-    return json.loads(globals_.output), globals_.recording_ok
+    result = json.loads(globals_.output), globals_.recording_ok
+    return result + (globals_.recording_name,) if with_name else result
 
 
 def test_wrong_bank_flood_preserves_qualified_rows_and_exact_callback_totals():
@@ -538,3 +552,485 @@ def test_wrong_pc_consumes_protected_capacity_without_losing_diagnostics():
     ok, reasons = P.evaluate(trace)
     assert not ok and P.verdict(reasons) == "PC_IS_NEXT_INSTRUCTION"
     assert any(reason.startswith("TRACE_OVERFLOW:") for reason in reasons)
+
+
+# ══ Card B2: SYNTH setup mode, disclosure binding, the stronger rival-card oracle, battle-mode timeline ═══════════
+#
+# RED CONTROLS (each negative case below is a separate parametrize id):
+#   class outside {1B..1F}, id out of range, wrong fixture identity     -> test_rival_gate_defects_fail_with_specific_reason
+#   wild gate row (mode 1, class 0) never qualifies                      -> test_a_wild_battle_row_never_qualifies_as_a_rival_gate
+#   missing / misordered / mismatched next+last witnesses                -> test_rival_witness_defects_fail
+#   setup binding absent / wrong                                         -> test_setup_binding_is_required
+#   wrong-bank hits are counted and excluded                             -> test_wrong_bank_rows_are_excluded_from_the_rival_oracle
+#   wild control with no observed wild mode / with a qualified hit       -> test_wild_control_defects_fail
+#   synth without a matching disclosure                                  -> test_synth_requires_a_bound_disclosure
+DISC = "ab" * 32
+SITE6 = "218bd2fa0cd1"
+
+
+def rival_hit(kind="gate", **fields):
+    base = {"trainer_class": 0x1B, "trainer_id": 3, "ot_party_count": 2, "mode": 2, "cur_ot_mon": 0,
+            "cur_party_mon": 0, "site_bytes": SITE6}
+    base.update(fields)
+    return hit(kind, **base)
+
+
+def trio(**fields):
+    return [rival_hit(kind, **fields) for kind in ("gate", "next", "last")]
+
+
+def mode_row(mode, **fields):
+    row = {"kind": "mode", "mode": mode, "trainer_class": 0, "trainer_id": 0, "ot_party_count": 0}
+    row.update(fields)
+    return row
+
+
+def bound(trace, setup="synth", disc=DISC):
+    final = trace[-1]
+    if setup is not None:
+        final["setup"] = setup
+    if disc is not None:
+        final["disclosure_sha256"] = disc
+    return trace
+
+
+def rival_trace(events=None):
+    return bound(complete(trio() if events is None else events))
+
+
+def rival_eval(trace, **kw):
+    kw.setdefault("disclosure_sha256", DISC)
+    return P.evaluate_rival(trace, **kw)
+
+
+def has(reasons, prefix):
+    return any(r.startswith(prefix + ":") for r in reasons)
+
+
+def test_rival_constants_are_the_documented_five_classes_and_fixture_identity():
+    assert frozenset({0x1B, 0x1C, 0x1D, 0x1E, 0x1F}) == P.RIVAL_CLASSES
+    assert P.FIXTURE_EXPECT == {"trainer_class": 0x1B, "trainer_id": 3, "enemy_party": 2}
+    assert P.PINNED_SITE_HEX == SITE6
+
+
+def test_good_rival_trace_passes_and_generic_oracle_is_unchanged():
+    assert rival_eval(rival_trace()) == (True, [])
+    assert P.verdict([]) == "PASS"
+    # played / generic oracle keeps accepting non-rival classes and optional witnesses (the pre-existing contract)
+    assert P.evaluate(good_trace()) == (True, [])
+    assert P.evaluate(complete([hit()])) == (True, [])
+    assert P.evaluate(rival_trace()) == (True, [])
+
+
+@pytest.mark.parametrize(("events", "prefix"), [
+    (trio(trainer_class=9), "NOT_RIVAL_CLASS"),
+    (trio(trainer_class=0x1A), "NOT_RIVAL_CLASS"),
+    (trio(trainer_class=0x20), "NOT_RIVAL_CLASS"),
+    (trio(trainer_class=0), "NOT_RIVAL_CLASS"),
+    (trio(trainer_class=None), "NOT_RIVAL_CLASS"),
+    (trio(trainer_class=True), "NOT_RIVAL_CLASS"),
+    (trio(trainer_class="1b"), "NOT_RIVAL_CLASS"),
+    (trio(trainer_class=0x1C), "FIXTURE_IDENTITY_MISMATCH"),
+    (trio(trainer_class=0x1F), "FIXTURE_IDENTITY_MISMATCH"),
+    (trio(trainer_id=4), "FIXTURE_IDENTITY_MISMATCH"),
+    (trio(trainer_id=0), "FIXTURE_IDENTITY_MISMATCH"),
+    (trio(ot_party_count=3), "FIXTURE_IDENTITY_MISMATCH"),
+    (trio(ot_party_count=1), "FIXTURE_IDENTITY_MISMATCH"),
+    (trio(trainer_id=None), "BAD_TRAINER_ID"),
+    (trio(trainer_id=-1), "BAD_TRAINER_ID"),
+    (trio(trainer_id=256), "BAD_TRAINER_ID"),
+    (trio(trainer_id=True), "BAD_TRAINER_ID"),
+    (trio(trainer_id=3.0), "BAD_TRAINER_ID"),
+    (trio(site_bytes="218bd2ffffff"), "SITE_BYTES_NOT_PINNED"),
+    (trio(site_bytes="218bd2fa0cd2"), "SITE_BYTES_NOT_PINNED"),
+    (trio(site_bytes="218bd2"), "SITE_BYTES_MISMATCH"),
+    (trio(site_bytes=None), "SITE_BYTES_MISMATCH"),
+    (trio(cur_ot_mon=1, cur_party_mon=0), "BAD_SELECTED_INDEX"),
+    (trio(cur_ot_mon=2, cur_party_mon=2), "BAD_SELECTED_INDEX"),
+    (trio(cur_ot_mon=False, cur_party_mon=False), "BAD_SELECTED_INDEX"),
+    (trio(mode=1), "NOT_TRAINER_BATTLE"),
+    (trio(mode=0), "NOT_TRAINER_BATTLE"),
+    ([rival_hit(pc=0x47E0), rival_hit("next"), rival_hit("last")], "PC_IS_NEXT_INSTRUCTION"),
+    ([rival_hit(pc=0x1234), rival_hit("next"), rival_hit("last")], "PC_OTHER"),
+], ids=["class-9", "class-1a", "class-20", "class-0", "class-none", "class-bool", "class-str",
+        "class-1c-not-fixture", "class-1f-not-fixture", "id-4", "id-0", "party-3", "party-1",
+        "id-none", "id-neg", "id-256", "id-bool", "id-float", "site-trailer", "site-last-byte",
+        "site-3-bytes", "site-none", "idx-differ", "idx-out-of-range", "idx-bool", "mode-wild",
+        "mode-none", "pc-next-instruction", "pc-other"])
+def test_rival_gate_defects_fail_with_specific_reason(events, prefix):
+    ok, reasons = rival_eval(rival_trace(events))
+    assert not ok
+    assert has(reasons, prefix), reasons
+
+
+@pytest.mark.parametrize("klass", [0x1B, 0x1C, 0x1D, 0x1E, 0x1F], ids=["rival0", "rival1", "rival2", "lyra1", "lyra2"])
+@pytest.mark.parametrize("tid", [0, 1, 3, 0x1C, 255], ids=["id0", "id1", "id3", "id1c", "id255"])
+def test_five_class_gate_accepts_any_valid_id_and_does_not_test_ids_against_classes(klass, tid):
+    ok, reasons = rival_eval(rival_trace(trio(trainer_class=klass, trainer_id=tid)), expected=None)
+    assert (ok, reasons) == (True, [])
+
+
+@pytest.mark.parametrize("count", [1, 2, 3, 6], ids=["n1", "n2", "n3", "n6"])
+def test_five_class_gate_accepts_any_valid_enemy_party_size(count):
+    assert rival_eval(rival_trace(trio(ot_party_count=count)), expected=None) == (True, [])
+
+
+@pytest.mark.parametrize("fields", [{"trainer_class": 9}, {"trainer_class": 0x20}, {"trainer_class": 0}],
+                         ids=["class-9", "class-20", "class-0"])
+def test_five_class_gate_still_refuses_classes_outside_the_set_without_a_fixture_identity(fields):
+    ok, reasons = rival_eval(rival_trace(trio(**fields)), expected=None)
+    assert not ok and has(reasons, "NOT_RIVAL_CLASS")
+
+
+def test_a_wild_battle_row_never_qualifies_as_a_rival_gate():
+    wild = [hit(mode=1, trainer_class=0, trainer_id=0, ot_party_count=1, site_bytes=SITE6)]
+    ok, reasons = rival_eval(rival_trace(wild))
+    assert not ok
+    assert has(reasons, "NOT_TRAINER_BATTLE") and has(reasons, "NOT_RIVAL_CLASS") and has(reasons, "NO_RIVAL_GATE")
+    # even a wild row dressed with a rival class and a trainer-like record is not a rival gate while mode says wild
+    dressed = [rival_hit(mode=1), rival_hit("next"), rival_hit("last")]
+    ok, reasons = rival_eval(rival_trace(dressed))
+    assert not ok and has(reasons, "NOT_TRAINER_BATTLE") and has(reasons, "NO_RIVAL_GATE")
+
+
+@pytest.mark.parametrize(("events", "prefix"), [
+    ([rival_hit()], "WITNESS_MISSING"),
+    ([rival_hit(), rival_hit("next")], "WITNESS_MISSING"),
+    ([rival_hit(), rival_hit("last")], "WITNESS_MISSING"),
+    ([rival_hit("next"), rival_hit(), rival_hit("last")], "WITNESS_MISSING"),
+    ([rival_hit(), rival_hit("last"), rival_hit("next")], "WITNESS_MISSING"),
+    ([rival_hit(), rival_hit("next", bank=0x10, matched=False), rival_hit("last")], "WITNESS_MISSING"),
+    ([rival_hit(), rival_hit("next"), rival_hit("last", bank=0x10, matched=False)], "WITNESS_MISSING"),
+    ([rival_hit(), rival_hit("next", bank=0x10, matched=True, qualified=True), rival_hit("last")], "WRONG_BANK_HIT"),
+    ([rival_hit(), rival_hit("next", pc=0x47E1), rival_hit("last")], "NEXT_PC_MISMATCH"),
+    ([rival_hit(), rival_hit("next"), rival_hit("last", pc=0x480E)], "LAST_PC_MISMATCH"),
+    ([rival_hit(), rival_hit("next", trainer_class=0x1C), rival_hit("last")], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next"), rival_hit("last", trainer_class=0x1C)], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next", trainer_id=4), rival_hit("last")], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next"), rival_hit("last", trainer_id=4)], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next", ot_party_count=3), rival_hit("last")], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next", cur_ot_mon=1, cur_party_mon=1), rival_hit("last")], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next"), rival_hit("last", cur_ot_mon=1, cur_party_mon=1)], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next", cur_party_mon=1), rival_hit("last")], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next", mode=1), rival_hit("last")], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next"), rival_hit("last", mode=0)], "WITNESS_MISMATCH"),
+    ([rival_hit(), rival_hit("next", site_bytes="218bd2ffffff"), rival_hit("last")], "SITE_BYTES_NOT_PINNED"),
+], ids=["gate-only", "no-last", "no-next", "next-before-gate", "last-before-next", "next-wrong-bank",
+        "last-wrong-bank", "next-claims-match-in-wrong-bank", "next-pc", "last-pc", "next-class", "last-class", "next-id", "last-id",
+        "next-count", "next-idx", "last-idx", "next-party-idx", "next-wild", "last-no-mode", "next-site"])
+def test_rival_witness_defects_fail(events, prefix):
+    ok, reasons = rival_eval(rival_trace(events))
+    assert not ok
+    assert has(reasons, prefix), reasons
+
+
+def test_the_first_rival_gate_is_the_one_whose_witness_chain_is_required():
+    second = [rival_hit(cur_ot_mon=1, cur_party_mon=1)]
+    chain = [rival_hit(), rival_hit("next"), rival_hit("last")] + second
+    assert rival_eval(rival_trace(chain)) == (True, [])
+    # the later gate does not satisfy the chain for the earlier one
+    ok, reasons = rival_eval(rival_trace([rival_hit(), rival_hit("next", cur_ot_mon=1, cur_party_mon=1),
+                                           rival_hit("last", cur_ot_mon=1, cur_party_mon=1)]))
+    assert not ok and has(reasons, "WITNESS_MISMATCH")
+
+
+@pytest.mark.parametrize(("setup", "disc", "arg"), [
+    (None, DISC, DISC), ("played", DISC, DISC), ("synthetic", DISC, DISC), (None, None, DISC),
+    ("synth", None, DISC), ("synth", "cd" * 32, DISC), ("synth", DISC, "cd" * 32),
+    ("synth", DISC, None), ("synth", DISC, "not hex"), ("synth", "not hex", "not hex"),
+    ("synth", DISC.upper(), DISC),
+], ids=["no-setup", "played", "synthetic", "no-binding", "no-disclosure", "trace-differs", "arg-differs",
+        "arg-none", "arg-not-hex", "both-not-hex", "case-differs"])
+def test_setup_binding_is_required(setup, disc, arg):
+    ok, reasons = P.evaluate_rival(bound(complete(trio()), setup=setup, disc=disc), disclosure_sha256=arg)
+    assert not ok
+    assert has(reasons, "SETUP_BINDING"), reasons
+
+
+@pytest.mark.parametrize("events", [
+    trio() + [{"kind": "guest_write"}], trio() + [{"kind": "cpu_change"}], trio() + [{"kind": "overflow"}],
+    trio() + [{"kind": "driver_error"}],
+], ids=["guest-write", "cpu-change", "overflow", "driver-error"])
+def test_rival_oracle_inherits_every_recording_integrity_failure(events):
+    ok, reasons = rival_eval(rival_trace(events))
+    assert not ok and reasons
+
+
+def test_rival_oracle_inherits_missing_final_and_counter_checks():
+    assert not rival_eval(trio())[0]                                  # no final
+    trace = rival_trace()
+    trace[-1]["guest_writes"] = 1
+    assert has(rival_eval(trace)[1], "PROBE_MUTATION")
+    trace = rival_trace()
+    trace[-1]["hook_counts"]["gate"]["total"] += 1
+    assert not rival_eval(trace)[0]
+    assert rival_eval(None) == (False, ["INVALID_TRACE: expected a list of event objects"])
+
+
+def test_wrong_bank_rows_are_excluded_from_the_rival_oracle():
+    wrong = [rival_hit(bank=0x10, matched=False), rival_hit("next", bank=0x11, matched=False),
+             rival_hit("last", bank=0x10, matched=False)]
+    ok, reasons = rival_eval(rival_trace(wrong))
+    assert not ok and P.verdict(reasons) == "NO_GATE_HIT"
+    assert not has(reasons, "WRONG_BANK_HIT") and not has(reasons, "NOT_RIVAL_CLASS")
+    # wrong-bank samples mixed into a genuine trace are counted and excluded, the genuine chain still passes
+    mixed = [rival_hit(bank=0x10, matched=False, trainer_class=9), *trio()]
+    assert rival_eval(rival_trace(mixed)) == (True, [])
+    # a wrong-bank row with a rival record never supplies the witness for a real gate
+    only_gate = [rival_hit(), rival_hit("next", bank=0x10, matched=False), rival_hit("last", bank=0x10, matched=False)]
+    assert has(rival_eval(rival_trace(only_gate))[1], "WITNESS_MISSING")
+
+
+def test_zero_hits_and_non_gate_hits_stay_open_not_pass_for_the_rival_card_too():
+    for events in ([], [rival_hit("next"), rival_hit("last")]):
+        ok, reasons = rival_eval(rival_trace(events))
+        assert not ok and P.verdict(reasons) == "NO_GATE_HIT"
+
+
+def test_a_custom_staged_site_is_compared_in_full():
+    other = "218bd2fa0cd2"
+    assert rival_eval(rival_trace(trio(site_bytes=other)), site_hex=other) == (True, [])
+    assert has(rival_eval(rival_trace(trio(site_bytes=other)))[1], "SITE_BYTES_NOT_PINNED")
+    with pytest.raises(ValueError):
+        rival_eval(rival_trace(), site_hex="218bd2")
+
+
+def test_staged_site_must_equal_the_full_pinned_six_bytes():
+    assert P.require_pinned_site(SITE6) == SITE6
+    for bad in ("218bd2ffffff", "218bd2", "", "zz"):
+        with pytest.raises(ValueError, match="pinned"):
+            P.require_pinned_site(bad)
+
+
+# ── wild-battle control ─────────────────────────────────────────────────────────────────────────
+
+def wild_trace(events):
+    return bound(complete(events))
+
+
+def wild_eval(trace, **kw):
+    kw.setdefault("disclosure_sha256", DISC)
+    return P.evaluate_wild_control(trace, **kw)
+
+
+def test_wild_control_passes_with_an_observed_wild_battle_and_no_qualified_gate():
+    assert wild_eval(wild_trace([mode_row(1), mode_row(0)])) == (True, [])
+    # wrong-bank callbacks are counted and excluded: they are not qualified hits
+    assert wild_eval(wild_trace([mode_row(1), rival_hit(bank=0x10, matched=False)])) == (True, [])
+
+
+@pytest.mark.parametrize(("events", "prefix"), [
+    ([], "WILD_NOT_OBSERVED"),
+    ([mode_row(0)], "WILD_NOT_OBSERVED"),
+    ([mode_row(2)], "WILD_NOT_OBSERVED"),
+    ([mode_row(True)], "WILD_NOT_OBSERVED"),
+    ([mode_row(1.0)], "WILD_NOT_OBSERVED"),
+    ([mode_row(1), rival_hit()], "WILD_QUALIFIED_HIT"),
+    ([mode_row(1), hit(mode=1, trainer_class=0, trainer_id=0)], "WILD_QUALIFIED_HIT"),
+    ([mode_row(1), mode_row(2)], "CONTROL_TRAINER_BATTLE"),
+    ([mode_row(1), {"kind": "guest_write"}], "GUEST_WRITE"),
+    ([mode_row(1), {"kind": "overflow"}], "TRACE_OVERFLOW"),
+], ids=["no-modes", "mode-0-only", "trainer-only", "mode-bool", "mode-float", "qualified-rival-gate",
+        "qualified-wild-gate", "trainer-contamination", "guest-write", "overflow"])
+def test_wild_control_defects_fail(events, prefix):
+    ok, reasons = wild_eval(wild_trace(events))
+    assert not ok
+    assert has(reasons, prefix), reasons
+
+
+def test_wild_control_needs_the_setup_binding_and_a_complete_recording():
+    assert has(wild_eval(bound(complete([mode_row(1)]), setup="played"))[1], "SETUP_BINDING")
+    assert has(wild_eval(wild_trace([mode_row(1)]), disclosure_sha256=None)[1], "SETUP_BINDING")
+    assert has(wild_eval([mode_row(1)])[1], "INCOMPLETE_TRACE")
+    assert wild_eval({}) == (False, ["INVALID_TRACE: expected a list of event objects"])
+
+
+def test_verdict_reports_an_unobserved_wild_control_as_open():
+    ok, reasons = wild_eval(wild_trace([]))
+    assert not ok and P.verdict(reasons) == "WILD_NOT_OBSERVED"
+    assert P.verdict(["NO_GATE_HIT: x", "WILD_NOT_OBSERVED: y"]) == "NO_GATE_HIT"
+
+
+# ── setup mode + disclosure binding ─────────────────────────────────────────────────────────────
+
+FIXTURE_BYTES = b"native fixture bytes"
+FIXTURE_SHA = hashlib.sha256(FIXTURE_BYTES).hexdigest()
+SOURCE_SHA = hashlib.sha256(b"the source it was derived from").hexdigest()
+
+
+def disclosure_file(tmp_path, **override):
+    doc = {"synth": True, "statement": "SYNTH Cherrygrove-scene derivative", "input_sha256": SOURCE_SHA,
+           "output_sha256": FIXTURE_SHA, "pinned_input": True, "native_acceptance": "UNVERIFIED"}
+    doc.update(override)
+    path = tmp_path / "rival_scene.disclosure.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return path
+
+
+def test_disclosure_binds_the_derivative_fixture(tmp_path):
+    path = disclosure_file(tmp_path)
+    bound_doc = P.load_disclosure(path, FIXTURE_BYTES)
+    assert bound_doc["role"] == "derivative"
+    assert bound_doc["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert bound_doc["fixture_sha256"] == FIXTURE_SHA
+
+
+def test_disclosure_also_binds_the_declared_source_as_a_control_fixture(tmp_path):
+    path = disclosure_file(tmp_path)
+    assert P.load_disclosure(path, b"the source it was derived from")["role"] == "source"
+
+
+@pytest.mark.parametrize("override", [
+    {"synth": False}, {"synth": "yes"}, {"statement": "played from the start"}, {"statement": ""},
+    {"output_sha256": "00" * 32, "input_sha256": "11" * 32},
+    {"output_sha256": FIXTURE_SHA.upper(), "input_sha256": "11" * 32},
+    {"output_sha256": "nothex", "input_sha256": "11" * 32},
+    {"output_sha256": None, "input_sha256": None},
+], ids=["synth-false", "synth-str", "statement-not-synth", "statement-empty", "hash-mismatch", "hash-case",
+        "hash-not-hex", "hash-null"])
+def test_disclosure_that_does_not_bind_this_fixture_is_refused(tmp_path, override):
+    with pytest.raises(ValueError):
+        P.load_disclosure(disclosure_file(tmp_path, **override), FIXTURE_BYTES)
+
+
+@pytest.mark.parametrize("text", ["", "not json", "[]", "null", '"s"'], ids=["empty", "garbage", "array", "null", "string"])
+def test_disclosure_must_be_a_json_object(tmp_path, text):
+    path = tmp_path / "d.json"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ValueError):
+        P.load_disclosure(path, FIXTURE_BYTES)
+
+
+def test_missing_disclosure_file_is_refused(tmp_path):
+    with pytest.raises(ValueError):
+        P.load_disclosure(tmp_path / "nope.json", FIXTURE_BYTES)
+
+
+def synth_args(tmp_path, *extra, disclosure=True, fixture_bytes=FIXTURE_BYTES):
+    fixture = tmp_path / "rival_scene.SaveRAM"
+    fixture.write_bytes(fixture_bytes)
+    argv = ["--setup", "synth", "--fixture", str(fixture)]
+    if disclosure:
+        argv += ["--disclosure", str(disclosure_file(tmp_path))]
+    return P.parse_args(argv + list(extra))
+
+
+def test_synth_accepts_a_bound_disclosure_and_records_the_binding(tmp_path):
+    args = synth_args(tmp_path)
+    assert args.setup == "synth" and args.expect == "rival"
+    assert args.disclosure_info["role"] == "derivative"
+    assert args.disclosure_sha256 == args.disclosure_info["sha256"]
+    assert len(args.disclosure_sha256) == 64
+
+
+def test_synth_wild_control_is_selectable(tmp_path):
+    args = synth_args(tmp_path, "--expect", "wild", fixture_bytes=b"the source it was derived from")
+    assert args.expect == "wild" and args.disclosure_info["role"] == "source"
+
+
+def test_synth_requires_a_bound_disclosure(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        synth_args(tmp_path, disclosure=False)
+    assert exc.value.code == 2
+
+
+def test_synth_with_a_disclosure_for_another_fixture_is_an_argument_error(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        synth_args(tmp_path, fixture_bytes=b"some other save")
+    assert exc.value.code == 2
+
+
+def test_played_setup_is_unchanged_and_rejects_a_disclosure_or_expectation(tmp_path):
+    fixture = tmp_path / "native.SaveRAM"
+    fixture.write_bytes(b"native fixture")
+    args = P.parse_args(["--setup", "played", "--fixture", str(fixture)])
+    assert args.setup == "played" and args.disclosure_info is None and args.disclosure_sha256 is None
+    for extra in (["--disclosure", str(disclosure_file(tmp_path))], ["--expect", "rival"], ["--expect", "wild"]):
+        with pytest.raises(SystemExit) as exc:
+            P.parse_args(["--setup", "played", "--fixture", str(fixture)] + extra)
+        assert exc.value.code == 2
+
+
+def test_synth_rejects_an_unknown_expectation(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        synth_args(tmp_path, "--expect", "both")
+    assert exc.value.code == 2
+
+
+def test_labels_never_call_a_synth_run_played(tmp_path):
+    args = synth_args(tmp_path)
+    assert P.lane_prefix("played") == "played-" and P.lane_prefix("synth") == "synth-"
+    line = P.setup_line(args, FIXTURE_SHA)
+    assert "SYNTH" in line and "played" not in line and args.disclosure_sha256 in line and FIXTURE_SHA in line
+    assert "derivative" in line
+    played = P.parse_args(["--setup", "played", "--fixture", str(args.fixture)])
+    assert "no synthetic guest setup" in P.setup_line(played, FIXTURE_SHA) and "SYNTH" not in P.setup_line(played, FIXTURE_SHA)
+
+
+def test_oracle_selection_follows_setup_and_expectation(tmp_path):
+    played = P.parse_args(["--setup", "played", "--fixture", str(synth_args(tmp_path).fixture)])
+    synth = synth_args(tmp_path)
+    wild = synth_args(tmp_path, "--expect", "wild", fixture_bytes=b"the source it was derived from")
+    clean = rival_trace()
+    assert P.run_oracle(played, good_trace(), SITE6) == (True, [])
+    assert P.run_oracle(synth, bound(complete(trio()), disc=synth.disclosure_sha256), SITE6) == (True, [])
+    assert not P.run_oracle(synth, good_trace(), SITE6)[0]               # generic class 9 trace is not a rival pass
+    assert not P.run_oracle(synth, clean, SITE6)[0]                      # binding differs from this run's disclosure
+    assert P.run_oracle(wild, bound(complete([mode_row(1)]), disc=wild.disclosure_sha256), SITE6) == (True, [])
+
+
+# ── Lua: battle-mode timeline, setup binding and the (still unchanged) bounded rows ─────────────
+
+def test_lua_records_battle_mode_transitions_as_bounded_separate_rows():
+    trace, recorded = run_mock_driver(frames=6, callbacks=0, modes={1: 0, 3: 1, 5: 0}, cap=50)
+    assert recorded is True
+    rows = [r for r in trace if r["kind"] == "mode"]
+    assert [(r["mode"], r["frame"]) for r in rows] == [(1, 3), (0, 5)]
+    assert all({"trainer_class", "trainer_id", "ot_party_count"} <= set(r) for r in rows)
+    assert trace[-1]["mode_changes"] == 2 and trace[-1]["mode_rows_dropped"] == 0
+
+
+def test_lua_observes_battle_mode_during_the_native_route_and_the_idle_tail():
+    trace, recorded = run_mock_driver(frames=8, route_frames=4, callbacks=0, modes={1: 0, 2: 1, 3: 0, 6: 2}, cap=50)
+    assert recorded is True
+    assert [(r["mode"], r["frame"]) for r in trace if r["kind"] == "mode"] == [(1, 2), (0, 3), (2, 6)]
+
+
+def test_lua_mode_rows_have_their_own_cap_and_never_consume_the_hook_capacity():
+    modes = {f: (f % 2) + 1 for f in range(1, 201)}                      # a transition every single frame
+    trace, recorded = run_mock_driver(frames=200, callbacks=0, modes=modes, cap=100000)
+    assert recorded is True
+    rows = [r for r in trace if r["kind"] == "mode"]
+    assert len(rows) == 64
+    assert trace[-1]["mode_changes"] == 200 and trace[-1]["mode_rows_dropped"] == 200 - 64
+    assert not any(r["kind"] == "overflow" for r in trace)
+    assert trace[-1]["hook_counts"]["gate"]["total"] == 200
+
+
+def test_lua_mode_rows_do_not_change_hook_accounting_or_the_generic_oracle():
+    trace, recorded = run_mock_driver(frames=3, modes={1: 2}, cap=50)
+    assert recorded is True
+    assert [r["mode"] for r in trace if r["kind"] == "mode"] == [2]
+    assert trace[-1]["hook_hits"] == 3 * 3 * 7002
+    assert P.evaluate(trace) == (True, [])
+
+
+def test_lua_final_carries_the_setup_and_disclosure_binding():
+    disc = "cd" * 32
+    trace, _ = run_mock_driver(setup="synth", disclosure=disc)
+    assert trace[-1]["setup"] == "synth" and trace[-1]["disclosure_sha256"] == disc
+    played, _ = run_mock_driver()
+    assert "setup" not in played[-1] and "disclosure_sha256" not in played[-1]
+
+
+def test_lua_check_names_the_setup_not_always_played():
+    _, _, name = run_mock_driver(setup="synth", disclosure="cd" * 32, with_name=True)
+    assert "synth" in name and "played" not in name
+    _, _, name = run_mock_driver(with_name=True)
+    assert "played" in name
+
+
+def test_lua_still_cannot_mutate_the_guest():
+    source = (REPO / "tools/polished_live/rival_gate_probe.lua").read_text(encoding="utf-8")
+    assert "denied memory." in source and "denied emu.setregister" in source
+    assert "memory.write" not in source and "L.ww(" not in source and "L.wbytes" not in source
