@@ -432,7 +432,7 @@ def test_a_trainer_battle_is_announced_from_the_facade_sym():
     assert [m["trainer_id"] for m in starts] == [TRAINER[0] * 256 + TRAINER[1]]
 
 
-def test_replace_rival_team_refuses_by_default_and_blocker_one_is_closed():
+def test_replace_rival_team_parks_for_the_native_window_by_default_and_blocker_one_is_closed():
     """Blocker 1 (no PARTYMON_STRUCT_LENGTH / MON_HP / MON_SPECIES) is closed by lua/gen2/polished_rival.lua, which derives
     them from the profile's party_struct; the swap is composed and REFUSES until an owner-chosen rival class is
     configured (tests/unit/test_polished_rival_path.py)."""
@@ -443,8 +443,10 @@ def test_replace_rival_team_refuses_by_default_and_blocker_one_is_closed():
     rig.client.handle_command(rig.client, rig.lua.table_from({"cmd": "replace_rival_team", "trainer_id": tid,
                                                               "blobs_hex": rig.lua.table_from(["00" * 70])}))
     rig.frame(2)
-    errors = [m["error"] for m in rig.sent("rival_team_replaced")]
-    assert len(errors) == 1 and "no rival trainer classes configured" in errors[0] and rig.writes() == []
+    # default rival set RIVAL0/1/2 (owner 2026-10-08): TRAINER is class $1B, so the command PARKS for the native window
+    # (no refusal) and still writes nothing until the CPU is at 0f:47DD
+    assert [m["error"] for m in rig.sent("rival_team_replaced")] == []
+    assert rig.client.rival.pending is not None and rig.writes() == []
     # the generated profile still lacks the three constants; the composed one carries them, derived from party_struct
     constants = json.loads((REPO / "data/games/polished_crystal/profile.json").read_text(
         encoding="utf-8"))["titles"]["polished"]["constants"]

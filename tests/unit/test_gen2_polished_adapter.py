@@ -1,5 +1,5 @@
 """Polished Crystal adapter (server/adapters/gen2_polished.py): pack load, routing, 9-bit species + forms,
-rival ids (all five rival classes), trainer_info, keys, blobs and the companion gate."""
+rival ids (RIVAL0/1/2 only, owner 2026-10-08), trainer_info, keys, blobs and the companion gate."""
 import random
 
 import pytest
@@ -52,13 +52,56 @@ def test_nine_bit_species_and_forms(adapter):
     assert adapter.species_name(201, 2) == "Unown"
 
 
-def test_rival_ids_cover_all_five_classes(adapter):
+_RIVAL_CLASS_NAMES = ("RIVAL0", "RIVAL1", "RIVAL2")
+
+
+def _rival_violations(adapter, trainers):
+    """What is wrong with adapter.rival_trainer_ids() against the pack: a missing RIVAL0/1/2 instance, or any other class."""
+    wanted = {trainers["rival_classes"][n] * 256 + int(inst)
+              for n in _RIVAL_CLASS_NAMES for inst in trainers["parties"][str(trainers["rival_classes"][n])]}
+    got = adapter.rival_trainer_ids()
+    return {"missing": sorted(wanted - got), "foreign": sorted(got - wanted)}
+
+
+def _trainers_pack():
+    import json
+    from pathlib import Path
+
+    return json.loads((Path(__file__).resolve().parents[2] / "data/games/polished_crystal/trainers.json")
+                      .read_text(encoding="utf-8"))
+
+
+def test_rival_ids_are_rival0_1_2_only(adapter):
+    """Owner ruling 2026-10-08: RIVAL0/RIVAL1/RIVAL2 ($1B-$1D) are the Rival Team Swap set; LYRA1/LYRA2 are excluded."""
+    trainers = _trainers_pack()
     rivals = adapter.rival_trainer_ids()
-    assert {tid >> 8 for tid in rivals} == {27, 28, 29, 30, 31}     # RIVAL0/1/2, LYRA1/2
-    assert 28 * 256 + 1 in rivals and 30 * 256 + 1 in rivals
+    assert {tid >> 8 for tid in rivals} == {27, 28, 29}
+    assert 28 * 256 + 1 in rivals and 30 * 256 + 1 not in rivals
+    assert not any(tid >> 8 in (trainers["rival_classes"]["LYRA1"], trainers["rival_classes"]["LYRA2"]) for tid in rivals)
     # Pin the SIZE as well as the class set: a class-only assertion passes unchanged if a whole
-    # rival's instances are dropped from the pack, which is the failure this guards.
-    assert len(rivals) == 36
+    # rival's instances are dropped from the pack. 3 + 12 + 6 instances.
+    assert len(rivals) == 21
+    assert _rival_violations(adapter, trainers) == {"missing": [], "foreign": []}
+    assert rivals is not adapter.rival_trainer_ids() and adapter.rival_trainer_ids() == rivals   # a fresh set each call
+    rivals.clear()
+    assert len(adapter.rival_trainer_ids()) == 21
+
+
+def test_red_control_including_lyra_fails_the_exclusion(adapter):
+    """Mutant: the pre-ruling five-class computation. The same check must go red (36 ids, 15 of them LYRA)."""
+    import copy
+
+    trainers = _trainers_pack()
+    five = {trainers["rival_classes"][n] for n in ("RIVAL0", "RIVAL1", "RIVAL2", "LYRA1", "LYRA2")}
+    mutant = copy.copy(adapter)
+    mutant._rival_ids = frozenset(c * 256 + i for c, i in adapter._trainer_names if c in five)
+    violations = _rival_violations(mutant, trainers)
+    assert len(mutant.rival_trainer_ids()) == 36
+    assert {tid >> 8 for tid in violations["foreign"]} == {30, 31} and len(violations["foreign"]) == 15
+    # and the dropped-instance mutant is caught as missing
+    short = copy.copy(adapter)
+    short._rival_ids = frozenset(sorted(adapter._rival_ids)[1:])
+    assert len(_rival_violations(short, trainers)["missing"]) == 1
 
 
 def test_trainer_info(adapter):

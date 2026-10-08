@@ -16,8 +16,9 @@
 -- count needs (R.ranges), on top of the whole-block bounds.
 --
 -- THE GATE. Every refusal below happens BEFORE the first byte is written (a named reason, nothing written):
---   * no rival trainer classes configured (OWNER DECISION, EXPLODE_RIVAL.md §3.4: this module never decides it;
---     deps.rival_classes / :set_classes() supply wOtherTrainerClass values and the default is none)
+--   * no rival trainer classes configured. OWNER RULING 2026-10-08: when deps.rival_classes is nil the set is
+--     R.DEFAULT_RIVAL_CLASSES = RIVAL0/RIVAL1/RIVAL2 ($1B-$1D); LYRA1/LYRA2 ($1E/$1F) are EXCLUDED. An explicit
+--     deps.rival_classes / :set_classes() list (even an empty one) overrides the default.
 --   * the battle hold (polished_overworld.lua O.battle_checkpoint kind "rival": a battle, no link, no native save, no
 --     backup save, the 0f:47DD site bytes re-read from the executed ROM), wBattleMode == TRAINER_BATTLE
 --   * the CPU at 0f:47DD: hROMBank == 0x0F AND the PC register == 0x47DD (io.register("PC")). The native-window
@@ -30,6 +31,12 @@
 -- The write is only valid before 0f:480d (§10.3). The client parks a command for the native window; frame end
 -- announces the visit and reports its result. Live swap consumption and callback timing remain separate evidence.
 local R = {}
+
+--- The default rival set (owner ruling 2026-10-08): wOtherTrainerClass of RIVAL0, RIVAL1, RIVAL2. The profile carries no
+--- trainer-class constants (profile.json titles.polished.constants has none), so these are pinned here and held equal, by
+--- NAME, to data/games/polished_crystal/trainers.json rival_classes (RIVAL0 27, RIVAL1 28, RIVAL2 29 = $1B/$1C/$1D;
+--- constants/trainer_constants.asm:95-127) by tests/unit/test_polished_rival_path.py. LYRA1 $1E / LYRA2 $1F are excluded.
+R.DEFAULT_RIVAL_CLASSES = {0x1B, 0x1C, 0x1D}
 
 local function integer(value, low, high)
     return type(value) == "number" and value % 1 == 0 and value >= low and value <= high
@@ -45,7 +52,7 @@ end
 
 --- deps: profile, io (read_u8/bank_valid/framecount/register), Permit, facade (the composed explode facade),
 --- checkpoint (its O.battle_checkpoint), hold (its battle_hold: rival_swap_gate), coords (its sym: {bank, addr}),
---- species_known(effective_id), rival_classes (optional array of wOtherTrainerClass), log.
+--- species_known(effective_id), rival_classes (optional array of wOtherTrainerClass; nil = R.DEFAULT_RIVAL_CLASSES), log.
 --- Returns {writes = the facade with rival_swap routed here, ranges, set_classes, constants}.
 function R.new(deps)
     assert(type(deps) == "table", "Polished rival options required")
@@ -117,7 +124,7 @@ function R.new(deps)
         end
         classes = set
     end
-    self:set_classes(deps.rival_classes)
+    self:set_classes(deps.rival_classes == nil and R.DEFAULT_RIVAL_CLASSES or deps.rival_classes)
 
     local function wram(bank, addr)
         assert(io.bank_valid(bank, addr, 1) == true, "read refused: bank " .. bank .. " not mapped")
