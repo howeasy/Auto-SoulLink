@@ -10,9 +10,9 @@
     "generator": "tools/gen_polished_profile.py",
     "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
     "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
-    "overlay_provenance_sha256": "f69d1432463161a824082eecf79f7733468d08963485a71a7e2a721af0f2ae15",
-    "overlay_sha1": "57f039b6e80effff564e9fa9ac483f40f095b990",
-    "overlay_sym_sha256": "da20ad9d8dcdfe0b86b1f74559622ed0d285542b3e042ef700671d3a1c7bf30c",
+    "overlay_provenance_sha256": "71bf6810484c8cf1972c2538139f77bfd12c700e8cabd2b56bd8156e3236587f",
+    "overlay_sha1": "877a477a7dfc70b775ca3f46461d67abebe07083",
+    "overlay_sym_sha256": "22bcd92866bec62f9f4dc6733ac7c6cfd557a1bbf311b92cb70264199c8b4e6e",
     "repo": "https://github.com/Rangi42/polishedcrystal",
     "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
     "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
@@ -561,7 +561,7 @@
         "abi": 3,
         "artifact": "polished_overlay",
         "base_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
-        "md5": "f0b3c3df43cc4622617a811796cf7ec3",
+        "md5": "62d175da20fe983a92582bdaf3fb0018",
         "panel": {
           "base": 50733,
           "line_max": 16,
@@ -576,7 +576,7 @@
           "wSlinkPanelText": 50733,
           "wTilemap": 49568
         },
-        "rom_sha1": "57f039b6e80effff564e9fa9ac483f40f095b990",
+        "rom_sha1": "877a477a7dfc70b775ca3f46461d67abebe07083",
         "sfx": {
           "caps": [
             "SLINK_CAP_SFX",
@@ -605,10 +605,10 @@
           ]
         },
         "sym": "polished_slink.sym",
-        "sym_sha256": "da20ad9d8dcdfe0b86b1f74559622ed0d285542b3e042ef700671d3a1c7bf30c",
+        "sym_sha256": "22bcd92866bec62f9f4dc6733ac7c6cfd557a1bbf311b92cb70264199c8b4e6e",
         "trade": {
           "capabilities": {
-            "commit": false,
+            "commit": true,
             "proposer_service": true,
             "responder_service": true
           },
@@ -628,6 +628,16 @@
             "OverworldLoop.loop"
           ],
           "entries": {
+            "SlinkTradeCommit": {
+              "addr": 21248,
+              "bank": 126,
+              "symbol": "SlinkTradeCommit"
+            },
+            "SlinkTradeCommitEnd": {
+              "addr": 22332,
+              "bank": 126,
+              "symbol": "SlinkTradeCommitEnd"
+            },
             "SlinkTradeDispatch": {
               "addr": 18176,
               "bank": 126,

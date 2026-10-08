@@ -240,3 +240,6 @@ INCLUDE "engine/slink/trade_service.asm"
 ; TRADE card C6: the held RESPONDER service (commit disabled) behind the SlinkTradePromptEntry trampoline.
 ; After the proposer service: it reuses its helpers and the SLINK_TRADE_* constants it defines.
 INCLUDE "engine/slink/trade_responder.asm"
+
+; C5 native commit helper is present but default-disabled at both APPLY callers.
+INCLUDE "engine/slink/trade_commit.asm"

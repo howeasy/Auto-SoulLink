@@ -40,6 +40,11 @@ DEF SLINK_TRADE_APPLY_FRAMES EQU 3600
 ; Declining/refusing made no mutation, so the RELEASE wait may safely close without a host.
 DEF SLINK_TRADE_RELEASE_FRAMES EQU 90
 DEF SLINK_TRADE_RESULT_NOT_PERFORMED EQU 1
+; Deliberate build-time authorization gate. Symbol presence is NOT enablement.
+IF !DEF(SLINK_TRADE_COMMIT_ENABLE)
+DEF SLINK_TRADE_COMMIT_ENABLE EQU 0
+ENDC
+ASSERT SLINK_TRADE_COMMIT_ENABLE == 0 || SLINK_TRADE_COMMIT_ENABLE == 1
 
 SECTION "SLink Trade Service", ROMX[$4a00], BANK[SLINK_SERVICE_BANK]
 
@@ -198,6 +203,9 @@ SlinkTradeWaitApply::
 	ld a, [hl]
 	call SlinkTradeValidateSnapshot
 	jp c, SlinkTradeExit
+IF SLINK_TRADE_COMMIT_ENABLE
+	jp SlinkTradeApplyCommit ; tail jump: shared waits require context-base SP
+ENDC
 	; COMMIT DISABLED: nothing is applied, so the honest result is 1 ("not performed"), never 0.
 	ld a, SLINK_TRADE_RESULT_NOT_PERFORMED
 	call SlinkTradePublishDone

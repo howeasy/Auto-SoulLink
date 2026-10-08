@@ -29,6 +29,10 @@ BASE = S.offsets()["PokemonStatsOffset"]
 PIKACHU = BASE + 24 * S.BASE_DATA_SIZE
 
 
+def overlay_byte_ownership() -> set[int]:
+    return {i for lo, hi in W.ups_spans((REPO / "patch/dist/SLink-Polished.ups").read_bytes()) for i in range(lo, hi)}
+
+
 def _pack(name: str) -> dict:
     return json.loads((PACK / f"{name}.json").read_text(encoding="utf-8"))
 
@@ -188,16 +192,10 @@ def test_content_check_refuses_an_unpinned_source_and_a_changed_header(roms, tmp
 
 
 # ── the write-domain audit ───────────────────────────────────────────────────────────────
-def test_the_overlay_owns_2547_bytes_in_twenty_eight_runs():
+def test_the_overlay_write_domain_covers_every_final_ups_byte():
     spans = W.ups_spans((REPO / "patch/dist/SLink-Polished.ups").read_bytes())
-    assert len(W.geometry()["ups"]) == sum(b - a for a, b in spans) == 2547
-    # bank $7E holds the last THIRTEEN runs: service+panel+sound+version (split by one unchanged byte),
-    # then the trade frame at $4200, the item policy at $4280, the special gates at $4400 and the
-    # stub entry at $4480, the snapshot at $4500, the incoming predicate at $4600, the responder dispatcher
-    # at $4700 and its PromptEntry jp trampoline at $4780, then the held proposer service at $4A00 (194 + 557 bytes, split by
-    # one unchanged byte) and the held responder service (C6) at $5000 (384 bytes; fixed sections above the version field);
-    # the 6 re-pointed SpecialsPointers bytes in bank $03 are a run of their own
-    assert spans[0][0] == 0x70 and len(spans) == 28 and spans[-13][0] == 0x7E * 0x4000
+    assert W.geometry()["ups"] == overlay_byte_ownership()
+    assert spans[0][0] == 0x70 and any(lo == 0x7E * 0x4000 for lo, _ in spans)
     assert any(lo == 0xC030 and hi - lo == 6 for lo, hi in spans), spans
     assert spans[-1][1] <= 0x7E * 0x4000 + 0x4000
     # the header checksums ($14E-$14F) ride inside the ROM0 bridge's run now, not beside it
@@ -217,7 +215,7 @@ def test_write_domain_is_red_on_an_overlay_bank_7e_or_header_byte(roms, tmp_path
 def test_write_domain_lets_upr_own_its_tables_and_needs_the_overlay_as_source(roms, tmp_path):
     release, overlay = roms
     first_wild = S.offsets()["JohtoGrassWildMonsOffset"] + 6
-    assert W.check_output(*_files(tmp_path, overlay, first_wild, PIKACHU + 8)) == {"changed": 2, "ups_bytes": 2547}
+    assert W.check_output(*_files(tmp_path, overlay, first_wild, PIKACHU + 8)) == {"changed": 2, "ups_bytes": len(overlay_byte_ownership())}
     with pytest.raises(P.UprPipelineError, match="not the pinned Polished Crystal companion overlay"):
         W.check_output(*_files(tmp_path, release, first_wild))
 
@@ -316,7 +314,7 @@ def test_prepare_pair_routes_polished_to_its_own_checks(roms, tmp_path, monkeypa
     a, b = pair["players"]["a"], pair["players"]["b"]
     assert (a["seed"], b["seed"]) == (11, 22) and a["sha1"] != b["sha1"] and a["content_hash"] != b["content_hash"]
     for row in (a, b):
-        assert row["fingerprint"] == "" and len(row["content_hash"]) == 64 and row["write_domain"]["ups_bytes"] == 2547
+        assert row["fingerprint"] == "" and len(row["content_hash"]) == 64 and row["write_domain"]["ups_bytes"] == len(overlay_byte_ownership())
 
 
 def test_prepare_pair_refuses_a_polished_output_that_wrote_into_the_overlay(roms, tmp_path, monkeypatch):

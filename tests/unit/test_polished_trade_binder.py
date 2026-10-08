@@ -572,24 +572,7 @@ def test_missing_whole_family(env):
         *[("staging", n) for n in PROFILE["overlay"]["trade"]["staging"]],
         *[("snapshot", n) for n in PROFILE["overlay"]["trade"]["snapshot"]],
     ],
-    ids=[
-        "dispatch",
-        "entry",
-        "prompt",
-        "service",
-        "service-end",
-        "responder",
-        "responder-end",
-        "timeout",
-        "wait",
-        "stage-nick",
-        "stage-ot",
-        "stage-party",
-        "stage-sender",
-        "snap-nick",
-        "snap-ot",
-        "snap-party",
-    ],
+    ids=str,
 )
 def test_missing_family_leaf(env, group, name):
     profile = copy.deepcopy(PROFILE)

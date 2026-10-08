@@ -1415,3 +1415,133 @@ Measured correction to s13: at gate entry sp+0..1 is `_ReturnFarCall` (00:2698),
 **Card C6 LANDED (2026-10-06, branch claude/pol-c6, overlay v9 `6e0062aa1089d6d461f46d33b7353f84ffa9c699`, UPS 2630 B, 2538 bytes in 28 runs): the held RESPONDER service, commit DISABLED.** `patch/polished/src/trade_responder.asm` (fixed 7e:5000, end `SlinkTradeResponderServiceEnd` 7e:5180, 384 B, limit `$5300`; a later C5 body must start at or above `$5300`): `SlinkTradeResponderService` 7e:5000, `.decline` 5090, `SlinkTradeResponderWait` 7e:5098 (`.next` 509d, `.wait` 50a3, `.applyPhase` 50da), `SlinkTradeResponderRelease` 7e:512b, `SlinkTradeResponderExit` 7e:515b, `SlinkTradeResponderOfferText` 7e:516d. `SlinkTradePromptEntry` (7e:4780) is now a 3-byte `jp SlinkTradeResponderService` (`SlinkTradeDispatchEnd` 7e:4783), so the dispatcher's `push de / call PromptEntry` frame is the only frame under the service and the service `ret`s straight to the dispatcher. Flow: re-check header, command PROMPT, generation != ACK, nonzero token, own slot (`SlinkTradeCheckOwnSlot`: party 1..6, contest, mail, record predicates) and the staged incoming mon (`SlinkTradeValidateIncomingStaged`) -> pickup ACK of the PROMPT generation (last entry check, before any native UI) -> `GetNickname` (own nick for the offer text) / `OpenText` / offer text / `YesNoBox`. NO or B: DONE result 1 (decline), bounded 90-frame RELEASE wait, close. YES: wait text -> held-frame, command and own-slot re-checks -> `SlinkTradeSnapshot` (only after every native menu returned; the offer text and the YesNoBox are the only menus) -> DONE **result 0 = consent only, never a completed-trade claim** -> ONE 3600-frame budget shared by the host RELEASE of the PROMPT generation and then its fresh APPLY (generation previous+1 incl. FF->00, ACK = previous, same token and slot; every frame is inspected before the counter expires, the v8 order; an APPLY that replaces the RELEASE unobserved is ignored and the visit times out) -> APPLY pickup ACK -> staged incoming re-validated, party count and own slot re-checked, own preimage compared with the consent snapshot -> DONE **result 1** ("not performed: commit disabled", never 0 for an APPLY) -> 90-frame RELEASE wait -> close. B or a timeout in any wait closes the lease without a further publication. Every exit is `SlinkTradeResponderExit` (release snapshot, close lease, `CloseText` only if this visit opened the text, `add sp, 10`, `ret`). Own copies of the RELEASE wait and the exit exist because the proposer's `SlinkTradeExit` has no `CloseText` and hard-codes its jumps; the 10-byte context layout is the proposer's (ASSERTed), flags bit 0 = RELEASE owed, bit 7 = text open. **Deliberately NOT in this build:** the consent-time `FixPlayerEVsAndStats` normalization and the user-confirmed `Link_SaveGame` of TRADE_COMMIT_RESPONDER.md 4(2)-(3) (both write party/save bytes and the card is "never touches party/box/save"), the commit call and the result-0/2 no-escape holds. Consequences: the consent snapshot is NOT post-normalization (the commit card must re-take it), and nothing in the responder writes a party, box, save, SRAM or OT slot 0 byte. The proposer's policy is kept: only the SELECTED slot is mail-checked (the whole-party mail refusal is the C5 default). **Host side is unchanged and still proposer-only:** `lua/gen2/polished_trade.lua` `T:arm` refuses PROMPT (:359), `T:poll_done` maps any DONE result other than 1 to UNCERTAIN (:375-386) and `T:release` refuses a non-NOT_PERFORMED DONE (:382-386), so a consent DONE (result 0) is not releasable by today's binder; the phase-aware H1 card of TRADE_COMMIT_RESPONDER.md 4 owes PROMPT/DONE0 => CONSENT, PROMPT/DONE1 => decline. The profile now reports `overlay.trade.capabilities.responder_service = true` (the `SlinkTradeResponderService`/`End` pair) while `production` stays false and the binder's `advertised()` stays false. Evidence: `tests/unit/test_polished_trade_responder.py` (19 scenarios on the BUILT bytes against a scripted host acting like `lua/gb_trade_lease.lua`, native UI trapped = MODEL; the real dispatcher on a valid idle-overworld state and the nine pinned stack bytes; the REAL dispatcher re-run on the service's own stack at every native call and the first 14 wait frames with the real lease and with a forged fresh PROMPT, refused every time, with a control that the same forged PROMPT on the pinned idle stack IS accepted and a red control that a dispatcher with its nine stack pins removed accepts a nested call; 26 byte-patch mutants each red in a named scenario; the old bare-`ret` PromptEntry red). Model run: stack_used 34, min_sp 0xcfde, native-call depth 14, wait depth 20, via the dispatcher +4. NOT proven: the native OpenText/PrintText/YesNoBox/CloseText/GetNickname under the real engine, real stack depth under interrupts/the real bridge chain, a live PROMPT (nothing publishes one yet), nothing about durability (there is no commit).
 
 **Card C6-fix LANDED (2026-10-07, branch claude/pol-c6fix, overlay `57f039b6e80effff564e9fa9ac483f40f095b990`, UPS 2639 B, 2547 bytes in 28 runs): the responder's post-menu party-COUNT recheck.** Independent review magi-b91bf14a found that `SlinkTradeResponderService` compared the current `wPartyCount` with the context count (stack +8, captured by `SlinkTradeCaptureContext`) only AFTER the APPLY pickup, so a count change inside the YesNoBox (4 -> 5 with the selected slot still valid) took the snapshot and published the consent DONE 0 first (publications `ADAC`), against TRADE_COMMIT_RESPONDER.md 4(3), which refuses before snapshot and consent. The service now compares `wPartyCount` with context+8 right after the post-menu own-slot recheck and before `SlinkTradeSnapshot`/`SlinkTradePublishDone`; a mismatch is `jp SlinkTradeResponderExit` (no snapshot, no DONE; publications `AC`, stack balanced, the stored count is NOT updated). The later post-APPLY compare is kept. +9 bytes (`ld hl,sp+8 / ld a,[wPartyCount] / cp [hl] / jp nz`); only the eleven responder symbols after the insert moved (`SlinkTradeResponderServiceEnd` 7e:5180 -> 7e:5189, still under the `$5300` limit); no clean symbol moved. Evidence: new scenario `menu_count_changes` in `tests/unit/test_polished_trade_responder.py` (count 4 -> 5, 4 -> 3 and 4 -> 6 inside the YesNoBox with slot 2 valid: `AC`, no snapshot, no DONE, sp_delta 0; control with the count rewritten to its own value still reaches `ADADC`) was RED on the committed v9 bytes (`ADAC`, want `AC`) and is green on the rebuilt bytes; byte mutant "party count check after the menu dropped" is red in that scenario, and the existing "party count check dropped" mutant now targets the second (post-APPLY) compare. Live smoke `writes_run.py` (POL_STOP_AFTER_B=1) PASS on the rebuilt overlay. NOT proven: the new refusal under the real engine (a count change inside a real native YesNoBox is MODEL only).
+
+## 19. C5 native commit body, built but disabled (2026-10-07)
+
+The C5 overlay SHA1 is `877a477a7dfc70b775ca3f46461d67abebe07083`
+(UPS 3727 bytes). `SlinkTradeCommit` is `7E:5300`, its end-exclusive
+`SlinkTradeCommitEnd` is `7E:573C`, `SlinkTradeApplyCommit` is `7E:56DB`,
+and `SlinkTradeCommitEnabled` at `7E:573B` contains **0**. The default
+`SLINK_TRADE_COMMIT_ENABLE EQU 0` removes both APPLY call sites at assembly
+time; the helper's paired presence markers do not authorize it. The generated
+profile consequently reports component `commit: true`, but still
+`production: false`. The old no-commit tests now check the ROM gate and
+actual unreachability, not the absence of a helper symbol.
+
+The pinned clean build reproduced its locked ROM and release symbols; no
+clean symbol moved. Applying the UPS to the release ROM reproduced the
+provenance SHA1. The four bridge/gate windows remain
+`0070: f044e0d7afe08f`, `0DA8: cd700000000000`,
+`1F8000: 210bc63e53223e4c223e4e223e4b223e`,
+and `C030: 7e00447e1044`. The proposer's **752 bytes** and responder's
+**393 bytes** are byte-identical to integration `48172aa6` / overlay
+`57f039b6e80effff564e9fa9ac483f40f095b990`. Profile, engine-sites/checkpoint,
+and beacon generators passed `--check` against the rebuilt artifacts.
+
+A private, non-published MODEL cut also assembled and linked with
+`-DSLINK_TRADE_COMMIT_ENABLE=1`; both conditional native call paths resolved,
+the responder ended at `7E:51A3` (below `5300`), and the gate witness was 1.
+It was never launched in an emulator and is not a release artifact.
+
+### Native sequence and refusal boundary
+
+The helper accepts A=own zero-based slot and B=local role 0/1, with the
+caller's authenticated ten-byte APPLY context immediately above its return
+address. Its preflight rechecks private role/count/slot/token/generation,
+APPLY pickup ACK, WRAM mapping, VBlank, battle/link/pause/contest state,
+saved-player identity, the current staged-input validator, local mail
+policy, outgoing display names, and the native HP-only last-alive rule.
+The latter is deliberately **not** a new egg/stat/form policy: an incoming
+egg's nonzero HP still satisfies the native rule. The current incoming
+validator remains the owner's admission boundary.
+
+After preparing both native 53-byte display buffers, it repeats the staged
+validator, own-slot validator and exact 70-byte snapshot comparison without
+an intervening menu/delay. Egg display uses species FF and clears only the
+display extension bit; the underlying record retains its species/full form.
+All three DVs, personality, ID, nickname, full OT span and sender names are
+provided; actual caught-data fields are never zeroed.
+
+The mutation tail runs Polished `RemoveMonFromParty` →
+`SetStorageBoxPointer`/`ShiftPartySlotToEnd`, verifies N-1, then animates in
+the locally selected role. Removal already rotates SRAM mail: there is
+**no second shift**, and selecting the last slot does zero mail swaps.
+`CopyBetweenPartyAndTemp` uses B=81/C=1 and OT slot 0, followed by
+`AddTempMonToParty`; the append readback compares the full record/OT/nickname
+with only native non-egg happiness allowed to differ. Non-eggs use
+`EVOLVE_TRADE=3` and a nonzero native trade link mode; eggs skip forced
+evolution. After the native evolution return, count, record legality, OT,
+ID, all DVs and personality are checked without requiring an evolved record
+to equal the unevolved stage.
+
+The helper explicitly restores map music and the speech display, then calls
+`ForceGameSave`. Success additionally requires native primary/backup
+checksums, save phase zero, and both saved Pokemon-data spans equal to the
+live postimage; SRAM is closed. These checks do **not** prove mail/storage
+integrity or backing-device durability. Every post-removal failure returns
+2 and avoids saving an already-detected partial party. Return 1 is reserved
+for pre-removal refusal. The shared service tail calls commit once, maps
+unknown results to 2, holds result 0 until a matching RELEASE, and holds
+result 2 without B/timeout/RELEASE escape.
+
+Only the enabled responder branch adds explicit save consent, native
+`FixPlayerEVsAndStats` and `Link_SaveGame` before its snapshot. None of
+those calls is present in this default-disabled responder's assembled bytes.
+
+### MODEL and live evidence
+
+`python -m pytest tests/unit/test_polished_trade_commit.py -q -p no:cacheprovider`
+passed **136 cases**. The old UPS failed this suite on the absent helper
+symbol before the rebuild. The real SM83 executes the rebuilt helper,
+validators, snapshot comparison, native removal/mail rotation, temp/name
+copy, append/dex work and checksum verification. A separate real native
+`CheckHowToEvolve` path verifies Linking-Cord trade selection, Everstone,
+Metal Coat consumption, missing held item, and TRUE-versus-EVOLVE_TRADE.
+Native animation, full evolution UI/stat/learned-move work, map UI, full
+save, saved-player identity comparison and SRAM-open/close routines remain
+explicit **MODEL traps**. Fixture hooks route SRAM banks; interrupts,
+real WRAM banking and timing are absent.
+
+Cases cover both roles; count 1/6 and first/middle/last slots; exact party
+order/names/full OT metadata; all 70 snapshot-byte flips; whole-party mail
+refusal; extended forms/egg display; identity/count/temp/append/save faults;
+and result 0/1/2/unknown lifecycle holds. Fault controls include six
+discarded-guard byte mutants and 22 individually inverted preflight
+branches. Phase-specific write whitelists reject preflight party/dex/SRAM
+mutation and commit-phase box allocation. With helper entry SP=C0C0,
+observed model stack high-water was 50 bytes for the one-mon/last-slot
+paths and 62 bytes for first-of-six (minimum C082). Explicit helper locals
+are 22 bytes, at most 24 with its saved result; native UI/ISR high-water
+remains unmeasured.
+
+The helper/companion/profile regression run passed **290 cases**, including
+the profile's assembled gate-zero checks; new helper/service lint passed.
+The complete `python -u -m pytest tests/unit -k polished -q -p no:cacheprovider`
+run passed **3166 cases, 8 skipped**, with 23230 deselected (1435.92 seconds).
+The three footprint/snapshot consumers also passed 59 cases. Old no-commit
+scenarios remain meaningful: the release's gate is zero and the helper/tail
+are unreachable from default proposer/responder executions.
+
+`python tools/verify_gen2_release.py --lane coverage-map` passed; this is
+only that lane, **not** a release verdict. The requested disabled live smoke
+`POL_LANE=F:/slink-work/lanes/pol-c5-live POL_STOP_AFTER_B=1 python tools/polished_live/writes_run.py`
+passed `(a)+(b)`, zero failed checks, frame 786, EmuHawk PID 32328 (exit 0).
+Result SHA256:
+`1d4a572fd3fc4393b5317da8db4102704ff60794d377cf4ede9e11ed7225901e`.
+The driver explicitly reports the negative write scenarios **NOT RUN**.
+The fixture SHA256 remains
+`75c7a5dc30126f746567202cfb39fe583dfa04eb226063560541f6cbd29f36b8`.
+This proves boot/client-write smoke on the new disabled artifact, **not**
+animation, native commit or durable trading.
+
+### Remaining enablement questions
+
+No enabled live commit was requested or performed. Owner enablement, the
+incoming egg/form/canonical-stat domain, real nested native stack/ISR margin,
+complete animation/evolution scratch census, primary/backup/mail/storage
+interruption recovery and cold-load durability remain open. The full-save
+choice follows the C5 contract; its Pokemon-data checksum/readback boundary
+does not close the other storage domains. Do not infer a two-player durable
+receipt, production trade admission or recovery protocol from these symbols,
+model traps or the disabled smoke.
+

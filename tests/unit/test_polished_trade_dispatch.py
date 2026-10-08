@@ -618,8 +618,8 @@ def test_the_builder_allows_the_dispatch_span_and_refuses_one_byte_past_the_comb
     # contiguous empty-bank allowance), so the byte just past the dispatch end is no longer refused ...
     data[last] ^= 0xFF
     pc.verify_overlay(clean_rom, bytes(data), csyms, nsyms)
-    # ... and the first byte past the RESPONDER service end (the last bank-$7E section) is
-    past = flat(BANK7E, nsyms["SlinkTradeResponderServiceEnd"][1])
+    # C5 is the final bank-$7E section, even though commit callers remain disabled.
+    past = flat(BANK7E, nsyms["SlinkTradeCommitEnd"][1])
     data[past] ^= 0xFF
     with pytest.raises(RuntimeError, match=r"unexpected change at"):
         pc.verify_overlay(clean_rom, bytes(data), csyms, nsyms)

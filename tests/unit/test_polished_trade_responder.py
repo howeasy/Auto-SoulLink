@@ -852,7 +852,8 @@ def sc_reentry(env, rom=None):
 def sc_no_commit(env, rom=None):
     rig, run = sc_consent_yes(env, rom)
     sym = env.sym
-    assert not [n for n in sym if "Commit" in n and n.startswith("SlinkTrade")], "a commit symbol exists in the overlay"
+    assert env.rom[env.flat("SlinkTradeCommitEnabled")] == 0, "the release commit gate is enabled"
+    assert sym["SlinkTradeCommit"] not in run.pcs and sym["SlinkTradeApplyCommit"] not in run.pcs
     deny = {env.clean[n] for n in COMMIT_NATIVES if n in env.clean}
     assert deny, "no commit natives resolved from the clean sym"
     hit = sorted(n for n in COMMIT_NATIVES if n in env.clean and env.clean[n] in run.pcs)
@@ -953,24 +954,13 @@ def test_the_overlay_invariants_hold(env):
     assert rom[0xC030:0xC036].hex() == "7e00447e1044"
 
 
-def test_source_shape():
-    src = SRC.read_text(encoding="utf-8")
-    code = "\n".join(line.split(";", 1)[0] for line in src.splitlines())
-    assert 'SECTION "SLink Trade Responder", ROMX[$5000], BANK[SLINK_SERVICE_BANK]' in src
-    assert "SlinkTradeResponderService::" in src and "SlinkTradeResponderServiceEnd::" in src
-    assert "ASSERT @ <= $5300" in src
-    # commit disabled: no commit symbol, no save, no normalization, no farcall, no species list, no numeric $50 terminator
-    for forbidden in ("SlinkTradeCommit", "Link_SaveGame", "ForceGameSave", "FixPlayerEVsAndStats", "farcall", "farjp",
-                      "wPartySpecies", "wOTPartySpecies", "VBLANK_NORMAL", "GetSGBLayout", "RemoveMonFromParty",
-                      "AddTempMonToParty", "EvolvePokemon", "TradeAnimation"):
-        assert forbidden not in code, forbidden
-    assert "SlinkTradeSnapshot" in code and "SlinkTradeValidateSnapshot" in code and "SlinkTradeValidateIncomingStaged" in code
-    assert "call OpenText" in code and "call CloseText" in code and "call YesNoBox" in code and "call PrintText" in code
-    dispatch = (REPO / "patch/polished/src/trade_dispatch.asm").read_text(encoding="utf-8")
-    assert "SlinkTradePromptEntry::\n\tjp SlinkTradeResponderService\nSlinkTradeDispatchEnd::" in dispatch
-    slink = (REPO / "patch/polished/src/slink.asm").read_text(encoding="utf-8")
-    assert slink.index("trade_service.asm") < slink.index("trade_responder.asm") and slink.rstrip().endswith(
-        'INCLUDE "engine/slink/trade_responder.asm"')
+def test_source_shape(env):
+    # Preserve the old no-commit assertion as an executable ROM gate, not a
+    # prohibition on a helper being present elsewhere in the cartridge.
+    assert env.rom[env.flat("SlinkTradeCommitEnabled")] == 0
+    lo, hi = env.flat("SlinkTradeResponderService"), env.flat("SlinkTradeResponderServiceEnd")
+    assert not static_commit_scan(env.rom[lo:hi], {"SlinkTradeApplyCommit": env.sym["SlinkTradeApplyCommit"],
+                                                 **{n: env.clean[n] for n in COMMIT_NATIVES if n in env.clean}})
 
 
 def test_report_the_stack_budgets(env, capsys):

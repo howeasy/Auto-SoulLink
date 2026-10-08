@@ -5,7 +5,7 @@
 
 Nothing is rebuilt. The staged ROM is the pinned release with the committed
 patch/dist/SLink-Polished.ups applied, and it is refused unless its sha1 is the integrated
-overlay `57f039b6…` (the same figure lanes/g2int-ov/drv/mkrom.py produces). The save fixture is
+overlay `877a477a…` (C5 present, commit gate disabled). The save fixture is
 copied into this lane and its sha256 printed, so another card rewriting its own lane cannot move
 this run's inputs.
 
@@ -49,8 +49,8 @@ UPS = REPO / "patch/dist/SLink-Polished.ups"
 # BizHawk silently created a fresh one -- that is why the boot came up as a new game twice.
 # Stage under the harness's own name.
 STAGED = LANE / "rom" / "pol_overlay.gbc"
-# the integrated overlay sha1, as staged by lanes/g2int-ov/drv/mkrom.py
-INTEGRATED_SHA1 = "57f039b6e80effff564e9fa9ac483f40f095b990"
+# The rebuilt C5 overlay; symbol presence does not enable its commit call sites.
+INTEGRATED_SHA1 = "877a477a7dfc70b775ca3f46461d67abebe07083"
 
 
 def stage() -> str:
