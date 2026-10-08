@@ -1,0 +1,199 @@
+-- RC1 single-cartridge qualification recorder. No story/party/register staging.
+-- Fixture/logical link are SYNTH; handle_command is TEST HOST; game actions are native.
+local M = {}
+function M.bank_valid(bank, addr, n, read, hrom)
+    local last=addr+n-1
+    if last<0x4000 or (addr>=0xc000 and last<0xd000) or (addr>=0xff80 and last<0xffff) then return bank==0 end
+    if addr>=0x4000 and last<0x8000 then return bank==read(hrom,"System Bus") end
+    if addr>=0xd000 and last<0xe000 then
+        local mapped=read(0xff70,"System Bus")%8
+        return bank==(mapped==0 and 1 or mapped)
+    end
+    return false
+end
+function M.run()
+    local ROOT=assert(os.getenv("SLINK_ROOT"))
+    package.path=ROOT.."/lua/?.lua;"..package.path
+    local L=dofile(ROOT.."/tools/polished_live/pol_lib.lua")
+    local config=L.json.decode(L.slurp(assert(os.getenv("POL_EXPLODE_CONFIG"))))
+    local K=config.contract
+    assert(K.schema=="polished-explode-live-v1")
+    local trace,write_log,ids={}, {}, {}
+    local parts,c,target,queued,recorded,finished
+    local errors,cap,last_write=0,2048,0
+    local function add(kind,fields)
+        assert(#trace<cap,"trace capacity exhausted")
+        local e={kind=kind,ord=#trace+1,frame=emu.framecount()}
+        for k,v in pairs(fields or {}) do e[k]=v end
+        trace[#trace+1]=e
+        return e
+    end
+    local function read(label,delta)
+        local row=assert(K.symbols[label],label)
+        assert(M.bank_valid(row[1],row[2]+(delta or 0),1,memory.read_u8,K.symbols.hROMBank[2]),"unmapped "..label)
+        local value=memory.read_u8(row[2]+(delta or 0),"System Bus")
+        assert(type(value)=="number" and value%1==0 and value>=0 and value<=255,"unreadable "..label)
+        return value
+    end
+    local function hp(label,delta) return read(label,delta)*256+read(label,(delta or 0)+1) end
+    local function snapshot()
+        local out={}
+        for domain,size in pairs(K.snapshot_sizes) do
+            local bytes={}
+            if domain~="HRAM" then assert(memory.getmemorydomainsize(domain)==size,"snapshot domain size "..domain) end
+            for i=0,size-1 do bytes[#bytes+1]=memory.read_u8(domain=="HRAM" and 0xff80+i or i,domain=="HRAM" and "System Bus" or domain) end
+            out[domain]=L.hex(bytes)
+        end
+        return out
+    end
+    local function state()
+        return {pc=emu.getregister("PC"),bank=read("hROMBank"),mode=read("wBattleMode"),
+            active=read("wCurBattleMon"),slot=read("wCurBattleMon"),action=read("wBattlePlayerAction"),turn=read("hBattleTurn"),
+            battle_hp=hp("wBattleMonHP"),party_hp=target and hp("wPartyMons",target.slot*48+34) or -1,
+            fainted=(read("wPlayerSubStatus2")&4)~=0,move=read("wCurPlayerMove"),
+            map_status=read("wMapStatus"),script=read("wScriptRunning"),link=read("wLinkMode")}
+    end
+    local function mapped()
+        for _,label in ipairs({'wBattleMode','wCurBattleMon','wBattlePlayerAction','wBattleMonHP','wPartyMons','wPlayerSubStatus2','wCurPlayerMove','wMapStatus','wScriptRunning','wLinkMode'}) do
+            local r=K.symbols[label]
+            if not M.bank_valid(r[1],r[2],1,memory.read_u8,K.symbols.hROMBank[2]) then return false end
+        end
+        return true
+    end
+    local function scoped(context,fn,self,...)
+        if not queued or recorded then return fn(self,...) end
+        if not mapped() then return fn(self,...) end
+        local s=state()
+        if context=='battle' and (s.pc~=K.sites.hold.addr or s.bank~=K.sites.hold.bank or s.mode~=1) then return fn(self,...) end
+        if context=='overworld' and s.mode~=0 then return fn(self,...) end
+        local scope=add('scope_begin',{context=context,key=target.key})
+        local before=snapshot();local start=#write_log
+        local out=table.pack(fn(self,...));local after=snapshot()
+        s.scope_ord=scope.ord
+        local writes={};for i=start+1,#write_log do writes[#writes+1]=write_log[i] end
+        if #writes>0 then
+            s.context,s.key,s.before,s.after,s.writes=context,target.key,before,after,writes
+            if c.faint_settle then
+                for _,ob in ipairs(c.faint_settle.owed) do
+                    local a=ob.attempts[#ob.attempts]
+                    if a and ob.key==target.key then s.attempt={identity=a.identity,epoch=a.epoch,visit=a.visit,seq=a.seq,generation=ob.gen} end
+                end
+            end
+            add("operation",s);recorded=true;last_write=#write_log
+        elseif context=="battle" and config.case=="bench-faint" then
+            local changed=false
+            for domain in pairs(before) do if before[domain]~=after[domain] then changed=true end end
+            s.key,s.writes,s.changed,s.before,s.after=target.key,writes,changed,before,after
+            add("bench_hold",s)
+        end
+        return table.unpack(out,1,out.n)
+    end
+    local C=require("connector")
+    C.init(assert(os.getenv("SLINK_HOST")),assert(tonumber(os.getenv("SLINK_PORT"))))
+    local net={connected=C.connected,pump=C.pump,receive=C.receive,send=function(line)
+        local yes=C.send(line)
+        -- connector.send queues and returns nil; the client's send() treats that as accepted.
+        add("wire",{message=L.json.decode(line),sent=C.connected()==true and yes~=false,transport="real connector queue"})
+        return yes
+    end}
+    local hud={sanitize=function(s) return s end,nuzlocke_start=function() end,show=function(text)
+        add("hud",{text=text,key=target and target.key or "",dead=target and c.dead_keys[target.key]==true or false,
+                    fs_seq=c and c.faint_settle and c.faint_settle.seq or 0})
+    end}
+    local io_={cart_ram_linear=true,read_u8=function(a,d) return memory.read_u8(a,d or "System Bus") end,
+        read_range=function(a,n,d) local b={} for i=0,n-1 do b[#b+1]=memory.read_u8(a+i,d or "System Bus") end return b end,
+        write_u8=function(a,v,d) write_log[#write_log+1]={addr=a,value=v,domain=d or "System Bus"} return memory.write_u8(a,v,d or "System Bus") end,
+        bank_valid=function(b,a,n) return M.bank_valid(b,a,n,memory.read_u8,K.symbols.hROMBank[2]) end,
+        stack_valid=function(sp,n) return sp>=0xc000 and sp+n<0xd000 end,
+        domain_size=memory.getmemorydomainsize,domains=memory.getmemorydomainlist,
+        register=emu.getregister,framecount=emu.framecount,
+        on_bus_exec=function(fn,a,name,d) return event.on_bus_exec(fn,a,name,d or "System Bus") end,
+        unregister=event.unregisterbyid}
+    add("begin",{provenance=config.provenance,disclosure=config.disclosure,case=config.case})
+    local function finish(ok,why)
+        if finished then return end
+        finished=true
+        if not ok then errors=errors+1;add("driver_error",{reason=tostring(why)}) end
+        if c then c:stop() end
+        for _,id in ipairs(ids) do event.unregisterbyid(id) end
+        add("final",{completed=ok and errors==0,driver_errors=errors,post_operation_writes=recorded and #write_log-last_write or -1})
+        local file=assert(io.open(L.RUN.."/trace.json","wb"));file:write(assert(L.json.encode(trace)));file:close()
+        L.check("explode-live recording complete",ok,why)
+        L.finish("explode-live "..config.case)
+    end
+    local ok,why=pcall(function()
+        local Entry=dofile(ROOT.."/lua/gen2/entry.lua")
+        parts,why=Entry.build({root=ROOT,title="polished",io=io_,net=net,hud=hud,player="a",
+            rom_size=memory.getmemorydomainsize("ROM"),read_rom_u8=function(a) return memory.read_u8(a,"ROM") end,
+            polished_active_faint=true,polished_faint_observer=true,
+            log=function(text) L.log(text) end})
+        assert(parts,why);assert(parts.runtime_rom_sha1==config.provenance.rom_sha1,"composed ROM differs")
+        c=parts.client
+        local hold,deferred,event_=c.at_battle_hold,c.run_deferred,c.on_event
+        c.at_battle_hold=function(self,...) return scoped("battle",hold,self,...) end
+        c.run_deferred=function(self,...) return scoped("overworld",deferred,self,...) end
+        c.on_event=function(self,e)
+            if queued and e.site_id=="battle_faint" and e.capture then
+                add("consumer",{phase=e.phase,capture=e.capture,battle=e.battle,batch_generation=e.batch_generation})
+            end
+            return event_(self,e)
+        end
+        for name,site in pairs(K.sites) do
+            if name~="hold" then
+                local samples=0
+                ids[#ids+1]=event.on_bus_exec(function()
+                    if finished then return end
+                    local good,err=pcall(function()
+                        local bank,pc=read("hROMBank"),emu.getregister("PC")
+                        if bank~=site.bank then
+                            if samples<16 then samples=samples+1;add("wrong_bank",{site=name,bank=bank,pc=pc}) end
+                            return
+                        end
+                        assert(pc==site.addr,"native hook PC drift")
+                        if queued then
+                            if not mapped() then return end
+                            local s=state();s.site=name
+                            local party=assert(parts.reads.read_party());local mon=assert(party.mons[target.slot+1])
+                            s.key=mon.key
+                            local bytes={};for i=0,#site.bytes/2-1 do bytes[#bytes+1]=memory.read_u8(site.rom_offset+i,"ROM") end
+                            s.bytes=L.hex(bytes);add("native",s)
+                        end
+                    end)
+                    if not good then errors=errors+1;add("driver_error",{reason=tostring(err)}) end
+                end,site.addr,"explode_live_"..name,"System Bus")
+            end
+        end
+        c:start()
+        ids[#ids+1]=event.onframeend(function()
+            if finished then return end
+            local good,err=pcall(function()
+                c:frame_end()
+                if not queued and mapped() and read("wBattleMode")==1 and c.writes_enabled and c.faint_settle.last_identity then
+                    local party=assert(parts.reads.read_party())
+                    local slot=config.case=="bench-faint" and config.target.slot or read("wCurBattleMon")
+                    local mon=assert(party.mons[slot+1]);assert(mon.key==config.target.key and mon.hp>0,"target differs from linked SYNTH fixture")
+                    target={key=mon.key,slot=slot};queued=true
+                    local command=config.case=="explode" and "force_explode" or "force_faint"
+                    add("command",{cmd=command,key=mon.key,slot=slot,mode=1})
+                    c:handle_command({cmd=command,key=mon.key,nickname="QUAL_TARGET"})
+                end
+                assert(emu.framecount()<config.frame_cap,"frame cap")
+            end)
+            if not good then errors=errors+1;add("driver_error",{reason=tostring(err)}) end
+        end,"explode_live_frame")
+        client.speedmode(300)
+        for n,step in ipairs(config.steps) do
+            add("route",{step=n,frames=step.frames,buttons=step.buttons})
+            local buttons={};for _,b in ipairs(step.buttons) do buttons[b]=true end
+            for _=1,step.frames do L.frame(buttons) end
+        end
+        local after=0
+        while after<3600 and not (target and c.dead_keys[target.key] and recorded) do L.pulse("A");after=after+1 end
+        assert(target and recorded and c.dead_keys[target.key],"command/write/settlement incomplete")
+        L.idle(90) -- retain duplicate/quiet re-zero evidence; qualification demands one KO
+        assert(errors==0,"callback failure")
+    end)
+    finish(ok,why)
+end
+if rawget(_G,"POL_EXPLODE_UNIT_TEST") then return M end
+M.run()
