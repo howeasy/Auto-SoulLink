@@ -1323,6 +1323,7 @@ S.POLISHED_UNPROVEN = {"a live exec hit at the capture_party PC on a running car
 -- writer, and BATTLE_FLOW 1.3 makes a party-record write at that boundary a write the copy-back erases.
 S.POLISHED_BATTLE_SITES = {
     battle_faint = "before_party_copyback",
+    battle_faint_copyback_return = "after_party_copyback",
     battle_end = "before_end_processing",
     wild_ready = "after_enemy_load",
     trainer_ready = "trainer_party_build_entry",
@@ -1406,6 +1407,31 @@ function S.new_polished(options)
                    id..": the PC must be pinned by byte sequence read out of the ROM")
             assert(integer(row.bank,1,255) and integer(row.addr,0x4000,0x7FFF) and integer(row.rom_offset,0,0x7FFFFF)
                    and integer(row.hex_len,1,32),id..": anchor required")
+            if id == "battle_faint_copyback_return" then
+                assert(callable(authority.capture_faint), id..": client-owned faint capture authority required")
+                assert(row.hex_len == 3 and row.expected_hex == "CDC334"
+                       and type(row.instructions) == "table" and #row.instructions == 1
+                       and row.instructions[1] == "call UpdateEnemyMonInParty",
+                       id..": player-copy return instruction proof required")
+                assert(type(row.point_symbols) == "table", id..": source point-symbol facts required")
+                for _, symbol in ipairs({"wBattleMode", "wCurBattleMon", "wLinkMode",
+                                         "wBattleMonHP", "wBattleMonStatus", "wPlayerSubStatus2"}) do
+                    local point = row.point_symbols[symbol]
+                    assert(type(point) == "table" and integer(point.bank,0,1)
+                           and integer(point.addr,0xC000,0xDFFF)
+                           and ((point.addr < 0xD000 and point.bank == 0)
+                                or (point.addr >= 0xD000 and point.bank == 1)),
+                           id..": invalid source point "..symbol)
+                    if profile.ram[symbol] ~= nil then
+                        assert(profile.ram[symbol] == point.addr and profile.ram_bank[symbol] == point.bank,
+                               id..": profile/point address mismatch "..symbol)
+                    end
+                end
+                -- The profile omits this point; qualify the generated pair against the pinned overlay symbol,
+                -- but all callback reads still use the row, never an address fallback.
+                local sub = row.point_symbols.wPlayerSubStatus2
+                assert(sub.bank == 0 and sub.addr == 0xC4E2, id..": SUBSTATUS2 point differs from pinned symbol")
+            end
             battle_ids[#battle_ids+1], battle_sites[id] = id, row
             registered_sites[#registered_sites+1] = {id=id}
         end
@@ -1475,6 +1501,32 @@ function S.new_polished(options)
                                      {battle={slot=slot,hp=wram("wBattleMonHP",2),max_hp=wram("wBattleMonMaxHP",2),
                                               mode=mode,link_mode=wram("wLinkMode")}})},context,held)
         end
+        -- This instruction is after the unconditional player copyback CALL, not its entry.
+        -- Point reads are bank-checked on both sides; native HP is BIG-endian.
+        local function faint_copyback_return(prepared, context, held)
+            local row = battle_sites[prepared.id]
+            local function point(name, span)
+                local p = row.point_symbols[name]
+                local n = span or 1
+                need(io.bank_valid(p.bank,p.addr,n) == true,"OPEN: unmapped observer memory "..name)
+                local first = io.read_u8(p.addr,"System Bus")
+                local second = span and io.read_u8(p.addr+1,"System Bus") or nil
+                need(io.bank_valid(p.bank,p.addr,n) == true,"OPEN: observer bank changed "..name)
+                need(integer(first,0,255) and (not span or integer(second,0,255)),
+                     "OPEN: observer byte unavailable "..name)
+                return span and first * 256 + second or first
+            end
+            local b = {mode=point("wBattleMode"), slot=point("wCurBattleMon"),
+                       hp=point("wBattleMonHP",2), status=point("wBattleMonStatus"),
+                       link_mode=point("wLinkMode"), fainted=math.floor(point("wPlayerSubStatus2")/4)%2 == 1}
+            if (b.mode ~= 1 and b.mode ~= 2) or not integer(b.slot,0,5)
+               or b.hp ~= 0 or b.status ~= 0 or b.link_mode ~= 0 or not b.fainted then return nil end
+            local captured = authority.capture_faint(b,held)
+            if captured == nil then return nil end
+            need(authority.valid(held) == true,"OPEN: observer epoch changed")
+            return batch({observation("battle_faint",row,
+                {source_site_id=prepared.id,battle=b,capture=captured})},context,held)
+        end
         -- A write window fires on EVERY turn / every send-out. Silence is the normal outcome: the wiring layer
         -- answers nil when nothing is owed, and only a landed write is published.
         local function write_window(prepared, context, held)
@@ -1486,7 +1538,16 @@ function S.new_polished(options)
                    prepared.id..": a write may only land at its own declared gate")
             return batch({observation(prepared.id,battle_sites[prepared.id],{write=outcome.result})},context,held)
         end
+        local wrong_bank_hits = {}
         local function process(prepared)
+            if prepared.id == "battle_faint_copyback_return" then
+                local bank = io.read_u8(profile.ram.hROMBank,"System Bus")
+                need(integer(bank,0,255),"OPEN: observer ROM bank unavailable")
+                if bank ~= prepared.anchor.bank then
+                    wrong_bank_hits[prepared.id] = (wrong_bank_hits[prepared.id] or 0) + 1
+                    return nil -- bounded counters only; never stamp or advance the client's clock
+                end
+            end
             local context = binding:context(prepared.anchor)
             if not context then return nil end -- another bank mapped at this PC: nothing stamped
             local held = authority.capture()
@@ -1495,6 +1556,7 @@ function S.new_polished(options)
             need(authority.valid(held) == true,"OPEN: held observation unavailable")
             if prepared.id == S.POLISHED_SITE then return capture_party(prepared,context,held) end
             if prepared.id == "battle_faint" then return faint_boundary(prepared,context,held) end
+            if prepared.id == "battle_faint_copyback_return" then return faint_copyback_return(prepared,context,held) end
             if WINDOWS[prepared.id] ~= nil then return write_window(prepared,context,held) end
             return batch({observation(prepared.id,battle_sites[prepared.id])},context,held)
         end
@@ -1544,6 +1606,7 @@ function S.new_polished(options)
             local registered = {S.POLISHED_SITE}
             for _, id in ipairs(battle_ids) do registered[#registered+1] = id end
             status.registered_sites,status.refusals,status.drops = registered,copy(refusals),copy(drops)
+            status.wrong_bank_hits = copy(wrong_bank_hits)
             status.refused_acquisitions,status.pending_acquisitions = refused,0
             status.unproven = copy(S.POLISHED_UNPROVEN)
             return status

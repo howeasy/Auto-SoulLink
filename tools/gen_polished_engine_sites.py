@@ -67,6 +67,12 @@ PROOFS = {
         ),
         "point_symbols": ("wPartyCount", "wBattleType", "wBattleScriptFlags", "wMapGroup", "wMapNumber"),
     },
+    "battle_faint_copyback_return": {
+        "instructions": (("call UpdateEnemyMonInParty",
+                          lambda s: b"\xCD" + _le(s["UpdateEnemyMonInParty"][1])),),
+        "point_symbols": ("wBattleMode", "wCurBattleMon", "wLinkMode",
+                          "wBattleMonHP", "wBattleMonStatus", "wPlayerSubStatus2"),
+    },
 }
 
 SYMPATH = DATA / "polishedcrystal.sym"
@@ -156,6 +162,12 @@ SITES: tuple[dict, ...] = (
       "at battle_faint, immediately followed by `cd c3 34` = call UpdateEnemyMonInParty. The enemy side's "
       "ordering is documented for rival_swap_last_consumption.",
       symbol_offset=None, anchor="ResolveFaints.no_fainted_mons", find_hex="CDB034"),
+    S("battle_faint_copyback_return", "player_faint", "ResolveFaints.no_fainted_mons", "after_party_copyback",
+      "The instruction immediately after call UpdateBattleMonInParty returns: call UpdateEnemyMonInParty. "
+      "Player HP/status copyback has executed on the pinned native path. This is not faint-only: "
+      "a bound awaiting plain attempt, native player FAINTED and keyed zero HP/status are still required. "
+      "Observation only; never a write window. docs/polished/FAINT_OBSERVER.md section 2.",
+      symbol_offset=None, anchor="ResolveFaints.no_fainted_mons", find_hex="CDC334"),
     S("battle_end", "battle_end_result", "ExitBattle", "before_end_processing",
       "Battle exit, before end processing: ExitBattle's first instruction. Fires on EVERY battle exit, wild "
       "and trainer alike -- it brackets the encounter, it does not classify it.",
@@ -388,6 +400,14 @@ def build_site(site: dict, rom: bytes, sym: dict, spans: list[tuple[int, int]]) 
             raise SystemExit(f"{site['id']}: symbol {site['symbol']} absent from the .sym")
         bank, addr = sym[site["symbol"]]
     off = flat(bank, addr)
+    if site["id"] == "battle_faint_copyback_return":
+        for name in ("UpdateBattleMonInParty", "UpdateEnemyMonInParty"):
+            if sym[name][0] != 0:
+                raise SystemExit(f"{site['id']}: {name} must be a ROM0 call")
+        call_bank, call_addr, _ = find_in_extent(
+            rom, sym, site["symbol"], b"\xCD" + _le(sym["UpdateBattleMonInParty"][1]))
+        if call_bank != bank or call_addr + 3 != addr or rom[off - 3:off] != b"\xCD" + _le(sym["UpdateBattleMonInParty"][1]):
+            raise SystemExit(f"{site['id']}: player copyback call must immediately precede the return witness")
     span = (off, off + n - 1)
     if spans_overlap(span, spans):
         raise SystemExit(f"{site['id']}: 0x{off:X}..0x{span[1]:X} overlaps a companion-overlay span")
