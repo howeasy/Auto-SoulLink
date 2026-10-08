@@ -182,7 +182,9 @@ def test_a_randomized_cartridge_composes_a_dev_grade_client(made):
     assert hello["companion_abi"] == 3 and len(log.writes) == 0
     # the capture site (an engine site) plus the client two PC holds: the overworld frame wait and the battle hold
     assert set(log.hooks.values()) == {"SLink-gen2-polished:capture_party", "SLink-gen2-checkpoint",
-                                       "SLink-gen2-battle-hold"}
+                                       "SLink-gen2-battle-hold", "SLink-gen2-polished:battle_faint_copyback_return",
+                                       "SLink-gen2-polished:battle_faint", "SLink-gen2-polished:whiteout_before_heal",
+                                       "SLink-gen2-polished:rival_swap_gate"}
     assert not any("engine sites refused" in line for line in log.lines.values())
 
 

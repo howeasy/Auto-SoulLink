@@ -213,3 +213,17 @@ def test_a_client_reported_rom_content_leaves_the_player_with_no_tables():
     server._ingest_rom_content("a", {"wild": {}, "rom_sha1": "ab" * 20})
     adopted = server._player_adapters["a"]
     assert adopted.randomized and adopted.encounter_table("route_29") is None
+
+
+@pytest.mark.parametrize("enabled", [False, True], ids=["off", "explicit-cli-on"])
+def test_explode_remains_gated_before_live_qualification(adapter, tmp_path, enabled):
+    from server.state import SoulLinkState
+    from tests.unit.polished_state_rig import seed_pair
+
+    state = SoulLinkState(data_dir=str(tmp_path), adapter=adapter, explode_mode=enabled)
+    state.activated = True
+    seed_pair(state, "EFFFFF:D1C2:0A9:00", "CFFFFF:D1C2:037:40", a_party=True, b_party=True)
+    state.handle_event("a", {"event": "faint", "key": "EFFFFF:D1C2:0A9:00"})
+    assert adapter.supports_explode_mode() is False
+    assert any(command['cmd']=='force_faint' for command in state.queued_commands['b'])
+    assert not any(command['cmd']=='force_explode' for command in state.queued_commands['b'])

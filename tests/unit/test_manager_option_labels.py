@@ -156,3 +156,10 @@ def test_the_new_run_form_seeds_every_default_on_option_checked():
     seeded = {k for k, v in re.findall(r"(\w+): (true|false)", seed) if v == "true"}
     want = {key for key, _flag, default in manager.RUN_FLAGS if default is True}
     assert seeded == want
+
+
+@pytest.mark.parametrize("key", ["explode_mode", "rival_team_swap"], ids=["explode", "rival"])
+def test_polished_battle_options_remain_unselectable_before_live_qualification(key):
+    support = option_support(key, ["polished_crystal", "polished_crystal"])
+    assert support["ok"] is False
+    assert new_run_form()["support"]["gen2_polished"][key]["ok"] is False

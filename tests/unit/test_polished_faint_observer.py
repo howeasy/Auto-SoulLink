@@ -31,7 +31,8 @@ PACK = json.loads((ROOT / "data/games/polished_crystal/engine_signals.json").rea
 POINTS = ("wBattleMode", "wCurBattleMon", "wLinkMode", "wBattleMonHP", "wBattleMonStatus", "wPlayerSubStatus2")
 DEFAULT_HOOKS = {"SLink-gen2-polished:capture_party": 0x652B, "SLink-gen2-polished:battle_faint": 0x44C8,
                  "SLink-gen2-polished:whiteout_before_heal": 0x5EB9,
-                 "SLink-gen2-checkpoint": 0x51BF, "SLink-gen2-battle-hold": 0x416A}
+                 "SLink-gen2-checkpoint": 0x51BF, "SLink-gen2-battle-hold": 0x416A,
+                 "SLink-gen2-polished:rival_swap_gate": 0x47DD}
 
 
 def mutation(path, old, new):
@@ -42,8 +43,7 @@ def mutation(path, old, new):
 
 def build(*, enabled=True, interface=True, overrides=None):
     harness = br.HARNESS_HOOKS
-    if enabled:
-        harness = harness.replace(fc.DEPS_OLD, fc.DEPS_OLD + " polished_faint_observer=true,")
+    harness = harness.replace(fc.DEPS_OLD, fc.DEPS_OLD + (" polished_faint_observer=true," if enabled else " polished_faint_observer=false,"))
     with patch.object(br, "HARNESS_HOOKS", harness):
         return fc.build(interface=interface, overrides=overrides)
 
@@ -139,7 +139,7 @@ def test_attempt_callback_drain_and_real_sent_tick_share_one_frame_clock():
 
 
 @pytest.mark.parametrize("path,old,new", [
-    (ENTRY, 'battle_sites=deps.polished_faint_observer == true and {"battle_faint", "whiteout_before_heal", "battle_faint_copyback_return"} or {"battle_faint", "whiteout_before_heal"},',
+    (ENTRY, 'battle_sites=faint_observer and {"battle_faint", "whiteout_before_heal", "battle_faint_copyback_return"} or {"battle_faint", "whiteout_before_heal"},',
      'battle_sites={"battle_faint", "whiteout_before_heal"},'),
     (SIGNALS, 'if prepared.id == "battle_faint_copyback_return" then return faint_copyback_return(prepared,context,held) end',
      'if prepared.id == "battle_faint_copyback_return" then return nil end'),
@@ -156,7 +156,7 @@ def test_opt_in_hook_census_preserves_pinned_default(enabled, interface):
     expected = DEFAULT_HOOKS | ({HOOK: PC} if enabled else {})
     assert dict(rig.log["hook_at"].items()) == expected
     status = rig.client.signals.status(rig.client.signals)
-    assert list(status.registered_sites.values()) == ["capture_party", "battle_faint", "whiteout_before_heal"] + ([SITE] if enabled else [])
+    assert list(status.registered_sites.values()) == ["capture_party", "battle_faint", "whiteout_before_heal"] + ([SITE] if enabled else []) + ["rival_swap_gate"]
 
 
 def test_observer_without_settlement_authority_degrades_inert_not_legacy_success():
