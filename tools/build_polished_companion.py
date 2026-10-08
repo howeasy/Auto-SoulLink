@@ -63,6 +63,7 @@ from slink_space import work_root  # noqa: E402
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "patch" / "tools"))
 import rom_identity  # noqa: E402  (version-masked canonical identity, T8 ruling)
+
 SRC_DIR = ROOT / "patch" / "polished" / "src"
 ABI = ROOT / "patch" / "gb" / "slink_abi.inc"
 OUT_DIR = ROOT / "data" / "polished"
@@ -417,7 +418,20 @@ def moved_symbols(old: dict, new: dict) -> list[str]:
 
 def build(*, check: bool = False, version: str | None = None,
           rgbds_bin: pathlib.Path | None = None,
-          w64devkit_bin: pathlib.Path | None = None, repo_dir: pathlib.Path | None = None) -> int:
+          w64devkit_bin: pathlib.Path | None = None, repo_dir: pathlib.Path | None = None,
+          test_trade_enable: bool = False, test_output: pathlib.Path | None = None) -> int:
+    if test_trade_enable and test_output is None:
+        raise RuntimeError("test trade enable requires --test-output")
+    if test_output is not None:
+        test_output = test_output.resolve()
+        if check or test_output == ROOT.resolve() or ROOT.resolve() in test_output.parents:
+            raise RuntimeError("test output must be outside the repo and cannot use --check")
+        existing = test_output
+        while not existing.exists():
+            existing = existing.parent
+        in_repo = subprocess.run(["git", "-C", str(existing), "rev-parse", "--show-toplevel"], capture_output=True)
+        if in_repo.returncode == 0:
+            raise RuntimeError("test output must be outside every repository checkout")
     lock = load_lock()
     spec = lock["outputs"]["polishedcrystal"]
     abi_line = f"DEF SLINK_ABI_VERSION EQU {ABI_VERSION}"
@@ -425,11 +439,12 @@ def build(*, check: bool = False, version: str | None = None,
         raise RuntimeError(f"{ABI.name} no longer declares `{abi_line}`")
     rgbds_bin = rgbds_bin or ensure_rgbds(lock["rgbds_version"])
     devkit_bin = w64devkit_bin or ensure_w64devkit()
-    cache = work_root("cache") / "polished"
+    source_repo = repo_dir or work_root("cache") / "polished/src"
+    cache = test_output / "cache/polished" if test_output is not None else work_root("cache") / "polished"
 
     # 1. the clean build must reproduce the lock first (raises on a sha1 mismatch)
     clean_dir = cache / "companion-clean"
-    if build_rom_syms(repo_dir=repo_dir, build_dir=clean_dir, rgbds_bin=rgbds_bin,
+    if build_rom_syms(repo_dir=source_repo, build_dir=clean_dir, rgbds_bin=rgbds_bin,
                       w64devkit_bin=devkit_bin, check=True) != 0:
         raise RuntimeError("clean build does not reproduce the committed data/polished/ sym/map -- refusing")
     stem = spec["filename"].removesuffix(".gbc")
@@ -439,8 +454,12 @@ def build(*, check: bool = False, version: str | None = None,
 
     # 2. overlay build on a fresh export of the same commit
     tree = cache / "companion-overlay"
-    export_source(repo_dir or cache / "src", lock["source"]["commit"], tree)
+    export_source(source_repo, lock["source"]["commit"], tree)
     applied = apply_overlay(tree, version)
+    if test_trade_enable:
+        service = tree / "engine/slink/trade_service.asm"
+        service.write_text("DEF SLINK_TRADE_COMMIT_ENABLE EQU 1\n" + service.read_text(encoding="utf-8"),
+                           encoding="utf-8", newline="\n")
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([str(rgbds_bin), str(devkit_bin), env.get("PATH", "")])
     cmd = [str(devkit_bin / _binary_name("make")), "-j4", *lock["make_args"], *lock["make_targets"]]
@@ -477,9 +496,13 @@ def build(*, check: bool = False, version: str | None = None,
     print(f"[polished-companion] version field {version_slot}  canonical sha1 {canonical[:12]}  "
           f"stamped sha1 {hashlib.sha1(data).hexdigest()[:12]}", file=sys.stderr)
 
-    files = {UPS_PATH: ups,
-             OUT_DIR / "polished_slink.sym": _lf((tree / f"{stem}.sym").read_bytes()),
-             OUT_DIR / "polished_slink.map": _lf((tree / f"{stem}.map").read_bytes())}
+    out_dir = test_output / "data/polished" if test_output is not None else OUT_DIR
+    ups_path = test_output / "patch/dist/SLink-Polished.ups" if test_output is not None else UPS_PATH
+    provenance_path = out_dir / "overlay_provenance.json"
+    output_root = test_output if test_output is not None else ROOT
+    files = {ups_path: ups,
+             out_dir / "polished_slink.sym": _lf((tree / f"{stem}.sym").read_bytes()),
+             out_dir / "polished_slink.map": _lf((tree / f"{stem}.map").read_bytes())}
     provenance = {
         "schema": PROVENANCE_SCHEMA,
         "generated": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -499,9 +522,12 @@ def build(*, check: bool = False, version: str | None = None,
         "output": {**rom_facts(data), "identical_to_clean": data == base,
                    "canonical_sha1": canonical,
                    "version_slot": version_slot, "canonical_spans": canonical_spans,
-                   "ups": {"file": UPS_PATH.relative_to(ROOT).as_posix(), "size": len(ups), "sha256": _sha256(ups)}},
-        "symbols": {p.name: _sha256(b) for p, b in files.items() if p.parent == OUT_DIR},
+                   "ups": {"file": ups_path.relative_to(output_root).as_posix(), "size": len(ups), "sha256": _sha256(ups)}},
+        "symbols": {p.name: _sha256(b) for p, b in files.items() if p.parent == out_dir},
     }
+    if test_output is not None:
+        provenance["test_only"] = {"SLINK_TRADE_COMMIT_ENABLE": int(test_trade_enable),
+                                   "statement": "ISOLATED TEST BUILD; not a shipped pin"}
 
     print(f"[polished-companion] clean sha1 {spec['sha1']} reproduced", file=sys.stderr)
     print(f"[polished-companion] overlay sha1 {provenance['output']['sha1']}  ups {len(ups)} B  ({release_check})",
@@ -524,8 +550,9 @@ def build(*, check: bool = False, version: str | None = None,
     for path, blob in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(blob)
-    PROVENANCE_PATH.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8", newline="\n")
-    print(f"[polished-companion] published {len(files)} files + {PROVENANCE_PATH.relative_to(ROOT)}", file=sys.stderr)
+    provenance_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8", newline="\n")
+    published = provenance_path if test_output is not None else provenance_path.relative_to(ROOT)
+    print(f"[polished-companion] published {len(files)} files + {published}", file=sys.stderr)
     return 0
 
 
@@ -544,6 +571,8 @@ def main() -> int:
     ap.add_argument("--version", default=None,
                     help="stamp into the main-menu version line (20-byte fixed field)")
     ap.add_argument("--selfcheck", action="store_true", help="run the pure-function asserts only")
+    ap.add_argument("--test-trade-enable", action="store_true", help="TEST ONLY: compile native trade commit; requires isolated --test-output")
+    ap.add_argument("--test-output", type=pathlib.Path, help="isolated test build/cache root, outside the repository")
     args = ap.parse_args()
     if args.selfcheck:
         _selfcheck()
@@ -551,7 +580,8 @@ def main() -> int:
         return 0
     try:
         return build(check=args.check, rgbds_bin=args.rgbds_bin, w64devkit_bin=args.w64devkit_bin,
-                     repo_dir=args.repo_dir, version=args.version)
+                     repo_dir=args.repo_dir, version=args.version,
+                     test_trade_enable=args.test_trade_enable, test_output=args.test_output)
     except RuntimeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

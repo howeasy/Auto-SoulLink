@@ -205,8 +205,8 @@ def test_responder_apply_cannot_be_reclassified_as_prompt_consent(env, result):
     gen = b.apply()
     assert b.call("phase") == ("responder", "apply")
     done_frame(b, gen, result)
-    assert b.call("poll_done").disposition == ("NOT_PERFORMED" if result == 1 else "UNCERTAIN")
-    if result != 1:
+    assert b.call("poll_done").disposition == ({0: "COMPLETE", 1: "NOT_PERFORMED"}.get(result, "UNCERTAIN"))
+    if result not in (0, 1):
         done_frame(b, gen, 1)
         assert b.call("poll_done").disposition == "UNCERTAIN"
         assert b.call("release", gen)[1] == "UNCERTAIN"
@@ -246,15 +246,15 @@ def test_real_responder_closure_and_timeout_dispositions(env, case):
         assert rig.binder.call("reset") is True
 
 
-@pytest.mark.parametrize("fault", ["token", "generation", "apply-zero"], ids=["token", "gen", "apply-zero"])
-def test_real_responder_rejects_foreign_binding_and_apply_success_claim(env, fault):
+@pytest.mark.parametrize("fault", ["token", "generation", "apply-invalid"], ids=["token", "gen", "apply-invalid"])
+def test_real_responder_rejects_foreign_binding_and_invalid_apply_result(env, fault):
     rig = HostRig(env)
 
     def host(h):
         b = rig.binder
         while not h.header(CMD["DONE"]):
             yield
-        if fault != "apply-zero":
+        if fault != "apply-invalid":
             offset = 12 if fault == "token" else 6
             original = h.rd(offset)
             h.wr(offset, original ^ 1)
@@ -271,8 +271,8 @@ def test_real_responder_rejects_foreign_binding_and_apply_success_claim(env, fau
         assert isinstance(gen, int)
         while not h.header(CMD["DONE"]):
             yield
-        if fault == "apply-zero":
-            h.wr(8, 0)  # An otherwise bound but unsupported trade-completion claim.
+        if fault == "apply-invalid":
+            h.wr(8, 3)  # An otherwise bound but invalid native result remains poisoned.
             assert b.call("poll_done").disposition == "UNCERTAIN"
             before = list(b.writes)
             h.wr(8, 1)
@@ -284,7 +284,7 @@ def test_real_responder_rejects_foreign_binding_and_apply_success_claim(env, fau
 
     run = rig.run(host)
     resp.common(rig, run, "ADADC", results=[0, 1])
-    assert rig.binder.call("disposition")[0] == ("UNCERTAIN" if fault == "apply-zero" else "NOT_PERFORMED")
+    assert rig.binder.call("disposition")[0] == ("UNCERTAIN" if fault == "apply-invalid" else "NOT_PERFORMED")
 
 
 @pytest.mark.parametrize("command", ["QUERY", "OFFER", "PROMPT", "APPLY", "DONE", "RELEASE"],
@@ -386,13 +386,13 @@ MUTANTS = [
      lambda e: test_apply_requires_unchanged_consent_release_lease(e, "ack")),
     ("release-cmd", "bytes[l.fields.command+1] ~= t.commands.RELEASE", "false",
      lambda e: test_apply_requires_unchanged_consent_release_lease(e, "command")),
-    ("apply-zero", "elseif result ~= 1 then", "elseif false then",
+    ("apply-zero", "elseif result == 0 then", "elseif false then",
      lambda e: test_responder_apply_cannot_be_reclassified_as_prompt_consent(e, 0)),
     ("bad-prompt", "(result ~= 0 and result ~= 1)", "false",
      lambda e: test_prompt_dispositions_and_poison_are_phase_bound(e, 2, "UNCERTAIN")),
     ("reverse", "(prompt_result ~= nil and result ~= prompt_result)", "false",
      lambda e: test_prompt_decision_cannot_reverse(e, 0)),
-    ("reset", "if attempted and disposition ~= 'NOT_PERFORMED' then", "if false then",
+    ("reset", "if attempted and disposition ~= 'NOT_PERFORMED' and disposition ~= 'COMPLETE' then", "if false then",
      lambda e: test_real_responder_closure_and_timeout_dispositions(e, "b-after-arm")),
 ]
 

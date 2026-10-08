@@ -506,7 +506,7 @@ def test_invalid_apply_request_is_not_staged(env, kind):
 @pytest.mark.parametrize(
     "result", [0, 1, 2, 3], ids=["zero", "not-performed", "uncertain", "three"]
 )
-def test_done_never_reports_completion(env, result):
+def test_done_maps_native_commit_dispositions(env, result):
     b = Binder(env)
     b.accepted()
     b.frame += 1
@@ -515,9 +515,9 @@ def test_done_never_reports_completion(env, result):
     lease = PROFILE["overlay"]["trade"]["lease"]
     b.put(lease["base"] + lease["fields"]["result"], result)
     done = b.call("poll_done")
-    assert done.disposition == ("NOT_PERFORMED" if result == 1 else "UNCERTAIN")
+    assert done.disposition == ({0: "COMPLETE", 1: "NOT_PERFORMED"}.get(result, "UNCERTAIN"))
     before = list(b.writes)
-    if result == 1:
+    if result in (0, 1):
         assert b.call("release", gen) is True
     else:
         assert b.call("release", gen)[1] == "UNCERTAIN" and b.writes == before
@@ -832,7 +832,7 @@ def test_query_ack_readback_also_verifies_previously_written_payload(env):
     assert b.call("disposition") == ("UNCERTAIN", result[2])
 
 
-@pytest.mark.parametrize("unexpected", [0, 2, 3, 4], ids=["zero", "two", "three", "bad-byte"])
+@pytest.mark.parametrize("unexpected", [255, 2, 3, 4], ids=["invalid-ff", "two", "three", "bad-byte"])
 def test_unexpected_done_cannot_be_erased_by_result_one_real_service(env, unexpected):
     rig = svc.Rig(env)
     observed = {}
@@ -937,7 +937,7 @@ def test_proposer_phase_is_explicit_and_still_cannot_become_a_responder(env):
     assert b.call("phase") == ("proposer", "apply")
     b.frame_image("DONE", gen=gen, ack=gen)
     b.put(PROFILE["overlay"]["trade"]["lease"]["base"] + 8, 0)
-    assert b.call("poll_done").disposition == "UNCERTAIN"
+    assert b.call("poll_done").disposition == "COMPLETE"
 
 
 # ── g2p-cancel: host cancel/close of a pre-APPLY visit ─────────────────────────────────────
@@ -1553,3 +1553,27 @@ def test_binder2_each_undo_mutant_fails_the_real_service_oracle(env, monkeypatch
     monkeypatch.setattr(sys.modules[__name__], "Binder", mutated)
     with pytest.raises(AssertionError, match=message):
         check(env)
+
+
+def complete_apply(env, mutation=None):
+    b = Binder(env, mutation=mutation)
+    b.accepted()
+    b.frame += 1
+    gen = b.apply()
+    b.frame_image("DONE", gen=gen, ack=gen)
+    lease = PROFILE["overlay"]["trade"]["lease"]
+    b.put(lease["base"] + lease["fields"]["result"], 0)
+    assert b.call("poll_done").disposition == "COMPLETE"
+    assert b.call("release", gen) is True
+    b.put(lease["base"] + lease["fields"]["command"], 0)
+    assert b.call("reset") is True
+    assert b.call("advertised") is False
+
+
+def test_apply_complete_releases_and_resets(env):
+    complete_apply(env)
+
+
+def test_complete_result_mutant_is_red(env):
+    with pytest.raises(AssertionError):
+        complete_apply(env, ("elseif result == 0 then", "elseif false then"))
