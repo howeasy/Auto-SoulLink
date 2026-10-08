@@ -1,6 +1,6 @@
 SUMMARY:
-	ROM0: 16174 bytes used / 210 free
-	ROMX: 2050829 bytes used / 13555 free in 126 banks
+	ROM0: 16181 bytes used / 203 free
+	ROMX: 2051199 bytes used / 13185 free in 126 banks
 	SRAM: 30936 bytes used / 1832 free in 4 banks
 	WRAM0: 3831 bytes used / 265 free
 	WRAMX: 24784 bytes used / 3888 free in 7 banks
@@ -31,8 +31,9 @@ ROM0 bank #0:
 	SECTION: $3f34-$3f87 ($0054 bytes) ["SLink Phone Bridge"]
 	EMPTY: $3f88-$3f91 ($000a bytes)
 	SECTION: $3f92-$3fa0 ($000f bytes) ["SLink Main Menu Bridge"]
-	EMPTY: $3fa1-$3fff ($005f bytes)
-	TOTAL EMPTY: $00d2 bytes
+	SECTION: $3fa1-$3fa7 ($0007 bytes) ["SLink Title Bridge"]
+	EMPTY: $3fa8-$3fff ($0058 bytes)
+	TOTAL EMPTY: $00cb bytes
 
 ROMX bank #1:
 	SECTION: $4000 ($0000 bytes) ["SoldierGroup"]
@@ -3886,12 +3887,14 @@ ROMX bank #126:
 	EMPTY: $4783-$49ff ($027d bytes)
 	SECTION: $4a00-$4cef ($02f0 bytes) ["SLink Trade Service"]
 	EMPTY: $4cf0-$4fff ($0310 bytes)
-	SECTION: $5000-$5188 ($0189 bytes) ["SLink Trade Responder"]
-	EMPTY: $5189-$52ff ($0177 bytes)
+	SECTION: $5000-$5190 ($0191 bytes) ["SLink Trade Responder"]
+	EMPTY: $5191-$52ff ($016f bytes)
 	SECTION: $5300-$573b ($043c bytes) ["SLink Trade Commit"]
 	SECTION: $573c-$5763 ($0028 bytes) ["SLink Trade Commit Rollback"]
-	EMPTY: $5764-$7fff ($289c bytes)
-	TOTAL EMPTY: $324f bytes
+	EMPTY: $5764-$57ff ($009c bytes)
+	SECTION: $5800-$5969 ($016a bytes) ["SLink Title Band"]
+	EMPTY: $596a-$7fff ($2696 bytes)
+	TOTAL EMPTY: $30dd bytes
 
 VRAM bank #0:
 	SECTION: $8000-$9fff ($2000 bytes) ["VRAM0"]

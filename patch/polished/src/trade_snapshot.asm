@@ -1,5 +1,6 @@
 ; SLink companion overlay -- Polished Crystal trade card 2a: the outgoing SNAPSHOT (port of
-; patch/gen2/src/trade_snapshot.asm). INERT: nothing calls it until the held service lands.
+; patch/gen2/src/trade_snapshot.asm). Called by the held proposer and responder services (snapshot at
+; consent, validate at APPLY, release on every exit) and the validate by the (disabled) commit.
 ;
 ; The preimage is 70 bytes: the 48-byte party record, the 11-byte OT field (8 name bytes + the 3 extra
 ; metadata bytes, e.g. the Hyper Training mask) and the 11-byte nickname of ONE own party slot, copied

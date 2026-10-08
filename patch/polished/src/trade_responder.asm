@@ -22,8 +22,9 @@
 ;   PROMPT generation, last of the entry checks and BEFORE any native UI) -> OpenText, offer text, YesNoBox ->
 ;     NO / B: DONE result 1 (decline), bounded 90-frame RELEASE wait, close.
 ;     YES:    wait text -> re-check held frame / own slot / party count -> SlinkTradeSnapshot (ONLY after every native menu
-;             has returned) -> DONE result 0 = CONSENT ONLY, never a completed trade (the commit does not
-;             exist in this build) -> one 3600-frame wait shared by (1) the host's RELEASE of the PROMPT
+;             has returned) -> token re-checked (a binder cancel during the menus or the snapshot zeroes it:
+;             no DONE) -> DONE result 0 = CONSENT ONLY, never a completed trade (the commit is assembled but
+;             compile-disabled, SLINK_TRADE_COMMIT_ENABLE = 0) -> one 3600-frame wait shared by (1) the host's RELEASE of the PROMPT
 ;             generation and (2) its fresh APPLY (generation previous+1, ACK = previous, same token, same slot;
 ;             the APPLY is inspected BEFORE the counter expires, like the v8 proposer) -> pickup ACK ->
 ;             staged incoming re-validated, party count and own slot re-checked, own preimage compared with
@@ -33,10 +34,11 @@
 ; box, the save, SRAM or OT slot 0: the only CPU writes are the lease bytes, the stack, OT slot 1 (the
 ; snapshot) and what the native UI routines (OpenText/PrintText/YesNoBox/CloseText/GetNickname) touch.
 ;
-; NOT in this build (deliberately; they touch party/save and belong to the commit-enabled card): the
-; consent-time FixPlayerEVsAndStats normalization and the user-confirmed Link_SaveGame of
-; TRADE_COMMIT_RESPONDER.md 4(2)-(3), the commit call and the result-0/2 no-escape holds. Because this build
-; has no commit, the consent snapshot is NOT post-normalization and must be re-taken by the commit card.
+; Compiled OUT by default (SLINK_TRADE_COMMIT_ENABLE = 0, witness SlinkTradeCommitEnabled at 7e:573B; the
+; IF blocks below): the consent-time save prompt, FixPlayerEVsAndStats normalization and user-confirmed
+; Link_SaveGame of TRADE_COMMIT_RESPONDER.md 4(2)-(3), and the `jp SlinkTradeApplyCommit` into
+; trade_commit.asm. In the default build the APPLY ends in DONE result 1 and the consent snapshot is NOT
+; post-normalization; enabling the commit assembles the normalization before the snapshot.
 
 ASSERT SLINK_SERVICE_BANK == $7E ; fixed, like the other trade sections
 ASSERT SLINK_TRADE_CONTEXT_SIZE == 10 ; the proposer's context layout (token, slot, role, gen, result, count, flags)
@@ -119,6 +121,12 @@ ENDC
 	ld hl, sp + 4
 	ld a, [hl]
 	call SlinkTradeSnapshot ; only after every native menu has returned
+	jp c, SlinkTradeResponderExit
+	; Late-consent recheck: the held-frame check above ran before the snapshot; a binder that cancelled the
+	; visit since then has zeroed (or replaced) the token, and SlinkTradePublishDone would republish this
+	; visit's private token. A refused token takes the exit: snapshot released, lease closed, NO DONE.
+	ld hl, sp + 0
+	call SlinkTradeCheckToken
 	jp c, SlinkTradeResponderExit
 	ld hl, sp + 9
 	set SLINK_RESP_FLAG_RELEASE_OWED, [hl]

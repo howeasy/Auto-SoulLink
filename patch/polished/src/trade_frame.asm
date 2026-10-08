@@ -1,6 +1,7 @@
 ; SLink companion overlay -- Polished Crystal trade slice 1: bounded lease-frame primitives (port of
 ; patch/gen2/src/trade_frame.asm, behaviour byte-for-byte). Framing matches lua/gb_trade_lease.lua.
-; No publication, native UI, payload staging, or party mutation occurs here, and nothing calls it yet.
+; No publication, native UI, payload staging, or party mutation occurs here. Callers: the responder
+; dispatcher, the held proposer and responder services and the (disabled) commit.
 ; The shared ABI is already INCLUDEd by slink.asm.
 
 DEF SLINK_TRADE_OFS_MAGIC EQU 0
