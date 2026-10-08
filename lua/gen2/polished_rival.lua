@@ -23,7 +23,7 @@
 --   * the CPU at 0f:47DD: hROMBank == 0x0F AND the PC register == 0x47DD (io.register("PC")). UNVERIFIED live that
 --     BizHawk's PC register reads the instruction's own address inside an exec callback; until then every write attempted
 --     at a frame end (client.lua rival_tick) is refused here, which is the safe direction
---   * the class of the trainer being fought is in the rival set; a supplied ctx.trainer_id still names it (stale battle)
+--   * the class of the trainer being fought is in the rival set; hBattleTurn is enemy (1), and required ctx.trainer_id names it (stale battle)
 --   * ctx.cur_ot_mon is what wCurOTMon AND wCurPartyMon read (committed at 0f:47cc), inside the NEW party, and that mon
 --     has HP (the engine copies it next, §10); count 1..6; every record complete, a known species, not an egg, level
 --     1..MAX_LEVEL
@@ -137,9 +137,11 @@ function R.new(deps)
         assert(bank == site.bank and pc == site.pc, string.format(
             "not at the SendInUserPkmn rival gate %02X:%04X (hROMBank $%02X, PC %s)", site.bank, site.pc, bank,
             type(pc) == "number" and string.format("$%04X", pc) or tostring(pc)))
+        assert(io.read_u8(profile.hram.hBattleTurn, "System Bus") == 1, "not an enemy send-in")
         local class, id = ram("wOtherTrainerClass"), ram("wOtherTrainerID")
         assert(classes[class] == true, string.format("trainer class $%02X is not a configured rival class", class))
-        assert(ctx.trainer_id == nil or ctx.trainer_id == class * 256 + id, "stale battle: the trainer being fought differs")
+        assert(ctx.trainer_id ~= nil, "bound trainer identity required")
+        assert(ctx.trainer_id == class * 256 + id, "stale battle: the trainer being fought differs")
         local count = Permit.sequence_length(mons, "enemy party")
         assert(count >= 1 and count <= P, "enemy party count must be 1.." .. P)
         local cur = ctx.cur_ot_mon
@@ -245,7 +247,7 @@ function R.new(deps)
         gate:disarm()
         return facade:disarm()
     end
-    -- mons = list of {record = 48, ot = 11, nick = 11}; ctx = {link_mode, cur_ot_mon, trainer_id (optional)}
+    -- mons = list of {record = 48, ot = 11, nick = 11}; ctx = {link_mode, cur_ot_mon, trainer_id (required)}
     function proxy:write_enemy_party(mons, ctx)
         return gate:guard(function()
             local p = plan(mons, ctx)

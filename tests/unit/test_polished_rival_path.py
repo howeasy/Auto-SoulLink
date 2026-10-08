@@ -155,6 +155,7 @@ def ready(count_in_ram=0, *, classes=(RIVAL_CLASS,), cur=0, pc_=RIVAL_PC, overri
         for label in ("wLinkMode", "wGameLogicPaused"):
             rig.put(label, 0)
     enter_battle(rig, mons, mode=mode)
+    rig.put("hBattleTurn", 1)  # native enemy send-in; unrelated tests keep a valid bound context
     rig.put("wOtherTrainerClass", RIVAL_CLASS)
     rig.put("wOtherTrainerID", RIVAL_ID)
     rig.put("wCurOTMon", cur)
@@ -169,7 +170,8 @@ def swap(rig, mons=None, *, cur=0, arm=True, link=0, **ctx):
     writes = rig.rival.writes
     ok, why = (lcall(rig, writes.arm, writes, "rival_swap") if arm else (True, None))
     if ok:
-        table = rig.lua.table_from({"link_mode": link, "cur_ot_mon": cur, **ctx})
+        table = rig.lua.table_from({"link_mode": link, "cur_ot_mon": cur,
+                                    "trainer_id": RIVAL_CLASS * 256 + RIVAL_ID, **ctx})
         ok, why = lcall(rig, writes.write_enemy_party, writes, to_lua(rig.lua, mons), table)
     writes.disarm(writes)
     return ok, why
@@ -364,7 +366,7 @@ def client_swap(rig):
 
 def test_the_client_poll_cannot_land_the_swap_even_with_a_class_set_and_the_pc_forged():
     """rival_tick polls at a frame end while wCurOTMon == 0xFF: the PC is not 0f:47DD there, and with the PC forged
-    the index 0xFF is outside the new party. Either way: refused, nothing written."""
+    the legacy poll omits the newly required bound trainer identity. Either way: refused, nothing written."""
     rig = ready(pc_=0, fresh=True)
     rig.fill_enemy()
     before = rig.block()
@@ -374,7 +376,7 @@ def test_the_client_poll_cannot_land_the_swap_even_with_a_class_set_and_the_pc_f
     rig = ready(pc_=RIVAL_PC, fresh=True)
     before = rig.block()
     errors = client_swap(rig)
-    assert len(errors) == 1 and "outside the new party" in errors[0] and rig.block() == before
+    assert len(errors) == 1 and "bound trainer identity required" in errors[0] and rig.block() == before
 
 
 def test_the_default_composition_carries_the_blob_constants_and_an_empty_rival_set():
@@ -524,9 +526,9 @@ def test_a_refused_write_leaves_the_permit_disarmed_without_the_helpers_disarm()
     writes = rig.rival.writes
     rig.drop(MONS + 5)
     assert lcall(rig, writes.arm, writes, "rival_swap")[0] is True
-    table = rig.lua.table_from({"link_mode": 0, "cur_ot_mon": 0})
+    table = rig.lua.table_from({"link_mode": 0, "cur_ot_mon": 0, "trainer_id": TID})
     ok, why = lcall(rig, writes.write_enemy_party, writes, to_lua(rig.lua, py_party(2)), table)
-    assert ok is False
+    assert ok is False and "read-back mismatch" in why
     assert writes.armed is None, "the writer left its permit armed after a refusal"
     writes.disarm(writes)
 
@@ -539,3 +541,63 @@ def test_mutant_5_an_ignored_rollback_result_hides_a_torn_party():
     ok, why = swap(rig, py_party(2))
     assert ok is False and "TORN ENEMY PARTY" not in why, "the rollback verification is not load-bearing"
 
+
+
+@pytest.mark.parametrize("case,reason", [
+    ("player", "not an enemy send-in"),
+    ("wild", "not a trainer battle"),
+    ("missing", "bound trainer identity required"),
+    ("stale", "stale battle"),
+], ids=["player-side", "wild-at-gate", "missing-id", "stale-id"])
+def test_operation_predicate_refuses_without_any_write(case, reason):
+    rig = ready()
+    ctx = {}
+    if case == "player":
+        rig.put("hBattleTurn", 0)
+    elif case == "wild":
+        rig.put("wBattleMode", 1)
+    elif case == "missing":
+        ctx["trainer_id"] = None  # omitted by lupa, explicitly overriding the valid helper default
+    else:
+        ctx["trainer_id"] = TID + 1
+    refused(rig, reason, **ctx)
+
+
+def test_enemy_send_in_accepts_a_configured_nonfixture_rival_identity():
+    rig = ready(classes=(0x1E,))
+    rig.put("wOtherTrainerClass", 0x1E)
+    rig.put("wOtherTrainerID", 7)
+    ok, why = swap(rig, trainer_id=0x1E07)
+    assert ok is True, why
+    assert rig.mem[COUNT] == 2 and len(rig.writes()) == 141
+
+
+def test_enemy_side_address_is_the_existing_generated_symbol():
+    rig = ready()
+    assert rig.parts.profile.hram.hBattleTurn == SYM["hBattleTurn"][1] == 0xFFD1
+
+
+@pytest.mark.parametrize("guard", ["side", "identity"], ids=["drop-side", "optional-id"])
+def test_operation_predicate_source_mutants_turn_refusal_red(guard):
+    if guard == "side":
+        anchor = 'assert(io.read_u8(profile.hram.hBattleTurn, "System Bus") == 1, "not an enemy send-in")'
+        replacement = 'assert(true, "not an enemy send-in")'
+        reason, ctx = "not an enemy send-in", {}
+    else:
+        anchor = ('assert(ctx.trainer_id ~= nil, "bound trainer identity required")\n'
+                  '        assert(ctx.trainer_id == class * 256 + id, "stale battle: the trainer being fought differs")')
+        replacement = 'assert(ctx.trainer_id == nil or ctx.trainer_id == class * 256 + id, "stale battle: the trainer being fought differs")'
+        reason, ctx = "bound trainer identity required", {"trainer_id": None}
+    assert RIVAL.count(anchor) == 1
+    rig = ready(overrides=mutant(RIVAL.replace(anchor, replacement)))
+    if guard == "side":
+        rig.put("hBattleTurn", 0)
+    with pytest.raises(AssertionError):
+        refused(rig, reason, **ctx)
+    assert rig.mem[COUNT] == 2 and len(rig.writes()) == 141  # wrong acceptance, not an unrelated error
+
+
+def test_rival_module_compiles_in_lua55():
+    from lupa.lua55 import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    assert lua.eval("function(s) return assert(load(s)) ~= nil end")(RIVAL)

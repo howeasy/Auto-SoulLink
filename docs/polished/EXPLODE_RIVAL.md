@@ -575,6 +575,36 @@ stale trainer or `wCurOTMon`/`wCurPartyMon`, a battle that is not `TRAINER_BATTL
 `0f:47DD` (`hROMBank == 0x0F` and `io.register("PC") == 0x47DD`), count 0 or above 6, an index outside the new party or a
 mon with no HP being sent out, an unknown species, an egg, a level outside 1..100, an incomplete record/OT/nickname.
 
+**Production gate amendment (2026-10-08, g2p-rival-prod):** the writer now also
+requires `io.read_u8(profile.hram.hBattleTurn, "System Bus") == 1` and a non-nil
+`ctx.trainer_id` equal to the current `class * 256 + id`, before constructing the
+write plan (`lua/gen2/polished_rival.lua:140-145`). The existing generated HRAM
+field supplies `$FFD1` (`data/games/polished_crystal/profile.json:400`, generated
+from `hBattleTurn`); no generator/profile change and no literal address fallback.
+The class set remains caller-configurable; fixture class `$1B`/ID3 is not policy.
+Player side, wild mode at the exact site, missing identity and stale identity
+all refuse with zero writes; a configured `$1E`/ID7 enemy send-in is accepted by
+the model. Source-copy mutants removing side and restoring optional identity
+make the refusal assertion red through actual 141-byte wrong acceptance.
+
+The probe-level LIVE result is separate (`RIVAL_STAGING.md`, operation-predicate
+card): wild enemy initialization reaches this site too (`core.asm:8079-8086`),
+so bank/PC alone is insufficient. This amendment ran no emulator and does not
+prove swap consumption. `signals.lua` needs no change for the writer's fail-closed
+safety: it dispatches the window, and this writer plans before any write. A later
+signal-level filter could avoid non-rival dispatch, but must use the same live
+side/mode/class/bound identity and may not replace these writer checks. Client,
+entry, overworld and signal composition are unchanged. The existing legacy poll
+(`client.lua:2630`) does not pass trainer_id: it now refuses explicitly even if
+its PC is forged. The future caller must propagate the identity bound to the
+pending command, not derive a fresh identity from current RAM. Gen 2 CODE_DIGEST is
+staled by the production Lua edit and must be refreshed at the coordinated cut.
+
+Verification on this card: rival-path **42 passed**, explode-path **44 passed**,
+release-manifest **3 passed** (combined 89, no skips), including both in-process
+guard mutants and a Lua 5.5 compile-only check; Ruff and diff checks clean.
+The player-side and missing-ID cases failed red-first before the two assertions.
+
 **Source-tested (model only):** the exact bytes and write order, the narrowed ranges, every refusal above with zero
 writes, the read-back and restore, and eight mutant tests of the real module, each shown red (count first, a count
 write reaching `D284`, no PC gate, no array read-back, no count read-back, widened ranges, a drifted write that only the
