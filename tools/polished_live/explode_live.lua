@@ -21,6 +21,7 @@ function M.run()
     local trace,write_log,ids={}, {}, {}
     local parts,c,target,queued,recorded,finished
     local errors,cap,last_write=0,2048,0
+    local copy_seen=false
     local function add(kind,fields)
         assert(#trace<cap,"trace capacity exhausted")
         local e={kind=kind,ord=#trace+1,frame=emu.framecount()}
@@ -105,10 +106,12 @@ function M.run()
         write_u8=function(a,v,d) write_log[#write_log+1]={addr=a,value=v,domain=d or "System Bus"} return memory.write_u8(a,v,d or "System Bus") end,
         bank_valid=function(b,a,n) return M.bank_valid(b,a,n,memory.read_u8,K.symbols.hROMBank[2]) end,
         stack_valid=function(sp,n) return sp>=0xc000 and sp+n<0xd000 end,
-        domain_size=memory.getmemorydomainsize,domains=memory.getmemorydomainlist,
-        register=emu.getregister,framecount=emu.framecount,
+        -- BizHawk API members are userdata, not Lua functions; the client asserts type()=="function".
+        domain_size=function(d) return memory.getmemorydomainsize(d) end,
+        domains=function() return memory.getmemorydomainlist() end,
+        register=function(r) return emu.getregister(r) end,framecount=function() return emu.framecount() end,
         on_bus_exec=function(fn,a,name,d) return event.on_bus_exec(fn,a,name,d or "System Bus") end,
-        unregister=event.unregisterbyid}
+        unregister=function(id) return event.unregisterbyid(id) end}
     add("begin",{provenance=config.provenance,disclosure=config.disclosure,case=config.case})
     local function finish(ok,why)
         if finished then return end
@@ -157,6 +160,7 @@ function M.run()
                             s.key=mon.key
                             local bytes={};for i=0,#site.bytes/2-1 do bytes[#bytes+1]=memory.read_u8(site.rom_offset+i,"ROM") end
                             s.bytes=L.hex(bytes);add("native",s)
+                            if name=="copy_return" then copy_seen=true end
                         end
                     end)
                     if not good then errors=errors+1;add("driver_error",{reason=tostring(err)}) end
@@ -188,8 +192,25 @@ function M.run()
             for _=1,step.frames do L.frame(buttons) end
         end
         local after=0
-        while after<3600 and not (target and c.dead_keys[target.key] and recorded) do L.pulse("A");after=after+1 end
+        local walked=0
+        while after<3600 and not (target and c.dead_keys[target.key] and recorded) do
+            if not queued and mapped() and read("wBattleMode")==0 then
+                -- Random encounters are not frame-deterministic across runs: the fixed route's 4 grass holds may
+                -- end without a wild battle. Keep the route's own Left/Right grass walk (row 12) until one starts.
+                L.frame({[math.floor(walked/56)%2==0 and "Left" or "Right"]=true});walked=walked+1
+            else L.pulse("A") end
+            after=after+1
+        end
+        if walked>0 then add("route_tail",{frames=walked,walk=true}) end
         assert(target and recorded and c.dead_keys[target.key],"command/write/settlement incomplete")
+        -- Settlement can precede the native ResolveFaints copyback (an Explosion route ends mid-battle);
+        -- keep the same native A pulses going until copy_return fires or the battle ends, bounded.
+        if config.case~="bench-faint" then
+            local extra=0
+            while extra<2400 and not copy_seen and (not mapped() or read("wBattleMode")~=0) do L.pulse("A");extra=extra+1 end
+            add("route_tail",{frames=extra,copy_seen=copy_seen,mode=mapped() and read("wBattleMode") or -1})
+        end
+        pcall(function() client.screenshot(L.RUN.."/final.png") end)
         L.idle(90) -- retain duplicate/quiet re-zero evidence; qualification demands one KO
         assert(errors==0,"callback failure")
     end)
