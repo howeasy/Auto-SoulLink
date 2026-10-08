@@ -5,7 +5,7 @@
     python tools/polished_live/duo.py --fixture-a A.SaveRAM --fixture-b B.SaveRAM --distinct-identities
 
 Two EmuHawk (players a and b) boot the integrated overlay (patch/dist/SLink-Polished.ups on the pinned release,
-sha1 97628616...) under private dirs F:/slink-work/lanes/pol-duo/run/{a,b}/ (own ROM copy, SaveRAM copy, config,
+sha1 97628616... was integrated at that time; the executable pin is INTEGRATED_SHA1 below) under private dirs F:/slink-work/lanes/pol-duo/run/{a,b}/ (own ROM copy, SaveRAM copy, config,
 result, log) and talk to ONE real SLink server whose rom_contract.json pins BOTH players to the overlay sha1.
 Evidence is read from the SERVER (the wire transcript `--wire-log`, /api/status, /api/debug/raw_state, slink.log);
 the Lua driver (duo.lua) only supplies the client's own hello line and a zero-write tap. Then b's own EmuHawk PID is

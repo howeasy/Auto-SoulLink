@@ -1,5 +1,7 @@
 # C5 commit and C6 responder: proposed ROM contracts
 
+**Status update 2026-10-08:** C6 landed (overlay `57f039b6` then, including its responder fix); C5 landed (merge `7f56228b5`, overlay `877a477a`, `SlinkTradeCommitEnabled` at `7e:573B` = **0**, not enabled). See `TRADE.md:1417-1429` and `overlay_provenance.json:63`; no live qualification or commit enablement is claimed. The introduction below describes its historical design cut.
+
 Design only. Source cut: `b082abbe69162d02617dd8e58974629ee0faac5b`; overlay v8 SHA1
 `add6c9440d3485839996525052cf34d5d04963d1`. No commit, responder, production capability,
 server protocol change or live run is authorized by this document. The existing proposer

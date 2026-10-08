@@ -26,7 +26,7 @@ attraction, **disobedience** (the move script begins with an obedience check) an
 end the turn before the self-KO. Stale cache: `ParsePlayerAction` refreshes move data BEFORE the hold, `CheckTurn`/`VerifyChosenMove` read the cached
 original move (Sleep Talk and thaw exceptions, Disable) before `DoTurn` refreshes it, so "sleep always blocks" and "Disable always blocks" are both too simple.
 
-## Recommended bounded contract (needs your ruling)
+## DECIDED 2026-10-06: bounded contract (parity + plain-faint writer)
 **Explosion for an eligible active selected-move action; a guaranteed plain faint for every other case and for a failed attempt.** That matches the existing
 server semantics and is far smaller than forcing every bench or committed death to animate. It needs, in order: (a) execution settlement (observe the actual
 move or the HP 0 and clear the KO claim when the mon survives); (b) a Polished active-faint transaction (suppress the action, settle a pending switch, keep the
@@ -58,4 +58,4 @@ Everything else below is the peer's reading and is OPEN until its own oracle car
   (source pin first). Live matrix: free action, opponent first, Damp / locked / status-blocked then fallback, item already used, queued switch, bench before/after selection,
   Transform incl. same species, last mon wild/trainer, simultaneous enemy faint, readback failure. Needs a granted played fixture (Route 29 save); no SYNTH trainer/story staging implied.
 * Ordering limit: this does not guarantee death before an enemy priority move; that needs a separate pre-action native faint-resolution seam.
-Owner decision still open: explode scope (this bounded contract vs universal visible Explosion).
+Owner decision: **DECIDED 2026-10-06 — parity with the other generations plus the plain-faint writer**, not universal visible Explosion (relayed by coordinator card `g2p-decisions`; no owner-signed tree receipt; see `RC_TRACKER.md` "Owner decisions"). This settles scope, not implementation or live qualification.
