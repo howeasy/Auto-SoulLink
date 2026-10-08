@@ -20,6 +20,19 @@ and both identities unchanged across b's reconnect. The second save is a SYNTH i
 not independently played. Identity is read from the wire hello (ot_id, trainer_name, party) and /api/status
 (players.<p>.trainer_name, .party_keys, .identity_error).
 Only PIDs this script starts are ever killed (taskkill /T /F /PID); never an image-name kill.
+
+PLAY (`--scenario link|boxsync|faint|whiteout|all`, card g2p-duoplay): instead of the smoke, each scenario is its own
+fresh run (lane play-<name>/) driven by duo_play.lua through numbered step files, and judged by a server-side oracle
+(oracle_link / oracle_boxsync / oracle_faint / oracle_whiteout) that FAILS when the rule did not fire:
+  S1 link      both sides catch natively on Route 29 -> /api/status holds an ALIVE link of exactly those two keys.
+  S3 boxsync   reads gen2_polished supports_box_mon(): False -> SKIPPED (never PASS) without launching; True -> A's
+               first catch is quarantined (box_mon, executed + read back on A), then party_mon brings it back.
+  S2 faint     after S1: SYNTH HP 0 on A's linked mon + a dropped TCP session -> the server's hello reconcile kills the
+               link -> force_faint on B's wire -> B's own client writes it -> B's cartridge reads HP 0, nothing else.
+  S4 whiteout  after S1: SYNTH HP 0 on A's whole party, same path, every linked partner (and only those) dies on B.
+Production Polished has no faint observer or whiteout site (lua/gen2/entry.lua compose_polished), so the oracles
+report which server path carried the HP 0 (hello_reconcile / faint_event / whiteout_event). Evidence + disclosure:
+<lane>/play-<name>/evidence.json; one `RESULT: PASS|FAIL|SKIPPED polished-duo-play-<name>` line per scenario.
 """
 from __future__ import annotations
 
@@ -331,6 +344,302 @@ def evaluate_distinct(sides: dict, staged_sha1: str, expected: dict) -> tuple[bo
     return not reasons, reasons
 
 
+# ═══════════════════════ PLAY scenarios (`--scenario NAME|all`): the Soul Link rules firing ═══════════════════════
+# Each scenario is its own run (fresh lane, fresh server state) driven by duo_play.lua. Every oracle below reads
+# SERVER evidence (wire transcript, /api/status, slink.log) plus the CARTRIDGE read-backs the Lua side took from
+# WRAM/CartRAM, and each has a red control in tests/unit/test_polished_duo_driver.py: it FAILS on a transcript where
+# the rule did not fire. Verdicts are PASS, FAIL or SKIPPED (S3 only, when the adapter capability is off): never a
+# PASS for a rule the run did not observe.
+PLAY_ORDER = ("link", "boxsync", "faint", "whiteout")
+PLAY_SCENARIOS = {
+    "link": "S1 encounter linking: both players catch in one area -> the server pairs the two keys",
+    "boxsync": "S3 party sync / quarantine: box_mon on the first catch executed on that cartridge, party_mon back",
+    "faint": "S2 faint propagation: A's linked mon at HP 0 -> force_faint to B -> B's partner reads HP 0 on B",
+    "whiteout": "S4 whiteout: A's whole party at HP 0 -> every linked partner force-fainted on B, nothing else",
+}
+SYNTH_SETUP = {
+    "link": [],
+    "boxsync": [],
+    "faint": ["A: current HP of the ONE linked party record poked to 0 (2 WRAM bytes, the untapped writer)",
+              "A: TCP session dropped (connector.disconnect) so the client's own reconnect re-sends hello"],
+    "whiteout": ["A: current HP of EVERY party record poked to 0 (2 WRAM bytes each, the untapped writer)",
+                 "A: TCP session dropped (connector.disconnect) so the client's own reconnect re-sends hello"],
+}
+# Production Polished (lua/gen2/entry.lua compose_polished) registers ONE engine site, capture_party: the battle
+# faint observer is opt-in (deps.polished_faint_observer, never set by lua/gen2/run.lua) and there is no whiteout
+# site. So A's HP-0 reaches the server through the hello reconcile (server/state.py _handle_hello, "hp == 0 ->
+# fainted while we were disconnected" -> _propagate_faint), and the oracles name which server path fired.
+BOX_CAPABILITY_OFF = ("adapter gen2_polished supports_box_mon() is False: the server skips quarantine ('client has no "
+                      "box executor') and sends no box_mon/party_mon, so S3 cannot be observed")
+
+
+def play_names(arg: str) -> list[str]:
+    """`--scenario all` = every play scenario in PLAY_ORDER; else one known name (ValueError otherwise)."""
+    if arg == "all":
+        return list(PLAY_ORDER)
+    if arg not in PLAY_SCENARIOS:
+        raise ValueError(f"unknown scenario {arg!r}: choose from {', '.join(PLAY_ORDER)} or all")
+    return [arg]
+
+
+def _as_list(v) -> list:
+    return list(v) if isinstance(v, list) else []   # Lua encodes an empty array as {}
+
+
+def wire_slice(records: list, since: int = 0) -> list:
+    """(index, dir, msg) for records[since:], objects only."""
+    out = []
+    for i, rec in enumerate(records or []):
+        if i < since or not isinstance(rec, dict) or not isinstance(rec.get("msg"), dict):
+            continue
+        out.append((i, rec.get("dir"), rec["msg"]))
+    return out
+
+
+def c2s_events(records: list, event: str, since: int = 0) -> list[dict]:
+    return [m for _, d, m in wire_slice(records, since) if d == "c2s" and m.get("event") == event]
+
+
+def s2c_commands(records: list, since: int = 0) -> list[dict]:
+    out = []
+    for _, d, m in wire_slice(records, since):
+        if d == "s2c":
+            out += [c for c in _as_list(m.get("commands")) if isinstance(c, dict)]
+    return out
+
+
+def _step(ev: dict, role: str, label: str) -> dict:
+    return ((ev.get("steps") or {}).get(role) or {}).get(label) or {}
+
+
+def _snap(step: dict) -> dict:
+    return step.get("snapshot") or {}
+
+
+def _party(snap: dict) -> dict:
+    """{key: {slot, hp, max_hp, status, species}} from a cartridge snapshot."""
+    return {m["key"]: m for m in _as_list(snap.get("party")) if isinstance(m, dict) and m.get("key")}
+
+
+def _box_keys(snap: dict) -> set:
+    return {m.get("key") for m in _as_list(snap.get("box")) if isinstance(m, dict) and m.get("key")}
+
+
+def _caught_key(ev: dict, role: str) -> str | None:
+    cap = _step(ev, role, f"catch_{role}").get("capture") or {}
+    return cap.get("key") or None
+
+
+def _link_reasons(ev: dict) -> tuple[list[str], dict]:
+    """S1. Both catches native (capture site fired, the client's own capture line), on the SERVER wire, in ONE area,
+    then /api/status `linked` holds an ALIVE link of exactly those two keys in that area, which is not dead-zoned."""
+    reasons, facts = [], {}
+    caps = {}
+    for role in ("a", "b"):
+        st = _step(ev, role, f"catch_{role}")
+        if not st.get("ok"):
+            reasons.append(f"{role}:catch_failed")
+            continue
+        if (st.get("capture_site_hits") or 0) < 1:
+            reasons.append(f"{role}:capture_site_not_fired")
+        key = _caught_key(ev, role)
+        wire = [m for m in c2s_events(ev["wire"].get(role, []), "capture") if m.get("key") == key]
+        if not key or not wire:
+            reasons.append(f"{role}:capture_not_on_wire")
+            continue
+        caps[role] = wire[0]
+        snap = _snap(st)
+        if key not in _party(snap) and key not in _box_keys(snap):
+            reasons.append(f"{role}:caught_mon_not_on_cartridge")
+    if len(caps) < 2:
+        return reasons, facts
+    area = caps["a"].get("area_id") or ""
+    facts.update(area_id=area, a_key=caps["a"]["key"], b_key=caps["b"]["key"])
+    if not area or area != (caps["b"].get("area_id") or ""):
+        reasons.append("capture_areas_differ")
+    for role in ("a", "b"):
+        if any(m.get("area_id") == area for m in c2s_events(ev["wire"].get(role, []), "no_catch")):
+            reasons.append(f"{role}:no_catch_sent")
+    status = (ev.get("status") or {}).get("linked") or {}
+    links = [lk for lk in _as_list(status.get("links")) if isinstance(lk, dict) and lk.get("area_id") == area]
+    exact = [lk for lk in links if lk.get("a_key") == facts["a_key"] and lk.get("b_key") == facts["b_key"]]
+    if not links:
+        reasons.append("link_missing")
+    elif not exact:
+        reasons.append("link_keys_mismatch")
+    elif exact[0].get("status") != "alive":
+        reasons.append("link_not_alive")
+    if (status.get("area_states") or {}).get(area) == "dead":
+        reasons.append("area_dead_zoned")
+    return reasons, facts
+
+
+def oracle_link(ev: dict) -> tuple[str, list[str], dict]:
+    reasons, facts = _link_reasons(ev)
+    return ("PASS" if not reasons else "FAIL"), reasons, facts
+
+
+def _propagation_reasons(ev: dict, whole_party: bool) -> tuple[list[str], dict]:
+    """S2 / S4. After the stage mark: A's HP-0 reached the server (hello reconcile or a faint/whiteout event), B's
+    wire carries force_faint for exactly the expected partner keys, B's CLIENT received it, and B's CARTRIDGE reads
+    HP 0 on each partner while every other B party mon is untouched; /api/status `after` has those links not alive."""
+    reasons, facts = _link_reasons(ev)
+    reasons = [f"link:{r}" for r in reasons]
+    if "a_key" not in facts:
+        return reasons, facts
+    stage = _step(ev, "a", "stage")
+    pre_a = _party(stage.get("before") or {})
+    if not stage.get("ok"):
+        reasons.append("a:stage_failed")
+    targets = {w.get("key") for w in _as_list(stage.get("synth_writes")) if isinstance(w, dict)}
+    want_targets = set(pre_a) if whole_party else {facts["a_key"]}
+    if targets != want_targets:
+        reasons.append("a:stage_wrong_target")
+    post_a = _party(_snap(stage))
+    if not want_targets or any((post_a.get(k) or {}).get("hp", 1) != 0 for k in want_targets):
+        reasons.append("a:stage_not_landed")
+    mark = (ev.get("marks") or {}).get("stage") or {}
+    wa, wb = ev["wire"].get("a", []), ev["wire"].get("b", [])
+    zero_hello = [h for h in c2s_events(wa, "hello", mark.get("a", 0))
+                  if any(isinstance(e, dict) and e.get("key") == facts["a_key"] and e.get("hp") == 0
+                         for e in _as_list(h.get("party")))]
+    faint_ev = [m for m in c2s_events(wa, "faint", mark.get("a", 0)) if m.get("key") in want_targets]
+    whiteout_ev = c2s_events(wa, "whiteout", mark.get("a", 0))
+    facts["server_path"] = ("whiteout_event" if whiteout_ev else "faint_event" if faint_ev
+                            else "hello_reconcile" if zero_hello else "none")
+    if facts["server_path"] == "none":
+        reasons.append("a:hp0_not_reported")
+    linked = (ev.get("status") or {}).get("linked") or {}
+    partners = {lk["b_key"]: lk["a_key"] for lk in _as_list(linked.get("links"))
+                if isinstance(lk, dict) and lk.get("status") == "alive" and lk.get("a_key") in want_targets
+                and lk.get("b_key")}
+    facts["expected_partners"] = sorted(partners)
+    if not partners:
+        reasons.append("no_linked_partner")
+    kills = [c for c in s2c_commands(wb, mark.get("b", 0)) if c.get("cmd") in ("force_faint", "force_explode")]
+    killed = {c.get("key") for c in kills}
+    facts["b_force_faint_keys"] = sorted(str(k) for k in killed)
+    for kb in sorted(partners):
+        if kb not in killed:
+            reasons.append(f"b:force_faint_missing:{kb}")
+    if killed - set(partners):
+        reasons.append("b:force_faint_wrong_key")
+    pre_b, await_b = _party(_snap(_step(ev, "b", "pre"))), _step(ev, "b", "await")
+    post_b = _party(_snap(await_b))
+    if not await_b.get("ok"):
+        reasons.append("b:force_faint_not_received_by_client")
+    for kb in sorted(partners):
+        if (pre_b.get(kb) or {}).get("hp", 0) <= 0:
+            reasons.append(f"b:partner_not_alive_before:{kb}")
+        if kb not in post_b:
+            reasons.append(f"b:partner_missing_from_party:{kb}")
+        elif post_b[kb].get("hp") != 0:
+            reasons.append(f"b:cartridge_hp_not_zero:{kb}")
+    for key, mon in pre_b.items():
+        if key not in partners and (post_b.get(key) or {}).get("hp") != mon.get("hp"):
+            reasons.append(f"b:collateral_hp_change:{key}")
+    after = (ev.get("status") or {}).get("after") or {}
+    for lk in _as_list(after.get("links")):
+        if isinstance(lk, dict) and lk.get("b_key") in partners and lk.get("status") == "alive":
+            reasons.append(f"link_still_alive:{lk.get('area_id')}")
+    return reasons, facts
+
+
+def oracle_faint(ev: dict) -> tuple[str, list[str], dict]:
+    reasons, facts = _propagation_reasons(ev, whole_party=False)
+    return ("PASS" if not reasons else "FAIL"), reasons, facts
+
+
+def oracle_whiteout(ev: dict) -> tuple[str, list[str], dict]:
+    reasons, facts = _propagation_reasons(ev, whole_party=True)
+    return ("PASS" if not reasons else "FAIL"), reasons, facts
+
+
+def oracle_boxsync(ev: dict) -> tuple[str, list[str], dict]:
+    """S3. Capability off -> SKIPPED (and FAIL if a box command was sent anyway). On: A's first catch is quarantined
+    (box_mon on A's wire, no box_mon_failed), A's cartridge shows it left the party and sits in the box census; after
+    the link the server's party_mon brings it back and A's cartridge shows it in the party, out of the box."""
+    wa, wb = (ev.get("wire") or {}).get("a", []), (ev.get("wire") or {}).get("b", [])
+    box_cmds = [c for c in s2c_commands(wa) + s2c_commands(wb) if c.get("cmd") in ("box_mon", "party_mon")]
+    if not ev.get("box_capable"):
+        if box_cmds:
+            return "FAIL", ["box_command_sent_while_capability_false"], {}
+        return "SKIPPED", [BOX_CAPABILITY_OFF], {}
+    reasons, facts = _link_reasons(ev)
+    reasons = [f"link:{r}" for r in reasons]
+    ka = _caught_key(ev, "a")
+    if not ka:
+        return "FAIL", reasons or ["a:catch_failed"], facts
+    if f"skip quarantine: {ka[:8]}" in (ev.get("log") or ""):
+        reasons.append("a:quarantine_skipped")
+    if not any(c.get("cmd") == "box_mon" and c.get("key") == ka for c in s2c_commands(wa)):
+        reasons.append("a:box_mon_missing")
+    if any(m.get("key") == ka for m in c2s_events(wa, "box_mon_failed")):
+        reasons.append("a:box_mon_failed")
+    caught, boxed = _snap(_step(ev, "a", "catch_a")), _step(ev, "a", "boxed")
+    if not boxed.get("ok"):
+        reasons.append("a:box_mon_not_received_by_client")
+    bsnap = _snap(boxed)
+    if ka in _party(bsnap):
+        reasons.append("a:box_mon_not_executed")
+    if ka not in _box_keys(bsnap):
+        reasons.append("a:boxed_mon_not_in_census")
+    # the catch snapshot races the deposit (box_mon may already have run): compare counts only when it predates it
+    if ka in _party(caught) and bsnap.get("party_count") != (caught.get("party_count") or 0) - 1:
+        reasons.append("a:party_count_not_decremented")
+    if not any(c.get("cmd") == "party_mon" and c.get("key") == ka for c in s2c_commands(wa)):
+        reasons.append("a:party_mon_missing")
+    back = _step(ev, "a", "withdrawn")
+    wsnap = _snap(back)
+    if not back.get("ok"):
+        reasons.append("a:party_mon_not_received_by_client")
+    if ka not in _party(wsnap):
+        reasons.append("a:party_mon_not_executed")
+    if ka in _box_keys(wsnap):
+        reasons.append("a:withdrawn_mon_still_in_box")
+    linked = ((ev.get("status") or {}).get("after") or {}).get("players", {}).get("a", {})
+    if ka not in _as_list(linked.get("party_keys")):
+        reasons.append("a:server_party_model_missing_key")
+    return ("PASS" if not reasons else "FAIL"), reasons, facts
+
+
+ORACLES = {"link": oracle_link, "boxsync": oracle_boxsync, "faint": oracle_faint, "whiteout": oracle_whiteout}
+
+
+def play_steps(name: str, box_capable: bool) -> list[tuple[str, str]]:
+    """The (role, label) sequence play_main drives for a scenario (the oracles read these labels)."""
+    steps = [("a", "catch_a")]
+    if box_capable:
+        steps.append(("a", "boxed"))
+    steps.append(("b", "catch_b"))
+    if box_capable:
+        steps.append(("a", "withdrawn"))
+    if name in ("faint", "whiteout"):
+        steps += [("b", "pre"), ("a", "stage"), ("b", "await")]
+    return steps
+
+
+def adapter_box_capability() -> bool:
+    """What the server will do: gen2_polished's own supports_box_mon() (impure: imports the adapter)."""
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from server.adapters import get_adapter
+    return bool(get_adapter("gen2_polished").supports_box_mon())
+
+
+def play_step_lines(text: str) -> dict:
+    """PLAY_STEP lines of one side's result file, by label (unlabelled steps by op#k)."""
+    out = {}
+    for line in text.splitlines():
+        if line.startswith("PLAY_STEP "):
+            try:
+                rec = json.loads(line[len("PLAY_STEP "):])
+            except ValueError:
+                continue
+            out[rec.get("label") or f"{rec.get('op')}#{rec.get('k')}"] = rec
+    return out
+
+
 # ── live runner ────────────────────────────────────────────────────────────────────────────────────
 def kill_pid(proc: subprocess.Popen, label: str) -> None:
     if proc.poll() is None:
@@ -371,6 +680,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--fixture-b", help="SaveRAM for side b (env POL_FIXTURE_B; default POL_FIXTURE, then the warp fixture)")
     ap.add_argument("--distinct-identities", action="store_true",
                     help="require two genuinely distinct trainers: refuse identical fixtures, check each side against ITS fixture")
+    ap.add_argument("--scenario", choices=(*PLAY_ORDER, "all"),
+                    help="run a Soul Link PLAY scenario (duo_play.lua) instead of the zero-write smoke: "
+                         + "; ".join(f"{k} = {v}" for k, v in PLAY_SCENARIOS.items()))
     return ap.parse_args(argv)
 
 
@@ -393,6 +705,8 @@ def plan_fixtures(args, env=None) -> tuple[dict, dict]:
 def main(argv=None) -> int:
     args = parse_args(argv)
     fixtures, ident = plan_fixtures(args)
+    if args.scenario:
+        return play_main(args, fixtures, ident)
     sys.path[:0] = [str(REPO / "tools"), str(REPO)]
     import harness  # sym_table, free_port (reused unchanged)
     from gen1_playthrough import BIZHAWK_CONFIG, EMUHAWK, write_run_config
@@ -554,6 +868,176 @@ def main(argv=None) -> int:
          "sides": sides, "notes": notes}, indent=1, default=str), encoding="utf-8")
     print(f"RESULT: {'PASS' if ok else 'FAIL'} polished-duo-smoke" + ("" if ok else f" -- {reasons}"), flush=True)
     return 0 if ok else 1
+
+
+# ── PLAY runner (`--scenario NAME|all`) ────────────────────────────────────────────────────────────
+def play_main(args, fixtures: dict, ident: dict) -> int:
+    """Run each selected scenario as its own fresh run; one RESULT line per scenario, rc 0 only if none FAILED."""
+    box_capable = adapter_box_capability()
+    verdicts = {}
+    for name in play_names(args.scenario):
+        if name == "boxsync" and not box_capable:
+            verdict, reasons, facts = oracle_boxsync({"box_capable": False, "wire": {}})
+            print(f"[play] {name}: not launched -- {reasons[0]}", flush=True)
+        else:
+            verdict, reasons, facts = play_run(args, name, fixtures, ident, box_capable)
+        verdicts[name] = verdict
+        tail = "" if verdict == "PASS" else f" -- {reasons}"
+        print(f"RESULT: {verdict} polished-duo-play-{name}{tail}", flush=True)
+    return 1 if any(v == "FAIL" for v in verdicts.values()) else 0
+
+
+def play_run(args, name: str, fixtures: dict, ident: dict, box_capable: bool) -> tuple[str, list[str], dict]:
+    sys.path[:0] = [str(REPO / "tools"), str(REPO)]
+    import harness
+    from gen1_playthrough import BIZHAWK_CONFIG, EMUHAWK, write_run_config
+
+    from patch.tools.make_ups import ups_apply
+
+    deadline = time.monotonic() + float(os.environ.get("POL_DUO_DEADLINE", "3600"))
+    rom = ups_apply(RELEASE.read_bytes(), UPS.read_bytes())
+    sha1 = hashlib.sha1(rom).hexdigest()
+    if sha1 != INTEGRATED_SHA1:
+        raise SystemExit(f"staged overlay sha1 {sha1} != integrated overlay {INTEGRATED_SHA1}")
+    run = LANE / f"play-{name}"
+    if run.exists():
+        shutil.rmtree(run)
+    srv_dir, wire_dir = run / "srv", run / "wire"
+    srv_dir.mkdir(parents=True)
+    (srv_dir / "rom_contract.json").write_text(json.dumps(contract_for(sha1)), encoding="utf-8")
+    syms = json.dumps(harness.sym_table())
+    paths = {r: side_paths(run, r) for r in ("a", "b")}
+    for r, p in paths.items():
+        if stage_side(p, rom, fixtures[r]) != ident[r]["sha256"]:
+            raise SystemExit(f"side {r}: private SaveRAM copy differs from its fixture {fixtures[r]}")
+        write_run_config(BIZHAWK_CONFIG, p["config"], saveram_dir=p["sram_dir"], purergb=True)
+        if max(len(p["saveram"]), len(p["result"])) >= 200:
+            raise SystemExit("lane path too long for BizHawk SaveRAM")
+        Path(p["run"]).mkdir(parents=True, exist_ok=True)
+        Path(p["run"], "syms.json").write_text(syms, encoding="utf-8")
+    print(f"[play] {name}: {PLAY_SCENARIOS[name]}; overlay sha1 {sha1}; box capability {box_capable}; lane {run}",
+          flush=True)
+    port, http = harness.free_port(), harness.free_port()
+    srv_log = open(run / "server.log", "w", encoding="utf-8")  # noqa: SIM115 - closed in finally
+    srv = subprocess.Popen([sys.executable, "-m", "server.server", "--host", "127.0.0.1", "--port", str(port),
+                            "--http-port", str(http), "--data-dir", str(srv_dir), "--verbose", "--wire-log", str(wire_dir)],
+                           cwd=str(REPO), stdout=srv_log, stderr=subprocess.STDOUT)
+    procs: dict[str, subprocess.Popen] = {}
+    ev: dict = {"scenario": name, "box_capable": box_capable, "steps": {"a": {}, "b": {}}, "wire": {"a": [], "b": []},
+                "marks": {}, "status": {}, "log": ""}
+    nstep = {"a": 0, "b": 0}
+    finished: set[str] = set()      # sides that ran their stop step: their exit is expected, not an early death
+
+    def result_text(role: str) -> str:
+        f = Path(paths[role]["result"])
+        return f.read_text(encoding="utf-8", errors="replace") if f.is_file() else ""
+
+    def wire(role: str) -> list:
+        return read_jsonl(wire_dir / f"wire_{role}.jsonl")
+
+    def wait(what: str, pred, timeout: float):
+        end = min(time.monotonic() + timeout, deadline)
+        while time.monotonic() < end:
+            got = pred()
+            if got:
+                return got
+            for role, pr in procs.items():
+                if pr.poll() is not None and role not in finished and what != "exit":
+                    raise RuntimeError(f"{what}: EmuHawk {role} pid {pr.pid} exited early rc={pr.returncode}")
+            time.sleep(1.0)
+        raise RuntimeError(f"timeout waiting for {what}")
+
+    def step(role: str, label: str, op: dict, timeout: float = 600) -> dict:
+        nstep[role] += 1
+        k = nstep[role]
+        Path(paths[role]["run"], f"step_{k}.json").write_text(json.dumps({**op, "label": label}), encoding="utf-8")
+        rec = wait(f"{role} step {k} {label}", lambda: play_step_lines(result_text(role)).get(label), timeout)
+        ev["steps"][role][label] = rec
+        print(f"[play] {role} {label}: ok={rec.get('ok')} why={rec.get('why')}", flush=True)
+        return rec
+
+    def snap_status(label: str) -> dict:
+        st = http_json(http, "/api/status")
+        keep = ("connected", "party_keys", "admission", "identity_error", "nuzlocke_active")
+        ev["status"][label] = {"links": st.get("links"), "area_states": st.get("area_states"),
+                               "pending_captures": st.get("pending_captures"),
+                               "players": {p: {k: st["players"][p].get(k) for k in keep} for p in ("a", "b")}}
+        return st
+
+    def mark(label: str) -> None:
+        ev["marks"][label] = {r: len(wire(r)) for r in ("a", "b")}
+
+    verdict, reasons, facts = "FAIL", ["driver_error"], {}
+    try:
+        wait("server http", lambda: bool(http_json(http, "/api/status")), 40)
+        for role in ("a", "b"):
+            env = dict(os.environ, **side_env(paths[role], role, "127.0.0.1", port))
+            lua = (REPO / "tools/polished_live/duo_play.lua").as_posix()
+            procs[role] = subprocess.Popen([EMUHAWK, f"--lua={lua}", f"--config={paths[role]['config']}",
+                                            paths[role]["rom"]], cwd=str(REPO), env=env)
+            print(f"[play] EmuHawk {role} pid {procs[role].pid} (server pid {srv.pid} tcp {port} http {http})", flush=True)
+        wait("both sides ready", lambda: "PLAY_READY" in result_text("a") and "PLAY_READY" in result_text("b"), 600)
+        mark("start")
+        snap_status("start")
+        a = step("a", "catch_a", {"op": "catch", "attempts": 4}, 1200)
+        ka = (a.get("capture") or {}).get("key")
+        if a.get("ok") and ka:
+            if box_capable:
+                step("a", "boxed", {"op": "await_cmd", "cmd": "box_mon", "key": ka, "frames": 3600}, 300)
+            b = step("b", "catch_b", {"op": "catch", "attempts": 4}, 1200)
+            kb = (b.get("capture") or {}).get("key")
+            if b.get("ok") and kb:
+                def linked():
+                    lk = http_json(http, "/api/status").get("links") or []
+                    return any(x.get("a_key") == ka and x.get("b_key") == kb for x in lk)
+                try:
+                    wait("link on the server", linked, 60)
+                except RuntimeError as exc:
+                    print(f"[play] {exc}", flush=True)
+                if box_capable:
+                    step("a", "withdrawn", {"op": "await_cmd", "cmd": "party_mon", "key": ka, "frames": 3600}, 300)
+                snap_status("linked")
+                if name in ("faint", "whiteout"):
+                    step("b", "pre", {"op": "snapshot"}, 120)
+                    mark("stage")
+                    op = {"op": "synth_hp0", "all": True} if name == "whiteout" else {"op": "synth_hp0", "keys": [ka]}
+                    step("a", "stage", op, 300)
+                    step("b", "await", {"op": "await_cmd", "cmd": "force_faint", "key": kb, "frames": 3600}, 300)
+                    time.sleep(3)
+            snap_status("after")
+        for role in ("a", "b"):
+            step(role, f"stop_{role}", {"op": "stop"}, 120)
+            finished.add(role)
+        wait("exit", lambda: all(pr.poll() is not None for pr in procs.values()), 90)
+    except Exception as exc:  # noqa: BLE001 - any harness failure is a FAIL with the reason, never a silent pass
+        reasons = [f"driver_error: {exc}"]
+        ev["driver_error"] = str(exc)
+    finally:
+        for role, pr in procs.items():
+            kill_pid(pr, f"EmuHawk {role}")
+        kill_pid(srv, "server")
+        srv_log.close()
+    ev["wire"] = {r: wire(r) for r in ("a", "b")}
+    log_path = srv_dir / "slink.log"
+    ev["log"] = log_path.read_text(encoding="utf-8", errors="replace") if log_path.is_file() else ""
+    if "driver_error" not in ev:
+        verdict, reasons, facts = ORACLES[name](ev)
+    finals = {r: client_line(Path(paths[r]["result"]), "PLAY_FINAL") for r in ("a", "b")}
+    b_fixture = (f"fixture b: SYNTH identity derivative {ident['b']['prefix']} (O-33, derive_save.py)"
+                 if args.distinct_identities else "fixture b: a copy of fixture a (one shared trainer identity)")
+    disclosure = {"setup_synth": ["fixture a: O-33 SYNTH warp fixture (Route 29, five SYNTH level-50 mons)", b_fixture]
+                  + SYNTH_SETUP[name],
+                  "native": ["wild catches (walk, Bag -> Ball, throw) firing the capture_party site",
+                             "the client's capture/hello lines", "every server rule and command",
+                             "the receiving client's own write at its overworld hold", "the cartridge read-backs"]}
+    for line in disclosure["setup_synth"]:
+        print(f"[play] SYNTH setup: {line}", flush=True)
+    print(f"[play] {name}: facts {facts}; client finals {finals}", flush=True)
+    (run / "evidence.json").write_text(json.dumps(
+        {"verdict": verdict, "reasons": reasons, "facts": facts, "disclosure": disclosure, "finals": finals,
+         "fixtures": {r: {"path": str(fixtures[r]), **ident[r]} for r in ("a", "b")}, "evidence": ev},
+        indent=1, default=str), encoding="utf-8")
+    return verdict, reasons, facts
 
 
 if __name__ == "__main__":

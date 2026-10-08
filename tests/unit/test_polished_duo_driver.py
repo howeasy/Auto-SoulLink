@@ -477,3 +477,265 @@ def test_red_control_without_the_per_side_check_only_the_cross_side_checks_remai
     sides = copy.deepcopy(dgood())
     _a_shows(sides, keys=FOREIGN_KEYS)                   # a booted a file that is nobody's fixture
     assert duo.evaluate_distinct(sides, SHA, EXP) == (True, [])        # ... which only the per-side check can see
+
+
+# ═══════════════════════════ PLAY scenarios (`--scenario`): per-scenario oracle + red controls ═══════════════════════
+# Each oracle passes on a fabricated CORRECT transcript (server wire + /api/status + the Lua side's cartridge read-backs)
+# and FAILS, with its own reason, on a transcript where the rule did not fire. The live run is the receipt.
+KA, KB = "AE7343:D1C2:010:00", "1B2C3D:D1C3:013:00"
+A_OWN, B_OWN = ["EFFFFF:D1C2:0A9:00", "DFFFFF:D1C2:087:00"], ["EFFFFF:D1C3:0A9:00", "DFFFFF:D1C3:087:00"]
+AREA = "route_29"
+
+
+def _rec(direction, msg, conn=1):
+    return {"dir": direction, "conn": conn, "msg": msg}
+
+
+def _snapshot(keys, hp=None, box=()):
+    hp = hp or {}
+    return {"party": [{"slot": i, "key": k, "hp": hp.get(k, 120), "max_hp": 120, "status": 0} for i, k in enumerate(keys)],
+            "party_count": len(keys), "box": [{"box": 0, "slot": i, "key": k} for i, k in enumerate(box)]}
+
+
+def _catch(key, own):
+    return {"ok": True, "op": "catch", "capture": {"key": key, "area_id": AREA, "species_id": 16, "level": 3},
+            "capture_site_hits": 1, "snapshot": _snapshot(own + [key])}
+
+
+def _link_status(state="alive"):
+    return {"links": [{"area_id": AREA, "a_key": KA, "b_key": KB, "status": state}], "area_states": {AREA: "linked"},
+            "players": {"a": {"party_keys": A_OWN + [KA]}, "b": {"party_keys": B_OWN + [KB]}}}
+
+
+def link_ev():
+    wa = [_rec("meta", {"event": "_connect"}), _rec("c2s", {"event": "hello", "party": []}),
+          _rec("c2s", {"event": "capture", "key": KA, "area_id": AREA}),
+          _rec("s2c", {"commands": [{"cmd": "hud_show"}, {"cmd": "noop"}]})]
+    wb = [_rec("meta", {"event": "_connect"}), _rec("c2s", {"event": "hello", "party": []}),
+          _rec("c2s", {"event": "capture", "key": KB, "area_id": AREA}),
+          _rec("s2c", {"commands": [{"cmd": "msgbox"}, {"cmd": "play_sound", "sound": 25}]})]
+    return {"scenario": "link", "box_capable": False, "wire": {"a": wa, "b": wb}, "marks": {}, "log": "",
+            "steps": {"a": {"catch_a": _catch(KA, A_OWN)}, "b": {"catch_b": _catch(KB, B_OWN)}},
+            "status": {"linked": _link_status(), "after": _link_status()}}
+
+
+def faint_ev(whole_party=False):
+    ev = link_ev()
+    ev["scenario"] = "whiteout" if whole_party else "faint"
+    ev["marks"]["stage"] = {"a": len(ev["wire"]["a"]), "b": len(ev["wire"]["b"])}
+    a_party = A_OWN + [KA]
+    zeroed = a_party if whole_party else [KA]
+    ev["wire"]["a"] += [_rec("meta", {"event": "_disconnect"}), _rec("meta", {"event": "_connect"}, 2),
+                        _rec("c2s", {"event": "hello", "party": [{"key": k, "hp": 0 if k in zeroed else 120}
+                                                                   for k in a_party]}, 2)]
+    ev["wire"]["b"] += [_rec("s2c", {"commands": [{"cmd": "force_faint", "key": KB, "nickname": "Pidgey"},
+                                                  {"cmd": "play_sound", "sound": 26}, {"cmd": "memorialize", "key": KB}]})]
+    ev["steps"]["a"]["stage"] = {"ok": True, "op": "synth_hp0", "before": _snapshot(a_party),
+                                 "synth_writes": [{"key": k, "slot": i, "wram": 7000 + i} for i, k in enumerate(zeroed)
+                                                  for _ in (0, 1)],
+                                 "snapshot": _snapshot(a_party, hp=dict.fromkeys(zeroed, 0))}
+    ev["steps"]["b"]["pre"] = {"ok": True, "op": "snapshot", "snapshot": _snapshot(B_OWN + [KB])}
+    ev["steps"]["b"]["await"] = {"ok": True, "op": "await_cmd", "received": {"cmd": "force_faint", "key": KB},
+                                 "snapshot": _snapshot(B_OWN + [KB], hp={KB: 0})}
+    ev["status"]["after"] = _link_status("dead")
+    return ev
+
+
+def box_ev():
+    ev = link_ev()
+    ev["scenario"], ev["box_capable"] = "boxsync", True
+    ev["wire"]["a"] += [_rec("s2c", {"commands": [{"cmd": "box_mon", "key": KA}]}),
+                        _rec("s2c", {"commands": [{"cmd": "party_mon", "key": KA}]})]
+    ev["steps"]["a"]["boxed"] = {"ok": True, "op": "await_cmd", "snapshot": _snapshot(A_OWN, box=[KA])}
+    ev["steps"]["a"]["withdrawn"] = {"ok": True, "op": "await_cmd", "snapshot": _snapshot(A_OWN + [KA])}
+    ev["log"] = f"[a] quarantine: {KA[:8]} → box (pending link)\n"
+    return ev
+
+
+def _wire_cmds(ev, role, fn):
+    for rec in ev["wire"][role]:
+        if rec["dir"] == "s2c":
+            rec["msg"]["commands"] = [c for c in rec["msg"]["commands"] if fn(c)]
+
+
+def test_play_oracles_pass_on_a_correct_transcript():
+    assert duo.oracle_link(link_ev())[:2] == ("PASS", [])
+    verdict, reasons, facts = duo.oracle_faint(faint_ev())
+    assert (verdict, reasons) == ("PASS", []) and facts["server_path"] == "hello_reconcile"
+    assert facts["expected_partners"] == [KB] and facts["b_force_faint_keys"] == [KB]
+    verdict, reasons, facts = duo.oracle_whiteout(faint_ev(whole_party=True))
+    assert (verdict, reasons) == ("PASS", []) and facts["expected_partners"] == [KB]
+    assert duo.oracle_boxsync(box_ev())[:2] == ("PASS", [])
+
+
+LINK_DEFECTS = [
+    ("a_catch_failed", lambda e: e["steps"]["a"]["catch_a"].update(ok=False), "a:catch_failed"),
+    ("b_capture_site_silent", lambda e: e["steps"]["b"]["catch_b"].update(capture_site_hits=0), "b:capture_site_not_fired"),
+    ("b_capture_not_on_server_wire", lambda e: e["wire"]["b"].pop(2), "b:capture_not_on_wire"),
+    ("a_caught_mon_not_on_cartridge", lambda e: e["steps"]["a"]["catch_a"].update(snapshot=_snapshot(A_OWN)),
+     "a:caught_mon_not_on_cartridge"),
+    ("areas_differ", lambda e: e["wire"]["b"][2]["msg"].update(area_id="route_30"), "capture_areas_differ"),
+    ("no_catch_sent", lambda e: e["wire"]["b"].append(_rec("c2s", {"event": "no_catch", "area_id": AREA})),
+     "b:no_catch_sent"),
+    ("link_missing", lambda e: e["status"]["linked"].update(links=[]), "link_missing"),
+    ("link_keys_mismatch", lambda e: e["status"]["linked"]["links"][0].update(b_key=B_OWN[0]), "link_keys_mismatch"),
+    ("link_dead", lambda e: e["status"]["linked"]["links"][0].update(status="dead"), "link_not_alive"),
+    ("area_dead_zoned", lambda e: e["status"]["linked"]["area_states"].update({AREA: "dead"}), "area_dead_zoned"),
+]
+
+
+@pytest.mark.parametrize("name,mutate,reason", LINK_DEFECTS, ids=[d[0] for d in LINK_DEFECTS])
+def test_link_oracle_red_controls(name, mutate, reason):
+    ev = link_ev()
+    mutate(ev)
+    verdict, reasons, _ = duo.oracle_link(ev)
+    assert verdict == "FAIL" and reason in reasons, reasons
+
+
+FAINT_DEFECTS = [
+    ("no_force_faint_to_b", lambda e: _wire_cmds(e, "b", lambda c: c["cmd"] != "force_faint"), f"b:force_faint_missing:{KB}"),
+    # a force_faint that was already on B's wire BEFORE A's HP-0 is not this rule firing
+    ("force_faint_before_the_stage", lambda e: e["marks"]["stage"].update(b=len(e["wire"]["b"])),
+     f"b:force_faint_missing:{KB}"),
+    ("force_faint_wrong_key", lambda e: e["wire"]["b"][-1]["msg"]["commands"][0].update(key=B_OWN[0]),
+     "b:force_faint_wrong_key"),
+    ("b_client_never_received", lambda e: e["steps"]["b"]["await"].update(ok=False), "b:force_faint_not_received_by_client"),
+    ("b_cartridge_hp_not_zero", lambda e: e["steps"]["b"]["await"].update(snapshot=_snapshot(B_OWN + [KB])),
+     f"b:cartridge_hp_not_zero:{KB}"),
+    ("b_partner_left_party", lambda e: e["steps"]["b"]["await"].update(snapshot=_snapshot(B_OWN)),
+     f"b:partner_missing_from_party:{KB}"),
+    ("b_collateral_faint", lambda e: e["steps"]["b"]["await"].update(snapshot=_snapshot(B_OWN + [KB], hp={KB: 0, B_OWN[0]: 0})),
+     f"b:collateral_hp_change:{B_OWN[0]}"),
+    ("b_partner_already_dead", lambda e: e["steps"]["b"]["pre"].update(snapshot=_snapshot(B_OWN + [KB], hp={KB: 0})),
+     f"b:partner_not_alive_before:{KB}"),
+    ("a_hp0_never_reported", lambda e: e["wire"]["a"][-1]["msg"].update(party=[{"key": KA, "hp": 120}]), "a:hp0_not_reported"),
+    ("a_stage_failed", lambda e: e["steps"]["a"]["stage"].update(ok=False), "a:stage_failed"),
+    ("a_stage_hit_another_mon", lambda e: e["steps"]["a"]["stage"].update(synth_writes=[{"key": A_OWN[0]}]),
+     "a:stage_wrong_target"),
+    ("a_stage_did_not_land", lambda e: e["steps"]["a"]["stage"].update(snapshot=_snapshot(A_OWN + [KA])), "a:stage_not_landed"),
+    ("link_still_alive_after", lambda e: e["status"].update(after=_link_status("alive")), f"link_still_alive:{AREA}"),
+    ("never_linked", lambda e: e["status"]["linked"].update(links=[]), "link:link_missing"),
+]
+
+
+@pytest.mark.parametrize("name,mutate,reason", FAINT_DEFECTS, ids=[d[0] for d in FAINT_DEFECTS])
+def test_faint_oracle_red_controls(name, mutate, reason):
+    ev = faint_ev()
+    mutate(ev)
+    verdict, reasons, _ = duo.oracle_faint(ev)
+    assert verdict == "FAIL" and reason in reasons, reasons
+
+
+def test_faint_oracle_names_the_server_path_that_fired():
+    ev = faint_ev()
+    ev["wire"]["a"][-1]["msg"]["party"] = [{"key": KA, "hp": 120}]          # the hello no longer carries the HP 0 ...
+    ev["wire"]["a"].append(_rec("c2s", {"event": "faint", "key": KA}, 2))  # ... a faint event does
+    verdict, reasons, facts = duo.oracle_faint(ev)
+    assert (verdict, reasons, facts["server_path"]) == ("PASS", [], "faint_event")
+
+
+WHITEOUT_DEFECTS = [
+    ("only_the_linked_mon_zeroed", lambda e: e["steps"]["a"]["stage"].update(synth_writes=[{"key": KA}]), "a:stage_wrong_target"),
+    ("wipe_incomplete_on_a", lambda e: e["steps"]["a"]["stage"].update(snapshot=_snapshot(A_OWN + [KA], hp={KA: 0})),
+     "a:stage_not_landed"),
+    ("unlinked_b_mon_also_killed", lambda e: e["wire"]["b"][-1]["msg"]["commands"].append({"cmd": "force_faint", "key": B_OWN[1]}),
+     "b:force_faint_wrong_key"),
+    ("partner_spared", lambda e: _wire_cmds(e, "b", lambda c: c["cmd"] != "force_faint"), f"b:force_faint_missing:{KB}"),
+    ("b_cartridge_hp_not_zero", lambda e: e["steps"]["b"]["await"].update(snapshot=_snapshot(B_OWN + [KB])),
+     f"b:cartridge_hp_not_zero:{KB}"),
+    ("b_collateral_faint", lambda e: e["steps"]["b"]["await"].update(snapshot=_snapshot(B_OWN + [KB], hp={KB: 0, B_OWN[1]: 0})),
+     f"b:collateral_hp_change:{B_OWN[1]}"),
+    ("no_partner_to_kill", lambda e: e["status"]["linked"]["links"][0].update(a_key="0" * 18), "no_linked_partner"),
+]
+
+
+@pytest.mark.parametrize("name,mutate,reason", WHITEOUT_DEFECTS, ids=[d[0] for d in WHITEOUT_DEFECTS])
+def test_whiteout_oracle_red_controls(name, mutate, reason):
+    ev = faint_ev(whole_party=True)
+    mutate(ev)
+    verdict, reasons, _ = duo.oracle_whiteout(ev)
+    assert verdict == "FAIL" and reason in reasons, reasons
+
+
+def test_whiteout_oracle_reports_a_real_whiteout_event_when_one_is_sent():
+    ev = faint_ev(whole_party=True)
+    ev["wire"]["a"].append(_rec("c2s", {"event": "whiteout"}, 2))
+    assert duo.oracle_whiteout(ev)[2]["server_path"] == "whiteout_event"
+
+
+def test_boxsync_is_skipped_never_passed_while_the_capability_is_off():
+    ev = link_ev()
+    verdict, reasons, _ = duo.oracle_boxsync(ev)
+    assert verdict == "SKIPPED" and reasons == [duo.BOX_CAPABILITY_OFF]
+    assert duo.oracle_boxsync({"box_capable": False, "wire": {}})[0] == "SKIPPED"   # the not-launched path
+    ev = box_ev()
+    ev["box_capable"] = False                         # capability off but the server sent box commands anyway
+    assert duo.oracle_boxsync(ev)[:2] == ("FAIL", ["box_command_sent_while_capability_false"])
+
+
+BOX_DEFECTS = [
+    ("quarantine_skipped", lambda e: e.update(log=f"[a] skip quarantine: {KA[:8]} (client has no box executor)\n"),
+     "a:quarantine_skipped"),
+    ("no_box_mon", lambda e: _wire_cmds(e, "a", lambda c: c["cmd"] != "box_mon"), "a:box_mon_missing"),
+    ("box_mon_failed", lambda e: e["wire"]["a"].append(_rec("c2s", {"event": "box_mon_failed", "key": KA})), "a:box_mon_failed"),
+    ("box_mon_not_received", lambda e: e["steps"]["a"]["boxed"].update(ok=False), "a:box_mon_not_received_by_client"),
+    ("deposit_not_executed", lambda e: e["steps"]["a"]["boxed"].update(snapshot=_snapshot(A_OWN + [KA])), "a:box_mon_not_executed"),
+    ("deposit_lost_the_mon", lambda e: e["steps"]["a"]["boxed"].update(snapshot=_snapshot(A_OWN)), "a:boxed_mon_not_in_census"),
+    ("deposit_took_two", lambda e: e["steps"]["a"]["boxed"].update(snapshot=_snapshot(A_OWN[:1], box=[KA])),
+     "a:party_count_not_decremented"),
+    ("no_party_mon", lambda e: _wire_cmds(e, "a", lambda c: c["cmd"] != "party_mon"), "a:party_mon_missing"),
+    ("withdraw_not_received", lambda e: e["steps"]["a"]["withdrawn"].update(ok=False), "a:party_mon_not_received_by_client"),
+    ("withdraw_not_executed", lambda e: e["steps"]["a"]["withdrawn"].update(snapshot=_snapshot(A_OWN, box=[KA])),
+     "a:party_mon_not_executed"),
+    ("withdraw_duplicated", lambda e: e["steps"]["a"]["withdrawn"].update(snapshot=_snapshot(A_OWN + [KA], box=[KA])),
+     "a:withdrawn_mon_still_in_box"),
+    ("server_model_lost_it", lambda e: e["status"]["after"]["players"]["a"].update(party_keys=A_OWN),
+     "a:server_party_model_missing_key"),
+]
+
+
+@pytest.mark.parametrize("name,mutate,reason", BOX_DEFECTS, ids=[d[0] for d in BOX_DEFECTS])
+def test_boxsync_oracle_red_controls(name, mutate, reason):
+    ev = box_ev()
+    mutate(ev)
+    verdict, reasons, _ = duo.oracle_boxsync(ev)
+    assert verdict == "FAIL" and reason in reasons, reasons
+
+
+def test_play_names_steps_and_step_lines():
+    assert duo.play_names("all") == ["link", "boxsync", "faint", "whiteout"]
+    assert duo.play_names("faint") == ["faint"]
+    with pytest.raises(ValueError):
+        duo.play_names("trade")
+    assert duo.parse_args(["--scenario", "whiteout"]).scenario == "whiteout"
+    assert duo.parse_args([]).scenario is None                              # no flag = the unchanged zero-write smoke
+    assert duo.play_steps("link", False) == [("a", "catch_a"), ("b", "catch_b")]
+    assert duo.play_steps("faint", True) == [("a", "catch_a"), ("a", "boxed"), ("b", "catch_b"), ("a", "withdrawn"),
+                                             ("b", "pre"), ("a", "stage"), ("b", "await")]
+    labels = {lab for _, lab in duo.play_steps("whiteout", True)} | {"catch_a", "catch_b"}
+    assert set(duo.SYNTH_SETUP) == set(duo.PLAY_SCENARIOS) == set(duo.ORACLES) and labels
+    text = ('x\nPLAY_STEP {"k":1,"op":"catch","label":"catch_a","ok":true,"battles":{}}\nPLAY_STEP not json\n'
+            'PLAY_STEP {"k":2,"op":"idle","ok":true}\n')
+    got = duo.play_step_lines(text)
+    assert got["catch_a"]["ok"] is True and got["idle#2"]["op"] == "idle"
+    assert duo._as_list({}) == []                                           # Lua's empty array
+
+
+def test_box_capability_is_the_adapters_own_answer():
+    from server.adapters import get_adapter
+    assert duo.adapter_box_capability() is bool(get_adapter("gen2_polished").supports_box_mon())
+
+
+def test_synth_staging_is_disclosed_only_where_it_is_used():
+    assert duo.SYNTH_SETUP["link"] == [] and duo.SYNTH_SETUP["boxsync"] == []
+    for name in ("faint", "whiteout"):
+        assert any("HP" in s for s in duo.SYNTH_SETUP[name]) and any("disconnect" in s for s in duo.SYNTH_SETUP[name])
+
+
+def test_duo_play_lua_speaks_the_runner_protocol():
+    src = (REPO / "tools/polished_live/duo_play.lua").read_text(encoding="utf-8")
+    for token in ("PLAY_READY", "PLAY_STEP", "PLAY_FINAL", "step_%d.json", '"catch"', '"snapshot"', '"await_cmd"',
+                  '"synth_hp0"', '"stop"', "duo-play-side-", "C.disconnect()", "raw_write_u8"):
+        assert token in src, token
+    assert "BattleMenu_Run" in src and '"B" or "Start"' not in src     # the catch never chooses Run (no_catch dead zone)
+    assert "console.log" not in src                                       # milestones only, through L.log
