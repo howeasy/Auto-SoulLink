@@ -23,8 +23,8 @@ def inputs():
 def assert_schema(trade):
     assert trade["schema"] == "polished-trade-v1"
     assert trade["production"] is False
-    # C6 landed the responder service (commit still disabled): its start/End pair is now in the sym, production stays off
-    assert trade["capabilities"] == {"proposer_service": True, "responder_service": True, "commit": False}
+    # Component presence is not authorization: both bodies exist, production stays off.
+    assert trade["capabilities"] == {"proposer_service": True, "responder_service": True, "commit": True}
     lease = trade["lease"]
     assert (lease["base"], lease["offset"], lease["size"], lease["bank"]) == (0xC619, 14, 16, 0)
     assert lease["fields"] == {"magic": 0, "version": 4, "command": 5, "generation": 6, "ack": 7,
@@ -36,7 +36,7 @@ def assert_schema(trade):
         'glyph_floor': 0x5F, 'nature_count': 25, 'species_low_max': 0xFE,
         'items': {'symbol':'SlinkTradeAllowedItems','bank':0x7E,'addr':0x428F,'size':256},
     }
-    assert set(trade["entries"]) == set(gp.TRADE_ENTRIES) | {"SlinkTradeResponderService", "SlinkTradeResponderServiceEnd"}
+    assert set(trade["entries"]) == set(gp.TRADE_ENTRIES) | {"SlinkTradeResponderService", "SlinkTradeResponderServiceEnd", "SlinkTradeCommit", "SlinkTradeCommitEnd"}
     assert trade["dispatcher_stack_pin_names"] == ["NextOverworldFrame", "DelayFrame",
         "NextOverworldFrame.gfx_done", "HandleMap", "OverworldLoop.loop"]
     for group, expected in (("staging", {"party": (0xD28B, 48), "ot": (0xD3AB, 11),
@@ -55,22 +55,24 @@ def assert_disjoint(trade):
             assert a["bank"] != b["bank"] or a["addr"] + a["size"] <= b["addr"] or b["addr"] + b["size"] <= a["addr"]
 
 
-def test_schema_and_generated_family(inputs):
+def test_schema_and_generated_family(inputs, binder_env):
     trade = gp.trade_block(*inputs)
     assert_schema(trade)
     assert_disjoint(trade)
     assert json.loads(gp.OUT.read_bytes())["titles"]["polished"]["overlay"]["trade"] == trade
+    assert binder_env.rom[binder_env.flat("SlinkTradeCommitEnabled")] == 0
     for row in trade["entries"].values():
         assert (row["bank"], row["addr"]) == inputs[0][row["symbol"]]
 
 
-def test_the_responder_pair_is_present_and_a_half_pair_is_refused(inputs):
+def test_the_responder_pair_is_present_and_a_half_pair_is_refused(inputs, binder_env):
     symbols, prov = inputs
     for name in ("SlinkTradeResponderService", "SlinkTradeResponderServiceEnd"):
         assert name in symbols
     trade = gp.trade_block(symbols, prov)
     assert trade["capabilities"]["responder_service"] is True and trade["production"] is False
-    assert trade["capabilities"]["commit"] is False
+    assert trade["capabilities"]["commit"] is True
+    assert binder_env.rom[binder_env.flat("SlinkTradeCommitEnabled")] == 0
     assert trade["entries"]["SlinkTradeResponderService"]["addr"] == 0x5000
     del symbols["SlinkTradeResponderServiceEnd"]
     with pytest.raises(ValueError, match="incomplete component"):
@@ -92,18 +94,17 @@ def test_responder_capability_follows_the_symbol_pair_not_a_constant(inputs):
 
 
 @pytest.mark.parametrize("name,cap", [("SlinkTradeCommit", "commit")], ids=["commit"])
-def test_future_component_pair_flips_only_its_presence(inputs, name, cap):
+def test_component_pair_flips_only_its_presence(inputs, name, cap):
     symbols, prov = inputs
-    assert name not in symbols and "SlinkTradePromptEntry" in symbols
-    seed = symbols["SlinkTradeEntry"]
-    symbols[name] = seed._replace(address=0x5000)
+    assert name in symbols and "SlinkTradePromptEntry" in symbols
+    del symbols[name + "End"]
     with pytest.raises(ValueError, match="incomplete component"):
         gp.trade_block(symbols, prov)
-    symbols[name + "End"] = seed._replace(address=0x5010)
+    symbols[name + "End"] = symbols[name]._replace(address=symbols[name].address + 16)
     trade = gp.trade_block(symbols, prov)
     assert trade["capabilities"][cap] is True
     assert trade["production"] is False
-    assert trade["entries"][name]["addr"] == 0x5000
+    assert trade["entries"][name]["addr"] == 0x5300
     del symbols[name]
     with pytest.raises(ValueError, match="incomplete component"):
         gp.trade_block(symbols, prov)
@@ -120,14 +121,17 @@ def test_complete_symbols_do_not_grant_production(inputs):
 
 
 def test_prompt_entry_alone_is_not_the_commit_capability(inputs):
-    """PromptEntry is a jp trampoline now (C6), but it is still not evidence of a commit: that pair is absent."""
+    """A PromptEntry alone must never stand in for the commit's paired markers."""
+    symbols, _ = inputs
+    del symbols["SlinkTradeCommit"]
+    del symbols["SlinkTradeCommitEnd"]
     text = inspect.getsource(gp.trade_block)
     old = '"commit": component("SlinkTradeCommit")'
     assert old in text
     namespace = dict(gp.__dict__)
     exec(text.replace(old, '"commit": "SlinkTradePromptEntry" in symbols'), namespace)
     with pytest.raises(AssertionError):
-        assert_schema(namespace["trade_block"](*inputs))
+        assert namespace["trade_block"](*inputs)["capabilities"]["commit"] is False
 
 
 @pytest.mark.parametrize("name", gp.TRADE_ENTRIES + gp.TRADE_STACK_PINS + (

@@ -91,6 +91,15 @@ SlinkTradeResponderService::
 	call PrintText
 	call YesNoBox
 	jr c, .decline ; carry = NO or B
+IF SLINK_TRADE_COMMIT_ENABLE
+	ld hl, SlinkTradeCommitSaveText
+	call PrintText
+	call YesNoBox
+	jp c, .decline
+	farcall FixPlayerEVsAndStats
+	farcall Link_SaveGame
+	jp c, .decline
+ENDC
 	ld hl, SlinkTradeWaitText
 	call PrintText
 	ld hl, sp + 0
@@ -195,6 +204,9 @@ SlinkTradeResponderWait::
 	ld a, [hl]
 	call SlinkTradeValidateSnapshot ; the own preimage must still be the consent snapshot
 	jp c, SlinkTradeResponderExit
+IF SLINK_TRADE_COMMIT_ENABLE
+	jp SlinkTradeApplyCommit
+ENDC
 	; COMMIT DISABLED: nothing is applied, so the honest result is 1 ("not performed"), never 0.
 	ld a, SLINK_TRADE_RESULT_NOT_PERFORMED
 	call SlinkTradePublishDone

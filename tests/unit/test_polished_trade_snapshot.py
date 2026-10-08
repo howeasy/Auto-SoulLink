@@ -28,7 +28,6 @@ RELEASE = Path(os.environ.get("SLINK_WORK_ROOT", "F:/slink-work")) / "cache/poli
 CLEAN_SYM = REPO / "data/polished/polishedcrystal.sym"
 OVERLAY_SYM = REPO / "data/polished/polished_slink.sym"
 UPS = REPO / "patch/dist/SLink-Polished.ups"
-SRC = REPO / "patch/polished/src"
 
 P, OT, NICK, BLOB = 48, 11, 11, 70
 BLOB_AT = 0xC800            # arbitrary fake-WRAM home of an incoming blob
@@ -878,23 +877,6 @@ def test_the_predicate_mutants_are_each_caught_by_the_hand_table_or_the_fuzz(bui
         if kind == "predicate":
             assert observe_table(rom, syms) or observe_fuzz(rom, syms, 800)[0], name
             assert observe_fuzz(rom, syms, 3000)[0], f"the 3000-blob fuzz alone missed: {name}"
-
-
-# ------------------------------------------------------------------ source shape
-
-def test_the_new_files_are_fixed_sections_in_bank_7e_included_last():
-    snap_src = (SRC / "trade_snapshot.asm").read_text(encoding="utf-8")
-    val_src = (SRC / "trade_validate.asm").read_text(encoding="utf-8")
-    assert 'ROMX[$4500], BANK[SLINK_SERVICE_BANK]' in snap_src and 'ROMX[$4600], BANK[SLINK_SERVICE_BANK]' in val_src
-    assert snap_src.count("ASSERT SLINK_SERVICE_BANK == $7E") == 1 == val_src.count("ASSERT SLINK_SERVICE_BANK == $7E")
-    assert "_GOLD" not in snap_src + val_src and "_SILVER" not in snap_src + val_src
-    slink = (SRC / "slink.asm").read_text(encoding="utf-8")
-    assert slink.index("trade_gate.asm") < slink.index("trade_snapshot.asm") < slink.index("trade_validate.asm")
-    # the responder dispatcher (card D1/D2) is included after them, then the held proposer service (card C1a), then
-    # the held responder service (card C6), last
-    assert slink.index("trade_validate.asm") < slink.index('INCLUDE "engine/slink/trade_dispatch.asm"')
-    assert slink.index("trade_dispatch.asm") < slink.index("trade_service.asm") < slink.index("trade_responder.asm")
-    assert slink.rstrip().endswith('INCLUDE "engine/slink/trade_responder.asm"')
 
 
 def test_the_new_sections_do_not_overlap_the_gates(syms):

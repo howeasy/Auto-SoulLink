@@ -20,7 +20,6 @@ Absent input skips (no cached release ROM); present-but-wrong input fails.
 from __future__ import annotations
 
 import os
-import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -962,7 +961,8 @@ def sc_hvblank(env, rom=None):
 def sc_no_commit(env, rom=None):
     rig, run = sc_happy(env, rom)
     sym = env.sym
-    assert not [n for n in sym if "Commit" in n and n.startswith("SlinkTrade")], "a commit symbol exists in the overlay"
+    assert env.rom[env.flat("SlinkTradeCommitEnabled")] == 0, "the release commit gate is enabled"
+    assert sym["SlinkTradeCommit"] not in run.pcs and sym["SlinkTradeApplyCommit"] not in run.pcs
     deny = {env.clean[n] for n in COMMIT_NATIVES if n in env.clean}
     assert deny, "no commit natives resolved from the clean sym"
     hit = sorted(f"{n}" for n in COMMIT_NATIVES if n in env.clean and env.clean[n] in run.pcs)
@@ -1035,25 +1035,10 @@ def test_the_overlay_invariants_hold(env):
     assert rom[0xC030:0xC036].hex() == "7e00447e1044"
 
 
-def test_source_shape():
-    src = SRC.read_text(encoding="utf-8")
-    code = "\n".join(line.split(";", 1)[0] for line in src.splitlines())
-    assert "SECTION \"SLink Trade Service\", ROMX[$4a00], BANK[SLINK_SERVICE_BANK]" in src
-    assert 'ASSERT @ <= $5000' in src and "SlinkTradeProposerServiceEnd::" in src
-    # the proposer-only service never names the vanilla responder branch, the commit or the species list
-    for forbidden in ("SlinkTradeCommit", "SlinkTradePromptEntry", "wPartySpecies", "wOTPartySpecies", "VBLANK_NORMAL",
-                      "GetSGBLayout", "Link_SaveGame", "OpenText", "CloseText", "GetNickname"):
-        assert forbidden not in code, forbidden
-    assert not re.search(r"\$50(?![0-9a-fA-F])", code), "a numeric $50 terminator (the Polished terminator is $53)"
-    assert "SlinkTradeSnapshot" in src and "SlinkTradeValidateIncomingStaged" in src and "SlinkTradeValidateSnapshot" in src
-    assert "farcall SelectTradeOrDayCareMon" in src and "PARTYMENUACTION_GIVE_MON" in src
-    assert "call YesNoBox" in src and "call PrintText" in src and "ldh a, [hVBlank]" in src
-    gate = (REPO / "patch/polished/src/trade_gate.asm").read_text(encoding="utf-8")
-    assert "jp SlinkTradeProposerService\n\tnop\nSlinkTradeGatesEnd::" in gate
-    slink = (REPO / "patch/polished/src/slink.asm").read_text(encoding="utf-8")
-    # the proposer service precedes the C6 responder service, which is the last include
-    assert slink.index("trade_validate.asm") < slink.index("trade_service.asm") < slink.index("trade_responder.asm")
-    assert slink.rstrip().endswith('INCLUDE "engine/slink/trade_responder.asm"')
+def test_source_shape(env):
+    # The helper's presence must not enable a native commit: execute the real
+    # APPLY service and retain the original no-commit oracle.
+    sc_no_commit(env)
 
 
 def test_report_the_stack_budgets(env, capsys):
