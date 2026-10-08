@@ -10,11 +10,12 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import sys
 
 import pytest
 from lupa.lua55 import LuaRuntime
 
-from tests.unit import test_polished_trade_service as svc
+from tests.unit import test_polished_trade_responder as resp, test_polished_trade_service as svc
 
 env = svc.env
 
@@ -23,6 +24,9 @@ PATH = ROOT / "lua/gen2/polished_trade.lua"
 PROFILE = json.loads((ROOT / "data/games/polished_crystal/profile.json").read_bytes())["titles"][
     "polished"
 ]
+LEASE_BASE = PROFILE["overlay"]["trade"]["lease"]["base"]
+FIELDS = PROFILE["overlay"]["trade"]["lease"]["fields"]
+CMD = PROFILE["overlay"]["trade"]["commands"]
 
 
 def facts(env):
@@ -60,9 +64,11 @@ class Binder:
         self.frame, self.writes, self.fail_at = 0, [], None
         self.mem = bytearray(65536)
         self.machine, self.clock = machine, clock
+        self.logs: list[str] = []
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         g = self.lua.globals()
         g.pyread, g.pywrite = self.read, self.write
+        g.pylog = lambda message: self.logs.append(str(message))
         g.pyframe = lambda: self.clock() if self.clock else self.frame
         g.pymapped = lambda b, a, n: True
         source = PATH.read_text(encoding="utf-8")
@@ -89,6 +95,7 @@ class Binder:
             recursive=True,
         )
         spec.io = io
+        spec.log = self.lua.eval("function(message) pylog(message) end")
         if validation == 'built':
             g.pyrom = lambda bank, addr, size: self.lua.table_from(list(
                 env.rom[svc.pc._flat(bank,addr):svc.pc._flat(bank,addr)+size]))
@@ -397,17 +404,26 @@ def test_validator_parity_with_real_staged_routine(env, case):
         assert b.writes == before
 
 
-def test_partial_write_latches_uncertain(env):
+def test_partial_staging_fault_before_publication_is_not_performed_and_closed(env):
+    # Owner ruling 2026-10-07: a staging fault leaves the lease as the held OFFER (no APPLY byte, no
+    # generation), so it is pre-APPLY: NOT_PERFORMED, the lease closed through the cancel path, logged once.
     b = Binder(env)
     b.accepted()
     b.frame += 1
     b.fail_at = len(b.writes) + 5
     result = b.apply()
-    assert result[1] == "UNCERTAIN"
+    assert result[1] == "NOT_PERFORMED" and "APPLY not published" in result[2]
+    assert "injected write failure" in result[2]
+    assert b.read(LEASE_BASE + FIELDS["command"]) == CMD["OFFER"]
+    assert b.read(LEASE_BASE + FIELDS["generation"]) == 43 == b.read(LEASE_BASE + FIELDS["ack"])
+    assert [b.read(LEASE_BASE + FIELDS["token"] + i) for i in range(4)] == [0, 0, 0, 0]
     before = list(b.writes)
     b.fail_at = None
-    assert b.apply()[1] == "UNCERTAIN" and b.writes == before
-    assert b.call("disposition")[0] == "UNCERTAIN"
+    assert b.apply()[1:] == ("NOT_PERFORMED", result[2]) and b.writes == before
+    assert b.call("disposition") == ("NOT_PERFORMED", result[2])
+    assert len(b.logs) == 1 and "APPLY not published" in b.logs[0]
+    b.put(LEASE_BASE + FIELDS["command"], 0)
+    assert b.call("reset") is True
 
 
 @pytest.mark.parametrize(
@@ -529,12 +545,16 @@ def test_swallowed_staging_write_does_not_publish_apply(env):
 
     b.lua.globals().pywrite = swallow
     result = b.apply()
-    assert result[1] == "UNCERTAIN" and "readback mismatch" in result[2]
+    # The staging readback failed before any lease byte of the APPLY: pre-APPLY, so NOT_PERFORMED and the
+    # lease is closed through the cancel path (token zeroed; command and generation untouched).
+    assert result[1] == "NOT_PERFORMED" and "readback mismatch" in result[2]
     lease = PROFILE["overlay"]["trade"]["lease"]
     assert (
         b.read(lease["base"] + lease["fields"]["command"])
         == PROFILE["overlay"]["trade"]["commands"]["OFFER"]
     )
+    assert [b.read(LEASE_BASE + FIELDS["token"] + i) for i in range(4)] == [0, 0, 0, 0]
+    assert b.call("disposition")[0] == "NOT_PERFORMED" and len(b.logs) == 1
 
 
 def test_advisory_bypass_mutant_violates_rom_subset(env):
@@ -912,3 +932,438 @@ def test_proposer_phase_is_explicit_and_still_cannot_become_a_responder(env):
     b.frame_image("DONE", gen=gen, ack=gen)
     b.put(PROFILE["overlay"]["trade"]["lease"]["base"] + 8, 0)
     assert b.call("poll_done").disposition == "UNCERTAIN"
+
+
+# ── g2p-cancel: host cancel/close of a pre-APPLY visit ─────────────────────────────────────
+# The ROM's own documented host-side closes (patch/polished/src/trade_service.asm:20-21): the four visit-token
+# bytes zeroed (SlinkTradeCheckToken, trade_frame.asm:50,69-71, refused at trade_service.asm:81,114,140,166 and
+# trade_responder.asm:70,106,150 -> SlinkTradeExit / SlinkTradeResponderExit, never a DONE) plus, for an
+# unanswered OFFER, the reject (result 1, ACK last: trade_service.asm:145-147). Command and generation are never
+# written by a cancel.
+
+
+def lease_offsets(b, start):
+    return [a - LEASE_BASE for a, _ in b.writes[start:] if LEASE_BASE <= a < LEASE_BASE + 16]
+
+
+def apply_writes(env):
+    """The addresses a successful arm(APPLY) writes, in order (staging, then the 16-byte frame, then gen)."""
+    p = Binder(env)
+    p.accepted()
+    p.frame += 1
+    n = len(p.writes)
+    assert p.apply() == 44
+    return [a for a, _ in p.writes[n:]]
+
+
+def test_cancel_refusals_write_nothing(env):
+    b = Binder(env)
+    out = b.call("cancel", "x")
+    assert isinstance(out, tuple) and out[1:] == ("PENDING", "no visit to cancel")
+    b.accepted()
+    before = list(b.writes)
+    for bad in ("", 7, None):
+        out = b.call("cancel", bad)
+        assert isinstance(out, tuple) and out[1:] == ("PENDING", "cancel reason required")
+    assert b.writes == before and not b.logs
+    b.frame += 1
+    assert b.apply() == 44
+    before = list(b.writes)
+    out = b.call("cancel", "server withdrew")
+    # Once an APPLY is armed the visit is the ROM's: that path stays UNCERTAIN-capable and is not changed.
+    assert isinstance(out, tuple) and out[1:] == ("PENDING", "APPLY already armed: cancel refused")
+    assert b.writes == before and not b.logs
+    assert b.call("phase") == ("proposer", "apply") and b.call("disposition")[0] == "PENDING"
+
+
+def test_cancel_after_offer_reject_is_already_terminal(env):
+    b = Binder(env)
+    b.frame_image("QUERY", gen=42, ack=41)
+    assert b.call("answer_query", 42, 4, list(svc.TOKEN)) is True
+    b.frame_image("OFFER", gen=43, ack=42)
+    assert b.call("answer_offer", 43, False) is True
+    before = list(b.writes)
+    out = b.call("cancel", "late")
+    assert isinstance(out, tuple) and out[1:] == ("NOT_PERFORMED", "visit already terminal: offer rejected")
+    assert b.writes == before and not b.logs
+
+
+@pytest.mark.parametrize("when", ["query", "offer-pending", "accepted"], ids=["query", "offer", "accepted"])
+def test_cancel_writes_only_the_sanctioned_bytes_and_logs_once(env, when):
+    b = Binder(env)
+    b.frame_image("QUERY", gen=42, ack=41)
+    assert b.call("answer_query", 42, 4, list(svc.TOKEN)) is True
+    if when != "query":
+        b.frame_image("OFFER", gen=43, ack=42)
+    if when == "accepted":
+        assert b.call("answer_offer", 43, True) is True
+    start = len(b.writes)
+    assert b.call("cancel", "menu left") is True
+    pending = when == "offer-pending"
+    assert lease_offsets(b, start) == ([8, 12, 13, 14, 15, 7] if pending else [12, 13, 14, 15])
+    assert [v for _, v in b.writes[start:]] == ([1, 0, 0, 0, 0, 43] if pending else [0, 0, 0, 0])
+    # command and generation are never touched: no PROMPT/APPLY/RELEASE can be forged out of a cancel
+    assert b.read(LEASE_BASE + FIELDS["command"]) == (CMD["QUERY"] if when == "query" else CMD["OFFER"])
+    assert b.read(LEASE_BASE + FIELDS["generation"]) == (42 if when == "query" else 43)
+    assert b.call("disposition") == ("NOT_PERFORMED", "cancelled before APPLY: menu left")
+    assert b.call("phase") == ("proposer", "cancelled")
+    assert len(b.logs) == 1 and "menu left" in b.logs[0] and "cancelled before APPLY" in b.logs[0]
+    after = list(b.writes)
+    assert b.call("cancel", "again") is True  # idempotent: no second write, no second log
+    assert b.writes == after and len(b.logs) == 1
+    b.frame += 1
+    assert b.call("poll_query") is None and b.call("poll_offer") is None and b.call("poll_done") is None
+    for out in (b.call("answer_query", 42, 4, list(svc.TOKEN)), b.call("answer_offer", 43, True),
+                b.apply(), b.call("release", 44)):
+        assert isinstance(out, tuple) and out[1:] == ("NOT_PERFORMED", "cancelled before APPLY: menu left")
+    assert b.writes == after
+    # a DONE the ROM may still publish is not claimed by a cancelled visit
+    b.frame_image("DONE", gen=44, ack=44)
+    b.put(LEASE_BASE + FIELDS["result"], 1)
+    assert b.call("poll_done") is None and b.call("disposition")[0] == "NOT_PERFORMED"
+    # reusable only after the ROM closes
+    assert b.call("reset")[1] == "PENDING"
+    b.put(LEASE_BASE + FIELDS["command"], 0)
+    assert b.call("reset") is True and b.call("phase") == (None, None)
+    b.accepted()
+    b.frame += 1
+    assert b.apply() == 44
+
+
+def test_cancel_in_responder_phases_before_apply(env):
+    for phase in ("prompt", "consented", "released"):
+        b = Binder(env)
+        gen = b.call("arm", CMD["PROMPT"], 2, list(svc.TOKEN), payload())
+        assert isinstance(gen, int)
+        if phase != "prompt":
+            b.frame_image("DONE", gen=gen, ack=gen)
+            b.put(LEASE_BASE + FIELDS["result"], 0)
+            assert b.call("poll_done").disposition == "CONSENTED"
+        if phase == "released":
+            assert b.call("release", gen) is True
+            b.frame += 1
+        start = len(b.writes)
+        assert b.call("cancel", "disconnected") is True
+        assert lease_offsets(b, start) == [12, 13, 14, 15]
+        assert b.call("phase") == ("responder", "cancelled")
+        assert b.call("disposition") == ("NOT_PERFORMED", "cancelled before APPLY: disconnected")
+        before = list(b.writes)
+        out = b.apply()
+        assert isinstance(out, tuple) and out[1] == "NOT_PERFORMED" and b.writes == before
+        assert len(b.logs) == 1
+    # a declined PROMPT is already terminal: release() is its path, cancel writes nothing
+    b = Binder(env)
+    gen = b.call("arm", CMD["PROMPT"], 2, list(svc.TOKEN), payload())
+    b.frame_image("DONE", gen=gen, ack=gen)
+    b.put(LEASE_BASE + FIELDS["result"], 1)
+    assert b.call("poll_done").disposition == "DECLINED"
+    before = list(b.writes)
+    out = b.call("cancel", "x")
+    assert isinstance(out, tuple) and out[1] == "DECLINED" and "already terminal" in out[2]
+    assert b.writes == before and not b.logs
+
+
+def test_cancel_poisoned_binder_stays_uncertain(env):
+    b = Binder(env)
+    b.accepted()
+    b.frame += 1
+    addrs = apply_writes(env)
+    # the write AFTER the APPLY command byte fails: the command landed, so nothing can prove pre-APPLY
+    b.fail_at = len(b.writes) + addrs.index(LEASE_BASE + FIELDS["command"]) + 2
+    out = b.apply()
+    assert isinstance(out, tuple) and out[1] == "UNCERTAIN"
+    assert b.read(LEASE_BASE + FIELDS["command"]) == CMD["APPLY"]
+    before = list(b.writes)
+    b.fail_at = None
+    cancel = b.call("cancel", "x")
+    assert isinstance(cancel, tuple) and cancel[1:] == ("UNCERTAIN", out[2])
+    assert b.writes == before and not b.logs
+
+
+def test_cancel_dropped_token_write_is_uncertain(env):
+    b = Binder(env)
+    b.accepted()
+    at = LEASE_BASE + FIELDS["token"]
+    b.lua.globals().pywrite = lambda a, v: None if a == at else b.write(a, v)
+    out = b.call("cancel", "x")
+    assert isinstance(out, tuple) and out[1] == "UNCERTAIN"
+    assert f"lease readback mismatch at ${at:04X}: expected $00, observed ${svc.TOKEN[0]:02X}" in out[2]
+    assert b.call("disposition") == ("UNCERTAIN", out[2]) and not b.logs
+
+
+def test_responder_apply_fault_before_publication_is_not_performed(env):
+    b = Binder(env)
+    gen = b.call("arm", CMD["PROMPT"], 2, list(svc.TOKEN), payload())
+    b.frame_image("DONE", gen=gen, ack=gen)
+    b.put(LEASE_BASE + FIELDS["result"], 0)
+    assert b.call("poll_done").disposition == "CONSENTED"
+    assert b.call("release", gen) is True
+    b.frame += 1
+    b.fail_at = len(b.writes) + 2
+    out = b.apply()
+    assert isinstance(out, tuple) and out[1] == "NOT_PERFORMED" and "APPLY not published" in out[2]
+    assert b.read(LEASE_BASE + FIELDS["command"]) == CMD["RELEASE"]
+    assert b.read(LEASE_BASE + FIELDS["generation"]) == gen == b.read(LEASE_BASE + FIELDS["ack"])
+    assert [b.read(LEASE_BASE + FIELDS["token"] + i) for i in range(4)] == [0, 0, 0, 0]
+    assert len(b.logs) == 1
+
+
+# ---- the real proposer service --------------------------------------------------------------------------
+
+class SeededRig(svc.Rig):
+    """The proposer rig whose lease starts from a given 16-byte image (a previous visit's close)."""
+
+    def __init__(self, env, seed=None, **kwargs):
+        super().__init__(env, **kwargs)
+        self.seed = seed
+
+    def build_ram(self, m):
+        super().build_ram(m)
+        if self.seed is not None:
+            m.poke(self.lease, bytes(self.seed))
+
+
+def cancelled_run(env, when, *, binder=None, seed=None):
+    """QUERY answered, then the host cancels at `when` ("armed" = full visit, cancel refused after arm)."""
+    rig = SeededRig(env, seed=seed)
+    result = {}
+
+    def host(h):
+        b = binder or Binder(env, machine=h.m, clock=lambda: rig.frame)
+        if binder is not None:
+            b.machine, b.clock = h.m, lambda: rig.frame
+        result["binder"] = b
+        while not b.call("poll_query"):
+            yield
+        q = b.call("poll_query")
+        assert b.call("answer_query", q.gen, 4, list(svc.TOKEN)) is True
+        if when == "query":
+            assert b.call("cancel", "disconnected") is True  # the same frame as the answer
+            result["cancel_frame"] = rig.frame
+            return
+        while not b.call("poll_offer"):
+            yield
+        o = b.call("poll_offer")
+        if when == "offer-pending":
+            start = len(b.writes)
+            assert b.call("cancel", "server declined") is True
+            assert lease_offsets(b, start) == [8, 12, 13, 14, 15, 7]
+            result["cancel_frame"] = rig.frame
+            return
+        assert b.call("answer_offer", o.gen, True) is True
+        yield
+        if when == "accepted":
+            assert b.call("cancel", "withdrawal queued") is True
+            result["cancel_frame"] = rig.frame
+            return
+        gen = b.apply()
+        assert isinstance(gen, int)
+        result["gen"] = gen
+        before = list(b.writes)
+        out = b.call("cancel", "too late")
+        assert isinstance(out, tuple) and out[1:] == ("PENDING", "APPLY already armed: cancel refused")
+        assert b.writes == before
+        while not b.call("poll_done"):
+            yield
+        assert b.call("poll_done").disposition == "NOT_PERFORMED"
+        assert b.call("release", gen) is True
+
+    run = rig.run(host)
+    return rig, run, result
+
+
+@pytest.mark.parametrize("when", ["query", "offer-pending", "accepted"], ids=["query", "offer", "accepted"])
+def test_real_proposer_service_closes_on_cancel_without_done(env, when):
+    rig, run, result = cancelled_run(env, when)
+    svc.common(rig, run, "QC" if when == "query" else "QOC", forbid_calls=("menu",) if when == "query" else ())
+    assert run.frames == result["cancel_frame"]  # the ROM exits on the very frame it next inspects the lease
+    b = result["binder"]
+    assert b.call("closed") is True and b.call("disposition")[0] == "NOT_PERFORMED"
+    assert len(b.logs) == 1
+    if when != "query":
+        assert svc.snapshot_matches(rig, run)
+    assert tuple(run.m.peek(rig.lease + 12, 4)) == (0, 0, 0, 0)
+
+
+def test_real_proposer_binder_is_reusable_after_a_cancelled_visit(env):
+    rig, run, result = cancelled_run(env, "accepted")
+    svc.common(rig, run, "QOC")
+    b = result["binder"]
+    assert b.call("closed") is True and b.call("reset") is True and b.call("phase") == (None, None)
+    seed = list(run.m.peek(rig.lease, 16))
+    rig2, run2, result2 = cancelled_run(env, "armed", binder=b, seed=seed)
+    svc.common(rig2, run2, "QOADC")
+    assert svc.snapshot_matches(rig2, run2)
+    assert result2["gen"] == (seed[6] + 3) % 256 and len(b.logs) == 1
+    assert b.call("closed") is True and b.call("disposition")[0] == "NOT_PERFORMED" and b.call("reset") is True
+
+
+def test_real_armed_apply_cannot_be_cancelled(env):
+    rig, run, result = cancelled_run(env, "armed")
+    svc.common(rig, run, "QOADC")
+    assert svc.snapshot_matches(rig, run)
+
+
+def arm_fault_run(env, half):
+    """An accepted OFFER whose arm(APPLY) emission fails: before the APPLY byte publishes (pre-APPLY: closed,
+    NOT_PERFORMED, reusable) or after it (UNCERTAIN, no escape: the ROM's own APPLY hold closes)."""
+    rig = svc.Rig(env)
+    result = {}
+    addrs = apply_writes(env)
+    cmd_at = addrs.index(LEASE_BASE + FIELDS["command"])
+
+    def host(h):
+        b = Binder(env, machine=h.m, clock=lambda: rig.frame)
+        result["binder"] = b
+        while not b.call("poll_query"):
+            yield
+        q = b.call("poll_query")
+        assert b.call("answer_query", q.gen, 4, list(svc.TOKEN)) is True
+        while not b.call("poll_offer"):
+            yield
+        o = b.call("poll_offer")
+        assert b.call("answer_offer", o.gen, True) is True
+        result["offer_frame"] = rig.frame
+        yield
+        b.fail_at = len(b.writes) + (2 if half == "before" else cmd_at + 2)
+        out = b.apply()
+        b.fail_at = None
+        assert isinstance(out, tuple), out
+        if half == "before":
+            assert out[1] == "NOT_PERFORMED", out
+            assert "APPLY not published" in out[2] and "injected write failure" in out[2]
+            assert h.rd(5) == svc.OFFER and h.rd(6) == o.gen == h.rd(7)
+            assert tuple(h.rd(12 + i) for i in range(4)) == (0, 0, 0, 0)
+            assert b.call("disposition")[0] == "NOT_PERFORMED" and len(b.logs) == 1
+            result["cancel_frame"] = rig.frame
+            return
+        assert out[1] == "UNCERTAIN", out
+        assert h.rd(5) == svc.APPLY and h.rd(6) == o.gen == h.rd(7)  # command landed, generation did not
+        before = list(b.writes)
+        assert b.call("cancel", "x")[1] == "UNCERTAIN" and b.call("reset")[1] == "UNCERTAIN"
+        assert b.writes == before and not b.logs
+        yield from h.frames(10 ** 9)
+
+    run = rig.run(host)
+    svc.common(rig, run, "QOC")
+    assert svc.snapshot_matches(rig, run)
+    b = result["binder"]
+    if half == "before":
+        assert run.frames == result["cancel_frame"]
+        assert b.call("closed") is True and b.call("reset") is True
+        b.clock, b.frame = None, run.frames + 1
+        b.accepted()
+        b.frame += 1
+        assert b.apply() == 44
+    else:
+        # an APPLY byte without its generation is never picked up (trade_service.asm:171-175): the 3600-frame
+        # hold entered at the OFFER answer expires on its own
+        assert run.frames == result["offer_frame"] + 3600
+        assert b.call("closed") is True and b.call("disposition")[0] == "UNCERTAIN"
+        assert b.call("reset")[1] == "UNCERTAIN" and not b.logs
+
+
+@pytest.mark.parametrize("half", ["before", "after"], ids=["before-publication", "after-apply-byte"])
+def test_real_arm_fault_halves(env, half):
+    arm_fault_run(env, half)
+
+
+# ---- the real responder service -------------------------------------------------------------------------
+
+class ResponderHostRig(resp.Rig):
+    def build_ram(self, m):
+        host = super().build_ram(m)
+        m.poke(self.lease, bytes([0] * 16))
+        m.poke(self.lease + 6, self.gen0)
+        m.poke(self.lease + 7, self.gen0)
+        self.binder = Binder(self.env, machine=m, clock=lambda: self.frame)
+        self.prompt_gen = self.binder.call("arm", CMD["PROMPT"], self.own, list(svc.TOKEN), payload())
+        assert isinstance(self.prompt_gen, int), self.prompt_gen
+        return host
+
+
+@pytest.mark.parametrize("when", ["prompt-yes", "prompt-no", "consented", "released"],
+                         ids=["prompt-yes", "prompt-no", "consented", "released"])
+def test_real_responder_service_closes_on_cancel_before_apply(env, when):
+    rig = ResponderHostRig(env)
+
+    def host(h):
+        b = rig.binder
+        if when.startswith("prompt"):
+            yield from h.frames(10 ** 9)  # the cancel fires inside the YesNoBox (on_native)
+        while not b.call("poll_done"):
+            yield
+        assert b.call("poll_done").disposition == "CONSENTED"
+        if when == "released":
+            assert b.call("release", rig.prompt_gen) is True
+            yield
+        assert b.call("cancel", "disconnected") is True
+        rig.mark("cancel")
+        yield from h.frames(10 ** 9)
+
+    def on_native(h, what):
+        if what == "yesno" and "cancel" not in rig.marks:
+            assert rig.binder.call("cancel", "menu left") is True
+            rig.mark("cancel")
+
+    if when.startswith("prompt"):
+        rig.on_native = on_native
+    run = rig.run(host, yesno=(when != "prompt-no"))
+    b = rig.binder
+    if when == "prompt-yes":
+        # YES after the cancel: CheckHeldFrame refuses the zero token (trade_responder.asm:106): no snapshot,
+        # no consent DONE, the text box closed, exit before any wait frame.
+        resp.common(rig, run, "AC", results=[], frames=0)
+        assert run.snap_first is None
+    elif when == "prompt-no":
+        # NO after the cancel: the decline DONE is still published, then the 90-frame hold closes it.
+        resp.common(rig, run, "ADC", results=[1], frames=90)
+    else:
+        resp.common(rig, run, "ADC", results=[0])
+        assert run.frames == rig.marks["cancel"]
+    assert b.call("closed") is True and b.call("poll_done") is None
+    assert b.call("disposition") == ("NOT_PERFORMED", "cancelled before APPLY: " +
+                                     ("menu left" if when.startswith("prompt") else "disconnected"))
+    assert len(b.logs) == 1
+    assert b.call("reset") is True and b.call("phase") == (None, None)
+    # reusable on the ROM's closed lease: a fresh PROMPT arms
+    again = b.call("arm", CMD["PROMPT"], rig.own, list(svc.TOKEN), payload())
+    assert isinstance(again, int)
+
+
+# ---- red controls ----------------------------------------------------------------------------------------
+
+CANCEL_MUTANTS = [
+    ("cancel-after-arm",
+     "if attempted then return nil,'PENDING','APPLY already armed: cancel refused' end",
+     "if false then end", test_cancel_refusals_write_nothing),
+    ("cancel-after-arm-real",
+     "if attempted then return nil,'PENDING','APPLY already armed: cancel refused' end",
+     "if false then end", test_real_armed_apply_cannot_be_cancelled),
+    ("cancel-readback",
+     "verify_lease(expected) -- all written fields, not just the publication byte",
+     "-- readback skipped", test_cancel_dropped_token_write_is_uncertain),
+    ("cancel-order",
+     "writes:write_bytes(l.base+l.fields.token,{0,0,0,0}) -- cancel: token drift",
+     "if pending then writes:write_bytes(l.base+l.fields.ack,{pending.gen}) end "
+     "writes:write_bytes(l.base+l.fields.token,{0,0,0,0})",
+     lambda e: test_cancel_writes_only_the_sanctioned_bytes_and_logs_once(e, "offer-pending")),
+    ("arm-fault-mapped-to-uncertain",
+     "and apply_unpublished(slot) then", "and false then", lambda e: arm_fault_run(e, "before")),
+]
+
+
+@pytest.mark.parametrize("name,before,after,check", CANCEL_MUTANTS, ids=[m[0] for m in CANCEL_MUTANTS])
+def test_each_cancel_mutant_is_caught(env, monkeypatch, name, before, after, check):
+    source = PATH.read_text(encoding="utf-8")
+    assert source.count(before) == 1
+    check(env)
+    original = Binder
+
+    def mutated(*args, **kwargs):
+        kwargs["mutation"] = (before, after)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(sys.modules[__name__], "Binder", mutated)
+    with pytest.raises(AssertionError):
+        check(env)

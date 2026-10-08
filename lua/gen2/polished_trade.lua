@@ -285,6 +285,11 @@ function PT.compose(spec)
         for _,name in ipairs({'read_u8','read_range','write_u8','bank_valid','framecount'}) do
             assert(type(io[name]) == 'function','trade IO missing: '..name)
         end
+        -- Optional diagnostics sink (cancel logs exactly once per cancelled visit). Production
+        -- composition passes none: the BizHawk console `print` is the default.
+        local log = spec.log
+        if log == nil then log = print end
+        assert(type(log) == 'function', 'trade log must be a function')
         local function frame()
             local n=io.framecount(); assert(integer(n) and n >= 0, 'invalid frame counter'); return n
         end
@@ -364,7 +369,7 @@ function PT.compose(spec)
             end
         end
         local raw=Lease.new({lease=l.base,party_capacity=d.party_capacity,check=check,stage=stage},io,writes)
-        local offered, answered_at, token, attempted, disposition, reason
+        local offered, answered_at, token, attempted, disposition, reason, cancelled
         local role, phase, prompt_visit, prompt_result, released_at
         local T={hooks=clone(entries),spans=clone(st),timeouts=clone(t.timeouts),write_log=permit.log}
         local function scoped(fn,...)
@@ -387,10 +392,11 @@ function PT.compose(spec)
         end
         function T:advertised() return false end -- H1 is dev-only, including with future component labels.
         function T:phase() return role,phase end
-        function T:poll_query() if not poisoned and not attempted and role ~= 'responder' then return raw:poll_query() end end
-        function T:poll_offer() if not poisoned and not attempted and role ~= 'responder' then return raw:poll_offer() end end
+        function T:poll_query() if not poisoned and not attempted and not cancelled and role ~= 'responder' then return raw:poll_query() end end
+        function T:poll_offer() if not poisoned and not attempted and not cancelled and role ~= 'responder' then return raw:poll_offer() end end
         function T:answer_query(gen,mask,visit)
             if poisoned then return nil,'UNCERTAIN',poisoned end
+            if cancelled then return nil,'NOT_PERFORMED',reason end
             if role == 'responder' then return nil,'PENDING','responder visit active' end
             if attempted then return nil,'PENDING','APPLY already attempted' end
             local yes,a,b=scoped(raw.answer_query,raw,gen,mask,visit)
@@ -402,6 +408,7 @@ function PT.compose(spec)
         end
         function T:answer_offer(gen,accept)
             if poisoned then return nil,'UNCERTAIN',poisoned end
+            if cancelled then return nil,'NOT_PERFORMED',reason end
             if role == 'responder' then return nil,'PENDING','responder visit active' end
             if attempted or offered then return nil,'PENDING','OFFER already answered' end
             local offer=raw:poll_offer()
@@ -416,6 +423,7 @@ function PT.compose(spec)
         end
         local function apply_ready(command,slot,visit)
             if poisoned then return nil,'UNCERTAIN',poisoned end
+            if cancelled then return nil,'NOT_PERFORMED',reason end
             if command ~= t.commands.APPLY then return nil,'PENDING','proposer APPLY only' end
             if role == 'responder' then
                 if attempted or phase ~= 'released' or prompt_result ~= 0 then
@@ -450,8 +458,29 @@ function PT.compose(spec)
                bytes[l.fields.slot+1] ~= slot or bytes[l.fields.result+1] ~= 0 then return nil,'PENDING','offer lease changed' end
             return true
         end
+        local function apply_unpublished(slot)
+            -- After an arm(APPLY) that emitted writes and then failed: true ONLY when the lease still reads as
+            -- the exact pre-APPLY frame the ROM is holding for this visit (proposer: the accepted OFFER,
+            -- trade_service.asm:150-170 waits for command APPLY; responder: the consumed consent RELEASE,
+            -- trade_responder.asm:170-171 likewise) -- header, token, slot, result 0 and generation == ACK ==
+            -- the held generation. Then neither the APPLY command byte nor its generation reached the lease
+            -- and no pickup can have happened. An unreadable lease, or any observed APPLY byte / generation,
+            -- is NOT proof and keeps the write-exception latch.
+            local held_cmd=role == 'responder' and t.commands.RELEASE or t.commands.OFFER
+            local held_gen=role == 'responder' and prompt_visit.gen or offered.gen
+            local ok,bytes=pcall(io.read_range,l.base,l.size)
+            if not ok or not Lease.valid_bytes(bytes,l.size) then return false end
+            local f=l.fields
+            for i=1,4 do
+                if bytes[f.magic+i] ~= l.magic[i] or bytes[f.token+i] ~= token[i] then return false end
+            end
+            return bytes[f.version+1] == l.version and bytes[f.command+1] == held_cmd
+               and bytes[f.generation+1] == held_gen and bytes[f.ack+1] == held_gen
+               and bytes[f.slot+1] == slot and bytes[f.result+1] == 0
+        end
         function T:arm(command,slot,visit,payload)
             if poisoned then return nil,'UNCERTAIN',poisoned end
+            if cancelled then return nil,'NOT_PERFORMED',reason end
             if command == t.commands.PROMPT then
                 if role ~= nil then return nil,'PENDING','visit already active; reset after closure' end
                 if not t.capabilities.responder_service then return nil,'PENDING','responder service absent' end
@@ -469,6 +498,17 @@ function PT.compose(spec)
             if not ready then return nil,a,b end
             local gen,a,b=scoped(raw.arm,raw,command,slot,clone(visit),clone(payload))
             if gen then attempted=true; phase='apply'; disposition=nil; reason=nil; return gen end
+            if a == 'UNCERTAIN' and poisoned == b and apply_unpublished(slot) then
+                -- Owner ruling 2026-10-07: the emission failed (staging, or the frame before its command byte)
+                -- and the readback PROVES the lease is still the held pre-APPLY frame, so no commit can have
+                -- started: pre-APPLY uncertainty closes the lease through the cancel path, logs once and
+                -- reports NOT_PERFORMED. Anything the readback cannot prove stays poisoned (UNCERTAIN).
+                poisoned=nil
+                local closed_,ca,cb=self:cancel('APPLY not published: '..b)
+                if closed_ then return nil,'NOT_PERFORMED',reason end
+                if ca ~= 'UNCERTAIN' then poisoned=b end -- the close did not emit either: keep the latch
+                return nil,'UNCERTAIN',poisoned
+            end
             return gen,a,b
         end
         local function matching_done_result()
@@ -488,6 +528,7 @@ function PT.compose(spec)
         end
         function T:poll_done()
             if poisoned then return {disposition='UNCERTAIN',reason=poisoned} end
+            if cancelled then return nil end -- a DONE the ROM may still publish (decline) is not ours to claim
             local result=matching_done_result(); if result == nil then return nil end
             raw.phase='done'
             if role == 'responder' and (phase == 'prompt' or phase == 'consented' or phase == 'declined') then
@@ -511,6 +552,7 @@ function PT.compose(spec)
         end
         function T:release(gen)
             if poisoned then return nil,'UNCERTAIN',poisoned end
+            if cancelled then return nil,'NOT_PERFORMED',reason end
             local done=self:poll_done()
             local prompt_done=role == 'responder' and (phase == 'consented' or phase == 'declined')
             if not done or (done.disposition ~= 'NOT_PERFORMED' and not prompt_done) then
@@ -526,6 +568,7 @@ function PT.compose(spec)
         function T:closed() return io.read_u8(l.base+l.fields.command) == 0 end
         function T:disposition()
             if poisoned then return 'UNCERTAIN',poisoned end
+            if cancelled then return 'NOT_PERFORMED',reason end
             if role == 'responder' and not attempted and self:closed() then
                 if disposition == 'DECLINED' then return disposition,reason end
                 return 'NOT_PERFORMED','responder closed before APPLY'
@@ -540,9 +583,56 @@ function PT.compose(spec)
                 return nil,'UNCERTAIN','unsettled visit cannot reset'
             end
             if not self:closed() then return nil,'PENDING','lease must close before reset' end
-            offered,answered_at,token,attempted,disposition,reason=nil,nil,nil,nil,nil,nil
+            offered,answered_at,token,attempted,disposition,reason,cancelled=nil,nil,nil,nil,nil,nil,nil
             role,phase,prompt_visit,prompt_result,released_at=nil,nil,nil,nil,nil
             raw.expected,raw.phase,raw.visit_token,raw.entry_observed=nil,nil,nil,false
+            return true
+        end
+        -- Host-side close of a visit BEFORE any APPLY is armed (owner ruling 2026-10-07: pre-APPLY
+        -- uncertainty closes the lease, logs once and reports NOT_PERFORMED; UNCERTAIN stays reserved for an
+        -- armed APPLY, whose path is untouched here). The bytes are the ROM's own documented host-side closes
+        -- (patch/polished/src/trade_service.asm:20-21: "an OFFER reject, a token/slot/generation drift ...
+        -- closes the lease with no DONE"):
+        --   * the four visit-token bytes are ZEROED. SlinkTradeCheckToken refuses a zero token
+        --     (trade_frame.asm:50,69-71) at every pre-APPLY inspection of both services -- proposer
+        --     trade_service.asm:81 (after the QUERY answer, before the party menu), :114 (CheckHeldFrame after
+        --     the native menus, before the snapshot and the OFFER), :140 (after the OFFER answer), :166 (every
+        --     APPLY-wait frame); responder trade_responder.asm:70 (entry), :106 (CheckHeldFrame after the
+        --     YesNoBox, before the consent snapshot/DONE), :150 (every RELEASE-owed / APPLY-wait frame) -- and
+        --     each refusal is `jp SlinkTradeExit` / `SlinkTradeResponderExit` (release snapshot, SlinkTradeClose,
+        --     balanced stack), never a DONE. Command and generation are NOT written: a cancel can never be read
+        --     as a PROMPT, APPLY, RELEASE, consent or commit. A RELEASE would be ignored by the APPLY wait
+        --     (trade_service.asm:168-170) and a command 0 likewise, so neither is a close.
+        --   * a pending UNANSWERED OFFER is also rejected (result 1, then ACK = its generation LAST, exactly
+        --     answer_offer(gen,false)): trade_service.asm:145-147 exits on any nonzero result, so the 600-frame
+        --     OFFER wait ends on the next frame instead of at its timeout.
+        -- Post-DONE waits ignore the token (trade_service.asm:227-229, trade_responder.asm:227-229 `jr c, .wait`)
+        -- and close on their own 90-frame bound; a responder NO pressed after the cancel still publishes its
+        -- decline DONE (:128-131), which poll_done no longer claims. Not reversible: the visit stays
+        -- NOT_PERFORMED until reset() after the ROM's close. Returns true; nil,'PENDING',why when refused
+        -- without a write; nil,'UNCERTAIN',why after a partial emission (the shared write-exception latch).
+        function T:cancel(why)
+            if poisoned then return nil,'UNCERTAIN',poisoned end
+            if cancelled then return true end -- idempotent: no second write, no second log
+            if attempted then return nil,'PENDING','APPLY already armed: cancel refused' end
+            if role == nil then return nil,'PENDING','no visit to cancel' end
+            if type(why) ~= 'string' or why == '' then return nil,'PENDING','cancel reason required' end
+            if disposition ~= nil and disposition ~= 'CONSENTED' then
+                return nil,disposition,'visit already terminal: '..tostring(reason)
+            end
+            local pending=(role == 'proposer' and not offered) and raw:poll_offer() or nil
+            local yes,a,b=scoped(function()
+                if pending then writes:write_bytes(l.base+l.fields.result,{1}) end -- cancel: OFFER reject first
+                writes:write_bytes(l.base+l.fields.token,{0,0,0,0}) -- cancel: token drift
+                if pending then writes:write_bytes(l.base+l.fields.ack,{pending.gen}) end -- cancel: ACK publishes LAST
+                return true
+            end)
+            if not yes then return yes,a,b end
+            cancelled=true; raw.visit_token=nil
+            disposition,reason='NOT_PERFORMED','cancelled before APPLY: '..why
+            log(string.format('[SLink-polished] trade visit cancelled before APPLY (%s/%s): %s',
+                              tostring(role),tostring(phase),why))
+            phase='cancelled'
             return true
         end
         if spec.test_hooks == true then
