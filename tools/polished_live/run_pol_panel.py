@@ -1,7 +1,7 @@
 """pol-panel live runner: the Polished panel driver on a private lane, ROM staged from the COMMITTED ups.
 
 Deliberate differences from run_phone.py:
-  * POL_LANE is this lane (F:/slink-work/lanes/pol-panel2), never pol-phone's;
+  * POL_LANE selects the private lane (default F:/slink-work/lanes/pol-panel2);
   * the ROM is NOT taken from the shared cache. It is the committed patch/dist/SLink-Polished.ups
     applied to the pinned release ROM, and its sha1 is checked against
     data/polished/overlay_provenance.json -- the same pin build_polished_companion.py enforces.
@@ -13,7 +13,7 @@ import pathlib
 import shutil
 import sys
 
-LANE_ROOT = pathlib.Path("F:/slink-work/lanes/pol-panel2")
+LANE_ROOT = pathlib.Path(os.environ.get("POL_LANE", "F:/slink-work/lanes/pol-panel2"))
 os.environ["POL_LANE"] = str(LANE_ROOT)
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO / "tools"))
