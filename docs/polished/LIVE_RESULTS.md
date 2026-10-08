@@ -783,3 +783,15 @@ Card `g2p-svclive` (OMP 21080, probe fixes `6a754640`, merged `a73ce497c`). Over
 | apply-invalid | 1 | PASS, frame 1231 | PASS |
 
 Both FAILs were instrument defects, fixed red-first in the probe (`trade_service_probe.lua`) before the single retry; no unchanged failing case was re-run. In every PASS the lease ends idle (command/available/mask 0), the script engine is restored and the native close/return order holds. `apply-done1` PASS is disabled-commit evidence (result 1 = not performed), never a trade. Not shown: a cable partner, the SLink client/server, an enabled commit.
+
+## Cold reload identity/census probe on the current overlay (2026-10-08, SYNTH fixture, native CONTINUE, DEV). PASS (bounded)
+
+Card `g2p-reloadlive` (OMP 21080; no code change). Overlay `cf03f53accefbc5f3fee9062846699e30c4c987b`, private ROM sha1-checked; fixture the qualified SYNTH save `75c7a5dc...` (unchanged after all runs). The EXPECTED file was decoded independently from raw fixture bytes (not through the probe's or the codec's decoders): party of five (`EFFFFF:D1C2:0A9:00`, `DFFFFF:D1C2:087:00`, `CFFFFF:D1C2:037:40`, `BFFFFF:D1C2:022:00`, `AFFFFF:D1C2:055:40`), OT `80a0a0a0a0a0a053000000` for every slot, player `d1c2`, all twenty boxes empty in both newbox metadata copies. Route: the cold-boot prefix of `tools/polished_live/routes/dispatch_d3_route.json` through its first idle (A presses, no walking). Evidence root `F:/slink-work/lanes/pol-reloadlive` (`receipts.json`).
+
+| run | verdict | notes |
+|---|---|---|
+| offline | PASS | both save copies valid, region sums 5092; ROM version not observable offline (expected) |
+| live cold `cold-vde_8n71` | PASS, reasons [] | native load at frame 261, main copy selected, stable snapshot at frame 338; ROM version slot `920aab8b0caa7fe09ce19ce05300000000000000` = provenance `version_slot` (coordinator recomputed from the UPS); zero guest writes |
+| live cold, wrong slot-0 key (red control) `cold-ghrg2v6_` | MISSING_RECEIVED | same route/ROM/fixture; the oracle rejects it, never PASS |
+
+Bounded: empty referenced storage, main-copy acceptance only. Not exercised: occupied boxes / banked PokeDB, backup-copy fallback, a corrupt save, a reload after a trade or a box write.
