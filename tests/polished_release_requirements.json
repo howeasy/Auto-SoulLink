@@ -47,6 +47,10 @@
     "LIVE-PHONE-ENTRY",
     "LIVE-RECEPTIONIST-STACK",
     "LIVE-POKEGEAR-MEASUREMENT",
+    "LIVE-TITLE-SPLASH",
+    "LIVE-WRITES-OVERWORLD",
+    "LIVE-PANEL-PAGES-ROM",
+    "LIVE-PANEL-HELLO",
     "MGR-RANDOMIZER-FLAG",
     "MGR-PICKER-GATE",
     "MGR-COMPANION-GATE",
@@ -404,6 +408,76 @@
       ]
     },
     {
+      "id": "LIVE-TITLE-SPLASH",
+      "kind": "LIVE",
+      "description": "the SoulLink wordmark on the title screen and the main-menu patch-version slice, against a clean-ROM control",
+      "receipt": "tests/fixtures/polished/receipts/live_title_splash.json",
+      "expect_scenario": "title/wordmark-vs-clean-control",
+      "expect_checks": [
+        "overlay run verdict",
+        "ROM booted is the provenance overlay",
+        "wordmark band tile ids and palette-6 attributes at entrance and settled",
+        "VRAM tile data equals the shipped Crystal wordmark art",
+        "both wordmark rows join the interlaced logo shear",
+        "the settled screen matches the wordmark pixels",
+        "main-menu version slice equals the ROM field",
+        "clean-ROM control FAILS the identical judge"
+      ]
+    },
+    {
+      "id": "LIVE-WRITES-OVERWORLD",
+      "kind": "LIVE",
+      "description": "force_faint (bench), box_mon and party_mon through the client's own command path, each an exact-diff subset with a failing control",
+      "receipt": "tests/fixtures/polished/receipts/live_writes_overworld.json",
+      "expect_scenario": "writes/overworld-faint-deposit-withdraw",
+      "expect_checks": [
+        "run verdict",
+        "ROM booted is the provenance overlay with the overworld writer and box executor composed",
+        "force_faint: the bench mon's HP is 0, status 0, party count unchanged",
+        "force_faint: every write is inside the target's +32/+34/+35 bytes",
+        "force_faint: exact diff subset, and its control fails",
+        "box_mon: party 5 -> 4 and the key leaves the party",
+        "box_mon: the mon is in a gameplay box and its pokedb entry checksum verifies",
+        "box_mon: exact diff subset over declared ranges, and its control fails",
+        "party_mon: party 4 -> 5, the key at the last slot, healed",
+        "party_mon: the box slot is cleared and the pokedb entry is never freed",
+        "party_mon: exact diff subset, and its control fails",
+        "independent recompute of the three diffs equals the driver's"
+      ]
+    },
+    {
+      "id": "LIVE-PANEL-PAGES-ROM",
+      "kind": "LIVE",
+      "description": "the panel pages C0-C5 render and close against an ABI-obeying scripted host (the ROM half)",
+      "receipt": "tests/fixtures/polished/receipts/live_panel_pages_rom.json",
+      "expect_scenario": "panel/c0-c5-scripted-host",
+      "expect_checks": [
+        "run verdict",
+        "ROM booted is the provenance overlay",
+        "C0 the SLink row is row 0 and A opens the submenu",
+        "C1 PANEL cap advertised and the 69-byte mailbox span",
+        "C2 page 1 renders SOUL LINK / PARTNER: RED with no extra keypress",
+        "C3 A advances to page 2 PAIRS 2/3 / BADGES 4/8",
+        "C4 B closes back to the Phone list with no call placed and PANEL_STATE cleared",
+        "C5 every panel write is inside the mailbox span and the audit is non-vacuous"
+      ]
+    },
+    {
+      "id": "LIVE-PANEL-HELLO",
+      "kind": "LIVE",
+      "description": "the real client's hello to the real server advertises panel true on the current overlay",
+      "receipt": "tests/fixtures/polished/receipts/live_panel_hello.json",
+      "expect_scenario": "live/hello-panel-true",
+      "expect_checks": [
+        "run verdict",
+        "hello on the wire carries panel true and panel_abi 3",
+        "hello rom_sha1 is the provenance overlay",
+        "hello identity is polished_crystal/gen2_polished/overlay",
+        "server admitted the cartridge",
+        "0 Lua-originated writes and no panel write attempt"
+      ]
+    },
+    {
       "id": "MGR-RANDOMIZER-FLAG",
       "kind": "MANAGER",
       "description": "upr_pipeline.POLISHED_RANDOMIZER_ENABLED is the single switch every Manager path reads",
@@ -440,11 +514,11 @@
       "kind": "OPEN",
       "status": "OPEN",
       "blocking_rc": true,
-      "description": "force_faint and box_mon: the Polished write sink has no armed battle_faint or overworld plan yet, so a linked mon cannot be killed or deposited",
-      "blocker": "composed in the tree (deposit/withdraw executors, F1 plain-faint writer, opt-in F2 settlement, default-OFF classifier) with live box_mon/force_faint driver receipts only on OLDER overlays (LIVE_WRITES.md); not re-qualified on the current overlay 877a477a; supports_box_mon stays False; no PHYSICAL player-faint receipt",
+      "description": "force_faint and box_mon: a linked mon must be killable and depositable through the armed Polished write sink",
+      "blocker": "overworld half live on the current overlay 688945795e (LIVE-WRITES-OVERWORLD: bench force_faint, box_mon, party_mon exact diffs PASS) and supports_box_mon is True since 8c1b841e2; still missing: a PHYSICAL in-battle (active battler) faint receipt (duo S2n card in flight) and the (c) negatives under a real battle (writes.lua:612-618, NOT RUN)",
       "manager_row": null,
       "manager_row_note": "no Manager option governs the write sink; the consistency check binds only named options",
-      "evidence": "F:/slink-work/lanes/pol-phone/live_stageA/result.txt:68 'no Lua-originated memory write during the whole run (client included) -- 0'; docs/polished/BATTLE_FLOW.md F6"
+      "evidence": "tests/fixtures/polished/receipts/live_writes_overworld.json (F:/slink-work/lanes/pol-writes6889/writes/result.txt:69 '(c) negatives: NOT RUN'); docs/polished/BATTLE_FLOW.md F6"
     },
     {
       "id": "OPEN-EXPLODE-RIVAL",
@@ -452,31 +526,32 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "Explode Mode and Rival Team Swap writers exist as pure Lua modules but are not wired for Polished",
-      "blocker": "writers composed but inert (plain-faint opt-in OFF, rival facade refuses by default); the Manager still refuses both options for gen2_polished; rival gate proven at PROBE level only on 877a477a (LIVE_RESULTS.md 2026-10-08), no swap write live",
+      "blocker": "writers composed but inert (plain-faint opt-in OFF, rival facade refuses by default); the Manager still refuses both options for gen2_polished; rival gate proven at PROBE level only on historical overlay 877a477a (LIVE_RESULTS.md 2026-10-08), not re-run on the current overlay 688945795e, no swap write live",
       "manager_options": ["explode_mode", "rival_team_swap"],
       "evidence": "server/manager.py OPTION_SUPPORT['explode_mode']['gen2_polished'] ok=False; docs/polished/EXPLODE_RIVAL.md"
     },
     {
       "id": "OPEN-TITLE-SPLASH",
       "kind": "OPEN",
-      "status": "OPEN",
+      "status": "CLOSED",
+      "closed_by": "LIVE-TITLE-SPLASH",
       "blocking_rc": true,
-      "description": "the title-screen SLink splash is specified but not landed",
-      "blocker": "no Polished title code on the integration branch (the pol-title2 port was never built green); docs/polished/TITLE.md is a spec",
+      "description": "the title-screen SoulLink wordmark and main-menu patch-version slice, landed in patch/polished/src/title.asm and version.asm",
+      "blocker": "none: closed by LIVE-TITLE-SPLASH (overlay PASS, clean-ROM control FAIL on 688945795e). CGB fresh boot only; DMG and save variants not covered",
       "manager_row": null,
       "manager_row_note": "the title splash is a client feature; OPTION_SUPPORT['overworld_presence'] has no gen2_polished row",
-      "evidence": "docs/polished/TITLE.md; no lua/gen2 file reads the title screen for SLink"
+      "evidence": "tests/fixtures/polished/receipts/live_title_splash.json (F:/slink-work/lanes/pol-rcproof/title/evidence.json, 2026-10-08)"
     },
     {
       "id": "OPEN-PANEL-PAGES",
       "kind": "OPEN",
       "status": "OPEN",
       "blocking_rc": true,
-      "description": "the in-game panel pages (docs/polished/PANEL.md, PANEL_SLOT.md) are specified but not landed",
-      "blocker": "panel pages landed and passed C0-C5 live on a LANE overlay (LIVE_PANEL.md); not qualified on the current overlay 877a477a and no hello receipt with panel=true is bound to it",
+      "description": "the in-game panel pages (docs/polished/PANEL.md, PANEL_SLOT.md), paged by the real SLink host",
+      "blocker": "ROM half live on the current overlay 688945795e (LIVE-PANEL-PAGES-ROM: C0-C5 PASS against a scripted mailbox host) and the real client's hello advertises panel=true, panel_abi 3 (LIVE-PANEL-HELLO); still missing: real-host paging live (server link_panel -> lua panel:hold -> ROM render), card in flight",
       "manager_row": null,
       "manager_row_note": "the panel pages are a client feature; battle_calc's refusal is about calculator DATA, a separate obligation",
-      "evidence": "F:/slink-work/lanes/pol-phone/live_stageA/result.txt:12 hello carries 'panel false'"
+      "evidence": "tests/fixtures/polished/receipts/live_panel_pages_rom.json and live_panel_hello.json (F:/slink-work/lanes/pol-rcproof/panel/run/result.txt, F:/slink-work/lanes/pol-rcproof/hello/live/wire/wire_a.jsonl:2)"
     },
     {
       "id": "OPEN-IN-GAME-TRADE",

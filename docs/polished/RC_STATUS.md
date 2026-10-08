@@ -25,7 +25,7 @@ The gate is red, and every red is a real reason. None of them is the verifier be
 
 | # | Red | Why it is red | Who clears it |
 |---|---|---|---|
-| 1 | five OPEN items | `OPEN-WRITE-PATH`, `OPEN-EXPLODE-RIVAL`, `OPEN-TITLE-SPLASH`, `OPEN-PANEL-PAGES`, `OPEN-IN-GAME-TRADE` are all `status: OPEN, blocking_rc: yes` | the owning cards; each needs a `closed_by` author to flip |
+| 1 | four OPEN items (one CLOSED) | `OPEN-WRITE-PATH`, `OPEN-EXPLODE-RIVAL`, `OPEN-PANEL-PAGES`, `OPEN-IN-GAME-TRADE` are `status: OPEN, blocking_rc: yes`; `OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH` (2026-10-08) | the owning cards; each needs a `closed_by` LIVE receipt to flip |
 | 2 | three SOURCE cells red | `gen_polished_engine_sites`, `gen_polished_pack` and `gen_polished_profile` `--check` all fail | see §2 — this is a real commit-consistency defect, not an environment artefact |
 | 3 | five LIVE cells STALE | they ran overlay `29ea04c2`; the phone-card commit republished the overlay as `34942315` | re-run those five scenarios on the current overlay |
 | 4 | two BUILD cells | a full rgbds build; see §4 | the build host |
@@ -119,6 +119,22 @@ The R1/R2/R3 rows bind on `source_overlay_sha1`, not on the booted cartridge's o
 randomized cartridge can never equal the overlay sha1, so binding on it would be red forever.
 The item declares `"bind": "source"` and the receipt carries the overlay it was derived from.
 
+### 2026-10-08: four receipts bound to `68894579` and to a computed code digest
+
+The overlay is now `688945795e2656019247f5aaceb7b1d8791e900a` (title wordmark, `1d750de2e`), so
+every receipt above is STALE on the ROM binding. Four new DEV receipts were written against it,
+and unlike the older ones they carry the code digest the verifier computes
+(`--print-code-digest` = `f8966ea4…`), checked on the run worktree at `2959ee36a`:
+
+| item | evidence | what it does NOT prove |
+|---|---|---|
+| `LIVE-TITLE-SPLASH` | `pol-rcproof/title/evidence.json`: overlay PASS, clean-ROM control FAIL (15 reasons) on the same judge | DMG; save/main-menu variants |
+| `LIVE-WRITES-OVERWORLD` | `pol-writes6889/writes/result.txt`, 45 `[ok]`; a/b/d exact diffs recomputed from `trace.json` | (c) negatives; in-battle/PHYSICAL faint; bank 2 |
+| `LIVE-PANEL-PAGES-ROM` | `pol-rcproof/panel/run/result.txt`, C0-C5, 21 `[ok]` | pages from the real host (a scripted writer published them) |
+| `LIVE-PANEL-HELLO` | `pol-rcproof/hello/live/wire/wire_a.jsonl:2`: `panel true`, `panel_abi 3` | paging |
+
+`OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH`; the verifier re-checks that closure on every run.
+
 ### Every receipt is DEV, and cannot promote itself
 
 The receipt schema accepts `grade: "DEV"` only. A lane author writing a receipt cannot mark their
@@ -166,10 +182,10 @@ Run these two on the build host, sequentially, and clear the cache first if the 
 
 | item | Manager row it is bound to | why it blocks an RC |
 |---|---|---|
-| `OPEN-WRITE-PATH` | none (no Manager option governs the write sink) | every live run recorded **0 Lua-originated memory writes**; `force_faint` and `box_mon` have no armed plan, so a linked mon cannot be killed or deposited |
+| `OPEN-WRITE-PATH` | none (no Manager option governs the write sink) | overworld half live on `68894579` (`LIVE-WRITES-OVERWORLD`) and `supports_box_mon` is True since `8c1b841e2`; still no in-battle (active battler) / PHYSICAL faint receipt and no (c) negatives under a real battle |
 | `OPEN-EXPLODE-RIVAL` | `explode_mode`, `rival_team_swap` | both writers exist as pure Lua modules and neither is wired |
-| `OPEN-TITLE-SPLASH` | none | `docs/polished/TITLE.md` is a spec; no `lua/gen2` file reads the title screen for SLink |
-| `OPEN-PANEL-PAGES` | none | every recorded hello carries `panel false` |
+| `OPEN-TITLE-SPLASH` | none | **CLOSED** 2026-10-08 by `LIVE-TITLE-SPLASH` |
+| `OPEN-PANEL-PAGES` | none | ROM half (C0-C5, scripted host) and hello `panel=true` live on `68894579`; real-host paging (server `link_panel` -> lua `panel:hold` -> ROM) not yet run live |
 | `OPEN-IN-GAME-TRADE` | `pc_trade_npc` | the receptionist stack is measured, but no dispatch is armed; the native path stops at `Special_WaitForLinkedFriend` |
 
 Where an item names a Manager row, the verifier cross-checks that the row is **still refused**.
