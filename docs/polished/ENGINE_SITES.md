@@ -55,7 +55,61 @@ the client can tell "player pressed withdraw" from "the copy landed".
 | `save_completed` | `_SaveGameData.ok`, `engine/menus/save.asm:293` | `StartMenu_Save.saved`, `sym:4249`, `04:628f` | `renamed` / `UNVERIFIED` | save epoch | `_SaveGameData` does not exist; `SaveGameData` does (`sym:4664`, `05:478d`) without `.ok`. `StartMenu_Save.saved` is the caller-side success label. Which one the vanilla site corresponds to is **not established**. |
 | `map_entry_complete` | `EnterMap.dontresetpoison`, `engine/overworld/events.asm:127` | `EnterMap.dontresetpoison`, `sym:22891`, `25:514b` | `same` | `wMapGroup`/`wMapNumber` | Sub-label preserved verbatim; vanilla bank `$25` (37) is also `$25`, so the bank is unchanged and only the address moved. |
 | `continue_confirmed` | `Continue.Check2Pass`, `engine/menus/intro_menu.asm:359` | `Continue`, `sym:1924`, `01:60ca` | `renamed` / `UNVERIFIED` | party snapshot after copy | `Continue.Check2Pass` is gone; the sub-label naming changed. The `ld a, $8` the vanilla site sits on is **not verified** at `$60ca`. |
-| `whiteout_before_heal` | `Special`, `engine/events/specials.asm:1` | `Special`, `sym:2648`, `03:401b` | `same` | party HP, whiteout flag | Bank and address identical to vanilla `$03:401b` — remarkable, but see §9 note 1 on the shared `Special` label. |
+| `whiteout_before_heal` | `Special`, `engine/events/specials.asm:1` | **`LoseMoney` entry, `04:5EB9` +0**, `engine/events/whiteout.asm:57-60` | `moved` / source-resolved | party snapshot at the hook; guarded HRAM script bank/cursor | Replaces the shared `Special` dispatcher. See §3.1; not a write window or a physically qualified hook. |
+
+### 3.1 Guarded native whiteout entry
+
+`whiteout_before_heal` retains phase `before_heal_dispatch`, meaning **native
+whiteout entry before money/text/pause/heal**, not the `special HealParty` opcode.
+The only native caller is `Script_Whiteout`'s `callasm LoseMoney`
+(`engine/events/whiteout.asm:9-10`). Battle and overworld whiteouts join that
+script (`:1-10`); it waits for text, fades, pauses, then heals (`:27-30`).
+The shared `Special` dispatcher and `LostBattle` are not discriminating sites.
+
+The generator re-encodes `xor a; ld [wSpinning], a; ld hl, wMoney` from the pinned
+symbols and requires exactly one seven-byte match in `LoseMoney`'s extent,
+at offset zero. Current site: bank `04`, address `5EB9`, flat ROM offset `11EB9`,
+`expected_hex == find_hex == AFEA24D121E5D7`. A missing, duplicate, or displaced
+anchor refuses generation.
+
+Required guards combine with **ALL**:
+
+| Guard | Pinned value | Derivation |
+|---|---|---|
+| `hScriptBank`, `00:FFEB`, one byte | `04` | `Script_Whiteout`'s symbol bank |
+| `hScriptPos`, `00:FFEC`, two bytes, little-endian | `5E60` | `Script_Whiteout` address `5E5C` plus the consumed four-byte `callasm` |
+| `script_context` | `Script_Whiteout`, `04:5E5C`, `0E04B95E` | opcode from the word-table index of `Script_callasm`, then the `LoseMoney` bank/address |
+
+`macros/scripts/events.asm:96-100` emits `callasm` as an opcode and `dba` target.
+`engine/overworld/scripting.asm:52-73,314-319` supplies the dispatch table and
+consumes that bank/address before calling native code. Generation validates the
+caller bytes rather than copying a vanilla register/stack guard.
+
+The current shipped UPS was applied in memory: output SHA1
+`688945795e2656019247f5aaceb7b1d8791e900a`. Both the caller bytes and the entire
+native `LoseMoney` extent match the release ROM. All whiteout/guard symbols match
+the current overlay SYM, and the full bank `04` is unchanged from research overlay
+SHA1 `cf03f53accefbc5f3fee9062846699e30c4c987b`. This is byte/source evidence,
+not a physical callback receipt. The row remains `SOURCE_CANDIDATE`,
+`physical_firing: OPEN`, `runtime_enabled: false`; client registration and live
+load/fire bank/PC/byte validation are separate work.
+
+**Snapshot the party at the hook**, before queued processing can cross `HealParty`.
+The hook fires for every native whiteout, including trainer forfeits with living
+party members (`engine/battle/core.asm:4862-4890`;
+`engine/events/whiteout.asm:12-19`). **Owner ruling 2026-10-08: a trainer forfeit
+is not a Soul Link whiteout.** The consumer reports `whiteout` only when every
+non-egg party mon has HP 0 in the snapshot taken at this hook (the vanilla
+predicate). Native entry alone is not sufficient to report a Soul Link whiteout.
+Link, Battle Tower and can-lose outcomes do not use this caller unless they
+actually enter `Script_Whiteout`; unrelated shared-dispatch calls must never
+emit this signal.
+
+The retained `poison_faint` row is **N/A for faint reporting**: at 1 HP Polished
+cures poison rather than reducing HP to zero, otherwise it deals 1 HP damage
+(`engine/events/poisonstep.asm:96-123`). Its descriptor/phase now name the
+poison-step entry, not an after-zero-HP witness; the earlier §2 `same` verdict
+does not establish vanilla faint semantics.
 
 ## 4. Acquisition — catch, gift, trade, contest, roamer, hatch
 
@@ -163,10 +217,10 @@ SLink's link and dead-zone rules will see and must classify.
 
 ## 9. Risks and open items
 
-1. **`Special` is a shared label.** The vanilla `whiteout_before_heal` site and the
-   Polished `Special` (`sym:2648`, `03:401b`) are at the same bank and address.
-   Expected for an early, stable routine, but the label alone cannot prove the
-   surrounding code is unchanged. Re-read `engine/events/specials.asm` first.
+1. **Shared whiteout dispatch was replaced.** `whiteout_before_heal` now pins
+   native `LoseMoney` with required caller guards (§3.1), not the shared
+   `Special` label. Physical firing and callback snapshot timing remain open;
+   the generated row does not grant runtime admission.
 2. ~~**`battle_faint` has no located Polished counterpart.** This blocks both the
    faint event and the `battle_hold` checkpoint, whose two oracles are exactly the
    faint routine and `LostBattle`. Highest priority.~~

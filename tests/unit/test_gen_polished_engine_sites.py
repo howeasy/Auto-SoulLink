@@ -162,20 +162,6 @@ def test_generator_is_deterministic():
     assert a == b
 
 
-def test_check_is_red_on_drift(tmp_path: pathlib.Path):
-    signals_text, checkpoint_text = gen.build_all()
-    sig = tmp_path / "engine_signals.json"
-    ckpt = tmp_path / "write_checkpoint.json"
-    sig.write_text(signals_text, encoding="utf-8", newline="\n")
-    ckpt.write_text(checkpoint_text, encoding="utf-8", newline="\n")
-    saved = (gen.SIGNALS_OUT, gen.CHECKPOINT_OUT)
-    try:
-        gen.SIGNALS_OUT, gen.CHECKPOINT_OUT = sig, ckpt
-        assert gen.main.__wrapped__() is None if False else True  # main reads argv
-    finally:
-        gen.SIGNALS_OUT, gen.CHECKPOINT_OUT = saved
-
-
 def test_committed_packs_match_a_fresh_generation():
     signals_text, checkpoint_text = gen.build_all()
     assert gen.SIGNALS_OUT.read_text(encoding="utf-8") == signals_text
@@ -229,7 +215,9 @@ def test_capture_party_carries_the_cpu_instruction_proof_signals_lua_demands(sit
     sym = gen.read_sym(gen.SYMPATH)
     assert site["point_symbols"] == {n: {"bank": sym[n][0], "addr": sym[n][1]}
                                      for n in ("wPartyCount", "wBattleType", "wBattleScriptFlags", "wMapGroup", "wMapNumber")}
-    assert [k for k, v in sites.items() if "instructions" in v] == ["battle_faint_copyback_return", "capture_party"]
+    assert {k for k, v in sites.items() if "instructions" in v} == {
+        "battle_faint_copyback_return", "whiteout_before_heal", "capture_party",
+    }
 
 
 def test_an_instruction_proof_that_does_not_encode_the_rom_bytes_aborts(monkeypatch):
@@ -241,6 +229,117 @@ def test_an_instruction_proof_that_does_not_encode_the_rom_bytes_aborts(monkeypa
     monkeypatch.setitem(gen.PROOFS, "capture_party", wrong)
     with pytest.raises(SystemExit, match="instructions encode"):
         gen.build_site(row, rom, sym, [])
+
+
+def test_whiteout_is_the_guarded_native_entry_with_sym_derived_fields(sites: dict, rom: bytes):
+    sym = gen.read_sym(gen.SYMPATH)
+    site = sites["whiteout_before_heal"]
+    bank, addr = sym["LoseMoney"]
+    anchor = b"\xAF\xEA" + sym["wSpinning"][1].to_bytes(2, "little")
+    anchor += b"\x21" + sym["wMoney"][1].to_bytes(2, "little")
+    off = gen.flat(bank, addr)
+    assert (site["symbol"], site["bank"], site["addr"], site["symbol_offset"]) == (
+        "LoseMoney", bank, addr, 0)
+    assert site["rom_offset"] == off
+    assert site["expected_hex"] == site["find_hex"] == anchor.hex().upper()
+    assert site["hex_len"] == len(anchor) == 7
+    assert rom[off:off + len(anchor)] == anchor
+    assert site["phase"] == "before_heal_dispatch"
+    assert (site["kind"], site["status"], site["event_role"], site["maturity"]) == (
+        "CPU_INSTRUCTION", "RESOLVED", "OBSERVATION", "SOURCE_CANDIDATE")
+    assert site["physical_firing"] == "OPEN" and site["runtime_enabled"] is False
+    assert [s for s in sites.values() if s["signal"] == "whiteout"] == [site]
+    # The native dispatch word table supplies the script opcode, not a pasted 0x0E.
+    table = gen.flat(*sym["RunScriptCommand.Jumptable"])
+    table_end = gen.flat(*sym["GetScriptWordDE"])
+    handlers = [int.from_bytes(rom[i:i + 2], "little") for i in range(table, table_end, 2)]
+    call = bytes([handlers.index(sym["Script_callasm"][1]), bank]) + addr.to_bytes(2, "little")
+    script_bank, script_addr = sym["Script_Whiteout"]
+    script_off = gen.flat(script_bank, script_addr)
+    assert rom[script_off:script_off + len(call)] == call
+    expected_guards = {
+        "required": True, "combine": "ALL",
+        "memory_equals": [
+            {"symbol": "hScriptBank", "bank": sym["hScriptBank"][0],
+             "addr": sym["hScriptBank"][1], "width": 1, "value": script_bank},
+            {"symbol": "hScriptPos", "bank": sym["hScriptPos"][0],
+             "addr": sym["hScriptPos"][1], "width": 2, "byte_order": "little",
+             "value": script_addr + len(call)},
+        ],
+        "script_context": {"symbol": "Script_Whiteout", "bank": script_bank,
+                           "addr": script_addr, "expected_hex": call.hex().upper()},
+    }
+    assert site["guards"] == expected_guards
+    # Exercise the real serializer and the committed JSON, including both HRAM guards.
+    generated = json.loads(gen.build_all()[0])["titles"]["polished_crystal"]["sites"]
+    assert generated["whiteout_before_heal"]["guards"] == expected_guards
+
+
+@pytest.mark.parametrize("mutation,matches", [("wrong", 0), ("duplicate", 2)])
+def test_whiteout_refuses_a_wrong_or_duplicate_native_anchor(rom: bytes, mutation: str, matches: int):
+    sym = gen.read_sym(gen.SYMPATH)
+    row = next(s for s in gen.SITES if s["id"] == "whiteout_before_heal")
+    original = gen.build_site(row, rom, sym, [])
+    off, n = original["rom_offset"], original["hex_len"]
+    changed = bytearray(rom)
+    if mutation == "wrong":
+        changed[off] ^= 1
+    else:
+        changed[off + n:off + 2 * n] = rom[off:off + n]
+    with pytest.raises(SystemExit, match=f"matches {matches} times.*need exactly 1"):
+        gen.build_site(row, bytes(changed), sym, [])
+
+
+def test_whiteout_refuses_a_unique_anchor_moved_off_entry(rom: bytes):
+    sym = gen.read_sym(gen.SYMPATH)
+    row = next(s for s in gen.SITES if s["id"] == "whiteout_before_heal")
+    original = gen.build_site(row, rom, sym, [])
+    off, n = original["rom_offset"], original["hex_len"]
+    changed = bytearray(rom)
+    changed[off + n:off + 2 * n] = rom[off:off + n]
+    changed[off] ^= 1
+    with pytest.raises(SystemExit, match="must be the native LoseMoney entry"):
+        gen.build_site(row, bytes(changed), sym, [])
+
+
+def test_whiteout_refuses_a_wrong_script_caller(rom: bytes):
+    sym = gen.read_sym(gen.SYMPATH)
+    row = next(s for s in gen.SITES if s["id"] == "whiteout_before_heal")
+    changed = bytearray(rom)
+    changed[gen.flat(*sym["Script_Whiteout"]) + 2] ^= 1
+    with pytest.raises(SystemExit, match="must begin with callasm LoseMoney"):
+        gen.build_site(row, bytes(changed), sym, [])
+
+
+def test_whiteout_rederives_anchor_and_guards_when_symbols_relocate(rom: bytes):
+    sym = gen.read_sym(gen.SYMPATH)
+    row = next(s for s in gen.SITES if s["id"] == "whiteout_before_heal")
+    for name, delta in (("LoseMoney", 16), ("Script_Whiteout", 4),
+                        ("wSpinning", 1), ("wMoney", 1), ("hScriptBank", 1), ("hScriptPos", 1)):
+        bank, addr = sym[name]
+        sym[name] = bank, addr + delta
+    bank, addr = sym["LoseMoney"]
+    anchor = b"\xAF\xEA" + sym["wSpinning"][1].to_bytes(2, "little")
+    anchor += b"\x21" + sym["wMoney"][1].to_bytes(2, "little")
+    changed = bytearray(rom)
+    off = gen.flat(bank, addr)
+    changed[off:off + len(anchor)] = anchor
+    script_bank, script_addr = sym["Script_Whiteout"]
+    script_off = gen.flat(script_bank, script_addr)
+    # The dispatch table itself is unchanged in this control.
+    call = bytes([0x0E, bank]) + addr.to_bytes(2, "little")
+    changed[script_off:script_off + len(call)] = call
+    built = gen.build_site(row, bytes(changed), sym, [])
+    assert (built["bank"], built["addr"], built["symbol_offset"]) == (bank, addr, 0)
+    assert built["expected_hex"] == built["find_hex"] == anchor.hex().upper()
+    guard_bank, guard_pos = built["guards"]["memory_equals"]
+    assert (guard_bank["addr"], guard_bank["value"]) == (sym["hScriptBank"][1], script_bank)
+    assert (guard_pos["addr"], guard_pos["value"]) == (sym["hScriptPos"][1], script_addr + len(call))
+    assert built["guards"]["script_context"] == {
+        "symbol": "Script_Whiteout", "bank": script_bank, "addr": script_addr,
+        "expected_hex": call.hex().upper(),
+    }
+
 
 CLAIMS_DOC = """\
 ```json

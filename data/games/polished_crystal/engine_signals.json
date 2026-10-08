@@ -369,8 +369,8 @@
           "kind": "CPU_INSTRUCTION",
           "symbol": "DoPoisonStep.DamageMonIfPoisoned",
           "status": "RESOLVED",
-          "phase": "after_poison_hp_zero",
-          "semantics": "Poison damage applied and MON_STATUS cleared for a party slot.",
+          "phase": "before_poison_damage_or_cure",
+          "semantics": "N/A for faint reporting: at 1 HP Polished cures poison instead of reducing HP to zero; otherwise it deals 1 HP damage (engine/events/poisonstep.asm:96-123). This retained row is the native poison-step entry, not a faint witness.",
           "event_role": "OBSERVATION",
           "maturity": "SOURCE_CANDIDATE",
           "physical_firing": "OPEN",
@@ -477,21 +477,71 @@
           "id": "whiteout_before_heal",
           "signal": "whiteout",
           "kind": "CPU_INSTRUCTION",
-          "symbol": "Special",
+          "symbol": "LoseMoney",
           "status": "RESOLVED",
           "phase": "before_heal_dispatch",
-          "semantics": "Special dispatch before the whiteout heal.",
+          "semantics": "Native whiteout entry before money/text/pause/heal (engine/events/whiteout.asm:9-30,57-60). Script_Whiteout's callasm LoseMoney is the sole caller; hScriptBank/hScriptPos must identify that caller after its four-byte opcode has been consumed. The hook fires for every native whiteout, including trainer forfeits. The consumer snapshots the party at the hook, before HealParty, and reports a Soul Link whiteout only when every non-egg party mon has HP 0 (owner ruling 2026-10-08: a trainer forfeit is not a whiteout).",
           "event_role": "OBSERVATION",
           "maturity": "SOURCE_CANDIDATE",
           "physical_firing": "OPEN",
           "runtime_enabled": false,
-          "guards": {},
+          "guards": {
+            "required": true,
+            "combine": "ALL",
+            "memory_equals": [
+              {
+                "symbol": "hScriptBank",
+                "bank": 0,
+                "addr": 65515,
+                "width": 1,
+                "value": 4
+              },
+              {
+                "symbol": "hScriptPos",
+                "bank": 0,
+                "addr": 65516,
+                "width": 2,
+                "byte_order": "little",
+                "value": 24160
+              }
+            ],
+            "script_context": {
+              "symbol": "Script_Whiteout",
+              "bank": 4,
+              "addr": 24156,
+              "expected_hex": "0E04B95E"
+            }
+          },
           "symbol_offset": 0,
-          "bank": 3,
-          "addr": 16411,
-          "rom_offset": 49179,
-          "expected_hex": "212A40191919",
-          "hex_len": 6
+          "bank": 4,
+          "addr": 24249,
+          "rom_offset": 73401,
+          "expected_hex": "AFEA24D121E5D7",
+          "hex_len": 7,
+          "find_hex": "AFEA24D121E5D7",
+          "instructions": [
+            "xor a",
+            "ld [wSpinning], a",
+            "ld hl, wMoney"
+          ],
+          "point_symbols": {
+            "hScriptBank": {
+              "bank": 0,
+              "addr": 65515
+            },
+            "hScriptPos": {
+              "bank": 0,
+              "addr": 65516
+            },
+            "wPartyCount": {
+              "bank": 1,
+              "addr": 56526
+            },
+            "wPartyMon1": {
+              "bank": 1,
+              "addr": 56534
+            }
+          }
         },
         "capture_party": {
           "id": "capture_party",

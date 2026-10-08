@@ -73,6 +73,14 @@ PROOFS = {
         "point_symbols": ("wBattleMode", "wCurBattleMon", "wLinkMode",
                           "wBattleMonHP", "wBattleMonStatus", "wPlayerSubStatus2"),
     },
+    "whiteout_before_heal": {
+        "instructions": (
+            ("xor a", lambda s: b"\xAF"),
+            ("ld [wSpinning], a", lambda s: b"\xEA" + _le(s["wSpinning"][1])),
+            ("ld hl, wMoney", lambda s: b"\x21" + _le(s["wMoney"][1])),
+        ),
+        "point_symbols": ("hScriptBank", "hScriptPos", "wPartyCount", "wPartyMon1"),
+    },
 }
 
 SYMPATH = DATA / "polishedcrystal.sym"
@@ -122,17 +130,52 @@ def spans_overlap(a: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
     return any(a[0] <= hi and lo <= a[1] for lo, hi in spans)
 
 
+def _proof_bytes(site_id: str, sym: dict) -> bytes:
+    return b"".join(encode(sym) for _, encode in PROOFS[site_id]["instructions"])
+
+
+def _whiteout_guards(rom: bytes, sym: dict) -> dict:
+    # callasm emits db opcode, dba target (macros/scripts/events.asm:96-100).
+    # Re-derive its opcode from the native word table, not a pasted script byte
+    # (engine/overworld/scripting.asm:52-73), then verify the whiteout caller.
+    table_bank, _, table_offset = find_in_extent(
+        rom, sym, "RunScriptCommand.Jumptable", _le(sym["Script_callasm"][1]))
+    if table_bank != sym["Script_callasm"][0] or table_offset % 2:
+        raise SystemExit("whiteout_before_heal: callasm must have an aligned same-bank dispatch entry")
+    bank, addr = sym["Script_Whiteout"]
+    call = bytes([table_offset // 2, sym["LoseMoney"][0]]) + _le(sym["LoseMoney"][1])
+    off = flat(bank, addr)
+    if rom[off:off + len(call)] != call:
+        raise SystemExit("whiteout_before_heal: Script_Whiteout must begin with callasm LoseMoney")
+    return {
+        "required": True, "combine": "ALL",
+        "memory_equals": [
+            {"symbol": "hScriptBank", "bank": sym["hScriptBank"][0],
+             "addr": sym["hScriptBank"][1], "width": 1, "value": bank},
+            {"symbol": "hScriptPos", "bank": sym["hScriptPos"][0],
+             "addr": sym["hScriptPos"][1], "width": 2, "byte_order": "little",
+             "value": addr + len(call)},
+        ],
+        "script_context": {
+            "symbol": "Script_Whiteout", "bank": bank, "addr": addr,
+            "expected_hex": call.hex().upper(),
+        },
+    }
+
+
+
 def S(site_id, signal, symbol, phase, semantics, *, bank=None, addr=None, symbol_offset=0,
-      anchor=None, status="RESOLVED", reason=None, notes=None, find_hex=None):
+      anchor=None, status="RESOLVED", reason=None, notes=None, find_hex=None, guards=None):
     """One site. `bank`/`addr` override the symbol lookup (for hand-placed boundaries,
     where `anchor` names the .sym label the offset was derived from). `find_hex` instead
     pins the site by byte sequence: the generator locates it inside `symbol`'s extent and
-    requires exactly one match, so the offset is derived from the ROM, never hand-typed."""
+    requires exactly one match, so the offset is derived from the ROM, never hand-typed.
+    `find_hex` may be a sym -> hex factory; `guards` is a (ROM, sym) -> dict factory."""
     return {
         "signal": signal, "symbol": symbol, "symbol_offset": symbol_offset,
         "bank": bank, "addr": addr, "anchor": anchor, "phase": phase,
         "semantics": semantics, "status": status, "reason": reason, "notes": notes,
-        "id": site_id, "find_hex": find_hex,
+        "id": site_id, "find_hex": find_hex, "guards": guards,
     }
 
 
@@ -187,8 +230,10 @@ SITES: tuple[dict, ...] = (
       "GetBattleVar(BATTLE_VARS_MOVE) -> BattleVarPairs[18] -> BattleVarLocations[12] = wCurPlayerMove, so the "
       "vanilla explode rule transfers. docs/polished/EXPLODE_RIVAL.md 6.",
       symbol_offset=None, find_hex="CD3542"),
-    S("poison_faint", "poison_faint", "DoPoisonStep.DamageMonIfPoisoned", "after_poison_hp_zero",
-      "Poison damage applied and MON_STATUS cleared for a party slot.", bank=0x13, addr=0x68CB),
+    S("poison_faint", "poison_faint", "DoPoisonStep.DamageMonIfPoisoned", "before_poison_damage_or_cure",
+      "N/A for faint reporting: at 1 HP Polished cures poison instead of reducing HP to zero; "
+      "otherwise it deals 1 HP damage (engine/events/poisonstep.asm:96-123). This retained row is "
+      "the native poison-step entry, not a faint witness.", bank=0x13, addr=0x68CB),
     # ---- boot / save / map ----
     S("new_game", "new_game", "NewGame", "before_reset_wram", "New game reset.", bank=0x01, addr=0x5EF8),
     S("soft_reset", "soft_reset", "SoftReset", "reset_entry",
@@ -204,8 +249,14 @@ SITES: tuple[dict, ...] = (
       "Not re-anchored.", status=UNRESOLVED,
       reason="vanilla Continue.Check2Pass has no Polished counterpart; only Continue "
              "(01:60ca) exists and the ld a,$8 it sat on was not verified there."),
-    S("whiteout_before_heal", "whiteout", "Special", "before_heal_dispatch",
-      "Special dispatch before the whiteout heal.", bank=0x03, addr=0x401B),
+    S("whiteout_before_heal", "whiteout", "LoseMoney", "before_heal_dispatch",
+      "Native whiteout entry before money/text/pause/heal (engine/events/whiteout.asm:9-30,57-60). "
+      "Script_Whiteout's callasm LoseMoney is the sole caller; hScriptBank/hScriptPos must identify "
+      "that caller after its four-byte opcode has been consumed. The hook fires for every native whiteout, "
+      "including trainer forfeits. The consumer snapshots the party at the hook, before HealParty, and "
+      "reports a Soul Link whiteout only when every non-egg party mon has HP 0 "
+      "(owner ruling 2026-10-08: a trainer forfeit is not a whiteout).",
+      find_hex=lambda s: _proof_bytes("whiteout_before_heal", s).hex().upper(), guards=_whiteout_guards),
     # ---- capture / acquisition ----
     S("capture_party", "capture_party", "PokeBallEffect", "post_insert_post_nickname_copy",
       "Party catch only: `rst FarCall SetCaughtData` (engine/items/item_effects.asm ~line 534), the "
@@ -384,15 +435,17 @@ def build_site(site: dict, rom: bytes, sym: dict, spans: list[tuple[int, int]]) 
         "symbol": site["symbol"], "status": site["status"],
         "phase": site["phase"], "semantics": site["semantics"],
         "event_role": "OBSERVATION", "maturity": "SOURCE_CANDIDATE",
-        "physical_firing": "OPEN", "runtime_enabled": False, "guards": {},
+        "physical_firing": "OPEN", "runtime_enabled": False,
+        "guards": site["guards"](rom, sym) if site["guards"] else {},
     }
     if site["status"] == UNRESOLVED:
         out["reason"] = site["reason"]
         return out
     bank, addr, symoff = site["bank"], site["addr"], site["symbol_offset"]
     n = DEFAULT_HEX_LEN
-    if site["find_hex"]:
-        seq = bytes.fromhex(site["find_hex"])
+    find_hex = site["find_hex"](sym) if callable(site["find_hex"]) else site["find_hex"]
+    if find_hex:
+        seq = bytes.fromhex(find_hex)
         bank, addr, symoff = find_in_extent(rom, sym, site["symbol"], seq)
         n = len(seq)
     elif bank is None or addr is None:
@@ -400,6 +453,8 @@ def build_site(site: dict, rom: bytes, sym: dict, spans: list[tuple[int, int]]) 
             raise SystemExit(f"{site['id']}: symbol {site['symbol']} absent from the .sym")
         bank, addr = sym[site["symbol"]]
     off = flat(bank, addr)
+    if site["id"] == "whiteout_before_heal" and symoff != 0:
+        raise SystemExit("whiteout_before_heal: the anchor must be the native LoseMoney entry")
     if site["id"] == "battle_faint_copyback_return":
         for name in ("UpdateBattleMonInParty", "UpdateEnemyMonInParty"):
             if sym[name][0] != 0:
@@ -417,11 +472,11 @@ def build_site(site: dict, rom: bytes, sym: dict, spans: list[tuple[int, int]]) 
         "expected_hex": rom[off:off + n].hex().upper(),
         "hex_len": n,
     })
-    if site["find_hex"]:
-        out["find_hex"] = site["find_hex"]
+    if find_hex:
+        out["find_hex"] = find_hex
     proof = PROOFS.get(site["id"])
     if proof:
-        encoded = b"".join(encode(sym) for _, encode in proof["instructions"])
+        encoded = _proof_bytes(site["id"], sym)
         if encoded != rom[off:off + n]:
             raise SystemExit(f"{site['id']}: instructions encode {encoded.hex().upper()}, "
                              f"ROM has {rom[off:off + n].hex().upper()}")
