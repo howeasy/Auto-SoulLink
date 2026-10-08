@@ -43,7 +43,7 @@ local function ui(kind)
         if right_bank then native_ui, native_ui_frame = kind, emu.framecount() end
     end
 end
-client.speedmode(400)
+client.speedmode(300)
 L.log(fmt("[play %s] boot frame %d rom %s", ROLE, emu.framecount(), gameinfo.getromhash()))
 
 -- UNTAPPED writer: disclosed synth_hp0/synth_hp1 setup only; every byte is reported separately.
@@ -75,7 +75,7 @@ for _, name in ipairs({"OWPlayerInput", "SetInitialOptions.joypad_loop", "LoadBa
 end
 for name, kind in pairs({LoadBattleMenu = "root", SelectBattleMon = "party",
         ["BattleMenuPKMN_Loop.GetMenu"] = "switch_menu", ["MoveSelectionScreen.menu_loop"] = "move",
-        YesNoBox = "yesno", BattleTurn = "turn", TryPlayerSwitch = "turn",
+        YesNoBox = "yesno", BattleTurn = "turn", TryPlayerSwitch = "turn", BattleMenu_Run = "post_run",
         ["MoveSelectionScreen.use_move"] = "turn"}) do
     if L.ids[name] then L.unhook(name) end
     if L.SYM[name] then L.hook(name, ui(kind)) end
@@ -218,7 +218,10 @@ local function snapshot()
         local slot = i - 1
         mons[#mons + 1] = {slot = slot, key = m.key, species = pbyte(slot, 0), hp = be16(slot, HP_OFF),
                            max_hp = be16(slot, MAXHP_OFF), status = pbyte(slot, STATUS_OFF),
-                           level = pbyte(slot, 31), egg = math.floor(pbyte(slot, 21) / 64) % 2 == 1}
+                           level = pbyte(slot, 31), egg = math.floor(pbyte(slot, 21) / 64) % 2 == 1,
+                           record_hex = L.hex(L.wbytes("wPartyMons",slot*STRIDE,STRIDE)),
+                           ot_hex = L.hex(L.wbytes("wPartyMonOTs",slot*11,11)),
+                           nickname_hex = L.hex(L.wbytes("wPartyMonNicknames",slot*11,11))}
     end
     local box, box_why = {}, nil
     local okb, err = pcall(function()
@@ -233,7 +236,20 @@ local function snapshot()
         end
     end)
     if not okb then box_why = tostring(err) end
-    return {frame = emu.framecount(), party_count = L.rw("wPartyCount"), party = mons,
+    local diagnostic
+    if L.SYM and L.SYM.wSlinkMailbox then
+        local fs=P.client and P.client.faint_settle
+        local owed={}
+        if fs then for _,o in ipairs(fs.owed) do owed[#owed+1]={key=o.key,state=o.state,kind=o.kind} end end
+        diagnostic={pc=emu.getregister("PC"),sp=emu.getregister("SP"),rom_bank=L.rombank(),svbk=L.bus(0xff70),
+            battle_mode=L.rw("wBattleMode"),battle_turn=L.bus(L.SYM.hBattleTurn[2]),
+            game_paused=L.rw("wGameLogicPaused"),script_running=L.rw("wScriptRunning"),
+            menu_x=L.rw("wMenuCursorX"),menu_y=L.rw("wMenuCursorY"),
+            menu_flags=L.rw("wBattleMenuFlags"),menu_buffer=L.rw("wBattleMenuCursorBuffer"),
+            mailbox_hex=L.hex(L.wbytes("wSlinkMailbox",0,64)),
+            fs_owed=owed,client_writes=#client_writes}
+    end
+    return {frame = emu.framecount(), diagnostic=diagnostic, party_count = L.rw("wPartyCount"), party = mons,
             party_why = party == nil and tostring(why) or nil, box = box, box_why = box_why}
 end
 local function slot_of(snap, key)
@@ -349,10 +365,10 @@ end
 
 local staged
 local function op_synth_hp1(step)
-    local before, writes, lead_writes = snapshot(), {}, {}
+    local before, writes, lead_writes, lead_after = snapshot(), {}, {}, nil
     local function result(ok, why)
         return {ok = ok, why = why, before = before, synth_writes = writes,
-                lead_writes = lead_writes, snapshot = snapshot()}
+                lead_writes = lead_writes, lead_after = lead_after, snapshot = snapshot()}
     end
     if L.rw("wBattleMode") ~= 0 or not L.ow_idle() then return result(false, "setup-not-overworld-idle") end
     local want, matched = {}, {}
@@ -384,6 +400,7 @@ local function op_synth_hp1(step)
             end
         end
     end
+    lead_after = snapshot()
     for _, m in ipairs(party_evidence()) do
         if matched[m.key] then
             for i, value in ipairs({0, 1}) do
@@ -442,8 +459,8 @@ local function op_lose_native(step)
     native_ui = nil
     local walk_ok, walk_why = walk_for_battle()
     if not walk_ok then return finish(false, "encounter: " .. tostring(walk_why)) end
-    local bound, changed, signature = math.min(tonumber(step.frames) or 24000, 24000), emu.framecount(), nil
-    local target, final_switch_turn
+    local bound, changed, signature = math.min(tonumber(step.frames) or 72000, 72000), emu.framecount(), nil
+    local target, encounters = nil, 1
     local function choose_input(button, action)
         if button and emu.framecount() % 16 < 2 then
             inputs[#inputs + 1] = {frame = emu.framecount(), button = button, action = action,
@@ -466,7 +483,13 @@ local function op_lose_native(step)
         end
         if foe and L.rw("wBattleMode") == 0 and L.ow_idle() then
             if not step.all and has_report("faint", step.key) then return finish(true) end
-            return finish(false, step.all and "battle-ended-without-whiteout-wire" or "battle-ended-before-linked-faint-wire")
+            -- No further setup writes: surviving HP1 mons fight a fresh native encounter.
+            encounters = encounters + 1
+            if encounters > 80 then return finish(false,"native-encounter-bound-80") end
+            foe, native_ui, target = nil, nil, nil
+            local again, why = walk_for_battle()
+            if not again then return finish(false,"next-encounter: "..tostring(why)) end
+            changed, signature = emu.framecount(), nil
         end
         if L.rw("wBattleMode") ~= 0 then
             if L.rw("wBattleMode") ~= 1 then return finish(false, "wrong-battle-type-not-wild") end
@@ -485,20 +508,20 @@ local function op_lose_native(step)
         local btn, action
         if native_ui == "root" and emu.framecount() - native_ui_frame >= 8 then
             if not step.all and has_report("faint", step.key) then
-                -- Normal wild menu: B quick Run is legal ONLY after the actual own faint wire.
-                btn, action = "B", "run-after-linked-faint"
+                -- Native 2x2 menu RUN (bottom-right), only after the actual own faint wire.
+                local y,x=L.rw("wMenuCursorY"),L.rw("wMenuCursorX")
+                btn=y~=2 and "Down" or (x~=2 and "Right" or "A")
+                action="select-run-after-linked-faint"
             elseif step.all and #strong > 0 then
-                if final_switch_turn and (L.hits.BattleTurn or 0) > final_switch_turn
-                        and #strong == 1 and strong[1].slot == active then
-                    return finish(false, "final-strong-survived-switch-no-safe-turn-with-allowed-setup")
-                end
                 target = nil
                 for _, m in ipairs(strong) do if m.slot ~= active then target = m.slot break end end
                 if target == nil then
-                    return finish(false, "no-safe-switch-target-with-weak-mon-reserved")
+                    local y,x=L.rw("wMenuCursorY"),L.rw("wMenuCursorX")
+                    btn=y~=1 and "Up" or (x~=1 and "Left" or "A")
+                    action="fight-surviving-strong-existing-move"
+                else
+                    btn, action = "Select", "native-switch-turn"
                 end
-                if #strong == 1 then final_switch_turn = L.hits.BattleTurn or 0 end
-                btn, action = "Select", "native-switch-turn"
             else
                 local y, x = L.rw("wMenuCursorY"), L.rw("wMenuCursorX")
                 btn = y ~= 1 and "Up" or (x ~= 1 and "Left" or "A")
@@ -528,6 +551,8 @@ local function op_lose_native(step)
             btn, action = "A", "choose-existing-move"
         elseif native_ui == "yesno" then
             btn, action = "A", "use-next-mon-yes"
+        elseif native_ui == "post_run" then
+            btn, action = "A", "advance-native-run-result-text"
         elseif L.recent("BlinkCursor", 2) then
             btn, action = "A", "advance-native-text"
         elseif (native_ui == nil or native_ui == "turn") and emu.framecount() - native_ui_frame > 90 then
@@ -536,7 +561,7 @@ local function op_lose_native(step)
         end
         choose_input(btn, action)
     end
-    return finish(false, "native-loss-frame-bound-24000")
+    return finish(false, fmt("native-loss-frame-bound-%d",bound))
 end
 
 -- ── boot + step loop ─────────────────────────────────────────────────────────────────────────────
