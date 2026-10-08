@@ -315,10 +315,12 @@ local L = {
     RUN = "mock",
     SYM = {hBattleTurn = {0, 0xFFD1}},
     slurp = function() return "config" end,
-    bus = function() return bank end,
+    bus = function(addr) return addr == 0xFFD1 and (mock_side or 0) or bank end,
     rw = function(name)
         if name == "wBattleMode" then return cur_mode end
         if name == "wOTPartyCount" then return 3 end
+        if name == "wOtherTrainerClass" then return mock_class or 0 end
+        if name == "wOtherTrainerID" then return mock_id or 0 end
         return 0
     end,
     hex = function(bytes)
@@ -337,7 +339,7 @@ L.json = {
     decode = function()
         return {steps = route_frames and {{frames = route_frames, buttons = {}}} or {},
                 frames = mock_frames or 1, trace_cap = mock_cap,
-                setup = mock_setup, disclosure_sha256 = mock_disc}
+                setup = mock_setup, disclosure_sha256 = mock_disc, expected = {trainer_id=3}}
     end,
     encode = function(trace)
         if encoder_mode == "nil" then return nil end
@@ -377,11 +379,13 @@ end
 
 
 def run_mock_driver(*, encoder="normal", callbacks=7001, wrong_pc=False, cap=5, frame_error=False,
-                    frames=1, modes=None, setup=None, disclosure=None, with_name=False, route_frames=None):
+                    frames=1, modes=None, setup=None, disclosure=None, with_name=False, route_frames=None,
+                    side=0, klass=0, tid=0, mutant=False):
     from lupa.lua55 import LuaRuntime
 
     lua = LuaRuntime(unpack_returned_tuples=True)
     globals_ = lua.globals()
+    globals_.mock_side, globals_.mock_class, globals_.mock_id = side, klass, tid
     globals_.encoder_mode = encoder
     globals_.wrong_callbacks = callbacks
     globals_.wrong_pc = wrong_pc
@@ -394,7 +398,11 @@ def run_mock_driver(*, encoder="normal", callbacks=7001, wrong_pc=False, cap=5, 
     globals_.mock_disc = disclosure
     globals_.encode_trace = lambda value: json.dumps(_lua_value(value))
     lua.execute(MOCK_DRIVER)
-    lua.execute((REPO / "tools/polished_live/rival_gate_probe.lua").read_text(encoding="utf-8"))
+    source = (REPO / "tools/polished_live/rival_gate_probe.lua").read_text(encoding="utf-8")
+    if mutant:
+        assert source.count("and side == 1 and mode == 2") == 1
+        source = source.replace("and side == 1 and mode == 2", "and side == 1")
+    lua.execute(source)
     assert globals_.finished is True
     result = json.loads(globals_.output), globals_.recording_ok
     return result + (globals_.recording_name,) if with_name else result
@@ -409,7 +417,7 @@ def test_wrong_bank_flood_preserves_qualified_rows_and_exact_callback_totals():
     for name in P.HOOKS:
         rows = [row for row in trace if row["kind"] == name]
         samples = [row for row in rows if row["matched"] is False]
-        qualified = [row for row in rows if row["qualified"] is True]
+        qualified = [row for row in rows if row["raw_qualified"] is True]
         assert len(samples) == 16
         assert len(qualified) == 1
         assert qualified[0]["pc"] == P.HOOKS[name]
@@ -426,7 +434,7 @@ def test_wrong_bank_flood_preserves_qualified_rows_and_exact_callback_totals():
 def test_wrong_pc_after_wrong_bank_flood_keeps_diagnostic_verdict():
     trace, recorded = run_mock_driver(wrong_pc=True)
     assert recorded is True
-    bad = [row for row in trace if row["kind"] == "gate" and row["matched"] and not row["qualified"]]
+    bad = [row for row in trace if row["kind"] == "gate" and row["matched"] and not row["raw_qualified"]]
     assert len(bad) == 1
     assert bad[0]["pc"] == P.NEXT
     assert bad[0]["cur_ot_mon"] == 0 and bad[0]["site_bytes"] == "218bd2fa0cd1"
@@ -547,7 +555,7 @@ def test_wrong_bank_retained_sample_count_cannot_be_overstated():
 def test_wrong_pc_consumes_protected_capacity_without_losing_diagnostics():
     trace, recorded = run_mock_driver(wrong_pc=True, cap=4)
     assert recorded is True
-    bad = [row for row in trace if row["kind"] == "gate" and row["matched"] and not row["qualified"]]
+    bad = [row for row in trace if row["kind"] == "gate" and row["matched"] and not row["raw_qualified"]]
     assert len(bad) == 1 and bad[0]["pc"] == P.NEXT and bad[0]["mode"] == 2
     assert sum(row["kind"] == "overflow" for row in trace) == 1
     ok, reasons = P.evaluate(trace)
@@ -570,7 +578,7 @@ SITE6 = "218bd2fa0cd1"
 
 
 def rival_hit(kind="gate", **fields):
-    base = {"trainer_class": 0x1B, "trainer_id": 3, "ot_party_count": 2, "mode": 2, "cur_ot_mon": 0,
+    base = {"battle_turn": 1, "trainer_class": 0x1B, "trainer_id": 3, "ot_party_count": 2, "mode": 2, "cur_ot_mon": 0,
             "cur_party_mon": 0, "site_bytes": SITE6}
     base.update(fields)
     return hit(kind, **base)
@@ -667,13 +675,15 @@ def test_rival_gate_defects_fail_with_specific_reason(events, prefix):
 @pytest.mark.parametrize("klass", [0x1B, 0x1C, 0x1D, 0x1E, 0x1F], ids=["rival0", "rival1", "rival2", "lyra1", "lyra2"])
 @pytest.mark.parametrize("tid", [0, 1, 3, 0x1C, 255], ids=["id0", "id1", "id3", "id1c", "id255"])
 def test_five_class_gate_accepts_any_valid_id_and_does_not_test_ids_against_classes(klass, tid):
-    ok, reasons = rival_eval(rival_trace(trio(trainer_class=klass, trainer_id=tid)), expected=None)
+    ok, reasons = rival_eval(rival_trace(trio(trainer_class=klass, trainer_id=tid)),
+                             expected={"trainer_class": klass, "trainer_id": tid, "enemy_party": 2})
     assert (ok, reasons) == (True, [])
 
 
 @pytest.mark.parametrize("count", [1, 2, 3, 6], ids=["n1", "n2", "n3", "n6"])
 def test_five_class_gate_accepts_any_valid_enemy_party_size(count):
-    assert rival_eval(rival_trace(trio(ot_party_count=count)), expected=None) == (True, [])
+    assert rival_eval(rival_trace(trio(ot_party_count=count)),
+                      expected={"trainer_class": 0x1B, "trainer_id": 3, "enemy_party": count}) == (True, [])
 
 
 @pytest.mark.parametrize("fields", [{"trainer_class": 9}, {"trainer_class": 0x20}, {"trainer_class": 0}],
@@ -827,12 +837,11 @@ def test_wild_control_passes_with_an_observed_wild_battle_and_no_qualified_gate(
     ([mode_row(True)], "WILD_NOT_OBSERVED"),
     ([mode_row(1.0)], "WILD_NOT_OBSERVED"),
     ([mode_row(1), rival_hit()], "WILD_QUALIFIED_HIT"),
-    ([mode_row(1), hit(mode=1, trainer_class=0, trainer_id=0)], "WILD_QUALIFIED_HIT"),
     ([mode_row(1), mode_row(2)], "CONTROL_TRAINER_BATTLE"),
     ([mode_row(1), {"kind": "guest_write"}], "GUEST_WRITE"),
     ([mode_row(1), {"kind": "overflow"}], "TRACE_OVERFLOW"),
 ], ids=["no-modes", "mode-0-only", "trainer-only", "mode-bool", "mode-float", "qualified-rival-gate",
-        "qualified-wild-gate", "trainer-contamination", "guest-write", "overflow"])
+        "trainer-contamination", "guest-write", "overflow"])
 def test_wild_control_defects_fail(events, prefix):
     ok, reasons = wild_eval(wild_trace(events))
     assert not ok
@@ -1113,3 +1122,127 @@ def test_calibration_requires_disclosed_synth_and_no_timed_route(tmp_path):
     assert args.calibrate is True
     with pytest.raises(SystemExit):
         synth_args(tmp_path, "--calibrate", "--route", str(tmp_path / "route.json"))
+
+
+RETAINED = {
+    "synth-xq6b4nrp": "0121f76bdee7d422d1411477fa6efd7043f60131461d6f9264a377116620f4a1",
+    "synth-i_xfq96x": "1ce96295ed630aa7fd58a7ba56e47a5a30bf9f6cb1c79ffe157abb18e62eb41c",
+    "synth-1agu9bbq": "1e53789331507f5e436d5e3e11504a7805ce4b4f0581a31c249f1ee34c67a5b9",
+}
+
+
+def retained(name):
+    path = REPO / "tests/fixtures/polished/rival" / (name + ".json")
+    if not path.exists():
+        pytest.skip("OPEN: absent retained rival trace " + str(path))
+    raw = path.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == RETAINED[name]
+    return json.loads(raw)
+
+
+def test_retained_wild_is_unqualified_operation_control():
+    trace = retained("synth-1agu9bbq")
+    assert P.evaluate_wild_control(trace, disclosure_sha256=trace[-1]["disclosure_sha256"]) == (True, [])
+
+
+def test_operation_requires_measured_enemy_side():
+    assert not P.operation_qualified(rival_hit(battle_turn=None))
+    assert P.operation_qualified(rival_hit(battle_turn=1))
+    assert not P.operation_qualified(rival_hit(battle_turn=0))
+
+
+@pytest.mark.parametrize("name,expect,verdict", [
+    ("synth-i_xfq96x", "rival", "MISSING_SIDE"),
+    ("synth-xq6b4nrp", "rival", "NO_GATE_HIT"),
+    ("synth-1agu9bbq", "wild", "PASS"),
+], ids=["rival-open-side", "first-open-no-rival", "wild-pass-control"])
+def test_retained_trace_rejudgements(name, expect, verdict):
+    trace = retained(name)
+    original = copy.deepcopy(trace)
+    fn = P.evaluate_rival if expect == "rival" else P.evaluate_wild_control
+    ok, reasons = fn(trace, disclosure_sha256=trace[-1]["disclosure_sha256"])
+    assert P.verdict(reasons) == verdict
+    assert ok == (verdict == "PASS")
+    assert trace == original
+    assert sum(P.operation_qualified(r) for r in trace) == 0
+
+
+@pytest.mark.parametrize("fields,want", [
+    ({"side": 1, "klass": 27, "tid": 3}, True),
+    ({"side": 0, "klass": 27, "tid": 3}, False),
+    ({"side": 2, "klass": 27, "tid": 3}, False),
+    ({"side": 1, "klass": 0, "tid": 3}, False),
+    ({"side": 1, "klass": 27, "tid": 4}, False),
+    ({"side": 1, "klass": 27, "tid": 3, "modes": {1: 1}}, False),
+], ids=["rival", "player", "side-domain", "non-rival", "wrong-id", "wild-stale-identity"])
+def test_live_lua_and_python_operation_predicates_agree(fields, want):
+    trace, recorded = run_mock_driver(callbacks=0, **fields)
+    assert recorded
+    for row in trace:
+        if row["kind"] in P.HOOKS:
+            assert row["raw_qualified"] is True
+            assert row["qualified"] is want
+            assert P.operation_qualified(row) is want
+    assert trace[-1]["hook_counts"]["gate"]["qualified"] == 1  # raw count never filtered
+
+
+def test_mode_guard_mutants_are_red_on_synth_stale_identity():
+    # Explicit MODEL/SYNTH copy, not a rewritten physical receipt: stale rival identity
+    # in a real wild-side/mode row isolates the otherwise redundant mode guard.
+    wild = next(r for r in retained("synth-1agu9bbq") if r.get("kind") == "gate" and r.get("qualified"))
+    stale = dict(wild, trainer_class=27, trainer_id=3)
+    assert not P.operation_qualified(wild)
+    assert not P.operation_qualified(stale)
+    import inspect
+    source = inspect.getsource(P.operation_qualified)
+    anchor = 'and type(row.get("mode")) is int and row["mode"] == 2'
+    assert source.count(anchor) == 1
+    ns = dict(P.__dict__)
+    exec(source.replace(anchor, ""), ns)
+    with pytest.raises(AssertionError):
+        assert not ns["operation_qualified"](stale)
+    assert not ns["operation_qualified"](wild)  # real class0/id0 still excludes it
+    trace, recorded = run_mock_driver(callbacks=0, side=1, klass=27, tid=3, modes={1: 1}, mutant=True)
+    assert recorded
+    gate = next(r for r in trace if r["kind"] == "gate")
+    with pytest.raises(AssertionError):
+        assert gate["qualified"] is False
+
+
+def test_offline_cli_never_stages_launches_or_rewrites(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    trace = retained("synth-i_xfq96x")
+    path = tmp_path / "trace.json"
+    path.write_text(json.dumps(trace))
+    args = SimpleNamespace(rejudge=path, expect="rival", setup="synth",
+                           disclosure_sha256=trace[-1]["disclosure_sha256"])
+    before = path.read_bytes()
+    monkeypatch.setattr(P, "parse_args", lambda argv: args)
+    monkeypatch.setattr(P, "stage", lambda *a, **kw: pytest.fail("offline attempted ROM staging"))
+    monkeypatch.setattr(P, "WORK", tmp_path / "must-not-create")
+    assert P.main([]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["verdict"] == "MISSING_SIDE"
+    assert result["conditional_source_model"]["verdict"] == "PASS"
+    assert "NOT PHYSICAL PASS" in result["conditional_source_model"]["assumption"]
+    assert result["qualified_gate_frames"] == []
+    assert path.read_bytes() == before
+    assert not P.WORK.exists()
+
+
+@pytest.mark.parametrize("override", [{"qualified": False}, {"raw_qualified": False}],
+                         ids=["forged-operation", "forged-raw"])
+def test_current_schema_forged_qualification_fails(override):
+    trace, _ = run_mock_driver(callbacks=0, side=1, klass=27, tid=3, setup="synth", disclosure=DISC)
+    row = next(r for r in trace if r["kind"] == "gate")
+    row.update(override)
+    ok, reasons = P.evaluate_wild_control(trace, disclosure_sha256=DISC)
+    assert not ok
+    assert any("QUALIFICATION_MISMATCH" in r or "qualified" in r.lower() for r in reasons)
+
+
+
+def test_witness_cannot_skip_to_a_later_send_in_of_the_same_identity():
+    ok, reasons = rival_eval(rival_trace([rival_hit(), *trio()]))
+    assert not ok and has(reasons, "WITNESS_MISSING")

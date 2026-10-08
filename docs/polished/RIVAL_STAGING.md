@@ -358,6 +358,105 @@ Open: revised predicate/oracle independent review, fixed-route replay, actual
 swap application/consumption, all rival classes and physical 1x qualification.
 No claim is made for the unrelated trade/faint test files, which were not run.
 
+### Operation predicate card g2p-rival-pred, 2026-10-08 (SYNTH)
+
+This supersedes the earlier raw-site qualification premise, not any original
+receipt. The predicate now lives **only in the probe**. At each of gate/next/last,
+`rival_gate_probe.lua:74-79` computes:
+
+```lua
+local operation = qualified and side == 1 and mode == 2
+    and rival_classes[class] == true and config.expected ~= nil
+    and id == config.expected.trainer_id
+```
+
+Here the local `qualified` is the raw bank/PC match. The recorded row instead
+uses `raw_qualified` for that match and `qualified` for the operation conjunction.
+The final declares `qualification_schema="rival-operation/1"`; the existing
+`hook_counts.*.qualified` counters still count **raw bank/PC matches** so the
+shared uncensored-count checker retains its original meaning. All matched raw
+callbacks are retained even when excluded from the operation; wrong-bank sampling
+remains bounded at 16/site with exact total counters. No raw trace is filtered
+before integrity validation. Python independently recomputes the predicate
+(`rival_gate_probe.py:223-258`) and rejects a forged qualification flag.
+Expected trainer ID comes from the supplied fixture expectation (03 here), not
+from the class set. The additional fixture check requires class1B/count2 and
+valid matching indices; next/last must have the same side/mode/class/id/count/
+indices, and cannot borrow a chain after a later gate.
+
+**Missing side is not inferred in a physical verdict.** The coordinator's
+clarification approved OPEN instead of the requested old-trace PASS, because the
+first two retained recordings never captured hBattleTurn. `--rejudge` performs
+no ROM staging, emulator launch, trace rewrite, or result.txt replacement. It
+prints a separate OFFLINE REJUDGEMENT with original trace SHA256 and reasons.
+Where side is missing, a separately labelled source-derived **conditional model**
+sets side=1 in memory only; this is explicitly NOT PHYSICAL PASS. The source
+basis is the enemy-pointer branch at core.asm:1240-1245, not a measured register.
+
+| Retained trace | Offline measured verdict | Conditional model only |
+|---|---|---|
+| `synth-i_xfq96x` | **OPEN / MISSING_SIDE** (28 bank-matched hook rows lack side); no fully qualified operation | PASS assuming side1; only frame10085 triple qualifies, five wild gates excluded |
+| `synth-xq6b4nrp` | **OPEN / NO_GATE_HIT**; 10 hook rows lack side, and there is no rival at all | Still OPEN: assigning side cannot turn its wild hits into rival evidence |
+| `synth-1agu9bbq` | **PASS-as-control**, observed wild mode, zero operation-qualified gates | Not needed; measured enemy side1/wild mode1/class0/id0 |
+
+The three byte-identical trace copies are committed in
+`tests/fixtures/polished/rival/{synth-i_xfq96x,synth-xq6b4nrp,synth-1agu9bbq}.json`.
+Unit tests pin their SHA256 values listed in the preceding result and skip only
+if a copy is absent; a present wrong hash fails. New analysis files are
+`F:/slink-work/lanes/pol-rival-live/out/predicate-rejudge-<name>.final.json`.
+Original `trace.json` and `result.txt` files remain unchanged.
+
+**One fresh live run: PASS**, no retries. It used the corrected read-only,
+feedback-calibrated source route (`--calibrate`), not a promised deterministic
+replay of the old fixed-frame file. SYNTH derivative, same overlay
+`877a477a7dfc70b775ca3f46461d67abebe07083`, requested 300%, owned PID19156 exited.
+At frame **9125**, exactly one qualified gate -> next -> last triple has
+bank0F, PCs47DD/47E0/480D, **side1/mode2/class1B/id03/count2/indices0,0**.
+Four earlier wild gate callbacks remain raw-qualified but operation-unqualified.
+Final elapsed9185, zero guest writes/CPU changes/driver errors; hook totals191,
+no overflow. Receipt: `out/synth-pdm83y_x/probe/{trace.json,result.txt,route.json,
+calibration.json,input.json,config.ini,syms.json}`. Trace SHA256
+`ece415ff903aa319de998955b95eaf34ad505d4c4573006544aea612474a994b`;
+route SHA256 `898bd855d8711cbb7207b08dbcc9d83858c1c5223f9fcde86c51b13adc1117f2`.
+`predicate-live-source-rival_gate_probe.{lua,py}` retain the actual launch source;
+subsequent Python-only witness-boundary tightening is additionally checked by
+`predicate-rejudge-synth-pdm83y_x.final.json` (PASS), not a second live run.
+
+Example offline invocation (from the leased worktree; redirection makes a new
+analysis file, never the original receipt):
+
+```powershell
+python tools/polished_live/rival_gate_probe.py --rejudge F:/slink-work/lanes/pol-rival-live/out/synth-1agu9bbq/probe/trace.json --setup synth --expect wild --disclosure F:/slink-work/lanes/pol-rival-live/out/disclosure.json --fixture F:/slink-work/lanes/pol-rival-live/fixture/source.SaveRAM
+```
+
+**Controls and validation:** the retained wild control failed the old oracle
+red-first. An explicitly SYNTH **test copy** retains wild mode1/side1 but sets
+stale rival class1B/id03. Removing only mode==2 makes Python and Lua mutants
+qualify it; the assertion goes red. The untouched real class0/id0 wild trace
+remains excluded even by that single-term mutant, because class/id independently
+exclude it. Tests also cover player side, invalid side, class/ID mismatch,
+Python/Lua agreement, forged raw/operation flags, offline no-write/no-launch,
+and a red-first later-gate witness borrowing bug. Final command:
+`python -m pytest tests/unit/test_polished_rival_gate_probe.py tests/unit/test_polished_derive_rival_save.py -q --basetemp F:/slink-work/tmp/rival-pred-final2`
+=> **365 passed**; Ruff and diff checks clean.
+
+**Production follow-up, not changed here:** `lua/gen2/polished_explode.lua:229-231`
+currently passes the stamped rival snapshot to the writer;
+`lua/gen2/signals.lua:1532-1539,1560` dispatches the rival write window. A future
+operation gate there must carry measured side/mode/class/id from generated
+symbols and bind the expected trainer identity. The underlying
+`lua/gen2/polished_rival.lua:135-146` already checks trainer mode, bank/PC, configured
+class, optional ctx.trainer_id and selected indices; it is NOT missing all these
+guards. It needs an explicit enemy-side check and a mandatory bound expected
+trainer identity if the new contract requires ID matching (currently optional).
+Symbols on this cut: hROMBank=00:FF87; hBattleTurn=00:FFD1;
+wBattleMode=01:D233; wOtherTrainerClass=01:D235; wOtherTrainerID=01:D237;
+wCurOTMon=00:C4DD; wCurPartyMon=01:D10C; wOTPartyCount=01:D283
+(`polished_slink.sym:64087,65963,66230-66236,66299,70309`). Read the bank-qualified
+bytes in the callback; never transplant fixture class1B/id03 as universal policy.
+No production writer/client, fixed-frame replay, rival-swap consumption,
+all-class encounter, or 1x qualification was tested by this card.
+
 ## 5. Risks and implementation prerequisites
 
 * **Disclosure blocker:** CLI currently accepts only `--setup played`
