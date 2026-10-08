@@ -1,5 +1,6 @@
 ; SLink companion overlay -- Polished Crystal trade card 2a: the INCOMING-MON validity predicates
-; (docs/polished/TRADE.md section 14). INERT: nothing calls them until the held service lands.
+; (docs/polished/TRADE.md section 14). The staged wrapper is called by the held proposer and responder
+; services and the (disabled) commit; the commit also calls SlinkTradeValidateText directly.
 ;
 ; Native OT staging is SCATTERED, not contiguous: OT slot 0 is the 48-byte record at wOTPartyMon1, the
 ; 11-byte OT field (8 text + 3 metadata bytes) at wOTPartyMonOTs, the 11-byte nickname at

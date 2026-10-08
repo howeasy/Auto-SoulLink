@@ -96,6 +96,16 @@ POLISHED_EDITS = (
     # `ld [wWhichIndexSet], a`.
     ("engine/menus/main_menu.asm", ".loop\n\tcall MainMenu_PrintCurrentTimeAndDay\n",
      ".loop\n\tcall SlinkMainMenuLoopBridge ; SLink overlay: version line\n"),
+    # TITLE: the one `call EnableLCD` that ends _TitleScreen's setup (engine/movie/title.asm:179, flat 0xD40EB,
+    # bytes cd da 24), same size, to the ROM0 bridge (patch/polished/src/title.asm); plus the logo entrance's two
+    # shear-height immediates in TitleScreenEntrance (intro_menu.asm), 80 -> 88 lines, so the band on map rows
+    # 10-11 slides in with the logo. Same-size operands; title_logo_spans proves nothing else in either routine moved.
+    ("engine/movie/title.asm", "\tcall ChannelsOff\n\tcall EnableLCD\n",
+     "\tcall ChannelsOff\n\tcall SlinkTitleBridge ; SLink overlay: same size as call EnableLCD\n"),
+    ("engine/menus/intro_menu.asm", "\tld bc, 8 * 10 ; logo height\n",
+     "\tld bc, 8 * 11 ; logo height (SLink: + the title band)\n"),
+    ("engine/menus/intro_menu.asm", "\tld b, 8 * 10 / 2 ; logo height / 2\n",
+     "\tld b, 8 * 11 / 2 ; logo height / 2 (SLink: + the title band)\n"),
     # TRADE slice 2a: re-point SpecialsPointers entries 2 and 3 at the bank-$7E gates (trade_gate.asm).
     # The labels keep their names, so the `special` script macro still resolves; nothing in bank $24 changes.
     ("data/events/special_pointers.asm",
@@ -142,7 +152,13 @@ SCRIPT_END_LABEL = "DayOfWeekSiblingsHousePokedexScript.End"
 ENDTEXT_OPCODE = 0xC0
 DELAY_NATIVE = bytes.fromhex("f044e0d7afe08f")  # ldh a,[rLY] / ldh [hDelayFrameLY],a / xor a / ldh [hVBlankOccurred],a
 HEADER_CHECKSUMS = range(0x14D, 0x150)
-TITLE_HOOK_FLAT = 0x483CD     # docs/polished/TITLE.md 8.4; ROM bytes `cd ed 43`          # rgbfix header + global checksum
+TITLE_HOOK_FLAT = 0x483CD     # docs/polished/TITLE.md 8.4; ROM bytes `cd ed 43` (the main-menu version hook)
+# TITLE wordmark: the Crystal art tools/gen_gen1_title.py writes for the vanilla overlay, copied under the fixed names
+# patch/polished/src/title.asm INCBINs / INCLUDEs (one art source, no Polished copy to drift).
+TITLE_ART = ((ROOT / "patch" / "gen2" / "src" / "title_logo_crystal.2bpp", "title_logo.2bpp"),
+             (ROOT / "patch" / "gen2" / "src" / "title_rows_crystal.inc", "title_rows.inc"))
+TITLE_LOGO_HOOK_FLAT = 0xD40EB  # _TitleScreen 35:4000 + $EB: `call EnableLCD` (cd da 24), docs/polished/TITLE.md 2.2
+SHEAR_LINES = 88                # TitleScreenEntrance: the logo's 80 lines + the band's bottom row (8 lines)
 
 
 def apply_overlay(tree: pathlib.Path, version: str | None = None) -> list[str]:
@@ -160,6 +176,8 @@ def apply_overlay(tree: pathlib.Path, version: str | None = None) -> list[str]:
                                               encoding="utf-8", newline="\n")
     for src in files:
         (dst / src.name).write_bytes(src.read_bytes())
+    for src, name in TITLE_ART:
+        (dst / name).write_bytes(src.read_bytes())
     for path, text in texts.items():
         path.write_text(text, encoding="utf-8", newline="\n")
     return [f.name for f in files]
@@ -248,7 +266,20 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
     t_lo, t_hi = new["SlinkMainMenuLoopBridge"][1], new["SlinkMainMenuLoopBridgeEnd"][1]
     if base[t_lo:t_hi] != b"\xff" * (t_hi - t_lo):
         raise RuntimeError("the title bridge must link into ROM0 bytes the clean ROM leaves free ($FF)")
-    allowed += [(min(phone_lo, t_lo), max(phone_hi, t_hi), "ROM0 phone + title bridges"),
+    # TITLE wordmark: its ROM0 bridge sits in the same gap, after the main-menu bridge
+    w_lo, w_hi = new["SlinkTitleBridge"][1], new["SlinkTitleBridgeEnd"][1]
+    if new["SlinkTitleBridge"][0] != 0 or w_lo < t_hi or w_hi > 0x4000 \
+            or base[w_lo:w_hi] != b"\xff" * (w_hi - w_lo):
+        raise RuntimeError("the title-logo bridge must link into ROM0 bytes the clean ROM leaves free ($FF)")
+    # The band section opens with the generated row tables (title_rows.inc), then SlinkTitleBand; it is its OWN
+    # allowed span, so the free bytes between the trade commit and the band stay refused.
+    band_lo = min(new["SlinkTitleLogoRow0"][1], new["SlinkTitleBand"][1])
+    if {new[n][0] for n in ("SlinkTitleLogoRow0", "SlinkTitleBand", "SlinkTitleBandEnd")} != {SERVICE_BANK} \
+            or band_lo < new["SlinkTradeCommitEnd"][1] or new["SlinkTitleBandEnd"][1] > 0x8000:
+        raise RuntimeError("the title band must link in bank $7E, after the trade commit")
+    allowed.append((_flat(SERVICE_BANK, band_lo), _flat(SERVICE_BANK, new["SlinkTitleBandEnd"][1]),
+                    f"bank ${SERVICE_BANK:02X} title band"))
+    allowed += [(min(phone_lo, t_lo, w_lo), max(phone_hi, t_hi, w_hi), "ROM0 phone + main-menu + title bridges"),
                 *phone_hook_spans(base, data, old, new)]
     allowed += reset_hook_spans(base, data, old, new)
     allowed.append(gate_table_span(base, data, old, new))
@@ -259,6 +290,7 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
     if base[hook:hook + 3] != b"\xcd\xed\x43" or data[hook:hook + 3] != b"\xcd" + tgt.to_bytes(2, "little"):
         raise RuntimeError("the main-menu hook is not `call MainMenu_PrintCurrentTimeAndDay` -> `call SlinkMainMenuLoopBridge`")
     allowed.append((hook, hook + 3, "main-menu version hook"))
+    allowed += title_logo_spans(base, data, old, new)
     report = []
     for start, end in diff_spans(base, data):
         owner = next((name for lo, hi, name in allowed if lo <= start and end <= hi), None)
@@ -266,6 +298,53 @@ def verify_overlay(base: bytes, data: bytes, old: dict, new: dict) -> list[str]:
             raise RuntimeError(f"unexpected change at {start:#07x}-{end - 1:#07x}")
         report.append(f"bank ${start // 0x4000:02X} {start:#07x}-{end - 1:#07x} ({end - start:>3} B) {owner}")
     return report
+
+
+def _routine(old: dict, name: str) -> tuple[int, int]:
+    """Flat [start, end) of a clean routine: up to the next global (non-local) symbol in its bank."""
+    bank, addr = old[name]
+    following = sorted(a for n, (b, a) in old.items() if b == bank and a > addr and "." not in n)
+    return _flat(bank, addr), _flat(bank, following[0])
+
+
+def _patch_once(routine: bytearray, old: bytes, new: bytes, what: str) -> int:
+    if routine.count(old) != 1:
+        raise RuntimeError(f"{what}: the native bytes {old.hex()} are not in the routine exactly once")
+    at = routine.index(old)
+    routine[at:at + len(old)] = new
+    return at
+
+
+def title_logo_spans(base: bytes, data: bytes, old: dict, new: dict) -> list[tuple[int, int, str]]:
+    """TITLE: _TitleScreen changes only its `call EnableLCD` operand (to SlinkTitleBridge), and TitleScreenEntrance
+    only its two shear-height immediates (80 -> 88 lines). Each routine must otherwise equal the clean bytes."""
+    spans = []
+    lo, hi = _routine(old, "_TitleScreen")
+    call = b"\xcd" + old["EnableLCD"][1].to_bytes(2, "little")
+    if base[lo:hi].find(call) < 0 or lo + base[lo:hi].find(call) != TITLE_LOGO_HOOK_FLAT:
+        raise RuntimeError(f"_TitleScreen: `call EnableLCD` is not at {TITLE_LOGO_HOOK_FLAT:#07x}")
+    expected = bytearray(base[lo:hi])
+    at = _patch_once(expected, call, b"\xcd" + new["SlinkTitleBridge"][1].to_bytes(2, "little"), "title call EnableLCD")
+    if data[lo:hi] != expected:
+        raise RuntimeError("_TitleScreen changed more than the call EnableLCD operand")
+    spans.append((lo + at + 1, lo + at + 3, "_TitleScreen: call EnableLCD -> SlinkTitleBridge"))
+    lo, hi = _routine(old, "TitleScreenEntrance")
+    ly = old["wLYOverrides"][1]
+    if old["wLYOverridesEnd"][1] - ly < SHEAR_LINES:
+        raise RuntimeError("wLYOverrides is shorter than the widened shear")
+    expected = bytearray(base[lo:hi])
+    # `ld bc, 8 * 10` (logo height) and `ld b, 8 * 10 / 2 / ld hl, wLYOverrides + 1 / .loop: ld [hli], a / inc hl /
+    # dec b / jr nz` -- the immediates only
+    at = _patch_once(expected, b"\x01\x50\x00", b"\x01" + SHEAR_LINES.to_bytes(2, "little"),
+                     "title entrance shear height")
+    spans.append((lo + at + 1, lo + at + 2, "TitleScreenEntrance: shear height 80 -> 88"))
+    tail = b"\x21" + (ly + 1).to_bytes(2, "little") + b"\x22\x23\x05\x20"
+    at = _patch_once(expected, b"\x06\x28" + tail, b"\x06" + bytes((SHEAR_LINES // 2,)) + tail,
+                     "title entrance interlace count")
+    spans.append((lo + at + 1, lo + at + 2, "TitleScreenEntrance: interlace count 40 -> 44"))
+    if data[lo:hi] != expected:
+        raise RuntimeError("TitleScreenEntrance changed more than its two shear-height operands")
+    return spans
 
 
 def phone_hook_spans(base: bytes, data: bytes, old: dict, new: dict) -> list[tuple[int, int, str]]:
@@ -412,7 +491,7 @@ def build(*, check: bool = False, version: str | None = None,
             "applied": applied,
             "edits": list(dict.fromkeys(rel for rel, _old, _new in POLISHED_EDITS)),
             "sources_sha256": {p.relative_to(ROOT).as_posix(): source_sha256(p)
-                               for p in sorted(SRC_DIR.glob("*.asm")) + [ABI]},
+                               for p in sorted(SRC_DIR.glob("*.asm")) + [ABI] + [src for src, _ in TITLE_ART]},
             "mailbox": f"WRAM0 ${MAILBOX:04X} (69 bytes)",
             "service_bank": f"${SERVICE_BANK:02X}",
         },

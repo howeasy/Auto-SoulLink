@@ -1,9 +1,9 @@
 {
- "count": 29,
+ "count": 39,
  "schema": "polished-overlay-beacon-v1",
- "sha256": "6b154c52d9bea7d6dbabeff022b99c465ab82c2ce973948944c281fb884bd459",
+ "sha256": "ad27c4a876aba988da4a37b44db8911124740541e47c8c3246f13e43598328ed",
  "source": {
-  "canonical_sha1": "1f491ba407b100202ffdc55d700f793377b76a6c",
+  "canonical_sha1": "1f25c0c45438bc3433fec71dbbc827c71aeca874",
   "canonical_spans": [
    {
     "length": 2,
@@ -40,10 +40,10 @@
    2064771
   ],
   "generator": "tools/gen_polished_beacon.py",
-  "overlay_sha1": "cf03f53accefbc5f3fee9062846699e30c4c987b",
+  "overlay_sha1": "688945795e2656019247f5aaceb7b1d8791e900a",
   "rom_size": 2097152,
   "ups_file": "patch/dist/SLink-Polished.ups",
-  "ups_sha256": "0c27e6bdd81bf237f0749fbe34d23b2d7f0fa1fe86cf73807885c88bd17126fb",
+  "ups_sha256": "e83548e085ba06f3a671ce01b937984bf2be64222c03fc9ee9fb1a0acdbada57",
   "version_slot": {
    "length": 20,
    "offset": 2064752
@@ -75,8 +75,16 @@
    "offset": 16202
   },
   {
-   "length": 15,
+   "length": 22,
    "offset": 16274
+  },
+  {
+   "length": 1,
+   "offset": 26278
+  },
+  {
+   "length": 1,
+   "offset": 26285
   },
   {
    "length": 6,
@@ -105,6 +113,10 @@
   {
    "length": 2,
    "offset": 592763
+  },
+  {
+   "length": 2,
+   "offset": 868588
   },
   {
    "length": 264,
@@ -155,7 +167,7 @@
    "offset": 2067139
   },
   {
-   "length": 393,
+   "length": 401,
    "offset": 2068480
   },
   {
@@ -165,8 +177,36 @@
   {
    "length": 382,
    "offset": 2069990
+  },
+  {
+   "length": 180,
+   "offset": 2070528
+  },
+  {
+   "length": 93,
+   "offset": 2070709
+  },
+  {
+   "length": 15,
+   "offset": 2070803
+  },
+  {
+   "length": 15,
+   "offset": 2070819
+  },
+  {
+   "length": 15,
+   "offset": 2070835
+  },
+  {
+   "length": 15,
+   "offset": 2070851
+  },
+  {
+   "length": 23,
+   "offset": 2070867
   }
  ],
  "title": "polished",
- "total": 3648
+ "total": 4023
 }

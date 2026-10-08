@@ -166,6 +166,7 @@ class Rig:
         self.yesno = True
         self.on_native: Callable | None = None
         self.nest = False
+        self.entry_hooks: dict[str, Callable] = {}      # overlay routine -> host action at its FIRST entry (then the code)
 
     def a(self, name: str) -> int:
         return self.env.a(name)
@@ -267,6 +268,13 @@ class Rig:
         m.trap(NATIVES["open"], on_open)
         m.trap(NATIVES["close"], on_close)
         m.trap(NATIVES["nick"], on_nick)
+        for routine, action in self.entry_hooks.items():
+            hook_at = env.a(routine)
+
+            def fire(mm: S.SM83, action=action, addr=hook_at) -> None:
+                action(h)
+                mm._traps.pop(addr)          # one-shot: the next step executes the routine's own first instruction
+            m.trap(env.a(routine), fire, bank=BANK7E, ret=False)
         executed: set = set()
         if pcs:
             orig = m.step
@@ -607,6 +615,26 @@ def sc_token_generation_drift(env, rom=None):
         assert run.snap_first is None, label
 
 
+def sc_late_consent_cancel(env, rom=None):
+    """The binder cancels the visit (zeroes the token) after the held-frame check, while the snapshot runs: the
+    consent DONE must NOT be published and the private token must NOT be republished; the visit closes."""
+    rig = Rig(env, rom=rom)
+    cancelled = []
+
+    def cancel(h: Host) -> None:
+        for o in range(12, 16):
+            h.wr(o, 0)
+        cancelled.append(rig.frame)
+    rig.entry_hooks["SlinkTradeSnapshot"] = cancel
+    run = rig.run(None)
+    assert cancelled, "the scheduled cancel never ran: SlinkTradeSnapshot was not reached"
+    common(rig, run, "AC", calls=CONSENT_CALLS, results=[])
+    assert not [w for w in run.lease_writes if 12 <= w[0] <= 15], f"the token was republished: {run.lease_writes}"
+    assert run.m.peek(rig.lease + 12, 4) == bytes(4), "the cancelled token is not zero at exit"
+    assert run.snap_first is not None, "the snapshot ran (the cancel landed after the held-frame check)"
+    return rig, run
+
+
 def sc_snapshot_after_menus(env, rom=None):
     rig, run = sc_consent_yes(env, rom)
     assert run.snap_first is not None
@@ -911,6 +939,7 @@ SCENARIOS: dict[str, Callable] = {
     "good_incoming": sc_good_incoming_boundaries, "own_record_flip": sc_own_record_flip,
     "party_count_changes": sc_party_count_changes, "hvblank": sc_hvblank, "stack_balance": sc_stack_balance,
     "via_dispatcher": sc_via_dispatcher, "reentry": sc_reentry, "no_commit": sc_no_commit,
+    "late_consent_cancel": sc_late_consent_cancel,
 }
 
 
@@ -1064,6 +1093,13 @@ def mutant_token_compare_dropped_in_wait(env):
     return patch(env.rom, find(env, old), old, b"\xf8\x00\xa7\x00\x00" + old[5:])
 
 
+def mutant_late_consent_recheck_dropped(env):
+    # the token recheck between the snapshot and the consent DONE: ld hl,sp+0 / call CheckToken / jp c,Exit -> nops
+    old = (b"\xf8\x00\xcd" + le(env, "SlinkTradeCheckToken") + b"\xda" + le(env, "SlinkTradeResponderExit")
+           + b"\xf8\x09\xcb\xc6")
+    return patch(env.rom, find(env, old), old, b"\x00" * 8 + old[8:])
+
+
 def mutant_validate_snapshot_dropped(env):
     return nop_call(env, "SlinkTradeValidateSnapshot")
 
@@ -1162,6 +1198,7 @@ MUTANTS = [
     ("unbalanced stack on exit", mutant_unbalanced_exit, ("consent_yes", "stack_balance")),
     ("RELEASE generation compare dropped", mutant_release_generation_compare_dropped, ("release_before_apply",)),
     ("YesNoBox carry inverted", mutant_yes_no_inverted, ("consent_yes", "consent_no")),
+    ("late-consent token recheck dropped", mutant_late_consent_recheck_dropped, ("late_consent_cancel",)),
 ]
 
 

@@ -61,7 +61,8 @@ SlinkDelayFrameBridge::
 	ret
 SlinkDelayFrameBridgeEnd::
 ASSERT SlinkDelayFrameBridgeEnd <= $0100
-; Four local stack bytes (push af/bc/hl + the saved bank = 4 one-byte pushes); the service preserves DE.
+; Eight local stack bytes (four two-byte pushes: af, bc, hl and the saved bank in af) plus the two-byte
+; return of `call SlinkService`; the service preserves DE.
 
 SECTION "SLink Service", ROMX[$4000], BANK[SLINK_SERVICE_BANK]
 SlinkService::
@@ -79,8 +80,11 @@ SlinkService::
 	ld [hl], a
 	; SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY: the panel (patch/polished/src/panel.asm)
 	; paints the Phone-card text page; the sound service below plays the shared semantic codes
-	; through the cartridge's own PlaySFX (patch/polished/src/slink_sfx.asm). Phone and trade bits
-	; stay clear: neither protocol is served by this overlay.
+	; through the cartridge's own PlaySFX (patch/polished/src/slink_sfx.asm). SLINK_CAP_PHONE stays clear:
+	; the Phone card's virtual SLink contact opens the panel, it does not serve the host-driven phone-call
+	; extension (SLINK_OFS_PHONE_*). SLINK_CAP_TRADE stays clear although the trade lease services below
+	; are built (proposer + responder, commit compile-disabled: SlinkTradeCommitEnabled = 0); production
+	; trade is off and nothing here advertises it.
 	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
 	ld [wSlinkMailbox + SLINK_OFS_CAPS], a
 
@@ -216,22 +220,28 @@ INCLUDE "engine/slink/slink_sfx.asm"
 ; TITLE-VERSION: the main-menu version bridge and its 20-byte stamped field.
 INCLUDE "engine/slink/version.asm"
 
-; TRADE slice 1 (docs/polished/TRADE.md): the lease-frame primitives and the item policy. Inert --
-; nothing calls them until the dispatch slice.
+; TITLE: the SoulLink wordmark on the title screen (docs/polished/TITLE.md): the ROM0 bridge after the
+; main-menu bridge and the band, fixed at 7e:5800.
+INCLUDE "engine/slink/title.asm"
+
+; TRADE slice 1 (docs/polished/TRADE.md): the lease-frame primitives and the item policy, called by the
+; dispatcher and the proposer/responder services below.
 INCLUDE "engine/slink/trade_frame.asm"
 INCLUDE "engine/slink/trade_items.asm"
 
 ; TRADE slice 2a: the two special gates that re-point SpecialsPointers entries 2 and 3 (builder edit),
-; plus the stub SlinkTradeEntry. Trade requests skip the cable wait and end the script; battle is native.
+; plus SlinkTradeEntry, the 3-byte `jp SlinkTradeProposerService` trampoline the wait gate calls. Trade
+; requests skip the cable wait, run the held proposer service and end the script; battle is native.
 INCLUDE "engine/slink/trade_gate.asm"
 
-; TRADE card 2a: the outgoing 70-byte snapshot and the incoming-mon validity predicate. Inert -- nothing
-; calls them until the held service.
+; TRADE card 2a: the outgoing 70-byte snapshot and the incoming-mon validity predicates, called by the
+; held proposer and responder services (and the snapshot check by the disabled commit).
 INCLUDE "engine/slink/trade_snapshot.asm"
 INCLUDE "engine/slink/trade_validate.asm"
 
-; TRADE card D1/D2: the responder dispatcher (called from SlinkService each frame) and the INERT
-; SlinkTradePromptEntry stub it calls. Refuses by itself; the stub never touches the lease.
+; TRADE card D1/D2: the responder dispatcher (called from SlinkService each frame) and
+; SlinkTradePromptEntry, the 3-byte `jp SlinkTradeResponderService` trampoline it calls once every guard
+; holds. The dispatcher refuses by itself; the responder service owns every lease write.
 INCLUDE "engine/slink/trade_dispatch.asm"
 
 ; TRADE card C1a: the held PROPOSER-ONLY service (commit disabled), behind the SlinkTradeEntry trampoline.

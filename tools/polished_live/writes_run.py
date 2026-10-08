@@ -50,7 +50,7 @@ UPS = REPO / "patch/dist/SLink-Polished.ups"
 # Stage under the harness's own name.
 STAGED = LANE / "rom" / "pol_overlay.gbc"
 # The rebuilt C5 overlay; symbol presence does not enable its commit call sites.
-INTEGRATED_SHA1 = "cf03f53accefbc5f3fee9062846699e30c4c987b"
+INTEGRATED_SHA1 = "688945795e2656019247f5aaceb7b1d8791e900a"
 
 
 def stage() -> str:

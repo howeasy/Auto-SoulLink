@@ -96,10 +96,20 @@ RESPONDER_END = RESPONDER_SYMS["SlinkTradeResponderServiceEnd"]
 COMMIT_SYMS = {"SlinkTradeCommit": (0x7E, 0x4060), "SlinkTradeCommitEnd": (0x7E, 0x4068)}
 COMMIT_END = COMMIT_SYMS["SlinkTradeCommitEnd"]
 TABLE_AT = pc._flat(0x03, 0x4030)
+# TITLE wordmark: _TitleScreen's one `call EnableLCD` (at pc.TITLE_LOGO_HOOK_FLAT) retargets to a 7-byte ROM0 bridge
+# right after the main-menu bridge; TitleScreenEntrance's two shear immediates go 80 -> 88 lines. The band is its
+# own bank-$7E span, zero-length at the commit end here, so the trade span still ends exactly at COMMIT_END.
+TITLE_SYMS = {"_TitleScreen": (0x35, 0x4000), "SuicuneFrameIterator": (0x35, 0x4117), "EnableLCD": (0x00, 0x24DA),
+              "TitleScreenEntrance": (0x01, 0x6698), "TitleScreenTimer": (0x01, 0x66EF),
+              "wLYOverrides": (0x05, 0xDE00), "wLYOverridesEnd": (0x05, 0xDE90)}
+LOGO_BRIDGE, LOGO_BRIDGE_END = TITLE_END, TITLE_END + 7
+ENTRANCE_AT = pc._flat(*TITLE_SYMS["TitleScreenEntrance"])
+ENTRANCE_HEIGHT = bytes.fromhex("015000")                  # ld bc, 8 * 10
+ENTRANCE_PAIRS = bytes.fromhex("062821" "01de" "22230520")  # ld b, 8 * 10 / 2 / ld hl, wLYOverrides + 1 / ...
 
 CLEAN_SYMS = {"DelayFrame": (0x00, DELAY), "wPlayerPartyCount": (0x10, 0x5D00), "SoftReset": SOFT_RESET,
               "DelayFrames": DELAY_FRAMES, **PHONE_ROUTINES, **PHONE_NATIVES,
-              **GATE_ENTRIES, **GATE_NATIVES, pc.SCRIPT_END_LABEL: SCRIPT_END}
+              **GATE_ENTRIES, **GATE_NATIVES, pc.SCRIPT_END_LABEL: SCRIPT_END, **TITLE_SYMS}
 OVERLAY_SYMS = {
     "DelayFrame": (0x00, DELAY),
     "wPlayerPartyCount": (0x10, 0x5D00),     # every clean symbol survives, unmoved
@@ -139,6 +149,9 @@ OVERLAY_SYMS = {
     # TRADE card C6: the held responder service follows the proposer service.
     **RESPONDER_SYMS,
     **COMMIT_SYMS,
+    **TITLE_SYMS,
+    "SlinkTitleBridge": (0x00, LOGO_BRIDGE), "SlinkTitleBridgeEnd": (0x00, LOGO_BRIDGE_END),
+    "SlinkTitleLogoRow0": COMMIT_END, "SlinkTitleBand": COMMIT_END, "SlinkTitleBandEnd": COMMIT_END,
     "wSlinkMailbox": (0x00, pc.MAILBOX),
 }
 EMPTY_BANK = slice(pc._flat(pc.SERVICE_BANK, 0x4000), pc._flat(pc.SERVICE_BANK, 0x8000))
@@ -154,6 +167,10 @@ def clean_rom() -> bytes:
     rom[PHONE_LO:PHONE_HI] = b"\xff" * (PHONE_HI - PHONE_LO)
     rom[PHONE_HI:TITLE_END] = b"\xff" * (TITLE_END - PHONE_HI)
     rom[pc.TITLE_HOOK_FLAT:pc.TITLE_HOOK_FLAT + 3] = b"\xcd\xed\x43"      # call MainMenu_PrintCurrentTimeAndDay
+    rom[LOGO_BRIDGE:LOGO_BRIDGE_END] = b"\xff" * (LOGO_BRIDGE_END - LOGO_BRIDGE)
+    rom[pc.TITLE_LOGO_HOOK_FLAT:pc.TITLE_LOGO_HOOK_FLAT + 3] = b"\xcd\xda\x24"   # call EnableLCD
+    rom[ENTRANCE_AT + 0x10:ENTRANCE_AT + 0x13] = ENTRANCE_HEIGHT
+    rom[ENTRANCE_AT + 0x20:ENTRANCE_AT + 0x20 + len(ENTRANCE_PAIRS)] = ENTRANCE_PAIRS
     for at, native, _bridge in PHONE_CALLS:
         rom[at:at + 3] = b"\xcd" + PHONE_NATIVES[native][1].to_bytes(2, "little")
     for i, native in enumerate(GATE_NATIVES):         # the two native entries, then a neighbour that must not move
@@ -177,6 +194,10 @@ def overlay_rom(base: bytes | None = None) -> bytes:
     rom[PHONE_LO:PHONE_HI] = b"\x11" * (PHONE_HI - PHONE_LO)
     rom[PHONE_HI:TITLE_END] = b"\x12" * (TITLE_END - PHONE_HI)
     rom[pc.TITLE_HOOK_FLAT:pc.TITLE_HOOK_FLAT + 3] = b"\xcd" + PHONE_HI.to_bytes(2, "little")
+    rom[LOGO_BRIDGE:LOGO_BRIDGE_END] = b"\x13" * (LOGO_BRIDGE_END - LOGO_BRIDGE)
+    rom[pc.TITLE_LOGO_HOOK_FLAT + 1:pc.TITLE_LOGO_HOOK_FLAT + 3] = LOGO_BRIDGE.to_bytes(2, "little")
+    rom[ENTRANCE_AT + 0x11] = 88
+    rom[ENTRANCE_AT + 0x21] = 44
     for at, _native, bridge in PHONE_CALLS:
         rom[at + 1:at + 3] = PHONE_BRIDGES[bridge][1].to_bytes(2, "little")
     for i, (_native, gate) in enumerate(pc.TRADE_GATES):

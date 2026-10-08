@@ -5,6 +5,37 @@ Owner rules (`docs/memory`, "Title screen design rules"): plain vanilla look,
 mocks. Every patched title shows a SoulLink wordmark, and the patch version appears
 on the New Game/Continue menu.
 
+## Status (2026-10-08, card g2p-title-rebuild): wordmark BUILT, live check owed
+
+The wordmark is in the overlay (`patch/polished/src/title.asm`; overlay sha1
+`688945795e2656019247f5aaceb7b1d8791e900a`, UPS 4166 B, `data/polished/overlay_provenance.json`). ROM-bytes
+evidence: `tests/unit/test_polished_title.py`. **Not yet seen on screen** -- the live title check (T7/T9 below) is
+the coordinator's, after merge.
+
+| fact | value | source |
+|---|---|---|
+| hook | `call EnableLCD` at `35:40eb`, flat `0xD40EB`, `cd da 24` -> `cd a1 3f` (`call SlinkTitleBridge`) | `engine/movie/title.asm:179`; the only `call EnableLCD` in `_TitleScreen` (`35:4000`..`SuicuneFrameIterator` `35:4117`) |
+| bridge | ROM0 `$3FA1`-`$3FA7`: `farcall SlinkTitleBand` / `jp EnableLCD` (`d7 12 58 7e c3 da 24`) | after the main-menu bridge (`$3F92`-`$3FA0`); clean bytes `$FF` |
+| band | section fixed at `7e:5800` (after the trade commit, so no floating bank-$7E section moves): rows `7e:5800`/`7e:5809`, `SlinkTitleBand` `7e:5812`, art `7e:584a`-`7e:5969` | `data/polished/polished_slink.sym` |
+| art | the Crystal art unchanged: `patch/gen2/src/title_logo_crystal.2bpp` + `title_rows_crystal.inc` (18 tiles, ids `$60`-`$71`), copied by the builder (`TITLE_ART`) | `tools/gen_gen1_title.py` |
+| placement | map rows 10-11, tiles 6-14 (screen rows 9-10: `hSCY` = 8, `title.asm:187-188`), via `wTilemap` (UpdateBGMap mode 1 copies tiles) | `title.asm:5` and `:103-106` clear them; nothing else writes them |
+| palette | 6 (`title.asm:71-74`, the logo's lines 8-9): black / white / gold 26,21,0 / blue 2,3,30 -- the order `CRYSTAL_ROLES` paints; attribute bank bit clear | `gfx/title/title.pal` |
+| entrance | `TitleScreenEntrance` (`01:6698`, `engine/menus/intro_menu.asm`) shear widened 80 -> 88 lines: `ld bc, 8 * 11` (operand flat `0x66A6`) and `ld b, 8 * 11 / 2` (operand flat `0x66AD`) | both band rows slide in with the logo, as on the vanilla Crystal overlay |
+
+**Two corrections to the sections below, both settled from the ROM/source:**
+
+1. **vTiles2 is NOT untouched (§2.4, §7.3, §8.5).** `TitleLogoGFX` (`logo_version.2bpp.lz`) decompresses to **154 tiles**
+   from `vTiles1` (`title.asm:93-95`), so it runs on into `vTiles2` ids `$00`-`$19` (logo `$80`-`$0B`, copyright
+   `$0C`-`$18` drawn at `:115-118`, FAITHFUL `$19` at `:121-124`). `TitleSuicuneGFX` (256 tiles, `:22-28`) is VRAM
+   bank 1 only; `TitleCrystalGFX` (60 tiles) is OBJ tiles in `vTiles0`. Bank-0 ids `$1A`-`$7E` are free (`$7F` is the
+   `' '` clear tile), so `$60`-`$71` is still collision-free -- now by measurement, and `title.asm` ASSERTs the run
+   stays inside `$1A`-`$7E`. The test decompresses all three blocks out of the clean ROM with a model of
+   `home/decompress.asm` (checked against the clean build's own `logo_version.2bpp`).
+2. **The logo entrance DOES refill `wLYOverrides` (§7.5 is wrong).** `_TitleScreen` clears the buffer, but
+   `TitleScreenEntrance` in `engine/menus/intro_menu.asm` (run every frame from `RunTitleScreen`) fills
+   `8 * 10` lines with the interlaced SCX shear -- map rows 1-10, which includes the band's top row. Hence the
+   88-line widening, exactly as the vanilla Crystal overlay does (`tools/build_gen2_companion.py` `TITLE_SHEAR_EDITS`).
+
 **ROM facts carry bank:addr + flat offset + bytes** from
 `F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc`. WRAM is not in the
 ROM and is never dumped here.
