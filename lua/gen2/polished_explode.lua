@@ -5,8 +5,8 @@
 -- WHY A FACADE. The client has ONE writer slot (p.writes) and calls writes:arm("overworld" | "battle_hold" |
 -- "rival_swap"), faint_party_slot, faint_active_battler, explode_active_battler, write_enemy_party, and reads
 -- writes.sym.wCurOTMon. The overworld writer (polished_overworld.lua O.writes) has the first two only;
--- polished_writes.lua has explode_active_battler / write_enemy_party only, and no `sym`. This module routes each
--- call to the writer that owns it and fills in what the client never supplies:
+-- polished_writes.lua also owns active faint, explode and enemy-party writes; it has no `sym`. This facade routes each
+-- call to its owner and supplies the following callback context:
 --   * snapshot.bank / snapshot.pc: polished_writes.common() asserts the snapshot was taken at the gate PC. The
 --     client builds one snapshot per hold and never stamps them, so the facade stamps the site it is serving
 --     (explode -> battle_hold.execution_before, rival -> battle_hold.rival_swap_gate). That assertion is
@@ -49,23 +49,23 @@
 -- being written. client.lua `target()` returns nil for an absent target (one-line guard, see its commit).
 --
 -- WHAT COMPOSING p.battle_hold CHANGES. A force_faint/force_explode that arrives IN a battle now queues for the
--- next battle hold (client.lua:557) instead of waiting for the overworld checkpoint. Only force_explode of the
--- ACTIVE battler lands there. Every other queued write (an active faint, a bench faint) is refused by name at
--- the hold and stays queued, with one refusal line in the log per hold. Polished composes no battle_end engine
--- signal (only capture_party is bound), so the client's battle_end hand-off to the checkpoint never runs:
--- entry.lua sets p.battle_release_poll and client.lua release_battle_writes hands the queue to the overworld
--- checkpoint when wBattleMode reads 0 - the same moment it landed before. Without that hand-off a death
--- queued in battle would never land (measured). p.battle_bench is NOT composed (a bench faint on receipt
--- would be refused every frame); p.rival_swap is NOT composed either, see below.
+-- next battle hold instead of waiting for the overworld checkpoint. Active Explosion uses that hold;
+-- keyed active faint also uses it when the F2 settlement interface is explicitly enabled.
+-- The settlement interface defaults OFF; unkeyed active faint and in-battle bench faint refuse.
+-- The battle_release_poll option supplies the overworld hand-off when battle mode returns to zero:
+-- entry.lua enables it and client.lua release_battle_writes hands pending work to the checkpoint.
+-- This fallback is separate from the opt-in active-faint settlement and its native observation.
+-- p.battle_bench is not composed: bench writes retain the overworld safety gate.
+-- p.rival_swap is composed through the dedicated rival writer, with the guards described below.
 --
--- RIVAL SWAP IS WIRED BUT NOT COMPOSED, two measured blockers (both in files this card does not own):
---   1. the client decodes a replace_rival_team blob with c.PARTYMON_STRUCT_LENGTH / c.MON_HP / c.MON_SPECIES,
---      none of which is in the generated Polished profile.constants (it would raise on a nil);
---   2. rival_tick polls at a frame end while wCurOTMon == 0xFF, and polished_writes.write_enemy_party refuses
---      cur_ot_mon outside the NEW party (the write is only valid at 0f:47DD, after wCurOTMon is committed).
--- writes.sym IS provided, so the client announces trainer_battle_start; with rival_swap unset it answers
--- replace_rival_team "unsupported". write_enemy_party is reachable and tested through this facade at the real
--- gate state (tests/unit/test_polished_explode_path.py).
+-- RIVAL SWAP IS COMPOSED by entry.lua through polished_rival.lua:
+--   1. its facade supplies PARTYMON_STRUCT_LENGTH / MON_HP / MON_SPECIES for blob decoding;
+--      these constants are derived from the generated party-struct geometry, not defaulted;
+--   2. the writer requires configured rival classes, the actual gate PC/bank and enemy-side trainer identity;
+--      a frame-end poll or stale selected index is not a qualified send-in and refuses.
+-- writes.sym is supplied, so the client can announce trainer_battle_start.
+-- Composition does not supply qualification or a class policy: writes still require the live gate.
+-- The composed writer path is covered by tests/unit/test_polished_rival_path.py.
 local E = {}
 
 -- polished_writes.lua W.COORDS, {bank, address} straight from data/polished/polished_slink.sym (the test

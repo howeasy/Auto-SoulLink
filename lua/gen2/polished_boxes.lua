@@ -21,7 +21,7 @@
 -- declare both domains. "CartRAM": flat = bank*0x2000 + addr-0xA000 (NEWBOX top note; the mapping
 -- lua/gen2/boxes.lua uses). "WRAM": bank 0 = addr-0xC000, bank n = n*0x1000 + addr-0xD000, the flat Gambatte
 -- domain mapping of lua/tests/test_gen2_scripted_gate.lua G.wram_offset (Gen 2 live gates use it).
--- UNVERIFIED for Polished: neither mapping has been exercised on a Polished save/state yet (NEWBOX §7).
+-- Mapping implementation is exercised by the DEV census/writers; this is not cut qualification.
 --
 -- WRITE CONTRACT (§6): every write op takes the armed permit first and refuses without one (and the permit
 -- itself refuses an unarmed batch); it also refuses while wGameLogicPaused ~= 0 or sWritingBackup == 1.
@@ -30,7 +30,7 @@
 -- never points at garbage. A Bad Egg (checksum mismatch) is never decoded, moved or written.
 local B = {}
 
-B.NUM_BOXES, B.MONS_PER_BOX, B.MEMORIAL_BOX = 20, 20, 20 -- memorial = box 20: NEWBOX §6.2 proposal, owner ruling open
+B.NUM_BOXES, B.MONS_PER_BOX, B.MEMORIAL_BOX = 20, 20, 20 -- memorial = box 20, index 19 (MEMORIALIZE.md)
 B.ENTRY_SIZE, B.ENTRIES_PER_BANK = 49, 207
 local RECORD, BANKS_AT = 0x21, 0x14
 local SECTIONS = {{"A", 1, 167}, {"B", 168, 195}, {"C", 196, 207}}  -- pokemon_data_constants.asm:299 ff
