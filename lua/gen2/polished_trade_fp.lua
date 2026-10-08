@@ -2,9 +2,9 @@
 -- server/adapters/polished_trade_fingerprint.py.
 --
 -- WHAT THIS IS. The decision half of SlinkTradeDispatch, as a pure function over a snapshot.
--- No ROM byte is written, no overlay source is touched, and nothing here is armed: the overlay
--- is frozen until the title slice lands, and the capability bit is still not advertised
--- (patch/polished/src/slink.asm:73 `xor a ; core build: no capabilities`).
+-- No ROM byte is written, no overlay source is touched, and nothing here is armed. The overlay
+-- publishes panel/SFX bits while trade stays unadvertised
+-- (patch/polished/src/slink.asm capability publication).
 --
 -- WHY THE CONSTANTS ARE INJECTED. Python resolves the nine expected bytes from
 -- data/polished/polished_slink.sym at import, so a moved label fails there. Lua cannot read the

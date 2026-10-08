@@ -8,7 +8,7 @@ moved trainer classes (RIVAL0/1/2 + LYRA1/2). It never pairs with a vanilla Gen 
 It subclasses Gen2GSCAdapter for the methods whose logic is pack-shape agnostic (gift/legend area
 namespacing, area display names, move data, type names, artifact kinds, native-UI capabilities, badges,
 status tokens) and overrides everything bound to the vanilla pack or to species 1..251. The parent's
-__init__ is never run: it loads profile.json/area_map.json, which Polished does not have.
+__init__ is never run: this adapter loads its own generated Polished packs instead of the vanilla layout.
 
 SOURCE: polishedcrystal@3fa43192379df5c3e7b09a08e4d5d79af4f02f42 (tag v3.2.3, ROM sha1 6930b48a…,
 data/polished_sources.lock.json); docs/polished/RAM.md, docs/polished/NEWBOX.md.
@@ -749,21 +749,21 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
 
     # ── boxes, sprites, trainers ─────────────────────────────────────────────────────
     def supports_explode_mode(self):
-        return False             # no Polished force_explode client handler exists yet (the client landed
-                                  # 2026-10-04, force_explode did not): a queued force_explode would never fire
+        return False             # The battle facade is composed; Explode Mode remains unadvertised.
+                                  # Active-faint settlement is separately opt-in and default OFF.
 
     def supports_box_mon(self):
-        # C-WRITE round 2: the executor IS composed and proven (lua/gen2/polished_overworld.lua O.boxes,
-        # tests/unit/test_polished_write_path.py), but the capability stays FALSE. Advertising it strands every
-        # linked catch: state.py:2786 quarantines a solo catch, the link forms and state.py:2896-2912 queues the
-        # un-quarantine party_mon, this client refuses it (savemon -> party stat/PP reconstruction unqualified),
-        # sync_retrieve_failed re-boxes only a partner whose key is still in party_keys (state.py:617-643) - so
-        # both mons sit boxed with no retry and the pair never reaches the party again. The flag flips when
-        # withdraw() is composed, not before.
+        # Deposit and withdraw are composed through O.client_boxes in lua/gen2/entry.lua.
+        # The reconstruction tables and writer refusals are exercised by the composed unit rig.
+        # supports_box_mon remains FALSE; composition alone does not grant this capability.
+        # A coordinated capability flip needs the box-write contract and qualification evidence.
+        # Legacy sync_retrieve_failed may re-box an ALIVE linked partner still in its party.
+        # New outcome handling and recovery are separate from the executor being present.
+        # Do not infer release readiness from this implementation inventory.
         return False
 
     def reports_box_census(self):
-        return True              # P3: the Polished client reads the newbox/PokeDB layout (NEWBOX.md §6.1); no client yet
+        return True              # The composed client reports the newbox/PokeDB census (NEWBOX.md §6.1).
 
     @property
     def mons_per_box(self):

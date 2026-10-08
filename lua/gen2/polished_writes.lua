@@ -1,5 +1,5 @@
 -- Polished Crystal v3.2.3 Explode Mode (W-3) and Rival Team Swap (W-4) writers. Pure: no emulator
--- globals, no activation, NOT wired into lua/gen2/client.lua yet. Same permit/gate/refusal conventions as
+-- globals or self-activation; composed through polished_explode.lua. Same permit/gate/refusal conventions as
 -- lua/gen2/writes.lua (shared lua/write_permit.lua; arm -> one guarded call -> disarm).
 -- Spec: docs/polished/EXPLODE_RIVAL.md §6-§10 (they supersede §1-§5); struct offsets docs/polished/RAM.md.
 --
