@@ -1,8 +1,23 @@
 ; C5: native staged-record exchange. Built, NOT production-authorized.
 ; A = outgoing zero-based slot, B = local role (0/1). The caller's ten-byte
 ; authenticated APPLY context starts immediately above our return address.
-; Return 1 = pre-mutation refusal, 0 = native save/readback completed, 2 = hold.
-; No rollback, serial exchange, box allocation, or extra mail shift exists here.
+; Return 1 = verified not-performed, 0 = native save/readback completed, 2 = hold.
+; Bounded rollback: only a last/sole-slot removal failure BEFORE native UI.
+; That path changes only wPartyCount: SetStorageBoxPointer.party, Polished
+; engine/pc/bills_pc.asm:585-597; ShiftPartySlotToEnd returns without swaps
+; when selected == count (615-623). The outgoing record/OT/nick snapshot
+; is untouched and is rechecked after the original count is restored.
+; POINT OF NO RETURN = first DURABLE store, not the first live party store:
+; non-last slot: DoMailSwap -> DoPartySwap's SRAM CopyBytes store, bank 0
+; sPartyMon1Mail ($A600), bills_pc.asm:289-296,299-329 (first swap).
+; last/sole slot: no mail swap; ForceGameSave -> SaveGameData -> ValidateSave,
+; first SRAM sCheckValue1 store (engine/menus/save.asm:55-59,148-169,275-281).
+; CopyBytes's RAM record store and the last-slot dec [wPartyCount] precede
+; durability. Non-last partial rotations CANNOT be recovered from the one
+; outgoing snapshot; they stay result 2 even before their first durable byte.
+; Full pre-durable rollback after native UI is deliberately NOT claimed:
+; snapshot lifetime through animation/evolution is not proven. No new
+; scratch buffer, serial exchange, box allocation or mail shift is used.
 ; Native UI/save depth and cold-load durability still require enabled live proof.
 SECTION "SLink Trade Commit", ROMX[$5300], BANK[SLINK_SERVICE_BANK]
 
@@ -85,7 +100,7 @@ SlinkTradeCommit::
 	ld a, [wPartyCount]
 	inc a
 	cp [hl]
-	jp nz, .Uncertain
+	jp nz, SlinkTradeCommitRollback
 	call DisableSpriteUpdates
 	call ClearTileMap
 	call LoadFontsBattleExtra
@@ -147,7 +162,7 @@ SlinkTradeCommit::
 	ld a, 1
 	jr .Restore
 .Uncertain
-	; Never save a detected partial party, and never return a safe refusal.
+	; Durable/unsupported partial path: never save it or report a safe refusal.
 	call RestartMapMusic
 	call ReturnToMapWithSpeechTextbox
 	ld a, 2
@@ -597,5 +612,34 @@ SlinkTradeCommitSaveText:
 ; Auditable ROM witness of the compile-time call-site authorization.
 SlinkTradeCommitEnabled::
 	db SLINK_TRADE_COMMIT_ENABLE
+ASSERT SlinkTradeCommitEnabled == $573b, "compile gate witness moved"
+
+SECTION "SLink Trade Commit Rollback", ROMX[$573c], BANK[SLINK_SERVICE_BANK]
+SlinkTradeCommitRollback::
+	; Enter only immediately after removal, at the original 22-local-byte SP.
+	; The native last-slot path has no rotation, OT/nickname or SRAM writes.
+	; A non-last abort could already have performed a mail swap: always hold.
+	ld hl, sp + 3
+	ld a, [hl]
+	inc a
+	ld hl, sp + 4
+	cp [hl]
+	jp nz, SlinkTradeCommit.Uncertain
+	ld a, [hl]
+	ld [wPartyCount], a
+	; Re-run the identical preflight in its original no-link context.
+	ld hl, sp + 15
+	ld a, [hl]
+	ld [wLinkMode], a
+SlinkTradeCommitRollbackVerify::
+	call SlinkTradeCommit.Preflight
+	jp c, SlinkTradeCommit.Uncertain
+	ld hl, sp + 3
+	ld a, [hl]
+	call SlinkTradeValidateSnapshot
+	jp c, SlinkTradeCommit.Uncertain
+SlinkTradeCommitRollbackVerified::
+	ld a, 1
+	jp SlinkTradeCommit.Restore
 SlinkTradeCommitEnd::
 ASSERT @ <= $7000, "C5 commit exceeded its fixed bank-$7E reservation"
