@@ -199,3 +199,61 @@ CLAIMS: [{"path":"F:/slink-work/wt/polished/data/polished/polishedcrystal.sym","
 ## Coordinator note (2026-10-04): leads for the `battle_faint` blocker
 
 The doc's absence finding is about the vanilla label names. The Polished sym does hold a restructured faint path: `ResolveFaints` 0f:44af, `FaintUserPokemon` 0f:4cd2, `PlayerMonFaintHappinessMod` 0f:4f49, `MonFaintedAnimation` 0f:5090, `HasPlayerFainted` 00:3684, `wWhichMonFaintedFirst` 00:c54f (`engine/battle/core.asm:708`, `:2089`). The next card must read that source to pick the `before_party_copyback` equivalent; none of these is claimed to be it yet.
+
+
+## Battle-faint client wiring status (2026-10-08, g2p-faintsig round 2)
+
+The current Polished composition requests `battle_faint` by default alongside
+`capture_party`. The optional `battle_faint_copyback_return` observer at 0F:44CD
+and configured rival window remain additive; neither was replaced. No pack was
+regenerated and no physical/runtime qualification flag was changed.
+
+The existing `battle_faint` row is **RESOLVED / CPU_INSTRUCTION /
+SOURCE_CANDIDATE / runtime_enabled=false / physical_firing=OPEN** at 0F:44C8,
+phase `before_party_copyback`, `expected_hex == find_hex == E0D1`
+(`data/games/polished_crystal/engine_signals.json:147-167`). The Polished binder
+uses the same declared-phase, byte-pin, bank/PC and epoch admission checks as its
+other admitted source candidates. This is not a faint-only PC: ResolveFaints
+reaches it on live-player turns too.
+
+`signals.lua` preserves the existing boundary observation, then appends one
+`kind="faint", cause="battle"` event only when the authoritative player battle
+HP is zero and link mode is zero. It resolves the active slot using
+`reads.read_party()` and the injected Polished key function: 48-byte records,
+9-bit species and form identity remain owned by `polished.lua`, not a copied
+vanilla layout. A per-key latch, scoped to the captured epoch, suppresses repeated
+zero-HP callbacks; a live boundary for that slot permits a new episode. The
+party record may still have positive HP when captured. The unchanged client's
+faint latch waits for native party copyback before `send("faint")`.
+
+Commanded deaths still pass through the existing `FS.echo` or `self.commanded`
+suppression. The 44CD producer remains the settlement witness for an F1 plain
+write; a 44C8 natural notification does not substitute for it. MODEL tests use
+the composed client over the real overlay and execute UpdateBattleMonInParty's
+native SM83 bytes, including both suppression paths and F2 observer completion.
+No emulator was run for this card; natural-faint delivery to a real server,
+last-mon/whiteout reachability and interruption/reconnect cases need live proof.
+
+**Overworld poison-faint: N/A for this pinned Polished behavior.** The old table
+row below must not be read as an after-damage faint hook. At source commit
+`3fa43192379df5c3e7b09a08e4d5d79af4f02f42`,
+`engine/events/poisonstep.asm:59-73` begins with status/HP checks; :97-112 cures
+poison at 1 HP, and :119-126 decrements HP only on the other branch. Thus the
+current 13:68CB entry is not `after_poison_hp_zero`, and no `poison_faint` hook
+is registered. This says nothing against ordinary poison damage fainting in
+battle, which uses the battle HP-zero path.
+
+**Whiteout remains OPEN/unregistered.** The current 03:401B row is generic
+`Special` dispatch (`engine/events/specials.asm:1-13`) with no caller/script
+qualification and no find_hex. A separate generator/site card must establish a
+guarded pre-heal point. Do not interpret this battle-faint wiring as a whiteout
+fix or enable the existing generic row as-is.
+
+Verification round 3: the approved MODEL identity, hook-census and pre/post-copy
+batch expectations now pass without runtime changes. All nine requested Polished
+files: **264 passed, 1 skipped** (absent Crystal ROM input). Vanilla
+`-k "gen2 and (signals or sites)"`: **354 passed, 20 skipped**. The earlier six
+fixture/census failures are resolved; the wrong-slot case requires exactly the
+OTHER key's natural faint while all commanded-owner state/sequence/no-KO checks
+remain enforced. Source-copy red controls pass. Ready for independent review,
+not a new live qualification claim.
