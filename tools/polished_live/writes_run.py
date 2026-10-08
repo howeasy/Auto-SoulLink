@@ -5,12 +5,12 @@
 
 Nothing is rebuilt. The staged ROM is the pinned release with the committed
 patch/dist/SLink-Polished.ups applied, and it is refused unless its sha1 is the integrated
-overlay `877a477a…` (C5 present, commit gate disabled). The save fixture is
+overlay `cf03f53a…` (C5 present, commit gate disabled). The save fixture is
 copied into this lane and its sha256 printed, so another card rewriting its own lane cannot move
 this run's inputs.
 
-No SLink server is started: the card drives the CLIENT, through `Client:handle_command`
-(lua/gen2/client.lua:535), which is the same public entry the real reply path uses.
+A private SLink server settles the real client's connection; commands are driven through
+`Client:handle_command`, the same public entry the real reply path uses.
 
 One EmuHawk at a time, engine warp only, short non-Drive lane. Only the PID this script starts is
 ever killed (harness.kill_own) — never an image-name kill.
@@ -109,33 +109,16 @@ def main() -> int:
                            cwd=str(REPO), stdout=srv_log, stderr=subprocess.STDOUT)
     print(f"[writes] server pid {srv.pid} tcp {port}", flush=True)
     time.sleep(1.5)
-    # This card stops at the overworld: the command checks belong to the next one. The Lua driver
-    # is one long synchronous pass, but EmuHawk runs it in its own process, so the poll below can
-    # see the log mid-pass and kill the emulator (harness.launch's finally, own PID only) before
-    # the driver reaches L.idle(90) + handle_command.
-    def stop_at_overworld():
-        result = run / "result.txt"
-        if result.is_file() and "party from the client's own read path" in result.read_text(
-                encoding="utf-8", errors="replace"):
-            raise RuntimeError("stop-at-overworld")
-
     pid = None
     try:
         text, pid = harness.launch("tools/polished_live/writes.lua", run,
-                                   {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port)},
-                                   300,
-                                   poll=stop_at_overworld)
-    except RuntimeError as exc:
-        if "stop-at-overworld" not in str(exc):
-            raise
-        print(f"[writes] {exc}", flush=True)
-        text = (run / "result.txt").read_text(encoding="utf-8", errors="replace") \
-            if (run / "result.txt").is_file() else ""
+                                   {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port)}, 300)
     finally:
         # only our own PIDs: the emulator harness.kill_own handles, this is the server
         if srv.poll() is None:
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(srv.pid)], capture_output=True)
         srv.wait(timeout=20)
+        print(f"[writes] server pid {srv.pid} ended rc={srv.returncode}", flush=True)
     print(text[-4000:])
     result = run / "result.txt"
     if result.is_file():
