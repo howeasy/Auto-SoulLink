@@ -194,7 +194,7 @@ function M.run()
         local after=0
         local walked=0
         while after<3600 and not (target and c.dead_keys[target.key] and recorded) do
-            if not queued and read("wBattleMode")==0 then
+            if not queued and mapped() and read("wBattleMode")==0 then
                 -- Random encounters are not frame-deterministic across runs: the fixed route's 4 grass holds may
                 -- end without a wild battle. Keep the route's own Left/Right grass walk (row 12) until one starts.
                 L.frame({[math.floor(walked/56)%2==0 and "Left" or "Right"]=true});walked=walked+1
@@ -207,8 +207,8 @@ function M.run()
         -- keep the same native A pulses going until copy_return fires or the battle ends, bounded.
         if config.case~="bench-faint" then
             local extra=0
-            while extra<2400 and not copy_seen and read("wBattleMode")~=0 do L.pulse("A");extra=extra+1 end
-            add("route_tail",{frames=extra,copy_seen=copy_seen,mode=read("wBattleMode")})
+            while extra<2400 and not copy_seen and (not mapped() or read("wBattleMode")~=0) do L.pulse("A");extra=extra+1 end
+            add("route_tail",{frames=extra,copy_seen=copy_seen,mode=mapped() and read("wBattleMode") or -1})
         end
         pcall(function() client.screenshot(L.RUN.."/final.png") end)
         L.idle(90) -- retain duplicate/quiet re-zero evidence; qualification demands one KO
