@@ -33,8 +33,8 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-WORK = Path("F:/slink-work/lanes/pol-rival-probe")
-RELEASE = Path("F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc")
+WORK = Path(os.environ.get("SLINK_WORK_ROOT", "F:/slink-work/lanes/pol-rival-probe")) / "out"
+RELEASE = Path(os.environ.get("POL_RELEASE_ROM", "F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc"))
 BANK, GATE, NEXT, LAST = 0x0F, 0x47DD, 0x47E0, 0x480D
 PINNED_BYTES = bytes.fromhex("218BD2")
 PINNED_SITE_HEX = "218bd2fa0cd1"     # all six release bytes at 0f:47DD (flat 0x3C7DD), compared in full by the rival oracle
@@ -337,6 +337,7 @@ def parse_args(argv=None):
     ap.add_argument("--disclosure", type=Path, help="synth only: derive_rival_save disclosure JSON naming --fixture")
     ap.add_argument("--expect", choices=EXPECTATIONS, help="synth only: rival (default) or wild control oracle")
     ap.add_argument("--fixture", type=Path, required=True, help="SaveRAM, copied unchanged")
+    ap.add_argument("--calibrate", action="store_true", help="SYNTH only: source-derived native route with bounded read-only feedback")
     ap.add_argument("--route", type=Path, help="timed native input from emulator boot; optional for idle observation")
     ap.add_argument("--frames", type=int, default=12000, help="total observation frames, including route")
     ap.add_argument("--trace-cap", type=int, default=4096, help="maximum bank-matched hook rows; overflow fails the oracle")
@@ -347,6 +348,8 @@ def parse_args(argv=None):
             ap.error(f"--{name.replace('_', '-')} must be positive")
     if not args.fixture.is_file():
         ap.error(f"fixture does not exist: {args.fixture}")
+    if args.calibrate and (args.setup != "synth" or args.route is not None):
+        ap.error("--calibrate requires --setup synth and no --route")
     args.disclosure_info = args.disclosure_sha256 = None
     if args.setup == "played":
         if args.disclosure is not None or args.expect is not None:
@@ -466,7 +469,7 @@ def main(argv=None) -> int:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import harness
 
-    harness.SYMBOLS = tuple(harness.SYMBOLS) + tuple(s for s in EXTRA_SYMBOLS if s not in harness.SYMBOLS)
+    harness.SYMBOLS = tuple(harness.SYMBOLS) + tuple(s for s in (*EXTRA_SYMBOLS, "hBattleTurn") if s not in harness.SYMBOLS)
     harness.ROM_SRC = harness.ROM = rom
     harness.SRAM.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(args.fixture, harness.SRAM / harness.SAVE_NAME)
@@ -474,7 +477,8 @@ def main(argv=None) -> int:
     run = lane / "probe"
     run.mkdir()
     config = run / "input.json"
-    settings = {"steps": args.steps, "frames": args.frames, "trace_cap": args.trace_cap, "setup": args.setup}
+    settings = {"steps": args.steps, "frames": args.frames, "trace_cap": args.trace_cap, "setup": args.setup,
+                "calibrate": args.calibrate, "expect": args.expect}
     if args.setup == "synth":
         settings["disclosure_sha256"] = args.disclosure_sha256
     config.write_text(json.dumps(settings), encoding="utf-8")
