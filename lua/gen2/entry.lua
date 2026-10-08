@@ -977,7 +977,12 @@ local function compose_polished(deps, decision)
                         return bytes
                     end})
             end)
-            if composed and trade then parts.dev_polished_trade = trade
+            if composed and trade then
+                parts.dev_polished_trade = trade
+                -- PUMP card (672c824e): the client is constructed before the dev binder exists, so install the
+                -- dev-only trade pump late. It never changes the hello (trade_prepare stays false).
+                local pumped, pump_why = pcall(client.install_dev_trade_pump, client, {binder=trade, charmap=charmap})
+                if not pumped and deps.log then deps.log("[SLink-polished] dev trade pump not installed: " .. tostring(pump_why)) end
             elseif deps.log then deps.log("[SLink-polished] dev trade unavailable: " .. tostring(composed and why or trade)) end
         end
         return parts
