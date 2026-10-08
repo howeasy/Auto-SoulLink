@@ -51,6 +51,7 @@
     "LIVE-WRITES-OVERWORLD",
     "LIVE-PANEL-PAGES-ROM",
     "LIVE-PANEL-HELLO",
+    "LIVE-PANEL-HOST-PAGING",
     "MGR-RANDOMIZER-FLAG",
     "MGR-PICKER-GATE",
     "MGR-COMPANION-GATE",
@@ -478,6 +479,24 @@
       ]
     },
     {
+      "id": "LIVE-PANEL-HOST-PAGING",
+      "kind": "LIVE",
+      "description": "the real server's link_panel, held by the real client, is paged by the ROM after a native catch forms a pair",
+      "receipt": "tests/fixtures/polished/receipts/live_panel_host_paging.json",
+      "expect_scenario": "panel/real-host-paging",
+      "expect_checks": [
+        "run verdict",
+        "ROM booted is the provenance overlay",
+        "hello advertises panel true, panel_abi 3 on the overlay",
+        "a native catch formed a linked pair on the real server",
+        "the real server published link_panel and the wire log carries what the client held",
+        "the pair, pairs-alive, dead-zone and badge rows match the server's own state",
+        "three pages rendered, each line equal to the row the client staged",
+        "the client's own permit wrote the mailbox, all writes inside its span",
+        "B closes to the Phone list with no call placed and PANEL_STATE cleared"
+      ]
+    },
+    {
       "id": "MGR-RANDOMIZER-FLAG",
       "kind": "MANAGER",
       "description": "upr_pipeline.POLISHED_RANDOMIZER_ENABLED is the single switch every Manager path reads",
@@ -548,10 +567,10 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "the in-game panel pages (docs/polished/PANEL.md, PANEL_SLOT.md), paged by the real SLink host",
-      "blocker": "ROM half live on the current overlay 688945795e (LIVE-PANEL-PAGES-ROM: C0-C5 PASS against a scripted mailbox host) and the real client's hello advertises panel=true, panel_abi 3 (LIVE-PANEL-HELLO); still missing: real-host paging live (server link_panel -> lua panel:hold -> ROM render), card in flight",
+      "blocker": "paging live on the current overlay 688945795e (LIVE-PANEL-PAGES-ROM, LIVE-PANEL-HELLO, LIVE-PANEL-HOST-PAGING: real server link_panel -> lua panel:hold -> ROM render); still missing: rows unreadable on the 16-glyph ROM panel (wide label|field rows; Gen2PolishedAdapter inherits info_panel_width()==0) -- fix in flight (pol-panelfix)",
       "manager_row": null,
       "manager_row_note": "the panel pages are a client feature; battle_calc's refusal is about calculator DATA, a separate obligation",
-      "evidence": "tests/fixtures/polished/receipts/live_panel_pages_rom.json and live_panel_hello.json (F:/slink-work/lanes/pol-rcproof/panel/run/result.txt, F:/slink-work/lanes/pol-rcproof/hello/live/wire/wire_a.jsonl:2)"
+      "evidence": "tests/fixtures/polished/receipts/live_panel_host_paging.json not_proven[0]: page 1 renders 'RT29 Rattata 2 1' from 'RT29|Rattata|2|13/13|38||' (F:/slink-work/lanes/pol-panelhost/run/oracle.json); also live_panel_pages_rom.json, live_panel_hello.json"
     },
     {
       "id": "OPEN-IN-GAME-TRADE",

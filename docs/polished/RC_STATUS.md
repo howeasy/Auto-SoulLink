@@ -119,12 +119,12 @@ The R1/R2/R3 rows bind on `source_overlay_sha1`, not on the booted cartridge's o
 randomized cartridge can never equal the overlay sha1, so binding on it would be red forever.
 The item declares `"bind": "source"` and the receipt carries the overlay it was derived from.
 
-### 2026-10-08: four receipts bound to `68894579` and to a computed code digest
+### 2026-10-08: five receipts bound to `68894579` and to a computed code digest
 
 The overlay is now `688945795e2656019247f5aaceb7b1d8791e900a` (title wordmark, `1d750de2e`), so
-every receipt above is STALE on the ROM binding. Four new DEV receipts were written against it,
+every receipt above is STALE on the ROM binding. Five new DEV receipts were written against it,
 and unlike the older ones they carry the code digest the verifier computes
-(`--print-code-digest` = `f8966ea4…`), checked on the run worktree at `2959ee36a`:
+(`--print-code-digest` = `f8966ea4…`; the digest files are identical at `2959ee36a`, `499d1cab9` and `8edc811f2`):
 
 | item | evidence | what it does NOT prove |
 |---|---|---|
@@ -132,6 +132,7 @@ and unlike the older ones they carry the code digest the verifier computes
 | `LIVE-WRITES-OVERWORLD` | `pol-writes6889/writes/result.txt`, 45 `[ok]`; a/b/d exact diffs recomputed from `trace.json` | (c) negatives; in-battle/PHYSICAL faint; bank 2 |
 | `LIVE-PANEL-PAGES-ROM` | `pol-rcproof/panel/run/result.txt`, C0-C5, 21 `[ok]` | pages from the real host (a scripted writer published them) |
 | `LIVE-PANEL-HELLO` | `pol-rcproof/hello/live/wire/wire_a.jsonl:2`: `panel true`, `panel_abi 3` | paging |
+| `LIVE-PANEL-HOST-PAGING` | `pol-panelhost/run/oracle.json`: real server `link_panel` held, staged and rendered as 3 pages, 29 `[ok]` | readability: rows are cut to 16 glyphs; scripted partner B |
 
 `OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH`; the verifier re-checks that closure on every run.
 
@@ -185,7 +186,7 @@ Run these two on the build host, sequentially, and clear the cache first if the 
 | `OPEN-WRITE-PATH` | none (no Manager option governs the write sink) | overworld half live on `68894579` (`LIVE-WRITES-OVERWORLD`) and `supports_box_mon` is True since `8c1b841e2`; still no in-battle (active battler) / PHYSICAL faint receipt and no (c) negatives under a real battle |
 | `OPEN-EXPLODE-RIVAL` | `explode_mode`, `rival_team_swap` | both writers exist as pure Lua modules and neither is wired |
 | `OPEN-TITLE-SPLASH` | none | **CLOSED** 2026-10-08 by `LIVE-TITLE-SPLASH` |
-| `OPEN-PANEL-PAGES` | none | ROM half (C0-C5, scripted host) and hello `panel=true` live on `68894579`; real-host paging (server `link_panel` -> lua `panel:hold` -> ROM) not yet run live |
+| `OPEN-PANEL-PAGES` | none | paging live on `68894579` (ROM half, hello `panel=true`, real-host paging); rows unreadable on the 16-glyph ROM panel (`Gen2PolishedAdapter` inherits `info_panel_width()==0`), fix in flight (`pol-panelfix`) |
 | `OPEN-IN-GAME-TRADE` | `pc_trade_npc` | the receptionist stack is measured, but no dispatch is armed; the native path stops at `Special_WaitForLinkedFriend` |
 
 Where an item names a Manager row, the verifier cross-checks that the row is **still refused**.
