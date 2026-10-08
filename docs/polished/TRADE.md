@@ -1536,8 +1536,10 @@ animation, native commit or durable trading.
 
 ### Remaining enablement questions
 
-No enabled live commit was requested or performed. Owner enablement, the
-incoming egg/form/canonical-stat domain, real nested native stack/ISR margin,
+No enabled live commit was requested or performed.
+**DECIDED 2026-10-07: current validator only (species, item, nature, level, name terminators); no extra egg/form domain** (owner decision relayed by coordinator card `g2p-decisions`). The validator is not a certification of arbitrary incoming records.
+Commit **ENABLEMENT** remains OPEN: non-atomic mutation with no rollback (`trade_commit.asm:5`), real native/ISR stack high-water, cold-load coherence.
+Owner enablement remains a separate yes. Also open:
 complete animation/evolution scratch census, primary/backup/mail/storage
 interruption recovery and cold-load durability remain open. The full-save
 choice follows the C5 contract; its Pokemon-data checksum/readback boundary

@@ -100,10 +100,10 @@ Before the first **party, dex or SRAM mutation**, recheck:
    HP; it permits replacing the sole usable mon with a usable incoming mon. Preserve this
    rule unless the owner explicitly chooses another policy. Its globals are slot indices
    at this point. (`P/engine/link/link.asm:1219-1251`.)
-4. Resolve the remaining form/egg/canonical-stat policy before enabling C5. Current tests
-   may directly exercise defined cases, but no production caller may interpret the current
+4. **DECIDED 2026-10-07: current validator only (species, item, nature, level, name terminators); no extra egg/form domain** (owner decision relayed by coordinator card `g2p-decisions`). Current tests may directly exercise defined cases, but no production caller may interpret the current
    permissive record validator as certification of arbitrary incoming records.
    (`docs/polished/TRADE.md:1379-1380`; `patch/polished/src/trade_validate.asm:24-26`.)
+   Commit **ENABLEMENT** remains OPEN: non-atomic mutation with no rollback (`trade_commit.asm:5`), real native/ISR stack high-water, cold-load coherence; enabling it needs a separate owner yes.
 
 5. Mail policy must include the **whole local party**, not just the selected record:
    the receptionist invokes `CheckPartyForMail` before the save/wait flow
