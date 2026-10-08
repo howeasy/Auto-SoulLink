@@ -164,6 +164,8 @@ def test_release_aggregate_uses_overlay_proofs_and_ignores_broken_clean_history(
         (tmp_path / f"data/games/gen2_{title}/admission.json").write_text(json.dumps({"artifacts": [row]}))
     (tmp_path / "docs/gen2").mkdir(parents=True)
     (tmp_path / "docs/gen2/PLAN.md").write_text(_LEDGER.format(g4=_SIGNED))
+    # C-5 receipts are installed only at the freeze (FREEZE_RUNBOOK item 9); this test is about overlay proofs.
+    monkeypatch.setattr(gate, "c5_gate_errors", lambda root=None, head=None: [])
     fixtures = gate.fixtures_errors
     monkeypatch.setattr(gate, "fixtures_errors", lambda root, *, artifact_kind: fixtures(
         root, names=gate.OVERLAY_QUALIFICATIONS, artifact_kind=artifact_kind,

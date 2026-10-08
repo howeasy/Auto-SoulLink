@@ -753,14 +753,11 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
                                   # Active-faint settlement is separately opt-in and default OFF.
 
     def supports_box_mon(self):
-        # Deposit and withdraw are composed through O.client_boxes in lua/gen2/entry.lua.
-        # The reconstruction tables and writer refusals are exercised by the composed unit rig.
-        # supports_box_mon remains FALSE; composition alone does not grant this capability.
-        # A coordinated capability flip needs the box-write contract and qualification evidence.
-        # Legacy sync_retrieve_failed may re-box an ALIVE linked partner still in its party.
-        # New outcome handling and recovery are separate from the executor being present.
-        # Do not infer release readiness from this implementation inventory.
-        return False
+        # Party sync ON (owner 2026-10-08): deposit and withdraw are composed through O.client_boxes
+        # (lua/gen2/entry.lua) and passed the live write driver on overlay cf03f53a, (b) and (d) with an
+        # independently derived changed-byte subset (docs/polished/LIVE_RESULTS.md). The optional
+        # three-outcome box-write contract is parked; this is the legacy two-outcome path vanilla uses.
+        return True
 
     def reports_box_census(self):
         return True              # The composed client reports the newbox/PokeDB census (NEWBOX.md §6.1).

@@ -16,8 +16,8 @@ RED CONTROLS (each mutation must turn the named test red):
   battle end       drop `(mode == 0 and (self.census_mode or 0) ~= 0) or` from client.lua  -> test_a_battle_end_refreshes_the_census
   periodic         drop the `math.abs(...) >= self.rescan_every` arm from client.lua       -> test_the_periodic_interval_refreshes_the_census
   composition      delete `rescan_every=1800,` from entry.lua compose_polished             -> both refresh tests
-  capability       make Gen2PolishedAdapter.supports_box_mon return True                   -> test_a_polished_memorial_relocation_queues_nothing
-                                                                                              (+ the two NEEDS_STATE_GATE tests once applied)
+  capability       make Gen2PolishedAdapter.supports_box_mon return False                  -> the three test_a_polished_* quarantine
+                                                                                              tests (party sync flipped ON 2026-10-08)
 
 UNPROVEN without a live run: that a native catch-to-box leaves the SRAM census complete at the next trigger (the
 census checksum covers sGameData only; the live run read the box mon only after a reboot), and the on-cartridge cost
@@ -163,16 +163,18 @@ def _solo_catch(adapter, tmp_path, monkeypatch, key):
     return state, cmds
 
 
-# server/state.py is outside this card's file lease: the quarantine sites (_handle_capture, the hello re-quarantine)
-# need the staged one-condition patch (state_supports_box_mon.patch). Drop this marker when it lands (strict).
+# Party sync is ON for Polished (owner 2026-10-08, after the live write driver passed on overlay cf03f53a:
+# docs/polished/LIVE_RESULTS.md): supports_box_mon() is True, so Polished now behaves like vanilla Gen 2 below.
 
 POLISHED_KEY = "AE7343:D1C2:010:00"  # the live run's party Pidgey
 
 
-def test_a_polished_solo_catch_queues_no_box_mon(tmp_path, monkeypatch):
-    state, cmds = _solo_catch(Gen2PolishedAdapter(), tmp_path, monkeypatch, POLISHED_KEY)
+def test_a_polished_solo_catch_is_quarantined(tmp_path, monkeypatch):
+    adapter = Gen2PolishedAdapter()
+    assert adapter.supports_box_mon() is True
+    state, cmds = _solo_catch(adapter, tmp_path, monkeypatch, POLISHED_KEY)
     assert "route_29" in state.pending_captures  # still the pending (unlinked) capture
-    assert not any(c.get("cmd") == "box_mon" for c in cmds), cmds
+    assert any(c.get("cmd") == "box_mon" and c.get("key") == POLISHED_KEY for c in cmds), cmds
 
 
 def test_a_vanilla_solo_catch_still_quarantines(tmp_path, monkeypatch):
@@ -189,11 +191,10 @@ def _rehello(state, key, other):
                                               {"key": other, "hp": 30, "maxHP": 30}]})
 
 
-def test_a_polished_reconnect_does_not_re_quarantine(tmp_path, monkeypatch):
+def test_a_polished_reconnect_re_quarantines(tmp_path, monkeypatch):
     state, _ = _solo_catch(Gen2PolishedAdapter(), tmp_path, monkeypatch, POLISHED_KEY)
     cmds = _rehello(state, POLISHED_KEY, "4A9D3C:D1C2:0A9:00")
-    assert not any(c.get("cmd") == "box_mon" for c in cmds), cmds
-    assert POLISHED_KEY in state.party_keys["a"]  # the party model keeps the mon the cartridge holds
+    assert any(c.get("cmd") == "box_mon" and c.get("key") == POLISHED_KEY for c in cmds), cmds
 
 
 def test_a_vanilla_reconnect_still_re_quarantines(tmp_path, monkeypatch):
@@ -215,10 +216,10 @@ def _memorial_relocation(adapter, tmp_path, key):
     return [c["cmd"] for c in srv.state.queued_commands["a"]]
 
 
-def test_a_polished_memorial_relocation_queues_nothing(tmp_path, caplog):
+def test_a_polished_memorial_relocation_queues_like_vanilla(tmp_path, caplog):
     with caplog.at_level("WARNING"):
-        assert _memorial_relocation(Gen2PolishedAdapter(), tmp_path, POLISHED_KEY) == []
-    assert sum("cannot execute box_mon" in r.getMessage() for r in caplog.records) == 1  # once per key
+        assert _memorial_relocation(Gen2PolishedAdapter(), tmp_path, POLISHED_KEY)[:2] == ["party_mon", "box_mon"]
+    assert not any("cannot execute box_mon" in r.getMessage() for r in caplog.records)
 
 
 def test_a_vanilla_memorial_relocation_still_queues(tmp_path):
