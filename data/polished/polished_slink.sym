@@ -46896,7 +46896,10 @@
 7e:56fd SlinkTradeApplyCommit.Hold
 7e:572b SlinkTradeCommitSaveText
 7e:573b SlinkTradeCommitEnabled
-7e:573c SlinkTradeCommitEnd
+7e:573c SlinkTradeCommitRollback
+7e:5750 SlinkTradeCommitRollbackVerify
+7e:575f SlinkTradeCommitRollbackVerified
+7e:5764 SlinkTradeCommitEnd
 00:8000 vTiles0
 00:8800 vTiles1
 00:9000 vTiles2

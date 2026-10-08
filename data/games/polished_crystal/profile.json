@@ -10,9 +10,9 @@
     "generator": "tools/gen_polished_profile.py",
     "lock_sha256": "658caa2aeaaefc39fad5558ca949ea0202fcca0c870c8ab6b7e358ffe5d96a35",
     "map_sha256": "628242fa28f127a2ffd401a6627734f2ff99fb6badb2343c23c8e69fff4583f0",
-    "overlay_provenance_sha256": "71bf6810484c8cf1972c2538139f77bfd12c700e8cabd2b56bd8156e3236587f",
-    "overlay_sha1": "877a477a7dfc70b775ca3f46461d67abebe07083",
-    "overlay_sym_sha256": "22bcd92866bec62f9f4dc6733ac7c6cfd557a1bbf311b92cb70264199c8b4e6e",
+    "overlay_provenance_sha256": "4ce012a81e43d94d0c7a84ad985d938eb82bd4b8f124947d2da9355f2a980415",
+    "overlay_sha1": "cf03f53accefbc5f3fee9062846699e30c4c987b",
+    "overlay_sym_sha256": "13ff57ea5646c682836f9f9651340e38f420fb7b412fd150ef0a338d7a6dd610",
     "repo": "https://github.com/Rangi42/polishedcrystal",
     "rom_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
     "sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
@@ -561,7 +561,7 @@
         "abi": 3,
         "artifact": "polished_overlay",
         "base_sha1": "6930b48af5844d373e3c9130f26d6dd1084cf4ed",
-        "md5": "62d175da20fe983a92582bdaf3fb0018",
+        "md5": "8f2fc2d5d623c0fb8dc0b344958dc716",
         "panel": {
           "base": 50733,
           "line_max": 16,
@@ -576,7 +576,7 @@
           "wSlinkPanelText": 50733,
           "wTilemap": 49568
         },
-        "rom_sha1": "877a477a7dfc70b775ca3f46461d67abebe07083",
+        "rom_sha1": "cf03f53accefbc5f3fee9062846699e30c4c987b",
         "sfx": {
           "caps": [
             "SLINK_CAP_SFX",
@@ -605,7 +605,7 @@
           ]
         },
         "sym": "polished_slink.sym",
-        "sym_sha256": "22bcd92866bec62f9f4dc6733ac7c6cfd557a1bbf311b92cb70264199c8b4e6e",
+        "sym_sha256": "13ff57ea5646c682836f9f9651340e38f420fb7b412fd150ef0a338d7a6dd610",
         "trade": {
           "capabilities": {
             "commit": true,
@@ -634,7 +634,7 @@
               "symbol": "SlinkTradeCommit"
             },
             "SlinkTradeCommitEnd": {
-              "addr": 22332,
+              "addr": 22372,
               "bank": 126,
               "symbol": "SlinkTradeCommitEnd"
             },

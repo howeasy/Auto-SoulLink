@@ -438,3 +438,118 @@ def test_failed_native_count_transition_is_held_without_saving(env, native):
     result = r.run()
     assert result.a == 2 and "ForceGameSave" not in r.events
     r.invariant(result)
+
+
+def abort_removal_at_store(rig, *, durable=False, tamper=None):
+    """Fault-unwind after one REAL SM83 store, not an emulated CPU interrupt.
+
+    The machine executes the store before control is redirected to C5's
+    removal-failure handler with its saved local SP/bank. This models an
+    interrupted native operation returning failure; it is not a claim about
+    hardware interrupt routing, power loss or cold-load recovery.
+    """
+    m, step = rig.m, rig.m.step
+    seen = {}
+
+    def fault_step():
+        bank, pc = m.bank if m.pc >= 0x4000 else 0, m.pc
+        if (bank, pc) == rig.e.sym["SlinkTradeCommit.Mutation"]:
+            seen["locals_sp"] = m.sp
+        writes, sram = len(m.writes), len(rig.sram_writes)
+        step()
+        if "store" in seen or "locals_sp" not in seen:
+            return
+        if durable:
+            candidates = [(addr, value) for phase, sbank, addr, value in rig.sram_writes[sram:]
+                          if phase == "commit" and sbank == rig.mail_bank]
+        else:
+            candidates = [(addr, value) for _, addr, value in m.writes[writes:]
+                          if addr == rig.a("wPartyCount")
+                          or rig.a("wPartyMon1") <= addr < rig.a("wPartyMon1") + 6 * P]
+        if not candidates:
+            return
+        addr, value = candidates[0]
+        seen["store"] = (bank, pc, addr, value)
+        seen["party"] = rig.party()
+        seen["count"] = m.peek(rig.a("wPartyCount"))[0]
+        seen["mail"] = rig.mail()
+        assert bank != 0x7E, "the injection must observe the native store"
+        if tamper is not None:
+            tamper(rig)
+        m.sp = seen["locals_sp"]
+        m.set_bank(0x7E)
+        m.pc = rig.a("SlinkTradeCommit.Uncertain" if durable else "SlinkTradeCommitRollback")
+
+    m.step = fault_step
+    result = rig.run()
+    assert "store" in seen, "the requested native store never executed"
+    return result, seen
+
+
+@pytest.mark.parametrize("count,slot", [(1, 0), (6, 5)])
+def test_last_slot_first_live_store_rolls_back_count_and_reverifies(env, count, slot):
+    r = Rig(env, count=count, slot=slot)
+    result, seen = abort_removal_at_store(r)
+    assert seen["store"] == (0x12, 0x4787, r.a("wPartyCount"), count - 1)
+    assert seen["party"] == r.original and seen["count"] == count - 1
+    assert result.a == 1 and r.m.peek(r.a("wPartyCount"))[0] == count
+    assert r.party() == r.original and r.mail() == r.before_mail
+    assert not r.sram_writes and not r.events
+    r.invariant(result)
+
+
+def test_nonlast_first_live_store_is_a_partial_record_not_a_durable_write(env):
+    r = Rig(env, count=6, slot=0)
+    result, seen = abort_removal_at_store(r)
+    bank, pc, addr, _ = seen["store"]
+    assert (bank, pc, addr) == (0, 0x2B27, r.a("wPartyMon1"))
+    assert seen["count"] == 6 and seen["party"] != r.original
+    assert seen["party"][0][1:] == r.original[0][1:], "only its first byte was copied"
+    # Bounded delivery: one outgoing snapshot does not cover arbitrary rotation.
+    assert result.a == 2 and r.party() == seen["party"]
+    assert r.m.peek(r.a("wPartyCount"))[0] == 6
+    assert r.mail() == r.before_mail and not r.sram_writes
+    assert "ForceGameSave" not in r.events
+    r.invariant(result)
+
+
+def test_first_native_mail_store_is_the_nonlast_point_of_no_return(env):
+    r = Rig(env, count=6, slot=0)
+    result, seen = abort_removal_at_store(r, durable=True)
+    bank, pc, addr, value = seen["store"]
+    assert (bank, pc, addr) == (0, 0x2B18, 0xA600)
+    assert value == 2 and len(r.sram_writes) == 1
+    assert result.a == 2 and r.party() == seen["party"]
+    assert r.mail() == seen["mail"] and r.mail() != r.before_mail
+    assert "ForceGameSave" not in r.events
+    r.invariant(result)
+
+
+def check_rollback_verification_failure(env, *, mutant=False, guard="incoming"):
+    r = Rig(env, count=1, slot=0)
+    if mutant:
+        # Skip both the original preflight and the outgoing snapshot recheck.
+        at = r.a("SlinkTradeCommitRollbackVerify")
+        target = r.a("SlinkTradeCommitRollbackVerified")
+        r.m.mem.poke_rom(at, b"\xC3" + target.to_bytes(2, "little"), bank=0x7E)
+    def tamper(rr):
+        if guard == "incoming":
+            rr.m.poke(rr.a("wOTPartyMon1Level"), 0)
+        else:
+            rr.m.poke(rr.a("wOTPartyMon2"), rr.m.peek(rr.a("wOTPartyMon2"))[0] ^ 1)
+    result, _ = abort_removal_at_store(r, tamper=tamper)
+    assert result.a == 2, "rollback must not report NOT-PERFORMED without re-verification"
+    assert r.m.peek(r.a("wPartyCount"))[0] == 1
+    assert r.party() == r.original and not r.sram_writes
+    assert "ForceGameSave" not in r.events
+    r.invariant(result)
+
+
+@pytest.mark.parametrize("guard", ["incoming", "snapshot"])
+def test_last_slot_restore_reuses_preflight_and_snapshot_checks(env, guard):
+    check_rollback_verification_failure(env, guard=guard)
+
+
+def test_skipping_restore_verification_is_red(env):
+    with pytest.raises(AssertionError, match="without re-verification"):
+        check_rollback_verification_failure(env, mutant=True)
