@@ -13,6 +13,23 @@
 local L = dofile(os.getenv("SLINK_ROOT") .. "/tools/polished_live/pol_lib.lua")
 local fmt = string.format
 local J = L.json
+-- Retain complete pre/postimages, not just the first twelve changed addresses in the log.
+local trace = {checks = {}, operations = {}, negatives = "NOT RUN"}
+local original_check, original_finish = L.check, L.finish
+L.check = function(what, ok, detail)
+    trace.checks[#trace.checks + 1] = {what = what, ok = not not ok, detail = detail}
+    return original_check(what, ok, detail)
+end
+L.finish = function(tag)
+    trace.tag, trace.failures = tag, L.failures
+    local run = os.getenv("POL_RUN")
+    if run then
+        local file = assert(io.open(run .. "/trace.json", "wb"))
+        file:write(J.encode(trace))
+        file:close()
+    end
+    return original_finish(tag)
+end
 
 -- ── the write tap: every memory.write_* the client makes, in order ────────────────────────────
 local writes = {}
@@ -71,6 +88,7 @@ L.log(fmt("[writes] slink.lua built the client in %d frames; client=%s", emu.fra
           tostring(SLINK_GEN2_CLIENT ~= nil)))
 if not SLINK_GEN2_CLIENT then L.die("the Gen 2 route did not start a client") end
 local P = SLINK_GEN2_PARTS
+trace.rom_sha1 = P.runtime_rom_sha1
 L.log(fmt("[writes] parts: pack %s kind %s sha1 %s; overworld writer=%s boxes=%s",
           tostring(P.pack), tostring(P.artifact_kind), tostring(P.runtime_rom_sha1),
           tostring(P.overworld ~= nil and P.overworld.writes ~= nil),
@@ -96,16 +114,10 @@ if not ok_ow then
     L.log(fmt("[writes] CONTINUE did not reach the overworld after %d frames: %s", emu.framecount(), J.encode(g)))
     L.die("CONTINUE did not reach the overworld: " .. tostring(ow_why))
 end
--- No server is started: the card drives the CLIENT. Keys therefore come from the client's OWN read
--- path -- polished.lua:509 `r.read_party()` takes no argument and returns {mons={{key=...}}}; this
--- is the exact call shape tests/unit/test_polished_write_path.py uses (reads.read_party().mons[n].key).
+-- The private server settles transport; command keys come from the client's own decoded party.
 L.idle(120)
 local party_block, party_why = P.reads:read_party()
 local mons = (party_block and party_block.mons) or {}
--- NOTE: this line is NOT the phrase writes_run.py's coarse poll watches for ("party from the
--- client's own read path"). That poll kills the emulator whenever it sees it, which lands inside
--- the (a) idle and truncates the run; the driver's own env gates (POL_STOP_AFTER_A / _B) are the
--- precise stop. Delete the runner poll when writes_run.py is next touched.
 L.log(fmt("[writes] party read via the client's own read path: %d mons%s", #mons,
           party_block == nil and (" -- " .. tostring(party_why)) or ""))
 for i = 1, math.min(#mons, 6) do
@@ -140,7 +152,7 @@ L.log(fmt("[writes] party block: SystemBus $%04X / WRAM $%04X, stride %d, status
 local CO = (P.overworld and P.overworld.coords) or {}
 -- party block geometry for the diff expected-sets: wPartyCount then the three parallel arrays
 local PARTY_COUNT_AT = L.SYM.wPartyCount[2]
-local PARTY_MONS_OFF = PARTY_COUNT_AT + 1 - SB_BASE
+local PARTY_END_AT = L.SYM.wPartyMonNicknames[2] + 6 * 11
 local PARTY_OT_OFF = L.SYM.wPartyMonOTs[2] - SB_BASE
 local PARTY_NICK_OFF = L.SYM.wPartyMonNicknames[2] - SB_BASE
 
@@ -151,7 +163,7 @@ local PARTY_NICK_OFF = L.SYM.wPartyMonNicknames[2] - SB_BASE
 local function snapshot()
     local cart, party, alloc = {}, {}, {}
     for i = 0, 0x7FFF do cart[i] = memory.read_u8(i, "CartRAM") end
-    for a = SB_BASE - 8, SB_BASE + 6 * 48 + 11 + 11 do party[a] = memory.read_u8(a, "System Bus") end
+    for a = PARTY_COUNT_AT, PARTY_END_AT - 1 do party[a] = memory.read_u8(a, "System Bus") end
     for _, label in ipairs({"wPokeDB1UsedEntries", "wPokeDB2UsedEntries"}) do
         local c = CO[label]
         if c then for i = 0, 25 do alloc[c[1] * 0x1000 + c[2] - 0xD000 + i] = memory.read_u8(c[1] * 0x1000 + c[2] - 0xD000 + i, "WRAM") end end
@@ -189,6 +201,22 @@ local function is_subset(got, expect)
     for k in pairs(set) do missing[#missing + 1] = k end
     table.sort(missing)
     return #extra == 0, extra, missing
+end
+
+local function record_diff(name, before, after, diff, expected)
+    local function image(snap)
+        local cart, party, alloc = {}, {}, {}
+        for a = 0, 0x7FFF do cart[#cart + 1] = fmt("%02X", snap[1][a]) end
+        for a = PARTY_COUNT_AT, PARTY_END_AT - 1 do party[#party + 1] = fmt("%02X", snap[2][a]) end
+        for a, v in pairs(snap[3]) do alloc[tostring(a)] = v end
+        return {cart_hex = table.concat(cart), party_start = PARTY_COUNT_AT,
+                party_hex = table.concat(party), allocation = alloc}
+    end
+    local allowed = {}
+    for key in pairs(expected) do allowed[#allowed + 1] = key end
+    table.sort(allowed)
+    trace.operations[name] = {before = image(before), after = image(after),
+                              changed = diff, expected = allowed}
 end
 
 local function be16(slot, off) return L.bus(SB_BASE + slot * STRIDE + off) * 256
@@ -236,6 +264,7 @@ local sub_ok, extra, missing = is_subset(diff_a, expect_a)
 L.log(fmt("[writes] (a) changed set: %s", fmt_changed(diff_a)))
 L.check("(a5) EXACT diff: nothing outside the faint record's status +32 / HP +34..35 changed", sub_ok,
         fmt("unexpected: %s", table.concat(extra, ",")))
+record_diff("a", {b_cart, b_party, b_alloc}, {a_cart, a_party, a_alloc}, diff_a, expect_a)
 -- A byte the writer stores with the value it already held is a WRITE, not a CHANGE, so the
 -- expected set is a superset bound, not an equality: on this fixture the mon is status $00 with
 -- HP 0x0098, so status +32 and HP-hi +34 were already the values the write stores and only HP-lo
@@ -257,21 +286,26 @@ local wrong_ok = is_subset(diff_a, wrong)
 L.check("(a5c) CONTROL: the same diff against a deliberately wrong expected set FAILS", wrong_ok == false,
         fmt("subset reported %s against a one-slot-shifted set", tostring(wrong_ok)))
 
--- every write this run made must lie inside the declared party-record block, in EITHER domain the
--- tap may report (the client's io.write_u8 domain is logged with each write, never assumed).
+-- Even an idempotent store outside the target's three bytes is forbidden.
 local n, outside, seen_addrs = 0, {}, {}
 for i = w_before + 1, #writes do
     local w = writes[i]
     n = n + 1
     local a = w.addr
     seen_addrs[#seen_addrs + 1] = fmt("%s@%s[%s]", w.op, tostring(a), tostring(w.domain))
-    local inside = (a >= SB_BASE and a < SB_BASE + 6 * STRIDE) or (a >= WRAM_BASE and a < WRAM_BASE + 6 * STRIDE)
+    local inside = false
+    for _, off in ipairs({STATUS_OFF, HP_OFF, HP_OFF + 1}) do
+        if (w.domain == "System Bus" and a == SB_BASE + SLOT * STRIDE + off)
+                or (w.domain == "WRAM" and a == WRAM_BASE + SLOT * STRIDE + off) then inside = true end
+    end
     if not inside then outside[#outside + 1] = seen_addrs[#seen_addrs] end
 end
 L.log(fmt("[writes] (a) %d client write(s): %s", n, table.concat(seen_addrs, " | ")))
-L.check("(a4) every write landed inside the declared party-record block", #outside == 0,
-        #outside == 0 and n .. " write(s), all in the party block" or table.concat(outside, ", "))
+L.check("(a4) every write landed in ONLY the target slot's +32/+34/+35 bytes", #outside == 0,
+        #outside == 0 and n .. " write(s), all in the target's three bytes" or table.concat(outside, ", "))
 L.check("(a4b) the client wrote something at all", n > 0, n)
+trace.operations.a.writes = {}
+for i = w_before + 1, #writes do trace.operations.a.writes[#trace.operations.a.writes + 1] = writes[i] end
 
 if os.getenv("POL_STOP_AFTER_A") == "1" then
     L.log(fmt("[writes] POL_STOP_AFTER_A=1: stopping after (a); box_mon and the negatives are NOT RUN"))
@@ -331,14 +365,15 @@ else
     L.check("(b0a) box_mon was queued into the client's command path", true, tostring(bkey))
     L.idle(150)
     local count_after = L.rw("wPartyCount")
-    local after_party = P.reads:read_party()
+    local after_party, after_party_why = P.reads:read_party()
+    L.check("(b1c) read_party() succeeded after the deposit", after_party ~= nil, tostring(after_party_why))
     local after_keys = {}
     for i, m in ipairs((after_party and after_party.mons) or {}) do after_keys[i] = m.key end
     local still_there = false
     for _, k in ipairs(after_keys) do if k == bkey then still_there = true end end
     L.log(fmt("[writes] (b) party %d -> %d; keys now [%s]", count_before, count_after, table.concat(after_keys, " ")))
     L.check("(b1a) wPartyCount went 5 -> 4", count_after == count_before - 1, fmt("%d -> %d", count_before, count_after))
-    L.check("(b1b) the deposited key is no longer in read_party()", not still_there, tostring(bkey))
+    L.check("(b1b) the deposited key is no longer in read_party()", after_party ~= nil and not still_there, tostring(bkey))
 
     -- (b2) the COMPOSED census. lua/gen2/polished.lua P.census scans all 20 boxes through
     -- boxes.read_boxes inside scan() and FAILS CLOSED (polished.lua:767-771): it returns nil,why on
@@ -422,6 +457,38 @@ else
             fmt("Entries $%02X Banks $%02X (bank bit %d)", d_entries_dep or 0, d_banks_dep or 0,
                 math.floor((d_banks_dep or 0) / (2 ^ ((d_slot - 1) % 8))) % 2))
 
+    -- Derive one entry and one flag from the slot's pointer/bank selector and NEWBOX geometry,
+    -- independently of which bytes changed. Include exactly the engine's three shifted arrays.
+    local bank = 1 + math.floor((d_banks_dep or 0) / (2 ^ ((d_slot - 1) % 8))) % 2
+    local entry_at
+    for _, section in ipairs({{"A", 1, 167}, {"B", 168, 195}, {"C", 196, 207}}) do
+        if d_entries_dep >= section[2] and d_entries_dep <= section[3] then
+            entry_at = cart_flat("sBoxMons" .. bank .. section[1]) + (d_entries_dep - section[2]) * 49
+        end
+    end
+    local flag_at = wram_flat("wPokeDB" .. bank .. "UsedEntries") + ((d_entries_dep - 1) >> 3)
+    local flag_mask = 1 << ((d_entries_dep - 1) & 7)
+    L.check("(b6a) destination was empty and allocation flag changed only for the chosen entry",
+            entry_at ~= nil and b_cart[d_entries_at] == 0 and (b_alloc[flag_at] & flag_mask) == 0
+                and a_alloc2[flag_at] == (b_alloc[flag_at] | flag_mask),
+            fmt("bank %d entry %d entry@%s flag@%s", bank, d_entries_dep, tostring(entry_at), tostring(flag_at)))
+    local expect_b = {["party@" .. PARTY_COUNT_AT] = true, ["cart@" .. d_entries_at] = true,
+                      ["cart@" .. d_banks_at] = true, ["alloc@" .. flag_at] = true}
+    if entry_at then for i = 0, 48 do expect_b["cart@" .. (entry_at + i)] = true end end
+    for _, array in ipairs({{SB_BASE, STRIDE}, {SB_BASE + PARTY_OT_OFF, 11}, {SB_BASE + PARTY_NICK_OFF, 11}}) do
+        for slot = BSLOT, 4 do
+            for i = 0, array[2] - 1 do expect_b["party@" .. (array[1] + slot * array[2] + i)] = true end
+        end
+    end
+    local bok, bextra = is_subset(diff_b, expect_b)
+    L.check("(b6) EXACT diff subset: one Entries byte, Banks byte, allocation byte, 49-byte entry and party shift only",
+            bok, #bextra == 0 and "exact; every other record byte-identical" or ("unexpected: " .. table.concat(bextra, ",")))
+    record_diff("b", {b_cart, b_party, b_alloc}, {a_cart2, a_party2, a_alloc2}, diff_b, expect_b)
+    trace.operations.b.destination = {bank = bank, entry = d_entries_dep, entry_at = entry_at,
+                                      entries_at = d_entries_at, banks_at = d_banks_at, flag_at = flag_at}
+    local wrong_b = {["party@" .. PARTY_COUNT_AT] = true}
+    L.check("(b6c) CONTROL: deposit diff against a count-only expected set FAILS", not is_subset(diff_b, wrong_b))
+
     L.check("(b5) the deposit wrote the pokedb entry (49 B; N changed) and moved its allocation flag",
             n_entry >= 1 and n_entry <= 49 and n_alloc >= 1,
             fmt("%d of 49 pokedb byte(s) changed, %d alloc byte(s)", n_entry, n_alloc))
@@ -483,14 +550,16 @@ if os.getenv("POL_STOP_AFTER_D") == "1" or true then
     L.check(fmt("(d2) slot %d: HP %d == MaxHP %d and status $%02X", dslot, hp, maxhp, st),
             hp == maxhp and st == 0, fmt("HP %d MaxHP %d status $%02X", hp, maxhp, st))
     -- (d3) no longer boxed; the slot's Entries byte is 0 and its Banks bit clear
-    local any_box = false
+    local any_box, complete = false, true
     for i = 0, 19 do
-        local box = census_d and census_d.read_storage_box(i)
+        local box = P.overworld.census.read_storage_box(i)
+        if not box then complete = false end
         for _, m in ipairs((box and box.mons) or {}) do if m.key == bkey then any_box = true end end
     end
+    L.check("(d3d) all twenty box reads succeeded after the withdraw", complete)
     local entries_after = entries_at and memory.read_u8(entries_at, "CartRAM") or nil
     local banks_after = banks_at and memory.read_u8(banks_at, "CartRAM") or nil
-    L.check("(d3a) the withdrawn key is in NO box", not any_box, tostring(bkey))
+    L.check("(d3a) the withdrawn key is in NO box", complete and not any_box, tostring(bkey))
     L.check(fmt("(d3b) the box slot's Entries byte went $%02X -> $%02X (the deposit's value, not 0-vs-0)",
                 entries_before or 0, entries_after or 0),
             entries_before ~= nil and entries_before > 0 and entries_after == 0,
@@ -517,8 +586,8 @@ if os.getenv("POL_STOP_AFTER_D") == "1" or true then
     local expect_d = {}
     for i = 0, 48 - 1 do expect_d["party@" .. (SB_BASE + dslot * STRIDE + i)] = true end
     for i = 0, 11 - 1 do
-        expect_d["party@" .. (SB_BASE + PARTY_NICK_OFF + 6 * STRIDE + i)] = true
-        expect_d["party@" .. (SB_BASE + PARTY_OT_OFF + 6 * STRIDE + i)] = true
+        expect_d["party@" .. (SB_BASE + PARTY_NICK_OFF + dslot * 11 + i)] = true
+        expect_d["party@" .. (SB_BASE + PARTY_OT_OFF + dslot * 11 + i)] = true
     end
     expect_d["party@" .. PARTY_COUNT_AT] = true
     if entries_at then expect_d["cart@" .. entries_at] = true end
@@ -526,6 +595,7 @@ if os.getenv("POL_STOP_AFTER_D") == "1" or true then
     local dok, dextra, dmissing = is_subset(diff_d, expect_d)
     L.check("(d5) EXACT diff: only the new party slot's record+OT+nickname, wPartyCount, the Entries and Banks bytes changed",
             dok, #dextra == 0 and "exact" or ("unexpected: " .. table.concat(dextra, ",")))
+    record_diff("d", {d_cart0, d_party0, d_alloc0}, {d_cart1, d_party1, d_alloc1}, diff_d, expect_d)
     local party_changed, cart_changed = 0, 0
     for _, c in ipairs(diff_d) do
         if c.kind == "party" then party_changed = party_changed + 1 else cart_changed = cart_changed + 1 end
