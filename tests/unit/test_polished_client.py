@@ -215,7 +215,7 @@ def test_no_hook_and_no_write_on_the_whole_path(composed):
     # C-EXPLODE: the composition also hooks the battle hold (0f:416A, SLink-gen2-battle-hold): the explode PC hold, nothing written on its own.
     # the default rival set (RIVAL0/1/2, owner 2026-10-08) registers the native rival gate hook; it still writes nothing
     assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-polished:battle_faint', 'SLink-gen2-polished:whiteout_before_heal', 'SLink-gen2-checkpoint', 'SLink-gen2-battle-hold',
-        'SLink-gen2-polished:rival_swap_gate'} and len(log.writes) == 0
+        'SLink-gen2-polished:rival_swap_gate', 'SLink-gen2-polished:battle_faint_copyback_return'} and len(log.writes) == 0
     ticks = [json.loads(line) for line in log.sent.values() if json.loads(line)["event"] == "tick"]
     assert ticks and ticks[-1]["party"] == _hello(composed)["party"]
     parts.client.stop(parts.client)
@@ -223,7 +223,7 @@ def test_no_hook_and_no_write_on_the_whole_path(composed):
 # the hook registers nothing on its own and writes nothing without a command.
     # C-EXPLODE: the composition also hooks the battle hold (0f:416A, SLink-gen2-battle-hold): the explode PC hold, nothing written on its own.
     assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-polished:battle_faint', 'SLink-gen2-polished:whiteout_before_heal', 'SLink-gen2-checkpoint', 'SLink-gen2-battle-hold',
-        'SLink-gen2-polished:rival_swap_gate'}
+        'SLink-gen2-polished:rival_swap_gate', 'SLink-gen2-polished:battle_faint_copyback_return'}
 
 
 def test_the_production_signals_gate_refuses_polished():
@@ -334,3 +334,44 @@ def test_the_area_battle_types_are_the_profile_set(make, resolving, refused):
     for battle_type in refused:
         assert _wild_capture(make(), battle_type) == []
 
+
+
+@pytest.mark.parametrize("enabled", [None, True, False], ids=["default-on", "explicit-on", "explicit-off"])
+def test_polished_plain_faint_default_and_explicit_override(roms, enabled):
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    deps, _, log = _rig(lua, roms[1], _memory(_mons()))
+    if enabled is not None:
+        deps.polished_active_faint = enabled
+        deps.polished_faint_observer = enabled
+    parts, why = _pair(_entry(lua).build(deps))
+    assert why is None, why
+    parts.client.start(parts.client)
+    on = enabled is not False
+    assert (parts.client.faint_settle is not None) == on
+    assert ("SLink-gen2-polished:battle_faint_copyback_return" in set(log.hooks.values())) == on
+    parts.client.stop(parts.client)
+
+
+def test_disabling_only_active_faint_preserves_the_other_polished_signals(roms):
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    deps, _, log = _rig(lua, roms[1], _memory(_mons()))
+    deps.polished_active_faint = False
+    parts, why = _pair(_entry(lua).build(deps))
+    assert why is None, why
+    parts.client.start(parts.client)
+    assert parts.client.faint_settle is None
+    hooks = set(log.hooks.values())
+    assert 'SLink-gen2-polished:battle_faint_copyback_return' not in hooks
+    assert {'SLink-gen2-polished:capture_party', 'SLink-gen2-polished:battle_faint', 'SLink-gen2-polished:whiteout_before_heal'} <= hooks
+    parts.client.stop(parts.client)
+
+
+@pytest.mark.parametrize("guard", ["writer", "observer"], ids=["writer-default", "observer-default"])
+def test_default_on_composition_guards_are_load_bearing(roms, monkeypatch, guard):
+    source = (REPO / "lua/gen2/entry.lua").read_text(encoding="utf-8")
+    old, new = (("deps.polished_active_faint ~= false and explode.settlement", "deps.polished_active_faint == true and explode.settlement")
+                if guard == "writer" else ("deps.polished_faint_observer == nil and deps.polished_active_faint ~= false", "false"))
+    assert source.count(old) == 1
+    monkeypatch.setattr(__import__(__name__, fromlist=['_entry']), '_entry', lambda lua: lua.execute(source.replace(old, new)))
+    with pytest.raises(AssertionError):
+        test_polished_plain_faint_default_and_explicit_override(roms, None)

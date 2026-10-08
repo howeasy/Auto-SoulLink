@@ -824,10 +824,13 @@ local function compose_polished(deps, decision)
         local Signals, Registry, GB = load("lua/gen2/signals.lua"), load("lua/hook_registry.lua"),
                                       load("lua/gb_hook_binding.lua")
         local pack = load_json(json, root .. "/data/games/polished_crystal/engine_signals.json")
+        -- An unspecified observer follows settlement: disabling F1 alone keeps the normal engine signals.
+        local faint_observer = deps.polished_faint_observer == true
+            or (deps.polished_faint_observer == nil and deps.polished_active_faint ~= false)
         local function signals(authority)
             local binder, why = Signals.new_polished({title="polished", qualification=decision.qualification,
                 profile=profile, pack=pack, io=io_, reads=reads, key_fn=P.mon_key, areas=area_map,
-                battle_sites=deps.polished_faint_observer == true and {"battle_faint", "whiteout_before_heal", "battle_faint_copyback_return"} or {"battle_faint", "whiteout_before_heal"},
+                battle_sites=faint_observer and {"battle_faint", "whiteout_before_heal", "battle_faint_copyback_return"} or {"battle_faint", "whiteout_before_heal"},
                 authority=authority, Registry=Registry, GB=GB, owner="SLink-gen2-polished", max_pending=64})
             if binder then return binder end
             if deps.log then deps.log("[SLink-gen2] Polished engine sites refused: " .. tostring(why)) end
@@ -921,10 +924,10 @@ local function compose_polished(deps, decision)
             artifact_kind=decision.kind, foundation=P.FOUNDATION, reads=reads, wire=P.wire, panel=panel,
             writes=rival.writes, rival_swap=true, boxes=boxes, safety=explode.safety, battle_hold=explode.battle_hold,
             battle_release_poll=true, battle_hold_entry=explode.entry, battle_species_matches=explode.species_matches,
-            -- F2: the Polished-only OPT-IN active-faint settlement interface (client.lua `settle`); vanilla never gets it.
-            -- Off unless the launcher passes deps.polished_active_faint == true: turning it on moves an in-battle
-            -- force_faint of the active battler from the checkpoint hand-off to the 0f:416A hold (an owner-gated step).
-            active_faint_settlement=deps.polished_active_faint == true and explode.settlement or nil,
+            -- Polished death enforcement includes F1 + its native observer by default (owner ruling).
+            -- Explicit deps.polished_active_faint=false retains the checkpoint hand-off; vanilla never gets FS.
+            -- This is independent of the separately gated Explode Mode run rule.
+            active_faint_settlement=deps.polished_active_faint ~= false and explode.settlement or nil,
             -- the hold site the client hooks (io.on_bus_exec -> at_checkpoint -> run_deferred)
             checkpoint_pc=Overworld.HOLD.pc,
             -- C-WRITE round 2: with no contest_mask in the Polished pack a KO during the Bug Catching Contest

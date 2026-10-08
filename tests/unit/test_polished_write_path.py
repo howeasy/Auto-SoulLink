@@ -930,11 +930,15 @@ def test_the_same_ko_lands_once_the_contest_returns():
     assert rig.hp(0) == 0
 
 
-def test_red_control_without_the_contest_flag_the_same_death_is_dropped():
+def test_red_control_without_the_contest_flag_the_explicitly_legacy_death_is_dropped():
     """RED: the SAME state (the party reads empty) with the contest flag CLEAR is dropped as 'key not in party' -
     so the hold in the two tests above is the contest_mask branch and not an accident of the image."""
     mons = party()
-    rig = Rig(mons)
+    from unittest.mock import patch
+
+    old = 'local deps = {root=ROOTDIR, title="polished",'
+    with patch(__name__ + ".HARNESS", HARNESS.replace(old, old + " polished_active_faint=false, polished_faint_observer=false,")):
+        rig = Rig(mons)
     rig.mem[PARTY_COUNT] = 0
     rig.send_command({"cmd": "force_faint", "key": key_of(mons[0])})
     dropped = [line for line in rig.log["lines"].values() if "dropped at the checkpoint" in line]

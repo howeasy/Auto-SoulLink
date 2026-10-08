@@ -15,8 +15,8 @@ Proved here:
   * an explode lands only at the hold, in the polished_writes order (move slot, PP read-modify-write, party mirror,
     wCurPlayerMove LAST), touches nothing outside its declared ranges, and a wrong bank or a patched byte writes
     nothing; out-of-battle / link / native save / backup save / unarmed refuse
-  * faint_active_battler refuses by name; an in-battle faint stays queued and lands at the overworld checkpoint
-    after the battle
+  * unkeyed faint_active_battler refuses by name; the default keyed active faint lands at the hold and awaits
+    native evidence; explicit OFF retains the queued overworld checkpoint path
   * the rival path: trainer_battle_start is announced from writes.sym, replace_rival_team is refused by default
     (polished_rival.lua, no owner-chosen class), and write_enemy_party through the facade lands at the real gate
     state and refuses at the poll state
@@ -391,8 +391,25 @@ def test_faint_active_battler_refuses_by_name():
     assert ok is False and "not composed on Polished" in why and "USEITEM" in why and rig.writes() == []
 
 
-def test_an_in_battle_faint_stays_queued_then_lands_at_the_overworld_checkpoint():
-    rig, mons = ready()
+def test_an_in_battle_faint_lands_at_the_hold_by_default_and_awaits_native_proof():
+    from tests.unit import test_polished_plain_faint as pf
+
+    rig, mons = pf.setup()
+    order(rig, "force_faint", mons)
+    at_hold(rig)
+    assert [w["addr"] for w in rig.writes()] == pf.addresses()
+    assert rig.hp(0) == 0 and rig.status(0) == 0
+    assert rig.client.faint_settle.owed[1].state == "awaiting"
+    assert not rig.client.dead_keys[key_of(mons[0])]
+    assert rig.log["hook_at"]["SLink-gen2-polished:battle_faint_copyback_return"] == 0x44CD
+
+
+def test_an_explicitly_disabled_in_battle_faint_stays_queued_then_lands_at_the_overworld_checkpoint():
+    from unittest.mock import patch
+
+    old = 'local deps = {root=ROOTDIR, title="polished",'
+    with patch(__name__ + ".HARNESS_HOOKS", HARNESS_HOOKS.replace(old, old + " polished_active_faint=false, polished_faint_observer=false,")):
+        rig, mons = ready()
     order(rig, "force_faint", mons)
     at_hold(rig)
     assert rig.hp(0) == 300 and rig.writes() == [] and len(rig.client.pending_battle_writes) == 1
@@ -740,7 +757,7 @@ def test_a_different_species_with_the_same_low_byte_does_not_land(kind, wrong):
 
 
 def test_red_9_the_raw_byte_compare_never_lands_a_wide_or_variant_species():
-    source = mutate(CLIENT, "if p.battle_species_matches then same = p.battle_species_matches(mon, species) == true end",
+    source = mutate(CLIENT, "if matches then same = matches(mon, species) == true end",
                     "")
     for kind in ("ext", "variant"):
         rig, mons = ready(species_party(kind))
@@ -755,8 +772,12 @@ def test_red_9_the_raw_byte_compare_never_lands_a_wide_or_variant_species():
 
 # ── the held-KO cue, once ───────────────────────────────────────────────────────────────────────────────────
 
-def test_an_in_battle_active_faint_says_held_once_and_refuses_once():
-    rig, mons = ready()
+def test_an_explicitly_disabled_in_battle_active_faint_says_held_once_and_refuses_once():
+    from unittest.mock import patch
+
+    old = 'local deps = {root=ROOTDIR, title="polished",'
+    with patch(__name__ + ".HARNESS_HOOKS", HARNESS_HOOKS.replace(old, old + " polished_active_faint=false, polished_faint_observer=false,")):
+        rig, mons = ready()
     order(rig, "force_faint", mons)
     assert sum("held for the checkpoint" in line for line in rig.lines()) == 1
     for _ in range(4):

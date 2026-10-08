@@ -754,8 +754,8 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
 
     # ── boxes, sprites, trainers ─────────────────────────────────────────────────────
     def supports_explode_mode(self):
-        return False             # The battle facade is composed; Explode Mode remains unadvertised.
-                                  # Active-faint settlement is separately opt-in and default OFF.
+        return False             # OPEN-EXPLODE-RIVAL: enable only with live proof and the Manager rows.
+                                  # Normal plain-faint enforcement is composed independently.
 
     def supports_box_mon(self):
         # Party sync ON (owner 2026-10-08): deposit and withdraw are composed through O.client_boxes

@@ -254,7 +254,11 @@ def legacy_queued(overrides=None):
 
 
 def test_flags_off_sent_events_equal_existing_queued_overworld_path():
-    expected_rig, mons = br.ready()  # existing rig with neither flag supplied
+    from unittest.mock import patch
+
+    old = 'local deps = {root=ROOTDIR, title="polished",'
+    with patch.object(br, "HARNESS_HOOKS", br.HARNESS_HOOKS.replace(old, old + " polished_active_faint=false, polished_faint_observer=false,")):
+        expected_rig, mons = br.ready()  # explicit OFF keeps the existing queue path
     sent = len(expected_rig.sent())
     br.order(expected_rig, "force_faint", mons)
     br.at_hold(expected_rig)
@@ -306,7 +310,7 @@ def test_red_control_capture_without_native_fainted_cannot_complete():
         no_native_flag({obs.SIGNALS: signals, obs.CLIENT: client})
 
 
-PRE_SITES = ('battle_sites=deps.polished_faint_observer == true '
+PRE_SITES = ('battle_sites=faint_observer '
              'and {"battle_faint", "whiteout_before_heal", "battle_faint_copyback_return"} or {"battle_faint", "whiteout_before_heal"},')
 
 

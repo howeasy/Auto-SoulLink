@@ -46,7 +46,9 @@ def build(*, interface=True, initial_identity_unavailable=False, **kwargs):
     assert harness.count(HUD_OLD) == 1 and harness.count(DEPS_OLD) == 1
     harness = harness.replace(HUD_OLD, HUD_NEW)
     if interface:
-        harness = harness.replace(DEPS_OLD, DEPS_OLD + " polished_active_faint=true,")
+        harness = harness.replace(DEPS_OLD, DEPS_OLD + " polished_active_faint=true, polished_faint_observer=false,")
+    else:
+        harness = harness.replace(DEPS_OLD, DEPS_OLD + " polished_active_faint=false, polished_faint_observer=false,")
     if initial_identity_unavailable:
         harness = harness.replace("function io.read_u8(a, d)",
                                   "function io.read_u8(a, d)\n"
@@ -811,7 +813,7 @@ def test_red_control_a_branch_that_ignores_the_missing_interface_diverges():
         assert now[4] == before[4]
 
 
-def test_the_composition_without_the_opt_in_has_no_settlement_and_the_facade_still_refuses_unkeyed():
+def test_the_explicitly_disabled_composition_has_no_settlement_and_the_facade_still_refuses_unkeyed():
     rig, mons = build(interface=False)
     assert rig.client.faint_settle is None and rig.parts.battle.writes is not None
     order(rig, "force_faint", mons)
