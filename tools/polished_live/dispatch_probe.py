@@ -52,13 +52,16 @@ def read_symbols(path: Path) -> dict:
 
 def derive_contract(symbols: dict) -> dict:
     """Nine pinned VALUES come only from linked symbols; other stack positions are noise."""
-    needed = ("SlinkTradeDispatch", "SlinkTradePromptEntry", "NextOverworldFrame",
+    needed = ("SlinkTradeDispatch", "SlinkTradePromptEntry", "SlinkTradeResponderService", "NextOverworldFrame",
               "NextOverworldFrame.gfx_done", "DelayFrame", "HandleMap", "OverworldLoop.loop", "hROMBank", *FIELDS.values())
     missing = [s for s in needed if s not in symbols]
     if missing:
         raise ValueError(f"missing dispatcher symbols: {missing}")
     if symbols["SlinkTradeDispatch"] != (BANK, DISPATCH) or symbols["SlinkTradePromptEntry"] != (BANK, PROMPT):
         raise ValueError("dispatcher/prompt symbols differ from pinned 7e:4700 / 7e:4780")
+    target_bank, target = symbols["SlinkTradeResponderService"]
+    if target_bank != BANK or not 0x4000 <= target < 0x8000:
+        raise ValueError("responder service must share the prompt trampoline ROM bank")
     saved_bank = symbols["NextOverworldFrame"][0]
     if any(symbols[s][0] != saved_bank for s in ("NextOverworldFrame.gfx_done", "HandleMap", "OverworldLoop.loop")):
         raise ValueError("overworld stack chain symbols do not share one bank")
@@ -69,7 +72,7 @@ def derive_contract(symbols: dict) -> dict:
         if not 0 <= addr <= 0xFFFF:
             raise ValueError(f"stack return {symbol}+{delta} exceeds 16 bits")
         pins.extend(({"offset": offset, "value": addr & 0xFF}, {"offset": offset + 1, "value": addr >> 8}))
-    return {"bank": BANK, "dispatch_addr": DISPATCH, "prompt_addr": PROMPT,
+    return {"bank": BANK, "dispatch_addr": DISPATCH, "prompt_addr": PROMPT, "prompt_target": target,
             "rombank_addr": symbols["hROMBank"][1], "svbk_addr": 0xFF70,
             "pins": pins, "fields": FIELDS, "map_status_handle": 2,
             "step_continue_mask": 1 << 5, "map_events_on": 0}
@@ -282,8 +285,10 @@ def check_rom(rom: bytes, contract: dict) -> None:
     if rom[offset:offset + 5] != bytes((0xF8, 5, 0x7E, 0xFE, bank_pin)):
         raise ValueError("staged dispatcher entry does not contain ld hl,sp+5 / ld a,[hl] / cp saved bank")
     prompt_offset = BANK * 0x4000 + PROMPT - 0x4000
-    if rom[prompt_offset:prompt_offset + 1] != b"\xc9":
-        raise ValueError("staged prompt entry is not the pinned inert ret stub")
+    # C6 replaced the inert RET with a frame-neutral JP into the held responder.
+    expected = b"\xc3" + contract["prompt_target"].to_bytes(2, "little")
+    if rom[prompt_offset:prompt_offset + 3] != expected:
+        raise ValueError("staged prompt trampoline does not jump to the linked responder service")
 
 
 def stage(lane: Path, contract: dict, provenance: dict) -> tuple[Path, str]:

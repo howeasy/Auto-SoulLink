@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -18,6 +19,7 @@ _SPEC.loader.exec_module(P)
 
 def symbols():
     rows = {"SlinkTradeDispatch": (0x7E, 0x4700), "SlinkTradePromptEntry": (0x7E, 0x4780),
+            "SlinkTradeResponderService": (0x7E, 0x5000),
             "NextOverworldFrame": (0x25, 0x5185), "NextOverworldFrame.gfx_done": (0x25, 0x51BC),
             "DelayFrame": (0, 0x0DA8), "HandleMap": (0x25, 0x5156),
             "OverworldLoop.loop": (0x25, 0x50D9), "hROMBank": (0, 0xFF87)}
@@ -357,20 +359,35 @@ def synthetic_rom():
     rom = bytearray(128 * 0x4000)
     offset = P.BANK * 0x4000 + P.DISPATCH - 0x4000
     rom[offset:offset + 5] = bytes((0xF8, 5, 0x7E, 0xFE, 0x25))
-    rom[P.BANK * 0x4000 + P.PROMPT - 0x4000] = 0xC9
+    target = symbols()["SlinkTradeResponderService"][1]
+    prompt = P.BANK * 0x4000 + P.PROMPT - 0x4000
+    rom[prompt:prompt + 3] = b"\xc3" + target.to_bytes(2, "little")
     return rom
 
 
-def test_staged_entry_bytes_are_bank_qualified():
-    rom = synthetic_rom()
-    rom[P.DISPATCH:P.DISPATCH + 5] = b"wrong"
-    P.check_rom(bytes(rom), P.derive_contract(symbols()))
+def test_current_responder_trampoline_can_stage_a_provenance_bound_artifact(tmp_path, monkeypatch):
+    from patch.tools.make_ups import ups_create
+
+    source, target = bytes(128 * 0x4000), bytes(synthetic_rom())
+    release = tmp_path / "release.gbc"
+    release.write_bytes(source)
+    (tmp_path / "companion.ups").write_bytes(ups_create(source, target))
+    monkeypatch.setattr(P, "RELEASE", release)
+    monkeypatch.setattr(P, "REPO", tmp_path)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    wanted = hashlib.sha1(target).hexdigest()
+    provenance = {"base_sha1": hashlib.sha1(source).hexdigest(),
+                  "output": {"sha1": wanted, "ups": {"file": "companion.ups"}}}
+    staged, actual = P.stage(tmp_path / "lane", P.derive_contract(symbols()), provenance)
+    assert actual == wanted
+    assert hashlib.sha1(staged.read_bytes()).hexdigest() == wanted
 
 
-@pytest.mark.parametrize("site", ["dispatch", "prompt"], ids=["dispatch", "prompt"])
-def test_staged_entry_or_stub_drift_prevents_launch(site):
+@pytest.mark.parametrize("site,delta", [("dispatch", 0), ("prompt", 0), ("prompt", 1), ("prompt", 2)],
+                         ids=["dispatch", "prompt-opcode", "prompt-target-low", "prompt-target-high"])
+def test_staged_dispatch_or_prompt_drift_prevents_launch(site, delta):
     rom = synthetic_rom()
-    addr = P.DISPATCH if site == "dispatch" else P.PROMPT
+    addr = (P.DISPATCH if site == "dispatch" else P.PROMPT) + delta
     rom[P.BANK * 0x4000 + addr - 0x4000] ^= 1
     with pytest.raises(ValueError):
         P.check_rom(bytes(rom), P.derive_contract(symbols()))
