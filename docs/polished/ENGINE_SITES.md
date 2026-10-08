@@ -249,10 +249,11 @@ qualification and no find_hex. A separate generator/site card must establish a
 guarded pre-heal point. Do not interpret this battle-faint wiring as a whiteout
 fix or enable the existing generic row as-is.
 
-Verification checkpoint: the new composed suite has **13 passed**; vanilla
-`-k "gen2 and (signals or sites)" has **354 passed, 20 skipped**. The requested
-Polished regression run has **258 passed, 1 skipped, 6 failed**: old zero/single
-batch assumptions in test_polished_faint_e2e.py (four), old hook census in
-test_polished_client.py (one), and the nil-party standalone battle-site fixture
-(one). Their remaining fixture/expectation updates await an explicit lease
-extension. This candidate is **NOT READY TO LAND** while those failures remain.
+Verification round 3: the approved MODEL identity, hook-census and pre/post-copy
+batch expectations now pass without runtime changes. All nine requested Polished
+files: **264 passed, 1 skipped** (absent Crystal ROM input). Vanilla
+`-k "gen2 and (signals or sites)"`: **354 passed, 20 skipped**. The earlier six
+fixture/census failures are resolved; the wrong-slot case requires exactly the
+OTHER key's natural faint while all commanded-owner state/sequence/no-KO checks
+remain enforced. Source-copy red controls pass. Ready for independent review,
+not a new live qualification claim.

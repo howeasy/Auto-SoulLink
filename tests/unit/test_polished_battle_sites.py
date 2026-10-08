@@ -115,7 +115,10 @@ return function(rom, mem, with_writes, overrides)
                                    log = function(t) log.lines[#log.lines + 1] = t end})
     local binder, why = Signals.new_polished({
         title = "polished", qualification = "DEV_OVERLAY_SHA1", profile = profile, pack = signals, io = io,
-        reads = {read_party = function() return nil end}, key_fn = function(mon) return mon and mon.key end,
+        -- MODEL identities only: this standalone battle rig does not decode real party records.
+        reads = {read_party = function() return {count=3, mons={
+            {slot=0,is_egg=false,key="MODEL:0"}, {slot=1,is_egg=false,key="MODEL:1"},
+            {slot=2,is_egg=false,key="MODEL:2"}}} end}, key_fn = function(mon) return mon and mon.key end,
         areas = {}, authority = {capture = function() return {generation = 1, operation = "op-1"} end,
                                  valid = function() return true end},
         Registry = Registry, GB = GB, owner = "SLink-gen2-polished", max_pending = 64,
@@ -359,9 +362,11 @@ def test_the_battle_faint_observation_is_keyed_on_the_battle_struct(roms):
     _put(rig.mem, "wBattleMonHP", [0x00, 0x00])
     _put(rig.mem, "wBattleMonMaxHP", [0x50, 0x00])
     assert _fire(rig, BATTLE_FAINT) == [BATTLE_FAINT]
-    (event,) = _events(rig)
+    event, faint = _events(rig)
     assert event.site_id == "battle_faint" and event.phase == "before_party_copyback"
     assert (event.battle.slot, event.battle.hp, event.battle.max_hp, event.battle.mode) == (2, 0, 80, 1)
+    assert faint.kind == "faint" and faint.slot == 2 and faint.mon.key == "MODEL:2"
+    assert faint.mon.is_egg is False
     # the boundary is not faint-only: a live battler reports the same site, and no write ever rides it
     _, rig2 = _rig(roms)
     _put(rig2.mem, "wBattleMode", [1])
@@ -369,6 +374,7 @@ def test_the_battle_faint_observation_is_keyed_on_the_battle_struct(roms):
     _fire(rig2, BATTLE_FAINT)
     (event,) = _events(rig2)
     assert event.battle.hp == 32 and _writes(rig2) == []
+    assert event.kind == "observation"  # exactly one event above: no natural faint while alive
 
 
 # ── (4) Explode Mode ──────────────────────────────────────────────────────────────────────────────

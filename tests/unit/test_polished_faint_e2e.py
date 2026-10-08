@@ -114,10 +114,14 @@ def native_resolve(rig, *, post=True):
     return result
 
 
-def assert_awaiting(rig, ob):
+def assert_awaiting(rig, ob, *, natural_key=None):
     assert ob.state == "awaiting" and ob.obs_seq is None, "settled without bound native evidence"
     assert fc.ko(rig) == [] and not rig.client.dead_keys[ob.key]
-    assert rig.sent("faint") == []
+    if natural_key is None:
+        assert rig.sent("faint") == []
+    else:
+        assert natural_key != ob.key
+        assert [event["key"] for event in rig.sent("faint")] == [natural_key]
 
 
 def settled_once(overrides=None, command_factory=None):
@@ -188,6 +192,7 @@ def test_plain_faint_settles_once_through_native_copyback_and_registered_produce
 @pytest.mark.parametrize("case", ["wrong-slot", "stale-generation", "before-write"],
                          ids=["wrong-slot", "stale-generation", "before-write"])
 def test_other_slot_stale_capture_and_prior_native_faint_cannot_settle(case):
+    natural_key = None
     if case == "before-write":
         rig, mons = obs.build()
         br.order(rig, "force_faint", mons)
@@ -200,29 +205,34 @@ def test_other_slot_stale_capture_and_prior_native_faint_cannot_settle(case):
         rig.put("wWhichMonFaintedFirst", 1)
         seq = fc.FS(rig).seq
         native_resolve(rig)
-        assert fc.FS(rig).seq == seq and rig.client.signals.status(rig.client.signals).pending == 0
+        assert fc.FS(rig).seq == seq and rig.client.signals.status(rig.client.signals).pending == 1
         assert rig.writes() == []
         rig.io.register = rig.lua.eval("function(n) return n == 'PC' and 0x416A or 0 end")
         br.at_hold(rig)  # F1's already-native-fainted, zero-write outcome still awaits a NEW capture
         assert ob.state == "awaiting" and len(ob.attempts) == 1 and rig.writes() == []
     else:
-        rig, _, ob = staged()
+        rig, mons, ob = staged()
         seq = fc.FS(rig).seq
         if case == "wrong-slot":
             rig.put("wCurBattleMon", 1)
             native_resolve(rig)
             assert rig.hp(1) == 0  # real copyback was for another occupied slot
-            assert fc.FS(rig).seq == seq and rig.client.signals.status(rig.client.signals).pending == 0
+            natural_key = key_of(mons[1])
+            assert fc.FS(rig).seq == seq and rig.client.signals.status(rig.client.signals).pending == 1
         else:
             native_resolve(rig)
-            batch, = obs.batches(rig)
+            before_copy, batch = obs.batches(rig)
+            observation, faint = list(before_copy.events.values())
+            assert observation.phase == "before_party_copyback" and observation.capture is None
+            assert faint.kind == "faint" and faint.mon.key == ob.key
+            obs.consume(rig, before_copy)  # deliver natural events; only the post-copy envelope is made stale
             assert batch.events[1].capture.attempt_seq == ob.attempts[1].seq
             batch.generation -= 1  # genuinely captured payload delivered under a stale epoch envelope
             obs.consume(rig, batch)
             assert fc.FS(rig).seq == batch.events[1].capture.seq
     rig.frame(1)
     fc.tick(rig)
-    assert_awaiting(rig, ob)
+    assert_awaiting(rig, ob, natural_key=natural_key)
 
 
 def legacy_queued(overrides=None):
@@ -297,15 +307,14 @@ def test_red_control_capture_without_native_fainted_cannot_complete():
 
 
 PRE_SITES = ('battle_sites=deps.polished_faint_observer == true '
-             'and {"battle_faint_copyback_return"} or nil,')
+             'and {"battle_faint", "battle_faint_copyback_return"} or {"battle_faint"},')
 
 
 def pre_copy_only(overrides=None):
     entry = obs.SOURCES[obs.ENTRY]
     assert entry.count(PRE_SITES) == 1
     overrides = dict(overrides or {})
-    overrides[obs.ENTRY] = entry.replace(PRE_SITES, PRE_SITES.replace(
-        '{"battle_faint_copyback_return"}', '{"battle_faint", "battle_faint_copyback_return"}'))
+    overrides[obs.ENTRY] = entry  # pre-copy registration is now production-default, not a test-only addition
     rig, _, ob = staged(overrides)
     native_resolve(rig, post=False)  # registered 44c8 callback only; no post-copy evidence
     rig.frame(1)
@@ -319,13 +328,11 @@ def test_red_control_pre_copy_observation_cannot_complete():
     # The real authority still allocates capture.seq synchronously; the test never mints it.
     source = mutated_method(obs.SIGNALS, "        local function faint_boundary(",
                             "        -- This instruction is after", [
-        ('return batch({observation(prepared.id,battle_sites[prepared.id],\n'
-         '                                     {battle={slot=slot,hp=wram("wBattleMonHP",2),max_hp=wram("wBattleMonMaxHP",2),\n'
-         '                                              mode=mode,link_mode=wram("wLinkMode")}})},context,held)',
+        ('return batch(events,context,held)',
          'local b={slot=slot,hp=wram("wBattleMonHP",2),status=0,mode=mode,link_mode=wram("wLinkMode"),fainted=true}\n'
          '            local captured=authority.capture_faint(b,held)\n'
-         '            return batch({observation(prepared.id,battle_sites[prepared.id],\n'
-         '                {battle=b,capture=captured})},context,held)'),
+         '            events[1]=observation(prepared.id,battle_sites[prepared.id],{battle=b,capture=captured})\n'
+         '            return batch(events,context,held)'),
     ])
     client = obs.SOURCES[obs.CLIENT]
     old = 'and ev.phase == "after_party_copyback"'
