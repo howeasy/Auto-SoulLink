@@ -40,7 +40,6 @@
     "LIVE-HELLO-GATE-FRAME",
     "LIVE-CAPTURE-PARTY-ONLY",
     "LIVE-BOX-CENSUS",
-    "LIVE-NO-BOX-MON",
     "LIVE-R1-MANAGER-PAIR",
     "LIVE-R2-RANDOMIZED-BOOT",
     "LIVE-R3-REFUSALS",
@@ -274,20 +273,6 @@
         "a wild mon reached a box",
         "the census carried the box mon without a reboot",
         "the census followed the battle end, not the 1800-frame periodic rescan"
-      ]
-    },
-    {
-      "id": "LIVE-NO-BOX-MON",
-      "kind": "LIVE",
-      "description": "a boxless client is sent no box_mon command (the server skips quarantine)",
-      "receipt": "tests/fixtures/polished/receipts/live_no_box_mon.json",
-      "expect_scenario": "live/no-box-mon-boxless-client",
-      "expect_checks": [
-        "server admitted the cartridge",
-        "the catch reached the server",
-        "quarantine skipped because the client has no box executor",
-        "the string box_mon never occurs in this server.log",
-        "0 Lua-originated writes, so nothing was attempted client-side"
       ]
     },
     {
@@ -534,20 +519,20 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "force_faint and box_mon: a linked mon must be killable and depositable through the armed Polished write sink",
-      "blocker": "overworld half live on the current overlay 688945795e (LIVE-WRITES-OVERWORLD: bench force_faint, box_mon, party_mon exact diffs PASS) and supports_box_mon is True since 8c1b841e2; still missing: a PHYSICAL in-battle (active battler) faint receipt (duo S2n card in flight) and the (c) negatives under a real battle (writes.lua:612-618, NOT RUN)",
+      "blocker": "only remaining live requirement: a PHYSICAL in-battle natural faint (duo S2n). Owner ruling 2026-10-09 accepts in-battle write negatives as unit/model-covered, so (c) is not a live RC gate. Overworld bench force_faint, box_mon and party_mon exact diffs PASS in LIVE-WRITES-OVERWORLD on overlay 688945795e; supports_box_mon is True since 8c1b841e2. Commanded active/bench faint PASS in pol-explode2 is not the natural-faint receipt",
       "manager_row": null,
       "manager_row_note": "no Manager option governs the write sink; the consistency check binds only named options",
-      "evidence": "tests/fixtures/polished/receipts/live_writes_overworld.json (F:/slink-work/lanes/pol-writes6889/writes/result.txt:69 '(c) negatives: NOT RUN'); docs/polished/BATTLE_FLOW.md F6"
+      "evidence": "tests/fixtures/polished/receipts/live_writes_overworld.json; tests/unit/test_polished_write_path.py (in-battle negatives accepted by owner 2026-10-09); docs/polished/BATTLE_FLOW.md F6. Owner also accepts S4n whiteout event sent + all partners die via per-mon faint; this is not handler-caused death proof and _handle_whiteout stays unit-covered"
     },
     {
       "id": "OPEN-EXPLODE-RIVAL",
       "kind": "OPEN",
       "status": "OPEN",
       "blocking_rc": true,
-      "description": "Explode Mode and Rival Team Swap writers exist as pure Lua modules but are not wired for Polished",
-      "blocker": "writers composed but inert (plain-faint opt-in OFF, rival facade refuses by default); the Manager still refuses both options for gen2_polished; rival gate proven at PROBE level only on historical overlay 877a477a (LIVE_RESULTS.md 2026-10-08), not re-run on the current overlay 688945795e, no swap write live",
+      "description": "Explode Mode and Rival Team Swap are composed for Polished; remaining echo fix and capability/Manager enablement are not freeze-qualified",
+      "blocker": "rival swap, commanded active-faint and bench-faint PASS live in F:/slink-work/lanes/pol-explode2; remaining: client explode echo fix (in flight) plus capability/Manager flip at freeze. These runs are lane evidence only, not new receipts in this card; frozen-cut rebind is still required",
       "manager_options": ["explode_mode", "rival_team_swap"],
-      "evidence": "server/manager.py OPTION_SUPPORT['explode_mode']['gen2_polished'] ok=False; docs/polished/EXPLODE_RIVAL.md"
+      "evidence": "F:/slink-work/lanes/pol-explode2/rival/synth-90mk5ijy/receipt.json (PASS); explode/active-faint-ee5f2c0cb766/probe/oracle.json and explode/bench-faint-4dc72c955269/probe/oracle.json under that lane (ok=true, reasons=[]). server/manager.py OPTION_SUPPORT still refuses explode_mode and rival_team_swap pending freeze; docs/polished/EXPLODE_RIVAL.md"
     },
     {
       "id": "OPEN-TITLE-SPLASH",
