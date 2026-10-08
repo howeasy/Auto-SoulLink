@@ -307,7 +307,7 @@ def test_red_control_capture_without_native_fainted_cannot_complete():
 
 
 PRE_SITES = ('battle_sites=deps.polished_faint_observer == true '
-             'and {"battle_faint", "battle_faint_copyback_return"} or {"battle_faint"},')
+             'and {"battle_faint", "whiteout_before_heal", "battle_faint_copyback_return"} or {"battle_faint", "whiteout_before_heal"},')
 
 
 def pre_copy_only(overrides=None):

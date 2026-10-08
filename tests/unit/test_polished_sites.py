@@ -139,11 +139,11 @@ def test_exactly_one_hook_at_the_set_caught_data_farcall_never_the_routine_head(
     # C-WRITE r2: the WRITE hold is its own hook (25:51BF, the overworld frame wait), not an engine SITE - the
     # engine-site set stays exactly one (capture_party); the hold registers nothing and writes nothing on its own.
     # C-EXPLODE: the battle hold (0f:416A, the explode PC hold) is a third hook, hooked by the client, not an engine site.
-    assert [(h.name, h.addr) for h in hooks] == [(HOOK, SITE_PC), ("SLink-gen2-polished:battle_faint", 0x44C8), ("SLink-gen2-checkpoint", 0x51BF),
+    assert [(h.name, h.addr) for h in hooks] == [(HOOK, SITE_PC), ("SLink-gen2-polished:battle_faint", 0x44C8), ("SLink-gen2-polished:whiteout_before_heal", 0x5EB9), ("SLink-gen2-checkpoint", 0x51BF),
                                                  ("SLink-gen2-battle-hold", 0x416A)]
     assert all(h.addr != HEAD_PC for h in hooks)
     st = parts.client.signals.status(parts.client.signals)
-    assert list(st.registered_sites.values()) == ["capture_party", "battle_faint"]
+    assert list(st.registered_sites.values()) == ["capture_party", "battle_faint", "whiteout_before_heal"]
     assert (st.evidence_level, st.physical_status, st.runtime_authorized) == ("DEV_OVERLAY", "OPEN", False)
     assert len(st.unproven) == 2 and parts.qualification == "DEV_OVERLAY_SHA1" and parts.production_admitted is False
     assert roms[1][SITE_FLAT:SITE_FLAT + 7].hex().upper() == "D7084513FA09D1"  # the overlay ROM carries the anchor

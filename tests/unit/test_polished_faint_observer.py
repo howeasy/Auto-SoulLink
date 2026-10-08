@@ -30,6 +30,7 @@ PC = SYM["ResolveFaints.no_fainted_mons"][1] + 6
 PACK = json.loads((ROOT / "data/games/polished_crystal/engine_signals.json").read_text())
 POINTS = ("wBattleMode", "wCurBattleMon", "wLinkMode", "wBattleMonHP", "wBattleMonStatus", "wPlayerSubStatus2")
 DEFAULT_HOOKS = {"SLink-gen2-polished:capture_party": 0x652B, "SLink-gen2-polished:battle_faint": 0x44C8,
+                 "SLink-gen2-polished:whiteout_before_heal": 0x5EB9,
                  "SLink-gen2-checkpoint": 0x51BF, "SLink-gen2-battle-hold": 0x416A}
 
 
@@ -138,8 +139,8 @@ def test_attempt_callback_drain_and_real_sent_tick_share_one_frame_clock():
 
 
 @pytest.mark.parametrize("path,old,new", [
-    (ENTRY, 'battle_sites=deps.polished_faint_observer == true and {"battle_faint", "battle_faint_copyback_return"} or {"battle_faint"},',
-     'battle_sites={"battle_faint"},'),
+    (ENTRY, 'battle_sites=deps.polished_faint_observer == true and {"battle_faint", "whiteout_before_heal", "battle_faint_copyback_return"} or {"battle_faint", "whiteout_before_heal"},',
+     'battle_sites={"battle_faint", "whiteout_before_heal"},'),
     (SIGNALS, 'if prepared.id == "battle_faint_copyback_return" then return faint_copyback_return(prepared,context,held) end',
      'if prepared.id == "battle_faint_copyback_return" then return nil end'),
     (CLIENT, 'local seq = FS.next_seq()\n        if seq <= a.seq', 'local seq = a.seq\n        if seq <= a.seq'),
@@ -155,7 +156,7 @@ def test_opt_in_hook_census_preserves_pinned_default(enabled, interface):
     expected = DEFAULT_HOOKS | ({HOOK: PC} if enabled else {})
     assert dict(rig.log["hook_at"].items()) == expected
     status = rig.client.signals.status(rig.client.signals)
-    assert list(status.registered_sites.values()) == ["capture_party", "battle_faint"] + ([SITE] if enabled else [])
+    assert list(status.registered_sites.values()) == ["capture_party", "battle_faint", "whiteout_before_heal"] + ([SITE] if enabled else [])
 
 
 def test_observer_without_settlement_authority_degrades_inert_not_legacy_success():

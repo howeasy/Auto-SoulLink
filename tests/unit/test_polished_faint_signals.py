@@ -110,11 +110,12 @@ def test_wrong_bank_at_callback_does_not_emit():
     assert rig.client.signals.status(rig.client.signals).failed is None
 
 
-def test_unusable_poison_and_whiteout_rows_are_not_registered():
+def test_poison_stays_unregistered_and_guarded_whiteout_is_registered():
     rig, _, _ = build()
     hooks = dict(rig.log.hook_at.items())
     assert HOOK in hooks
-    assert not any("poison_faint" in k or "whiteout_before_heal" in k for k in hooks)
+    assert not any("poison_faint" in k for k in hooks)
+    assert "SLink-gen2-polished:whiteout_before_heal" in hooks
     row = json.loads((ROOT / "data/games/polished_crystal/engine_signals.json").read_text())["titles"]["polished_crystal"]["sites"]["battle_faint"]
     assert (row["status"], row["kind"], row["maturity"], row["runtime_enabled"], row["physical_firing"]) == (
         "RESOLVED", "CPU_INSTRUCTION", "SOURCE_CANDIDATE", False, "OPEN")
@@ -143,8 +144,8 @@ def test_natural_faint_uses_polished_party_identity(species, form):
 def test_source_copy_mutants_turn_natural_event_contract_red(guard):
     if guard == "registration":
         path = ENTRY
-        old = 'or {"battle_faint"},'
-        new = 'or nil,'
+        old = 'or {"battle_faint", "whiteout_before_heal"},'
+        new = 'or {"whiteout_before_heal"},'
         check = natural
     else:
         path = SIGNALS

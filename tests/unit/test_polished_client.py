@@ -213,14 +213,14 @@ def test_no_hook_and_no_write_on_the_whole_path(composed):
     # C-WRITE r2: the composition also hooks the overworld HOLD site (25:51BF, SLink-gen2-checkpoint);
 # the hook registers nothing on its own and writes nothing without a command.
     # C-EXPLODE: the composition also hooks the battle hold (0f:416A, SLink-gen2-battle-hold): the explode PC hold, nothing written on its own.
-    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-polished:battle_faint', 'SLink-gen2-checkpoint', 'SLink-gen2-battle-hold'} and len(log.writes) == 0
+    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-polished:battle_faint', 'SLink-gen2-polished:whiteout_before_heal', 'SLink-gen2-checkpoint', 'SLink-gen2-battle-hold'} and len(log.writes) == 0
     ticks = [json.loads(line) for line in log.sent.values() if json.loads(line)["event"] == "tick"]
     assert ticks and ticks[-1]["party"] == _hello(composed)["party"]
     parts.client.stop(parts.client)
     # C-WRITE r2: the composition also hooks the overworld HOLD site (25:51BF, SLink-gen2-checkpoint);
 # the hook registers nothing on its own and writes nothing without a command.
     # C-EXPLODE: the composition also hooks the battle hold (0f:416A, SLink-gen2-battle-hold): the explode PC hold, nothing written on its own.
-    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-polished:battle_faint', 'SLink-gen2-checkpoint', 'SLink-gen2-battle-hold'}
+    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-polished:battle_faint', 'SLink-gen2-polished:whiteout_before_heal', 'SLink-gen2-checkpoint', 'SLink-gen2-battle-hold'}
 
 
 def test_the_production_signals_gate_refuses_polished():
