@@ -459,14 +459,10 @@ function PT.compose(spec)
             return true
         end
         local function apply_unpublished(slot)
-            -- After an arm(APPLY) that emitted writes and then failed: true ONLY when the lease still reads as
-            -- the exact pre-APPLY frame the ROM is holding for this visit (proposer: the accepted OFFER,
-            -- trade_service.asm:150-170 waits for command APPLY; responder: the consumed consent RELEASE,
-            -- trade_responder.asm:170-171 likewise) -- header, token, slot, result 0 and generation == ACK ==
-            -- the held generation. Then neither the APPLY command byte nor its generation reached the lease
-            -- and no pickup can have happened. An unreadable lease, or any observed APPLY byte / generation,
-            -- is NOT proof and keeps the write-exception latch.
-            local held_cmd=role == 'responder' and t.commands.RELEASE or t.commands.OFFER
+            -- Fresh generation is the APPLY publication boundary. The full frame may already contain
+            -- APPLY/result $FF, but both ROM services reject generation == ACK before pickup. Prove that
+            -- BOTH still equal this visit's held generation, with its header/token/slot intact. A fresh
+            -- generation (even already ACKed), or an unreadable lease, keeps the UNCERTAIN latch.
             local held_gen=role == 'responder' and prompt_visit.gen or offered.gen
             local ok,bytes=pcall(io.read_range,l.base,l.size)
             if not ok or not Lease.valid_bytes(bytes,l.size) then return false end
@@ -474,9 +470,9 @@ function PT.compose(spec)
             for i=1,4 do
                 if bytes[f.magic+i] ~= l.magic[i] or bytes[f.token+i] ~= token[i] then return false end
             end
-            return bytes[f.version+1] == l.version and bytes[f.command+1] == held_cmd
+            return bytes[f.version+1] == l.version
                and bytes[f.generation+1] == held_gen and bytes[f.ack+1] == held_gen
-               and bytes[f.slot+1] == slot and bytes[f.result+1] == 0
+               and bytes[f.slot+1] == slot
         end
         function T:arm(command,slot,visit,payload)
             if poisoned then return nil,'UNCERTAIN',poisoned end
@@ -499,13 +495,13 @@ function PT.compose(spec)
             local gen,a,b=scoped(raw.arm,raw,command,slot,clone(visit),clone(payload))
             if gen then attempted=true; phase='apply'; disposition=nil; reason=nil; return gen end
             if a == 'UNCERTAIN' and poisoned == b and apply_unpublished(slot) then
-                -- Owner ruling 2026-10-07: the emission failed (staging, or the frame before its command byte)
-                -- and the readback PROVES the lease is still the held pre-APPLY frame, so no commit can have
+                -- Owner ruling 2026-10-07: emission failed before the fresh generation publication,
+                -- and readback PROVES this visit is unpublished, so no commit can have
                 -- started: pre-APPLY uncertainty closes the lease through the cancel path, logs once and
                 -- reports NOT_PERFORMED. Anything the readback cannot prove stays poisoned (UNCERTAIN).
                 poisoned=nil
                 local closed_,ca,cb=self:cancel('APPLY not published: '..b)
-                if closed_ then return nil,'NOT_PERFORMED',reason end
+                if closed_ or ca == 'NOT_PERFORMED' then return nil,'NOT_PERFORMED',reason end
                 if ca ~= 'UNCERTAIN' then poisoned=b end -- the close did not emit either: keep the latch
                 return nil,'UNCERTAIN',poisoned
             end
@@ -609,8 +605,9 @@ function PT.compose(spec)
         -- Post-DONE waits ignore the token (trade_service.asm:227-229, trade_responder.asm:227-229 `jr c, .wait`)
         -- and close on their own 90-frame bound; a responder NO pressed after the cancel still publishes its
         -- decline DONE (:128-131), which poll_done no longer claims. Not reversible: the visit stays
-        -- NOT_PERFORMED until reset() after the ROM's close. Returns true; nil,'PENDING',why when refused
-        -- without a write; nil,'UNCERTAIN',why after a partial emission (the shared write-exception latch).
+        -- NOT_PERFORMED until reset() after the ROM's close. Returns true on success, or
+        -- nil,'NOT_PERFORMED',reason for an incomplete close (token check/watchdog still owes closure).
+        -- A refusal without a write returns nil,'PENDING',why; an existing poison stays UNCERTAIN.
         function T:cancel(why)
             if poisoned then return nil,'UNCERTAIN',poisoned end
             if cancelled then return true end -- idempotent: no second write, no second log
@@ -627,12 +624,20 @@ function PT.compose(spec)
                 if pending then writes:write_bytes(l.base+l.fields.ack,{pending.gen}) end -- cancel: ACK publishes LAST
                 return true
             end)
-            if not yes then return yes,a,b end
+            -- These close bytes never publish APPLY. Even a failed/partial close cannot start a commit.
+            -- The ROM observes token mismatch, or its watchdog closes if every token store was lost.
+            local detail=why
+            if not yes then
+                poisoned=nil
+                detail=why..'; close incomplete: '..tostring(b)..' (ROM token mismatch or watchdog will close lease)'
+            end
             cancelled=true; raw.visit_token=nil
-            disposition,reason='NOT_PERFORMED','cancelled before APPLY: '..why
-            log(string.format('[SLink-polished] trade visit cancelled before APPLY (%s/%s): %s',
-                              tostring(role),tostring(phase),why))
-            phase='cancelled'
+            disposition,reason='NOT_PERFORMED','cancelled before APPLY: '..detail
+            local previous_phase=phase
+            phase='cancelled' -- terminal state is consistent even inside a throwing optional log sink
+            pcall(log,string.format('[SLink-polished] trade visit cancelled before APPLY (%s/%s): %s',
+                                    tostring(role),tostring(previous_phase),detail))
+            if not yes then return nil,'NOT_PERFORMED',reason end
             return true
         end
         if spec.test_hooks == true then
