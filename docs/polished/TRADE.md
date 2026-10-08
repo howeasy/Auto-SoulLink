@@ -1547,3 +1547,57 @@ does not close the other storage domains. Do not infer a two-player durable
 receipt, production trade admission or recovery protocol from these symbols,
 model traps or the disabled smoke.
 
+
+
+## Status 2026-10-08
+
+Source inspection at integration `4281d18c5`; no new emulator run or qualification
+by this documentation card. Current overlay is **cf03f53accefbc5f3fee9062846699e30c4c987b**,
+UPS **3767 B** (`data/polished/overlay_provenance.json:63,85-88`). The C5 body
+cut `7f56228b5` / overlay `877a477a` is historical. Bounded rollback commit
+`33f3b08bf` (merge `8d80f1ea3`) produced the current overlay. Applying the UPS
+to the pinned release reproduced its SHA1 and read **0** at `7e:573B`;
+`python tools/polished_pin_audit.py`: **130 pins; 0 STALE executable pins**.
+
+**C5 remains disabled.** `patch/polished/src/trade_commit.asm:1-21` limits rollback
+to a last/sole-slot removal failure before native UI. The point of no return is
+the first **durable** store, not the first live party write: non-last removal
+can write mail SRAM during rotation; last/sole-slot durability starts in native
+save. A non-last partial rotation stays result 2 even before its first durable
+byte because the single outgoing snapshot cannot restore the rotation. General
+pre-durable rollback after native UI is explicitly not claimed.
+
+**Host cancellation is implemented; pump integration is queued.**
+`lua/gen2/polished_trade.lua:614-641` exposes idempotent `T:cancel(reason)` for
+pre-APPLY visits; it rejects a pending OFFER when necessary, zeros the token,
+verifies writes, and returns NOT_PERFORMED on success. It refuses an already
+armed APPLY. In `T:arm` (`:481-512`), a staging/frame-write fault becomes
+NOT_PERFORMED only if readback proves the exact pre-APPLY frame remains and
+cancel succeeds; the ROM closes the invalidated lease on its next inspection.
+Observed APPLY publication, unreadable evidence, or failed closure remains
+UNCERTAIN/poisoned. This does not equate every pre-publication error with proof
+of no effect. The client pump does **not** call cancel yet and still needs to
+consume the binder's arm-fault disposition rather than pre-marking attempted;
+`TRADE_PUMP.md:101-111` describes the queued wiring. `advertised()` remains false
+(`polished_trade.lua:393`), and dev composition is not a production trade grant.
+
+**Stack pins are MODEL-only.** `tests/unit/test_polished_stack_margin.py:1-16,32-39`
+records proposer **37**, responder **32**, commit **60**, dispatcher **36** bytes
+of entry-relative depth, plus a **12-byte interrupt-entry reserve**. Native
+FarCall is executed in the rig, but native UI/save/animation/evolution trap
+interiors and actual ISR workload are not measured. These pins are not live
+stack-safety qualification and were not rerun for this documentation update.
+
+**Recorded live scope on cf03f53a:** `LIVE_RESULTS.md:770-785` records all six
+held-service cases PASS after the disclosed probe repairs: SYNTH setup + TEST
+HOST, no cable partner/server/client/native commit, with commit disabled.
+`apply-done1` is DONE result 1, not performed. `LIVE_RESULTS.md:787-797` records
+cold CONTINUE identity/census PASS for a five-mon, empty-box fixture and main
+save-copy acceptance; a wrong-key control fails. Occupied/banked storage,
+backup fallback and cold reload after a real trade/box write remain untested.
+These are existing recorded results, not runs performed by this card.
+
+**Commit enablement still requires a separate owner yes** (`RC_TRACKER.md`, owner
+decisions). General pre-durable recovery after native UI, native ISR/stack
+interiors, enabled second-identity trade evidence and cold-load durability after
+an actual commit are not closed by the current body or disabled-service PASS.
