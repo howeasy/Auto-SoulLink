@@ -495,8 +495,15 @@ def _rec(direction, msg, conn=1):
 
 def _snapshot(keys, hp=None, box=()):
     hp = hp or {}
-    return {"party": [{"slot": i, "key": k, "hp": hp.get(k, 120), "max_hp": 120, "status": 0} for i, k in enumerate(keys)],
-            "party_count": len(keys), "box": [{"box": 0, "slot": i, "key": k} for i, k in enumerate(box)]}
+    rows=[]
+    for i,k in enumerate(keys):
+        raw=bytearray((k.encode()*48)[:48])
+        raw[1]=0
+        raw[34:36]=hp.get(k,120).to_bytes(2,'big')
+        rows.append({'slot':i,'key':k,'hp':hp.get(k,120),'max_hp':120,'status':0,
+                     'record_hex':raw.hex(),'ot_hex':(k.encode()*11)[:11].hex(),
+                     'nickname_hex':(k.encode()*11)[:11].hex()})
+    return {'party':rows,'party_count':len(keys),'box':[{'box':0,'slot':i,'key':k} for i,k in enumerate(box)]}
 
 
 def _catch(key, own):
@@ -567,7 +574,7 @@ def natural_ev(whole_party=False):
     ev = link_ev()
     ev["scenario"] = "whiteout-natural" if whole_party else "faint-natural"
     ev["marks"]["stage"] = {r: len(ev["wire"][r]) for r in ("a", "b")}
-    a_party, ordered = A_OWN + [KA], [KA] + A_OWN
+    a_party, ordered = A_OWN + [KA], [KA] + A_OWN[1:] + A_OWN[:1]
     targets = a_party if whole_party else [KA]
     before, staged = _snapshot(a_party), _snapshot(ordered, hp=dict.fromkeys(targets, 1))
     before["frame"], staged["frame"] = 100, 101
@@ -575,15 +582,24 @@ def natural_ev(whole_party=False):
     for mon in staged["party"]:
         if mon["key"] in targets:
             for offset, old, new in ((0, 0, 0), (1, 120, 1)):
-                writes.append({"key": mon["key"], "slot": mon["slot"], "wram": 7000 + mon["slot"] * 48 + offset,
+                writes.append({"key": mon["key"], "slot": mon["slot"], "wram": 0x1CD6 + 34 + mon["slot"] * 48 + offset,
                                "old": old, "new": new})
+    lead_after=_snapshot(ordered)
+    from tools.polished_live.faint_probe import read_symbols
+    sym=read_symbols(REPO/'data/polished/polished_slink.sym')
+    lead=len(a_party)-1
+    lead_writes=[]
+    for label,field,size in [('wPartyMons','record_hex',48),('wPartyMonOTs','ot_hex',11),('wPartyMonNicknames','nickname_hex',11)]:
+        bank,addr=sym[label]
+        base=addr-0xc000 if addr<0xd000 else (bank or 1)*0x1000+addr-0xd000
+        for dst,src in [(0,lead),(lead,0)]:
+            old,new=bytes.fromhex(before['party'][dst][field]),bytes.fromhex(before['party'][src][field])
+            lead_writes.extend({'array':label,'wram':base+dst*size+i,'slot':dst,'key':before['party'][src]['key'],'old':old[i],'new':new[i]} for i in range(size))
     ev["steps"]["a"]["stage"] = {"ok": True, "op": "synth_hp1", "before": before, "synth_writes": writes,
-                                 "lead_writes": [], "snapshot": staged}
+                                 "lead_writes": lead_writes, "lead_after":lead_after, "snapshot": staged}
     zero_party = _snapshot(ordered, hp=dict.fromkeys(targets, 0))["party"]
-    event = {"event": "whiteout", "party": copy.deepcopy(zero_party)} if whole_party else {"event": "faint", "key": KA}
+    event = {"event": "whiteout"} if whole_party else {"event": "faint", "key": KA}
     report = dict(event, frame=150, party=copy.deepcopy(zero_party))
-    if whole_party:
-        report["wire_party"] = copy.deepcopy(zero_party)
     hit = {"frame": 150, "party": copy.deepcopy(zero_party), "pc": 0x4ABC, "bank": 15,
            "qualified": True, "expected_hex": "abcd", "site": "LoseMoney" if whole_party else "UpdateBattleMonInParty",
            "slot": 0, "battle_hp": 0}
@@ -591,6 +607,8 @@ def natural_ev(whole_party=False):
                                   "site_hits": {"faint_copyback": [copy.deepcopy(hit)], "whiteout": [hit] if whole_party else [],
                                                 "heal_party": []},
                                   "run_used": False, "fight_inputs": 1, "snapshot": _snapshot(ordered)}
+    if whole_party:
+        ev["wire"]["a"].append(_rec("c2s", {"event":"faint","key":KA}))
     ev["wire"]["a"].append(_rec("c2s", event))
     ev["wire"]["b"].append(_rec("s2c", {"commands": [{"cmd": "force_faint", "key": KB}]}))
     ev["steps"]["b"]["pre"] = {"ok": True, "op": "snapshot", "snapshot": _snapshot(B_OWN + [KB])}
@@ -632,6 +650,8 @@ NATURAL_DEFECTS = [
     ("link_memorial_is_not_dead", lambda e: e["status"].update(after=_link_status("memorial")), f"link_not_dead:{AREA}"),
     ("wrong_hp1_target", lambda e: e["steps"]["a"]["stage"]["synth_writes"][0].update(key=B_OWN[0]),
      "a:stage_wrong_target"),
+    ("wrong_hp_address", lambda e: e["steps"]["a"]["stage"]["synth_writes"][0].update(wram=100000),
+     f"a:stage_hp1_write_invalid:{KA}"),
     ("zero_injection", lambda e: _stage_byte(e, 1, 0), "a:stage_hp_zero_injection"),
     ("hp1_did_not_land", lambda e: e["steps"]["a"]["stage"].update(snapshot=_snapshot([KA] + A_OWN)),
      "a:stage_not_landed"),
@@ -689,10 +709,6 @@ def test_natural_faint_copyback_red_controls(name, mutate, reason):
 
 
 NATURAL_WHITEOUT_DEFECTS = [
-    ("alive_wire_forfeit", lambda e: e["wire"]["a"][-1]["msg"]["party"][1].update(hp=1),
-     "a:whiteout_wire_party_not_all_zero"),
-    ("wire_party_absent", lambda e: e["wire"]["a"][-1]["msg"].pop("party"), "a:whiteout_wire_party_missing"),
-    ("wire_party_incomplete", lambda e: e["wire"]["a"][-1]["msg"]["party"].pop(), "a:whiteout_wire_party_incomplete"),
     ("whiteout_hook_missing", lambda e: e["steps"]["a"]["battle"]["site_hits"].update(whiteout=[]),
      "a:whiteout_preheal_hook_missing"),
     ("whiteout_hook_unqualified", lambda e: e["steps"]["a"]["battle"]["site_hits"]["whiteout"][0].update(qualified=False),
@@ -721,7 +737,7 @@ def test_natural_whiteout_preheal_red_controls(name, mutate, reason):
     assert verdict == "FAIL" and reason in reasons, reasons
 
 
-@pytest.mark.parametrize("whole_party,path", [(False, "faint_event"), (True, "whiteout_event")])
+@pytest.mark.parametrize("whole_party,path", [(False, "faint_event"), (True, "whiteout_event_and_faint_propagation")])
 def test_natural_loss_passes_only_the_native_server_path(whole_party, path):
     ev = natural_ev(whole_party)
     # Native loss may heal A afterwards. The report at send / guarded pre-heal hook, not the final party,
@@ -750,11 +766,14 @@ def test_natural_whiteout_ignores_eggs_but_not_usable_mons():
     ev = natural_ev(True)
     egg = A_OWN[0]
     stage, battle = ev["steps"]["a"]["stage"], ev["steps"]["a"]["battle"]
-    parties = [stage["before"]["party"], stage["snapshot"]["party"], ev["wire"]["a"][-1]["msg"]["party"],
-               battle["reports"][0]["party"], battle["reports"][0]["wire_party"], battle["site_hits"]["whiteout"][0]["party"]]
+    parties = [stage["before"]["party"], stage["snapshot"]["party"], stage["lead_after"]["party"],
+               battle["reports"][0]["party"], battle["site_hits"]["whiteout"][0]["party"]]
     for party in parties:
         mon = next(m for m in party if m["key"] == egg)
         mon.update(egg=True, hp=120)
+        raw=bytearray.fromhex(mon['record_hex'])
+        raw[34:36]=b'\x00\x78'
+        mon['record_hex']=raw.hex()
     stage["synth_writes"] = [w for w in stage["synth_writes"] if w["key"] != egg]
     assert duo.oracle_whiteout_natural(ev)[:2] == ("PASS", [])
 
@@ -1146,3 +1165,22 @@ end
     loss = source[source.index("local function op_lose_native("):source.index("-- ── boot + step loop")]
     result = lua.execute(engine + loss + '\nreturn op_lose_native({key="K",all=false,frames=5000})')
     assert result["ok"] and result["fight_inputs"] == 1 and result["run_used"]
+
+
+def test_natural_whiteout_accepts_the_real_empty_wire_payload():
+    ev = natural_ev(True)
+    ev['wire']['a'][-1]['msg'].pop('party', None)
+    assert duo.oracle_whiteout_natural(ev)[:2] == ('PASS', [])
+
+
+def test_natural_whiteout_cannot_claim_handler_effects_from_event_presence():
+    ev = natural_ev(True)
+    facts = duo.oracle_whiteout_natural(ev)[2]
+    assert facts['whiteout_handler_proved'] is False
+    assert facts['server_path'] == 'whiteout_event_and_faint_propagation'
+
+
+def test_natural_setup_rejects_a_lead_write_that_is_not_a_permutation():
+    ev = natural_ev()
+    ev['steps']['a']['stage']['lead_writes'] = [{'array':'wPartyMons','wram':0,'slot':0,'key':KA,'old':7,'new':8}]
+    assert duo.oracle_faint_natural(ev)[0] == 'FAIL'

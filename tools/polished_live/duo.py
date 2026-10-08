@@ -33,9 +33,9 @@ that FAILS when the specified rule and reporting path did not fire:
   S2n faint-natural     after S1: SYNTH HP 1 on the linked lead -> FIGHT -> native faint after party copyback.
   S4n whiteout-natural  after S1: SYNTH HP 1 on every non-egg -> native switches/last weak lead FIGHT -> whiteout.
 The old HP-0/reconnect controls remain distinct from the native faint-copyback and guarded pre-heal LoseMoney paths.
-Native oracles never accept hello_reconcile as PASS. Whiteout requires the actual wire party frozen all-zero; a
-read-only hook cannot supply missing producer data. A final strong mon surviving its switch returns FAIL rather
-than changing its moves/PP or injecting a defeat. Each verdict records the observed server_path explicitly.
+Native oracles never accept hello_reconcile as PASS. Whiteout sends an empty payload; all-HP0 evidence comes
+from the qualified pre-heal hook and send-time cartridge snapshot. S4n proves whiteout event sent plus faint
+propagation, NOT whiteout-handler effects. Surviving strong mons continue native fights/encounters within a bound.
 Evidence: <lane>/play-<name>/evidence.json; one `RESULT: PASS|FAIL|SKIPPED polished-duo-play-<name>` line per scenario.
 PLAY startup HTTP readiness has a 40-second bound; a child not listening yet is not a rule failure.
 The native disclosure lists scenario paths, not evidence that every path ran; steps and PLAY_FINAL
@@ -365,7 +365,7 @@ PLAY_SCENARIOS = {
     "faint": "S2 faint propagation: A's linked mon at HP 0 -> force_faint to B -> B's partner reads HP 0 on B",
     "whiteout": "S4 whiteout: A's whole party at HP 0 -> every linked partner force-fainted on B, nothing else",
     "faint-natural": "S2n native faint: HP1 setup -> native copyback faint event -> exactly B's linked partner HP0",
-    "whiteout-natural": "S4n native whiteout: HP1 party -> guarded pre-heal whiteout event -> exactly B's linked partners HP0",
+    "whiteout-natural": "S4n native whiteout event sent + faint propagation: guarded all-HP0 witness; whiteout handler UNPROVEN",
 }
 SYNTH_SETUP = {
     "link": [],
@@ -496,6 +496,64 @@ def oracle_link(ev: dict) -> tuple[str, list[str], dict]:
     return ("PASS" if not reasons else "FAIL"), reasons, facts
 
 
+def _lead_permutation_valid(stage: dict, linked_key: str, targets: set) -> bool:
+    """Independently derive 48/11/11 spans from symbols
+     compare every logged byte and keyed postimage."""
+    from tools.polished_live.faint_probe import read_symbols
+    try:
+        sym = read_symbols(REPO / 'data/polished/polished_slink.sym')
+        stride = sym['wPartyMon2'][1] - sym['wPartyMon1'][1]
+        names = (sym['wPartyMonNicknames'][1] - sym['wPartyMonOTs'][1]) // 6
+        if (stride, names) != (48, 11):
+            return False
+        arrays = [('wPartyMons','record_hex',stride),('wPartyMonOTs','ot_hex',names),('wPartyMonNicknames','nickname_hex',names)]
+        before = _party(stage['before'])
+        lead_after = _party(stage['lead_after'])
+        final = _party(_snap(stage))
+        if not before or set(before) != set(lead_after) or set(before) != set(final):
+            return False
+        if any(len(_as_list(x.get('party'))) != len(before) for x in (stage['before'],stage['lead_after'],_snap(stage))):
+            return False
+        lead = before[linked_key]['slot']
+        slots = {m['slot']:m for m in before.values()}
+        if set(slots) != set(range(len(before))):
+            return False
+        expected = []
+        if lead != 0:
+            if any(bytes.fromhex(slots[x]['record_hex'])[1] != 0 for x in (0, lead)):
+                return False
+            for label,field,size in arrays:
+                bank,addr = sym[label]
+                base = addr-0xc000 if addr<0xd000 else (bank or 1)*0x1000+addr-0xd000
+                for dst,src in ((0,lead),(lead,0)):
+                    old,new = bytes.fromhex(slots[dst][field]),bytes.fromhex(slots[src][field])
+                    if len(old)!=size or len(new)!=size:
+                        return False
+                    expected.extend({'array':label,'wram':base+dst*size+i,'slot':dst,'key':slots[src]['key'],'old':old[i],'new':new[i]} for i in range(size))
+        if stage.get('lead_writes') != expected:
+            return False
+        for key,mon in before.items():
+            dst=lead if mon['slot']==0 else 0 if mon['slot']==lead else mon['slot']
+            if lead_after[key] != dict(mon,slot=dst):
+                return False
+            if final[key]['slot'] != dst:
+                return False
+            for _,field,size in arrays:
+                raw=bytes.fromhex(mon[field])
+                post=bytes.fromhex(final[key][field])
+                if len(raw)!=size or len(post)!=size:
+                    return False
+                allowed=bytearray(raw)
+                if field=='record_hex' and key in targets:
+                    allowed[34:36]=b'\x00\x01'
+                if post!=allowed:
+                    return False
+        return True
+    except (ValueError,KeyError,TypeError,IndexError):
+        return False
+
+
+
 def _natural_stage_reasons(stage: dict, linked_key: str, whole_party: bool) -> tuple[list[str], set]:
     """Only the disclosed HP1 byte pairs may establish the native-loss setup; HP0 injection is never evidence."""
     reasons = []
@@ -503,6 +561,8 @@ def _natural_stage_reasons(stage: dict, linked_key: str, whole_party: bool) -> t
     targets = ({k for k, m in before.items() if not (m.get("egg") or m.get("is_egg"))} if whole_party
                else {linked_key} if linked_key else set())
     writes = [w for w in _as_list(stage.get("synth_writes")) if isinstance(w, dict)]
+    if not _lead_permutation_valid(stage, linked_key, targets):
+        reasons.append('a:lead_not_exact_permutation')
     if not stage.get("ok"):
         reasons.append("a:stage_failed")
     if stage.get("op") != "synth_hp1":
@@ -527,8 +587,22 @@ def _natural_stage_reasons(stage: dict, linked_key: str, whole_party: bool) -> t
                          and type(w.get("new")) is int and 0 <= w["new"] <= 255 for w in rows))
         if valid:
             high, low = sorted(rows, key=lambda w: w["wram"])
-            valid = (low["wram"] == high["wram"] + 1 and [high["old"], low["old"]] ==
-                     [old_hp >> 8, old_hp & 255] and all(w.get("slot") == (after.get(key) or {}).get("slot") for w in rows))
+            from tools.polished_live.faint_probe import read_symbols
+            sym = read_symbols(REPO / 'data/polished/polished_slink.sym')
+            bank, addr = sym['wPartyMons']
+            base = addr-0xc000 if addr<0xd000 else (bank or 1)*0x1000+addr-0xd000
+            hp_off = sym['wPartyMon1HP'][1] - addr
+            slot = (after.get(key) or {}).get('slot')
+            expected_at = base + slot * 48 + hp_off if type(slot) is int else -1
+            try:
+                raw_old = bytes.fromhex(_party(stage['lead_after'])[key]['record_hex'])[hp_off:hp_off+2]
+            except (KeyError, TypeError, ValueError):
+                raw_old = b''  # incomplete/invalid recording fails the oracle instead of dropping evidence
+
+            valid = (hp_off == 34 and [high['wram'],low['wram']] == [expected_at,expected_at+1]
+                     and bytes([high["old"], low["old"]]) == raw_old
+                     and [high["old"], low["old"]] == [old_hp >> 8, old_hp & 255]
+                     and all(w.get("slot") == slot for w in rows))
             if high["new"] == low["new"] == 0:
                 reasons.append("a:stage_hp_zero_injection")
             valid = valid and [high["new"], low["new"]] == [0, 1]
@@ -595,12 +669,13 @@ def _natural_report_reasons(ev: dict, targets: set, linked_key: str, whole_party
                 and all(mons[k].get("hp") == 0 for k in targets))
 
     if whole_party:
-        if events and any(not _as_list(m.get("party")) for m in events):
-            reasons.append("a:whiteout_wire_party_missing")
-        elif events and any(set(_party(m)) != all_keys for m in events):
-            reasons.append("a:whiteout_wire_party_incomplete")
-        if events and any(not all_zero(m.get("party")) for m in events):
-            reasons.append("a:whiteout_wire_party_not_all_zero")
+        # The production wire event is whiteout{}. Native per-mon faint can retire the pair first.
+        facts['whiteout_handler_proved'] = False
+        facts['proof_claim'] = 'native whiteout event sent + faint propagation; whiteout handler UNPROVEN'
+        if whiteout and faint:
+            facts['server_path'] = 'whiteout_event_and_faint_propagation'
+        if not faint:
+            reasons.append('a:linked_faint_wire_missing')
         if reports and any(not all_zero(r.get("party")) for r in reports):
             reasons.append("a:whiteout_report_party_not_all_zero")
         site_hits = battle.get("site_hits") or {}
@@ -1110,7 +1185,7 @@ def play_run(args, name: str, fixtures: dict, ident: dict, box_capable: bool) ->
         raise SystemExit(f"staged overlay sha1 {sha1} != integrated overlay {INTEGRATED_SHA1}")
     run = LANE / f"play-{name}"
     if run.exists():
-        shutil.rmtree(run)
+        raise SystemExit("evidence already exists; choose a fresh POL_DUO_LANE: " + str(run))
     srv_dir, wire_dir = run / "srv", run / "wire"
     srv_dir.mkdir(parents=True)
     (srv_dir / "rom_contract.json").write_text(json.dumps(contract_for(sha1)), encoding="utf-8")
@@ -1230,7 +1305,7 @@ def play_run(args, name: str, fixtures: dict, ident: dict, box_capable: bool) ->
                         "op": "synth_hp1", "keys": [ka], "lead": ka}
                     staged = step("a", "stage", op, 120)
                     if staged.get("ok"):
-                        step("a", "battle", {"op": "lose_native", "key": ka, "all": whole, "frames": 24000}, 600)
+                        step("a", "battle", {"op": "lose_native", "key": ka, "all": whole, "frames": 72000 if whole else 24000}, 600)
                         step("b", "await", {"op": "await_cmd", "cmd": "force_faint", "key": kb, "frames": 3600}, 300)
                         time.sleep(3)
             snap_status("after")
