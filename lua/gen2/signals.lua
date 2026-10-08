@@ -1323,6 +1323,7 @@ S.POLISHED_UNPROVEN = {"a live exec hit at the capture_party PC on a running car
 -- writer, and BATTLE_FLOW 1.3 makes a party-record write at that boundary a write the copy-back erases.
 S.POLISHED_BATTLE_SITES = {
     battle_faint = "before_party_copyback",
+    whiteout_before_heal = "before_heal_dispatch",
     battle_faint_copyback_return = "after_party_copyback",
     battle_end = "before_end_processing",
     wild_ready = "after_enemy_load",
@@ -1415,6 +1416,41 @@ function S.new_polished(options)
                    id..": the PC must be pinned by byte sequence read out of the ROM")
             assert(integer(row.bank,1,255) and integer(row.addr,0x4000,0x7FFF) and integer(row.rom_offset,0,0x7FFFFF)
                    and integer(row.hex_len,1,32),id..": anchor required")
+            if id == "whiteout_before_heal" then
+                local g, points = row.guards, row.point_symbols
+                assert(row.symbol == "LoseMoney" and type(g) == "table" and g.required == true
+                       and g.combine == "ALL" and type(g.memory_equals) == "table" and type(points) == "table",
+                       id..": required whiteout guards missing")
+                for field in pairs(g) do
+                    assert(field == "required" or field == "combine" or field == "memory_equals"
+                           or field == "script_context", id..": unsupported whiteout guard "..tostring(field))
+                end
+                local script = g.script_context
+                assert(type(script) == "table" and script.symbol == "Script_Whiteout"
+                       and integer(script.bank,1,127) and script.bank == row.bank
+                       and integer(script.addr,0x4000,0x7FFC) and type(script.expected_hex) == "string"
+                       and #script.expected_hex == 8 and script.expected_hex:match("^%x+$"),
+                       id..": whiteout script context missing or invalid")
+                local found, n = {}, #g.memory_equals
+                for index in pairs(g.memory_equals) do assert(integer(index,1,n),id..": sparse whiteout guards") end
+                for index=1,n do
+                    local c = g.memory_equals[index]
+                    assert(type(c) == "table" and type(c.symbol) == "string" and found[c.symbol] == nil
+                           and integer(c.bank,0,7) and (c.width == 1 or c.width == 2)
+                           and integer(c.addr,0xC000,0xFFFF-c.width+1)
+                           and integer(c.value,0,256^c.width-1) and (c.width == 1 or c.byte_order == "little"),
+                           id..": invalid whiteout memory guard")
+                    local point = points[c.symbol]
+                    assert(type(point) == "table" and point.bank == c.bank and point.addr == c.addr,
+                           id..": whiteout guard/point mismatch")
+                    found[c.symbol] = c
+                end
+                local bank, pos = found.hScriptBank, found.hScriptPos
+                assert(bank and pos and bank.bank == 0 and pos.bank == 0 and bank.addr >= 0xFF80
+                       and pos.addr >= 0xFF80 and bank.width == 1 and pos.width == 2
+                       and bank.value == script.bank and pos.value == script.addr + #script.expected_hex/2,
+                       id..": whiteout caller guards disagree with script context")
+            end
             if id == "battle_faint_copyback_return" then
                 assert(callable(authority.capture_faint), id..": client-owned faint capture authority required")
                 assert(row.hex_len == 3 and row.expected_hex == "CDC334"
@@ -1533,6 +1569,47 @@ function S.new_polished(options)
             end
             return batch(events,context,held)
         end
+        local whiteout_seen, whiteout_generation
+        local function whiteout_guards(prepared)
+            local row = battle_sites[prepared.id]
+            for _, c in ipairs(row.guards.memory_equals) do
+                need(io.bank_valid(c.bank,c.addr,c.width) == true,"OPEN: whiteout guard bank unavailable")
+                local value = 0
+                for offset=0,c.width-1 do
+                    local byte = io.read_u8(c.addr+offset,"System Bus")
+                    need(integer(byte,0,255),"OPEN: whiteout guard unreadable")
+                    value = value + byte * 256^offset -- generated word guards are little-endian
+                end
+                need(io.bank_valid(c.bank,c.addr,c.width) == true and value == c.value,
+                     "whiteout memory guard refused: "..c.symbol)
+            end
+            local script = prepared.script
+            for offset, byte in ipairs(script.expected) do
+                need(io.read_u8(script.address+offset-1,"System Bus") == byte,
+                     "whiteout script-context bytes differ")
+            end
+        end
+        local function whiteout_event(prepared, context, held)
+            whiteout_guards(prepared)
+            local party, why = reads.read_party()
+            need(party and party.count > 0,"OPEN: pre-heal party unavailable: "..tostring(why))
+            party = copy(party) -- freeze the pre-HealParty image, not a later tick's healed state
+            local keys = {}
+            for _, mon in ipairs(party.mons) do
+                if not (mon.is_egg or mon.hp == 0) then
+                    whiteout_seen = nil -- native forfeit is not a Soul Link whiteout
+                    return nil
+                end
+                mon.key = key(mon)
+                keys[#keys+1] = mon.key
+            end
+            need(authority.valid(held) == true,"OPEN: whiteout epoch changed")
+            local signature = table.concat(keys,"|")
+            if whiteout_generation == held.generation and whiteout_seen == signature then return nil end
+            whiteout_seen, whiteout_generation = signature, held.generation
+            return batch({{kind="whiteout",site_id=prepared.id,party=party,
+                           phase=battle_sites[prepared.id].phase}},context,held)
+        end
         -- This instruction is after the unconditional player copyback CALL, not its entry.
         -- Point reads are bank-checked on both sides; native HP is BIG-endian.
         local function faint_copyback_return(prepared, context, held)
@@ -1590,6 +1667,7 @@ function S.new_polished(options)
             need(authority.valid(held) == true,"OPEN: held observation unavailable")
             if prepared.id == S.POLISHED_SITE then return capture_party(prepared,context,held) end
             if prepared.id == "battle_faint" then return faint_boundary(prepared,context,held) end
+            if prepared.id == "whiteout_before_heal" then return whiteout_event(prepared,context,held) end
             if prepared.id == "battle_faint_copyback_return" then return faint_copyback_return(prepared,context,held) end
             if WINDOWS[prepared.id] ~= nil then return write_window(prepared,context,held) end
             return batch({observation(prepared.id,battle_sites[prepared.id])},context,held)
@@ -1598,8 +1676,14 @@ function S.new_polished(options)
             sites=registered_sites,
             validate=function(descriptor)
                 local row = descriptor.id == S.POLISHED_SITE and site or assert(battle_sites[descriptor.id])
-                return {id=descriptor.id,anchor=binding:validate({id=descriptor.id,bank=row.bank,address=row.addr,
+                local checked = {id=descriptor.id,anchor=binding:validate({id=descriptor.id,bank=row.bank,address=row.addr,
                     capture_offset=0,rom_offset=row.rom_offset,expected_hex=row.expected_hex})}
+                if descriptor.id == "whiteout_before_heal" then
+                    local script = row.guards.script_context
+                    checked.script = binding:validate({id=descriptor.id.."_script_data",bank=script.bank,address=script.addr,
+                        capture_offset=0,rom_offset=script.bank*0x4000+script.addr-0x4000,expected_hex=script.expected_hex})
+                end
+                return checked
             end,
             register=function(prepared,callback,name) return binding:register(prepared.anchor,callback,name) end,
             unregister=function(handle) return binding:unregister(handle) end,
@@ -1619,13 +1703,22 @@ function S.new_polished(options)
         })
         if not service then return nil,message,fault end
         local self = {}
-        function self:drain() return service:drain() end
-        -- no latches: a natural boundary retires nothing, queued captures are delivered by the next drain
+        function self:drain()
+            if whiteout_seen ~= nil then
+                local ok, party = pcall(reads.read_party)
+                for _, mon in ipairs(ok and type(party) == "table" and party.mons or {}) do
+                    if not mon.is_egg and type(mon.hp) == "number" and mon.hp > 0 then whiteout_seen = nil break end
+                end
+            end
+            return service:drain()
+        end
+        -- A natural boundary preserves queued captures and the whiteout episode latch until healing.
         function self:boundary(reason)
             assert(BOUNDARIES[reason],"explicit failure/cancel/reset/reload/source_change boundary required")
         end
         -- an abandoned timeline (savestate load/rewind) delivers nothing it observed (as build's abandon)
         function self:abandon(reason)
+            whiteout_seen = nil
             local count = #service:drain()
             if count > 0 then
                 local drop = drops.abandoned_timeline or {count=0}

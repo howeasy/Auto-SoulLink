@@ -91,8 +91,10 @@ native `LoseMoney` extent match the release ROM. All whiteout/guard symbols matc
 the current overlay SYM, and the full bank `04` is unchanged from research overlay
 SHA1 `cf03f53accefbc5f3fee9062846699e30c4c987b`. This is byte/source evidence,
 not a physical callback receipt. The row remains `SOURCE_CANDIDATE`,
-`physical_firing: OPEN`, `runtime_enabled: false`; client registration and live
-load/fire bank/PC/byte validation are separate work.
+`physical_firing: OPEN`, `runtime_enabled: false`. The Polished composition now
+requests this row. Admission binds native and script ROM bytes; the callback
+checks bank/PC/native bytes, every required memory equality, and script bytes
+before taking the party snapshot. Physical firing remains unverified.
 
 **Snapshot the party at the hook**, before queued processing can cross `HealParty`.
 The hook fires for every native whiteout, including trainer forfeits with living
@@ -104,6 +106,13 @@ predicate). Native entry alone is not sufficient to report a Soul Link whiteout.
 Link, Battle Tower and can-lose outcomes do not use this caller unless they
 actually enter `Script_Whiteout`; unrelated shared-dispatch calls must never
 emit this signal.
+
+The consumer suppresses repeated callbacks for the same party/generation until
+a living non-egg party member is observed (native healing re-arms the next
+whiteout). The captured snapshot survives healing before event delivery; the
+existing client sends `whiteout` unchanged. Composed MODEL tests cover wiped
+parties, forfeits, eggs, duplicate callbacks, load/fire guard refusals and
+source-copy guard/predicate mutants. No emulator was run for this wiring.
 
 The retained `poison_faint` row is **N/A for faint reporting**: at 1 HP Polished
 cures poison rather than reducing HP to zero, otherwise it deals 1 HP damage

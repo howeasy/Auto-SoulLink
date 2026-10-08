@@ -827,7 +827,7 @@ local function compose_polished(deps, decision)
         local function signals(authority)
             local binder, why = Signals.new_polished({title="polished", qualification=decision.qualification,
                 profile=profile, pack=pack, io=io_, reads=reads, key_fn=P.mon_key, areas=area_map,
-                battle_sites=deps.polished_faint_observer == true and {"battle_faint", "battle_faint_copyback_return"} or {"battle_faint"},
+                battle_sites=deps.polished_faint_observer == true and {"battle_faint", "whiteout_before_heal", "battle_faint_copyback_return"} or {"battle_faint", "whiteout_before_heal"},
                 authority=authority, Registry=Registry, GB=GB, owner="SLink-gen2-polished", max_pending=64})
             if binder then return binder end
             if deps.log then deps.log("[SLink-gen2] Polished engine sites refused: " .. tostring(why)) end
