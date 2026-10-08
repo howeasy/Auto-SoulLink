@@ -744,7 +744,7 @@ def test_partial_diagnostic_exception_poisons_every_write_path_and_reset(env, pa
 @pytest.mark.parametrize("publication,events", [
     ("query", "QC"), ("offer", "QOC"), ("apply", "QOC"), ("release", "QOADC"),
 ], ids=["query-ack", "offer-ack", "apply-gen", "release"])
-def test_silently_dropped_lease_publication_is_uncertain_real_service(env, publication, events):
+def test_silently_dropped_lease_publication_obeys_apply_boundary_real_service(env, publication, events):
     rig = svc.Rig(env)
     observed = {}
 
@@ -763,10 +763,11 @@ def test_silently_dropped_lease_publication_is_uncertain_real_service(env, publi
 
             b.lua.globals().pywrite = drop
             result = callback()
-            assert result[0] is None and result[1] == "UNCERTAIN"
+            expected_disposition = "NOT_PERFORMED" if publication == "apply" else "UNCERTAIN"
+            assert result[0] is None and result[1] == expected_disposition
             expected = f"lease readback mismatch at ${address:04X}: expected ${wanted:02X}, observed ${old:02X}"
             assert expected in result[2]
-            assert b.call("disposition") == ("UNCERTAIN", result[2])
+            assert b.call("disposition") == (expected_disposition, result[2])
             observed["reason"] = result[2]
             b.lua.globals().pywrite = b.write
 
@@ -801,6 +802,11 @@ def test_silently_dropped_lease_publication_is_uncertain_real_service(env, publi
         assert svc.snapshot_matches(rig, run)
     b, reason = observed["binder"], observed["reason"]
     assert b.call("closed") is True
+    if publication == "apply":
+        assert b.call("poll_done") is None
+        assert b.call("disposition") == ("NOT_PERFORMED", reason) and len(b.logs) == 1
+        assert b.call("reset") is True
+        return
     assert b.call("poll_done").disposition == "UNCERTAIN"
     assert b.call("reset")[1:] == ("UNCERTAIN", reason)
     before = list(b.writes)
@@ -1067,9 +1073,12 @@ def test_cancel_poisoned_binder_stays_uncertain(env):
     b = Binder(env)
     b.accepted()
     b.frame += 1
-    addrs = apply_writes(env)
-    # the write AFTER the APPLY command byte fails: the command landed, so nothing can prove pre-APPLY
-    b.fail_at = len(b.writes) + addrs.index(LEASE_BASE + FIELDS["command"]) + 2
+    # Fresh generation landed BEFORE the write sink threw: a commit can have started.
+    def published_then_throw(address, value):
+        b.write(address, value)
+        if address == LEASE_BASE + FIELDS["generation"] and value == 44:
+            raise RuntimeError("injected published generation failure")
+    b.lua.globals().pywrite = published_then_throw
     out = b.apply()
     assert isinstance(out, tuple) and out[1] == "UNCERTAIN"
     assert b.read(LEASE_BASE + FIELDS["command"]) == CMD["APPLY"]
@@ -1080,15 +1089,17 @@ def test_cancel_poisoned_binder_stays_uncertain(env):
     assert b.writes == before and not b.logs
 
 
-def test_cancel_dropped_token_write_is_uncertain(env):
+def test_cancel_dropped_token_write_is_not_performed(env):
     b = Binder(env)
     b.accepted()
     at = LEASE_BASE + FIELDS["token"]
     b.lua.globals().pywrite = lambda a, v: None if a == at else b.write(a, v)
     out = b.call("cancel", "x")
-    assert isinstance(out, tuple) and out[1] == "UNCERTAIN"
+    assert isinstance(out, tuple) and out[1] == "NOT_PERFORMED"
     assert f"lease readback mismatch at ${at:04X}: expected $00, observed ${svc.TOKEN[0]:02X}" in out[2]
-    assert b.call("disposition") == ("UNCERTAIN", out[2]) and not b.logs
+    assert b.call("disposition") == ("NOT_PERFORMED", out[2]) and len(b.logs) == 1
+    assert "watchdog" in b.logs[0] and b.call("phase") == ("proposer", "cancelled")
+    assert b.call("reset")[1] == "PENDING"
 
 
 def test_responder_apply_fault_before_publication_is_not_performed(env):
@@ -1205,8 +1216,7 @@ def test_real_armed_apply_cannot_be_cancelled(env):
 
 
 def arm_fault_run(env, half):
-    """An accepted OFFER whose arm(APPLY) emission fails: before the APPLY byte publishes (pre-APPLY: closed,
-    NOT_PERFORMED, reusable) or after it (UNCERTAIN, no escape: the ROM's own APPLY hold closes)."""
+    """Fresh generation is publication; command/payload bytes alone cannot permit native pickup."""
     rig = svc.Rig(env)
     result = {}
     addrs = apply_writes(env)
@@ -1225,30 +1235,55 @@ def arm_fault_run(env, half):
         assert b.call("answer_offer", o.gen, True) is True
         result["offer_frame"] = rig.frame
         yield
-        b.fail_at = len(b.writes) + (2 if half == "before" else cmd_at + 2)
+        if half == "published":
+            def generation_then_throw(address, value):
+                b.write(address, value)
+                if address == LEASE_BASE + FIELDS["generation"] and value == (o.gen + 1) % 256:
+                    raise RuntimeError("injected fault AFTER fresh generation")
+            b.lua.globals().pywrite = generation_then_throw
+        else:
+            b.fail_at = len(b.writes) + (2 if half == "before" else len(addrs) if half == "payload" else cmd_at + 2)
+        if half == "unreadable":
+            failed = [False]
+            def write_then_unavailable(address, value):
+                try:
+                    b.write(address, value)
+                except RuntimeError:
+                    failed[0] = True
+                    raise
+            def unavailable(address):
+                if failed[0] and address == LEASE_BASE + FIELDS["generation"]:
+                    raise RuntimeError("injected unavailable generation readback")
+                return b.read(address)
+            b.lua.globals().pywrite, b.lua.globals().pyread = write_then_unavailable, unavailable
         out = b.apply()
         b.fail_at = None
+        b.lua.globals().pywrite, b.lua.globals().pyread = b.write, b.read
         assert isinstance(out, tuple), out
-        if half == "before":
-            assert out[1] == "NOT_PERFORMED", out
+        if half in ("before", "after", "payload"):
+            assert out[1] == "NOT_PERFORMED", "unpublished APPLY became UNCERTAIN"
             assert "APPLY not published" in out[2] and "injected write failure" in out[2]
-            assert h.rd(5) == svc.OFFER and h.rd(6) == o.gen == h.rd(7)
+            assert h.rd(5) == (svc.OFFER if half == "before" else svc.APPLY)
+            assert h.rd(6) == o.gen == h.rd(7)
+            if half == "payload":
+                assert h.rd(8) == 0xFF  # full unpublished frame; result is no longer the held OFFER's 0
             assert tuple(h.rd(12 + i) for i in range(4)) == (0, 0, 0, 0)
             assert b.call("disposition")[0] == "NOT_PERFORMED" and len(b.logs) == 1
             result["cancel_frame"] = rig.frame
             return
         assert out[1] == "UNCERTAIN", out
-        assert h.rd(5) == svc.APPLY and h.rd(6) == o.gen == h.rd(7)  # command landed, generation did not
+        assert h.rd(5) == svc.APPLY
+        assert h.rd(6) == ((o.gen + 1) % 256 if half == "published" else o.gen)
         before = list(b.writes)
         assert b.call("cancel", "x")[1] == "UNCERTAIN" and b.call("reset")[1] == "UNCERTAIN"
         assert b.writes == before and not b.logs
         yield from h.frames(10 ** 9)
 
     run = rig.run(host)
-    svc.common(rig, run, "QOC")
+    svc.common(rig, run, "QOADC" if half == "published" else "QOC")
     assert svc.snapshot_matches(rig, run)
     b = result["binder"]
-    if half == "before":
+    if half in ("before", "after", "payload"):
         assert run.frames == result["cancel_frame"]
         assert b.call("closed") is True and b.call("reset") is True
         b.clock, b.frame = None, run.frames + 1
@@ -1256,14 +1291,15 @@ def arm_fault_run(env, half):
         b.frame += 1
         assert b.apply() == 44
     else:
-        # an APPLY byte without its generation is never picked up (trade_service.asm:171-175): the 3600-frame
-        # hold entered at the OFFER answer expires on its own
-        assert run.frames == result["offer_frame"] + 3600
+        if half == "unreadable":
+            # No proof is available to the binder; real gen==ACK prevents pickup until native timeout.
+            assert run.frames == result["offer_frame"] + 3600
         assert b.call("closed") is True and b.call("disposition")[0] == "UNCERTAIN"
         assert b.call("reset")[1] == "UNCERTAIN" and not b.logs
 
 
-@pytest.mark.parametrize("half", ["before", "after"], ids=["before-publication", "after-apply-byte"])
+@pytest.mark.parametrize("half", ["before", "after", "payload", "published", "unreadable"],
+                         ids=["staging", "command", "payload", "fresh-generation", "unreadable"])
 def test_real_arm_fault_halves(env, half):
     arm_fault_run(env, half)
 
@@ -1342,7 +1378,7 @@ CANCEL_MUTANTS = [
      "if false then end", test_real_armed_apply_cannot_be_cancelled),
     ("cancel-readback",
      "verify_lease(expected) -- all written fields, not just the publication byte",
-     "-- readback skipped", test_cancel_dropped_token_write_is_uncertain),
+     "-- readback skipped", test_cancel_dropped_token_write_is_not_performed),
     ("cancel-order",
      "writes:write_bytes(l.base+l.fields.token,{0,0,0,0}) -- cancel: token drift",
      "if pending then writes:write_bytes(l.base+l.fields.ack,{pending.gen}) end "
@@ -1366,4 +1402,154 @@ def test_each_cancel_mutant_is_caught(env, monkeypatch, name, before, after, che
 
     monkeypatch.setattr(sys.modules[__name__], "Binder", mutated)
     with pytest.raises(AssertionError):
+        check(env)
+
+
+# ---- binder2: pre-publication close faults remain NOT_PERFORMED -------------------------------------------
+
+def close_fault_run(env, fault, *, mutation=None):
+    """Real accepted-OFFER ROM visit; fault only the binder's I/O or optional diagnostic sink."""
+    rig = svc.Rig(env)
+    seen = {"log_attempts": 0, "log_phases": []}
+
+    def host(h):
+        b = Binder(env, machine=h.m, clock=lambda: rig.frame, mutation=mutation)
+        seen["binder"] = b
+        while not (q := b.call("poll_query")):
+            yield
+        assert b.call("answer_query", q.gen, 4, list(svc.TOKEN)) is True
+        while not (o := b.call("poll_offer")):
+            yield
+        assert b.call("answer_offer", o.gen, True) is True
+        seen["offer_frame"] = rig.frame
+        yield
+        if fault.startswith("token"):
+            if fault == "token":
+                b.fail_at = len(b.writes) + 2  # first token byte lands; second throws before its store
+            else:
+                def lose_all_tokens(address, value):
+                    if not LEASE_BASE + FIELDS["token"] <= address < LEASE_BASE + FIELDS["token"] + 4:
+                        b.write(address, value)
+                b.lua.globals().pywrite = lose_all_tokens
+        else:
+            def throwing_log(_message):
+                seen["log_attempts"] += 1
+                seen["log_phases"].append(b.call("phase"))
+                raise RuntimeError("injected optional log failure")
+            b.lua.globals().pylog = throwing_log
+        out = b.call("cancel", "disconnected")
+        if fault.startswith("token"):
+            assert isinstance(out, tuple) and out[1] == "NOT_PERFORMED", "pre-APPLY close fault became UNCERTAIN"
+            assert ("injected write failure" if fault == "token" else "lease readback mismatch") in out[2]
+            assert "watchdog" in out[2]
+            assert b.call("disposition") == ("NOT_PERFORMED", out[2])
+            assert tuple(h.rd(12 + i) for i in range(4)) == ((0, *svc.TOKEN[1:]) if fault == "token" else svc.TOKEN)
+            assert len(b.logs) == 1 and "watchdog" in b.logs[0]
+        else:
+            assert out is True
+            assert seen["log_attempts"] == 1
+            assert seen["log_phases"] == [("proposer", "cancelled")], "optional logger observed nonterminal phase"
+        assert b.call("phase") == ("proposer", "cancelled")
+        assert b.call("reset")[1:] == ("PENDING", "lease must close before reset")
+        seen["cancel_frame"] = rig.frame
+        before = list(b.writes)
+        b.fail_at = None
+        b.lua.globals().pywrite = b.write
+        assert b.call("cancel", "retry") is True
+        assert b.writes == before
+        assert (len(b.logs) == 1) if fault.startswith("token") else (seen["log_attempts"] == 1)
+        assert b.apply()[1] == "NOT_PERFORMED" and b.writes == before
+
+    run = rig.run(host)
+    svc.common(rig, run, "QOC")  # no APPLY pickup or DONE publication
+    assert svc.snapshot_matches(rig, run)
+    assert run.frames == (seen["offer_frame"] + 3600 if fault == "token-all" else seen["cancel_frame"])
+    b = seen["binder"]
+    assert b.call("closed") is True and b.call("poll_done") is None
+    assert b.call("disposition")[0] == "NOT_PERFORMED"
+    assert b.call("reset") is True
+    return seen
+
+
+def test_real_cancel_token_fault_is_not_performed_logged_once_and_closes(env):
+    close_fault_run(env, "token")
+
+
+def test_real_cancel_all_token_stores_lost_waits_for_watchdog_without_retry(env):
+    close_fault_run(env, "token-all")
+
+
+def test_real_cancel_throwing_logger_is_contained_and_phase_is_consistent(env):
+    close_fault_run(env, "log")
+
+
+@pytest.mark.parametrize("where", ["command", "payload", "close-fault"],
+                         ids=["command", "payload", "failed-close"])
+def test_real_responder_unpublished_apply_remains_not_performed(env, where):
+    rig = ResponderHostRig(env)
+    observed = {}
+    addrs = apply_writes(env)
+    fail_index = addrs.index(LEASE_BASE + FIELDS["command"]) + 2 if where == "command" else len(addrs)
+
+    def host(h):
+        b = rig.binder
+        observed["binder"] = b
+        while not b.call("poll_done"):
+            yield
+        assert b.call("poll_done").disposition == "CONSENTED"
+        assert b.call("release", rig.prompt_gen) is True
+        yield
+        b.fail_at = len(b.writes) + fail_index
+        original = b.write
+        def closing_fault(address, value):
+            if where == "close-fault" and address == LEASE_BASE + FIELDS["token"] + 1 and value == 0:
+                raise RuntimeError("injected second close-token failure")
+            original(address, value)
+        b.lua.globals().pywrite = closing_fault
+        out = b.apply()
+        assert out[1] == "NOT_PERFORMED" and "APPLY not published" in out[2]
+        assert h.rd(5) == CMD["APPLY"] and h.rd(6) == rig.prompt_gen == h.rd(7)
+        assert b.call("disposition") == ("NOT_PERFORMED", out[2])
+        assert b.call("phase") == ("responder", "cancelled") and len(b.logs) == 1
+        if where == "close-fault":
+            assert "second close-token failure" in out[2] and "watchdog" in out[2]
+        assert b.call("reset")[1] == "PENDING"
+        b.fail_at = None
+        b.lua.globals().pywrite = b.write
+
+    run = rig.run(host)
+    resp.common(rig, run, "ADC", results=[0])  # consent only; no APPLY pickup/final DONE
+    b = observed["binder"]
+    assert b.call("closed") is True and b.call("poll_done") is None
+    assert b.call("reset") is True
+
+
+BINDER2_MUTANTS = [
+    ("close-fault-is-poison", "            local detail=why\n            if not yes then",
+     "            if not yes then return yes,a,b end\n            local detail=why\n            if not yes then",
+     lambda e: close_fault_run(e, "token"), "pre-APPLY close fault became UNCERTAIN"),
+    ("command-is-publication", "            return bytes[f.version+1] == l.version\n",
+     "            return bytes[f.version+1] == l.version and bytes[f.command+1] ~= t.commands.APPLY\n",
+     lambda e: arm_fault_run(e, "after"), "unpublished APPLY became UNCERTAIN"),
+    ("phase-after-log",
+     "            phase='cancelled' -- terminal state is consistent even inside a throwing optional log sink\n"
+     "            pcall(log,string.format('[SLink-polished] trade visit cancelled before APPLY (%s/%s): %s',\n"
+     "                                    tostring(role),tostring(previous_phase),detail))\n",
+     "            pcall(log,string.format('[SLink-polished] trade visit cancelled before APPLY (%s/%s): %s',\n"
+     "                                    tostring(role),tostring(previous_phase),detail))\n"
+     "            phase='cancelled' -- mutant: logger observed the old phase\n",
+     lambda e: close_fault_run(e, "log"), "optional logger observed nonterminal phase"),
+]
+
+
+@pytest.mark.parametrize("name,before,after,check,message", BINDER2_MUTANTS, ids=[m[0] for m in BINDER2_MUTANTS])
+def test_binder2_each_undo_mutant_fails_the_real_service_oracle(env, monkeypatch, name, before, after, check, message):
+    assert PATH.read_text(encoding="utf-8").count(before) == 1
+    check(env)
+    original = Binder
+    def mutated(*args, **kwargs):
+        kwargs["mutation"] = (before, after)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(sys.modules[__name__], "Binder", mutated)
+    with pytest.raises(AssertionError, match=message):
         check(env)
