@@ -1,5 +1,7 @@
 # C5 commit and C6 responder: proposed ROM contracts
 
+**Status update 2026-10-08:** C6 landed (overlay `57f039b6` then, including its responder fix); C5 landed (merge `7f56228b5`, overlay `877a477a`, `SlinkTradeCommitEnabled` at `7e:573B` = **0**, not enabled). See `TRADE.md:1417-1429` and `overlay_provenance.json:63`; no live qualification or commit enablement is claimed. The introduction below describes its historical design cut.
+
 Design only. Source cut: `b082abbe69162d02617dd8e58974629ee0faac5b`; overlay v8 SHA1
 `add6c9440d3485839996525052cf34d5d04963d1`. No commit, responder, production capability,
 server protocol change or live run is authorized by this document. The existing proposer
@@ -98,10 +100,10 @@ Before the first **party, dex or SRAM mutation**, recheck:
    HP; it permits replacing the sole usable mon with a usable incoming mon. Preserve this
    rule unless the owner explicitly chooses another policy. Its globals are slot indices
    at this point. (`P/engine/link/link.asm:1219-1251`.)
-4. Resolve the remaining form/egg/canonical-stat policy before enabling C5. Current tests
-   may directly exercise defined cases, but no production caller may interpret the current
+4. **DECIDED 2026-10-07: current validator only (species, item, nature, level, name terminators); no extra egg/form domain** (owner decision relayed by coordinator card `g2p-decisions`). Current tests may directly exercise defined cases, but no production caller may interpret the current
    permissive record validator as certification of arbitrary incoming records.
    (`docs/polished/TRADE.md:1379-1380`; `patch/polished/src/trade_validate.asm:24-26`.)
+   Commit **ENABLEMENT** remains OPEN: non-atomic mutation with no rollback (`trade_commit.asm:5`), real native/ISR stack high-water, cold-load coherence; enabling it needs a separate owner yes.
 
 5. Mail policy must include the **whole local party**, not just the selected record:
    the receptionist invokes `CheckPartyForMail` before the save/wait flow
