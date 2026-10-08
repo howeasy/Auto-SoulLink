@@ -21,18 +21,22 @@ not independently played. Identity is read from the wire hello (ot_id, trainer_n
 (players.<p>.trainer_name, .party_keys, .identity_error).
 Only PIDs this script starts are ever killed (taskkill /T /F /PID); never an image-name kill.
 
-PLAY (`--scenario link|boxsync|faint|whiteout|all`, card g2p-duoplay): instead of the smoke, each scenario is its own
+PLAY (`--scenario link|boxsync|faint|whiteout|faint-natural|whiteout-natural|all`, card g2p-duoplay): each scenario is its own
 fresh run (lane play-<name>/) driven by duo_play.lua through numbered step files, and judged by a server-side oracle
-(oracle_link / oracle_boxsync / oracle_faint / oracle_whiteout) that FAILS when the rule did not fire:
+that FAILS when the specified rule and reporting path did not fire:
   S1 link      both sides catch natively on Route 29 -> /api/status holds an ALIVE link of exactly those two keys.
   S3 boxsync   reads gen2_polished supports_box_mon(): False -> SKIPPED (never PASS) without launching; True -> A's
                first catch is quarantined (box_mon, executed + read back on A), then party_mon brings it back.
   S2 faint     after S1: SYNTH HP 0 on A's linked mon + a dropped TCP session -> the server's hello reconcile kills the
                link -> force_faint on B's wire -> B's own client writes it -> B's cartridge reads HP 0, nothing else.
   S4 whiteout  after S1: SYNTH HP 0 on A's whole party, same path, every linked partner (and only those) dies on B.
-Production Polished has no faint observer or whiteout site (lua/gen2/entry.lua compose_polished), so the oracles
-report which server path carried the HP 0 (hello_reconcile / faint_event / whiteout_event). Evidence + disclosure:
-<lane>/play-<name>/evidence.json; one `RESULT: PASS|FAIL|SKIPPED polished-duo-play-<name>` line per scenario.
+  S2n faint-natural     after S1: SYNTH HP 1 on the linked lead -> FIGHT -> native faint after party copyback.
+  S4n whiteout-natural  after S1: SYNTH HP 1 on every non-egg -> native switches/last weak lead FIGHT -> whiteout.
+The old HP-0/reconnect controls remain distinct from the native faint-copyback and guarded pre-heal LoseMoney paths.
+Native oracles never accept hello_reconcile as PASS. Whiteout requires the actual wire party frozen all-zero; a
+read-only hook cannot supply missing producer data. A final strong mon surviving its switch returns FAIL rather
+than changing its moves/PP or injecting a defeat. Each verdict records the observed server_path explicitly.
+Evidence: <lane>/play-<name>/evidence.json; one `RESULT: PASS|FAIL|SKIPPED polished-duo-play-<name>` line per scenario.
 PLAY startup HTTP readiness has a 40-second bound; a child not listening yet is not a rule failure.
 The native disclosure lists scenario paths, not evidence that every path ran; steps and PLAY_FINAL
 are the witnesses (S1 without box capability can finish with zero client writes).
@@ -354,12 +358,14 @@ def evaluate_distinct(sides: dict, staged_sha1: str, expected: dict) -> tuple[bo
 # WRAM/CartRAM, and each has a red control in tests/unit/test_polished_duo_driver.py: it FAILS on a transcript where
 # the rule did not fire. Verdicts are PASS, FAIL or SKIPPED (S3 only, when the adapter capability is off): never a
 # PASS for a rule the run did not observe.
-PLAY_ORDER = ("link", "boxsync", "faint", "whiteout")
+PLAY_ORDER = ("link", "boxsync", "faint", "whiteout", "faint-natural", "whiteout-natural")
 PLAY_SCENARIOS = {
     "link": "S1 encounter linking: both players catch in one area -> the server pairs the two keys",
     "boxsync": "S3 party sync / quarantine: box_mon on the first catch executed on that cartridge, party_mon back",
     "faint": "S2 faint propagation: A's linked mon at HP 0 -> force_faint to B -> B's partner reads HP 0 on B",
     "whiteout": "S4 whiteout: A's whole party at HP 0 -> every linked partner force-fainted on B, nothing else",
+    "faint-natural": "S2n native faint: HP1 setup -> native copyback faint event -> exactly B's linked partner HP0",
+    "whiteout-natural": "S4n native whiteout: HP1 party -> guarded pre-heal whiteout event -> exactly B's linked partners HP0",
 }
 SYNTH_SETUP = {
     "link": [],
@@ -368,11 +374,13 @@ SYNTH_SETUP = {
               "A: TCP session dropped (connector.disconnect) so the client's own reconnect re-sends hello"],
     "whiteout": ["A: current HP of EVERY party record poked to 0 (2 WRAM bytes each, the untapped writer)",
                  "A: TCP session dropped (connector.disconnect) so the client's own reconnect re-sends hello"],
+    "faint-natural": ["A: current HP of the ONE linked party record set to 1 (two disclosed WRAM bytes, never HP0)",
+                      "A: linked mon moved to lead by a separately disclosed party-record/OT/nickname swap"],
+    "whiteout-natural": ["A: current HP of EVERY non-egg party record set to 1 (two disclosed WRAM bytes each, never HP0)",
+                         "A: linked mon moved to lead by a separately disclosed party-record/OT/nickname swap"],
 }
-# Production Polished (lua/gen2/entry.lua compose_polished) registers ONE engine site, capture_party: the battle
-# faint observer is opt-in (deps.polished_faint_observer, never set by lua/gen2/run.lua) and there is no whiteout
-# site. So A's HP-0 reaches the server through the hello reconcile (server/state.py _handle_hello, "hp == 0 ->
-# fainted while we were disconnected" -> _propagate_faint), and the oracles name which server path fired.
+# Natural scenarios exercise the production faint observer and guarded LoseMoney whiteout hook. The original
+# SYNTH HP0 scenarios deliberately retain their reconnect path as separate controls; they are not native-loss proof.
 BOX_CAPABILITY_OFF = ("adapter gen2_polished supports_box_mon() is False: the server skips quarantine ('client has no "
                       "box executor') and sends no box_mon/party_mon, so S3 cannot be observed")
 
@@ -434,11 +442,16 @@ def _caught_key(ev: dict, role: str) -> str | None:
     return cap.get("key") or None
 
 
-def _link_reasons(ev: dict) -> tuple[list[str], dict]:
-    """S1. Both catches native (capture site fired, the client's own capture line), on the SERVER wire, in ONE area,
-    then /api/status `linked` holds an ALIVE link of exactly those two keys in that area, which is not dead-zoned."""
+def _link_reasons(ev: dict, before_stage: bool = False) -> tuple[list[str], dict]:
+    """S1. Both native catches on the server wire in one area -> exactly those keys ALIVE in `status.linked`.
+    A later native loss/Run can legitimately send no_catch; natural loss gates judge S1 only before the stage mark."""
     reasons, facts = [], {}
     caps = {}
+    wires = (ev.get("wire") or {})
+    if before_stage:
+        mark = (ev.get("marks") or {}).get("stage") or {}
+        wires = {r: wires.get(r, [])[:mark[r]] if type(mark.get(r)) is int and mark[r] >= 0 else []
+                 for r in ("a", "b")}
     for role in ("a", "b"):
         st = _step(ev, role, f"catch_{role}")
         if not st.get("ok"):
@@ -447,7 +460,7 @@ def _link_reasons(ev: dict) -> tuple[list[str], dict]:
         if (st.get("capture_site_hits") or 0) < 1:
             reasons.append(f"{role}:capture_site_not_fired")
         key = _caught_key(ev, role)
-        wire = [m for m in c2s_events(ev["wire"].get(role, []), "capture") if m.get("key") == key]
+        wire = [m for m in c2s_events(wires.get(role, []), "capture") if m.get("key") == key]
         if not key or not wire:
             reasons.append(f"{role}:capture_not_on_wire")
             continue
@@ -462,7 +475,7 @@ def _link_reasons(ev: dict) -> tuple[list[str], dict]:
     if not area or area != (caps["b"].get("area_id") or ""):
         reasons.append("capture_areas_differ")
     for role in ("a", "b"):
-        if any(m.get("area_id") == area for m in c2s_events(ev["wire"].get(role, []), "no_catch")):
+        if any(m.get("area_id") == area for m in c2s_events(wires.get(role, []), "no_catch")):
             reasons.append(f"{role}:no_catch_sent")
     status = (ev.get("status") or {}).get("linked") or {}
     links = [lk for lk in _as_list(status.get("links")) if isinstance(lk, dict) and lk.get("area_id") == area]
@@ -483,36 +496,176 @@ def oracle_link(ev: dict) -> tuple[str, list[str], dict]:
     return ("PASS" if not reasons else "FAIL"), reasons, facts
 
 
-def _propagation_reasons(ev: dict, whole_party: bool) -> tuple[list[str], dict]:
-    """S2 / S4. After the stage mark: A's HP-0 reached the server (hello reconcile or a faint/whiteout event), B's
-    wire carries force_faint for exactly the expected partner keys, B's CLIENT received it, and B's CARTRIDGE reads
-    HP 0 on each partner while every other B party mon is untouched; /api/status `after` has those links not alive."""
-    reasons, facts = _link_reasons(ev)
-    reasons = [f"link:{r}" for r in reasons]
-    if "a_key" not in facts:
-        return reasons, facts
-    stage = _step(ev, "a", "stage")
-    pre_a = _party(stage.get("before") or {})
+def _natural_stage_reasons(stage: dict, linked_key: str, whole_party: bool) -> tuple[list[str], set]:
+    """Only the disclosed HP1 byte pairs may establish the native-loss setup; HP0 injection is never evidence."""
+    reasons = []
+    before, after = _party(stage.get("before") or {}), _party(_snap(stage))
+    targets = ({k for k, m in before.items() if not (m.get("egg") or m.get("is_egg"))} if whole_party
+               else {linked_key} if linked_key else set())
+    writes = [w for w in _as_list(stage.get("synth_writes")) if isinstance(w, dict)]
     if not stage.get("ok"):
         reasons.append("a:stage_failed")
-    targets = {w.get("key") for w in _as_list(stage.get("synth_writes")) if isinstance(w, dict)}
-    want_targets = set(pre_a) if whole_party else {facts["a_key"]}
-    if targets != want_targets:
+    if stage.get("op") != "synth_hp1":
+        reasons.append("a:stage_not_hp1")
+    if {w.get("key") for w in writes} != targets:
         reasons.append("a:stage_wrong_target")
-    post_a = _party(_snap(stage))
-    if not want_targets or any((post_a.get(k) or {}).get("hp", 1) != 0 for k in want_targets):
+    if not targets or any(type((before.get(k) or {}).get("hp")) is not int or before[k]["hp"] <= 0 for k in targets):
+        reasons.append("a:stage_target_not_alive")
+    if set(before) != set(after) or any((after.get(k) or {}).get("hp") != 1 for k in targets):
         reasons.append("a:stage_not_landed")
+    if (after.get(linked_key) or {}).get("slot") != 0:
+        reasons.append("a:linked_mon_not_lead")
+    for key, mon in before.items():
+        if key not in targets and (after.get(key) or {}).get("hp") != mon.get("hp"):
+            reasons.append(f"a:stage_collateral_hp_change:{key}")
+    for key in sorted(targets):
+        rows = [w for w in writes if w.get("key") == key]
+        old_hp = (before.get(key) or {}).get("hp")
+        valid = (type(old_hp) is int and len(rows) == 2
+                 and all(type(w.get("wram")) is int and w["wram"] >= 0
+                         and type(w.get("old")) is int and 0 <= w["old"] <= 255
+                         and type(w.get("new")) is int and 0 <= w["new"] <= 255 for w in rows))
+        if valid:
+            high, low = sorted(rows, key=lambda w: w["wram"])
+            valid = (low["wram"] == high["wram"] + 1 and [high["old"], low["old"]] ==
+                     [old_hp >> 8, old_hp & 255] and all(w.get("slot") == (after.get(key) or {}).get("slot") for w in rows))
+            if high["new"] == low["new"] == 0:
+                reasons.append("a:stage_hp_zero_injection")
+            valid = valid and [high["new"], low["new"]] == [0, 1]
+        if not valid:
+            reasons.append(f"a:stage_hp1_write_invalid:{key}")
+    return reasons, targets
+
+
+def _natural_report_reasons(ev: dict, targets: set, linked_key: str, whole_party: bool) -> tuple[list[str], dict]:
+    """Bind the post-mark native server event to a send-time HP0 report and a qualified read-only engine witness."""
+    reasons, facts = [], {"server_path": "none"}
     mark = (ev.get("marks") or {}).get("stage") or {}
-    wa, wb = ev["wire"].get("a", []), ev["wire"].get("b", [])
-    zero_hello = [h for h in c2s_events(wa, "hello", mark.get("a", 0))
-                  if any(isinstance(e, dict) and e.get("key") == facts["a_key"] and e.get("hp") == 0
-                         for e in _as_list(h.get("party")))]
-    faint_ev = [m for m in c2s_events(wa, "faint", mark.get("a", 0)) if m.get("key") in want_targets]
-    whiteout_ev = c2s_events(wa, "whiteout", mark.get("a", 0))
-    facts["server_path"] = ("whiteout_event" if whiteout_ev else "faint_event" if faint_ev
-                            else "hello_reconcile" if zero_hello else "none")
-    if facts["server_path"] == "none":
-        reasons.append("a:hp0_not_reported")
+    wires = ev.get("wire") or {}
+    for role in ("a", "b"):
+        records = wires.get(role, [])
+        offset = mark.get(role)
+        if type(offset) is not int or not 0 <= offset <= len(records):
+            reasons.append("stage_mark_missing")
+            offset = 0
+        # A normal terminal disconnect belongs to runner teardown, not a reconnect-assisted death report.
+        if any(m.get("event") in ("hello", "_connect") for _, _, m in wire_slice(records, offset)):
+            reasons.append(f"{role}:poststage_reconnect")
+    wa, offset = wires.get("a", []), mark.get("a", 0)
+    offset = offset if type(offset) is int and offset >= 0 else 0
+    faint = [m for m in c2s_events(wa, "faint", offset) if m.get("key") == linked_key]
+    whiteout = c2s_events(wa, "whiteout", offset)
+    zero_hello = [m for m in c2s_events(wa, "hello", offset)
+                  if (_party(m).get(linked_key) or {}).get("hp") == 0]
+    events = whiteout if whole_party else faint
+    facts["server_path"] = ("whiteout_event" if whole_party and whiteout else "faint_event" if faint
+                            else "whiteout_event" if whiteout else "hello_reconcile" if zero_hello else "none")
+    if not events:
+        reasons.append("a:native_event_missing")
+    if not whole_party and whiteout:
+        reasons.append("a:unexpected_whiteout_event")
+    if not whole_party and any(m.get("key") != linked_key for m in c2s_events(wa, "faint", offset)):
+        reasons.append("a:unexpected_faint_key")
+    battle, stage = _step(ev, "a", "battle"), _step(ev, "a", "stage")
+    if not battle.get("ok") or battle.get("op") != "lose_native":
+        reasons.append("a:native_battle_failed")
+    if whole_party and battle.get("run_used"):
+        reasons.append("a:whiteout_run_used")
+    stage_frame = _snap(stage).get("frame")
+
+    def after_stage(row) -> bool:
+        return type(stage_frame) is int and type(row.get("frame")) is int and row["frame"] > stage_frame
+
+    event_name = "whiteout" if whole_party else "faint"
+    reports = [r for r in _as_list(battle.get("reports")) if isinstance(r, dict) and r.get("event") == event_name
+               and (whole_party or r.get("key") == linked_key) and after_stage(r)]
+    if not reports:
+        reasons.append("a:native_report_missing")
+    hits = (battle.get("site_hits") or {}).get("whiteout" if whole_party else "faint_copyback")
+    qualified = [h for h in _as_list(hits) if isinstance(h, dict) and h.get("qualified") is True and after_stage(h)
+                 and type(h.get("pc")) is int and type(h.get("bank")) is int
+                 and isinstance(h.get("expected_hex"), str) and re.fullmatch(r"(?:[0-9a-fA-F]{2})+", h["expected_hex"])]
+    facts["native_report_frames"] = [r["frame"] for r in reports]
+    all_keys = set(_party(_snap(stage)))
+
+    def all_zero(party) -> bool:
+        mons = _party({"party": party})
+        return (bool(mons) and set(mons) == all_keys and len(mons) == len(_as_list(party))
+                and {k for k, m in mons.items() if not (m.get("egg") or m.get("is_egg"))} == targets
+                and all(mons[k].get("hp") == 0 for k in targets))
+
+    if whole_party:
+        if events and any(not _as_list(m.get("party")) for m in events):
+            reasons.append("a:whiteout_wire_party_missing")
+        elif events and any(set(_party(m)) != all_keys for m in events):
+            reasons.append("a:whiteout_wire_party_incomplete")
+        if events and any(not all_zero(m.get("party")) for m in events):
+            reasons.append("a:whiteout_wire_party_not_all_zero")
+        if reports and any(not all_zero(r.get("party")) for r in reports):
+            reasons.append("a:whiteout_report_party_not_all_zero")
+        site_hits = battle.get("site_hits") or {}
+        if "heal_party" not in site_hits:
+            reasons.append("a:whiteout_heal_witness_missing")
+        heals = [h for h in _as_list(site_hits.get("heal_party")) if isinstance(h, dict) and type(h.get("frame")) is int]
+        witnesses = [h for h in qualified if h.get("site") == "LoseMoney" and all_zero(h.get("party"))
+                     and any(h["frame"] <= r["frame"] and all_zero(r.get("party"))
+                             and not any(h["frame"] <= heal["frame"] <= r["frame"] for heal in heals) for r in reports)]
+        if any(h["frame"] <= heal["frame"] <= r["frame"] for h in qualified for heal in heals for r in reports):
+            reasons.append("a:whiteout_healed_before_report")
+        if not witnesses:
+            reasons.append("a:whiteout_preheal_hook_missing")
+    else:
+        zero_reports = [r for r in reports if (_party(r).get(linked_key) or {}).get("hp") == 0]
+        if reports and not zero_reports:
+            reasons.append("a:faint_copyback_hp_not_zero")
+        staged_slot = (_party(_snap(stage)).get(linked_key) or {}).get("slot")
+        witnesses = [h for h in qualified if h.get("battle_hp") == 0 and h.get("slot") == staged_slot
+                     and (_party(h).get(linked_key) or {}).get("slot") == staged_slot
+                     and any(h["frame"] <= r["frame"] and (_party(r).get(linked_key) or {}).get("slot") == staged_slot
+                             for r in zero_reports)]
+        if not witnesses:
+            reasons.append("a:faint_copyback_hook_missing")
+    facts["native_hook_frames"] = [h["frame"] for h in witnesses]
+    return reasons, facts
+
+
+def _propagation_reasons(ev: dict, whole_party: bool, natural: bool = False) -> tuple[list[str], dict]:
+    """Shared B-side propagation proof; native variants additionally demand HP1 setup and the native event witnesses.
+    Legacy HP0 scenarios retain hello reconciliation; native scenarios require the exact force_faint and DEAD link."""
+    reasons, facts = _link_reasons(ev, before_stage=natural)
+    reasons = [f"link:{r}" for r in reasons]
+    facts["server_path"] = "none"
+    stage = _step(ev, "a", "stage")
+    if natural:
+        linked_key = facts.get("a_key") or _caught_key(ev, "a")
+        stage_reasons, want_targets = _natural_stage_reasons(stage, linked_key, whole_party)
+        report_reasons, report_facts = _natural_report_reasons(ev, want_targets, linked_key, whole_party)
+        reasons += stage_reasons + report_reasons
+        facts.update(report_facts)
+    if "a_key" not in facts:
+        return reasons, facts
+    mark = (ev.get("marks") or {}).get("stage") or {}
+    wa, wb = (ev.get("wire") or {}).get("a", []), (ev.get("wire") or {}).get("b", [])
+    if not natural:
+        pre_a = _party(stage.get("before") or {})
+        if not stage.get("ok"):
+            reasons.append("a:stage_failed")
+        targets = {w.get("key") for w in _as_list(stage.get("synth_writes")) if isinstance(w, dict)}
+        want_targets = set(pre_a) if whole_party else {facts["a_key"]}
+        if targets != want_targets:
+            reasons.append("a:stage_wrong_target")
+        post_a = _party(_snap(stage))
+        if not want_targets or any((post_a.get(k) or {}).get("hp", 1) != 0 for k in want_targets):
+            reasons.append("a:stage_not_landed")
+        zero_hello = [h for h in c2s_events(wa, "hello", mark.get("a", 0))
+                      if any(isinstance(e, dict) and e.get("key") == facts["a_key"] and e.get("hp") == 0
+                             for e in _as_list(h.get("party")))]
+        faint_ev = [m for m in c2s_events(wa, "faint", mark.get("a", 0)) if m.get("key") in want_targets]
+        whiteout_ev = c2s_events(wa, "whiteout", mark.get("a", 0))
+        facts["server_path"] = ("whiteout_event" if whiteout_ev else "faint_event" if faint_ev
+                                else "hello_reconcile" if zero_hello else "none")
+        if facts["server_path"] == "none":
+            reasons.append("a:hp0_not_reported")
     linked = (ev.get("status") or {}).get("linked") or {}
     partners = {lk["b_key"]: lk["a_key"] for lk in _as_list(linked.get("links"))
                 if isinstance(lk, dict) and lk.get("status") == "alive" and lk.get("a_key") in want_targets
@@ -520,8 +673,12 @@ def _propagation_reasons(ev: dict, whole_party: bool) -> tuple[list[str], dict]:
     facts["expected_partners"] = sorted(partners)
     if not partners:
         reasons.append("no_linked_partner")
-    kills = [c for c in s2c_commands(wb, mark.get("b", 0)) if c.get("cmd") in ("force_faint", "force_explode")]
-    killed = {c.get("key") for c in kills}
+    b_mark = mark.get("b", 0)
+    b_mark = b_mark if type(b_mark) is int and b_mark >= 0 else 0
+    kills = [c for c in s2c_commands(wb, b_mark) if c.get("cmd") in ("force_faint", "force_explode")]
+    if natural and any(c.get("cmd") != "force_faint" for c in kills):
+        reasons.append("b:force_faint_wrong_command")
+    killed = {c.get("key") for c in kills if not natural or c.get("cmd") == "force_faint"}
     facts["b_force_faint_keys"] = sorted(str(k) for k in killed)
     for kb in sorted(partners):
         if kb not in killed:
@@ -530,15 +687,40 @@ def _propagation_reasons(ev: dict, whole_party: bool) -> tuple[list[str], dict]:
         reasons.append("b:force_faint_wrong_key")
     pre_b, await_b = _party(_snap(_step(ev, "b", "pre"))), _step(ev, "b", "await")
     post_b = _party(_snap(await_b))
-    if not await_b.get("ok"):
+    received = await_b.get("received")
+    received = [received] if isinstance(received, dict) else _as_list(received)
+    received_keys = {c.get("key") for c in received if isinstance(c, dict) and c.get("cmd") == "force_faint"}
+    if not await_b.get("ok") or (natural and (received_keys != set(partners)
+                                             or any(not isinstance(c, dict) or c.get("cmd") != "force_faint" for c in received))):
         reasons.append("b:force_faint_not_received_by_client")
+    readbacks = await_b.get("force_faint_readback")
+    readbacks = [readbacks] if isinstance(readbacks, dict) else _as_list(readbacks)
+    if natural:
+        facts["b_cartridge_witness"] = {}
     for kb in sorted(partners):
         if (pre_b.get(kb) or {}).get("hp", 0) <= 0:
             reasons.append(f"b:partner_not_alive_before:{kb}")
+        readback_ok = False
+        if natural and readbacks:
+            readback_ok = any(isinstance(row, dict) and row.get("key") == kb and row.get("hp") == 0
+                              and type(row.get("slot")) is int
+                              and (_party(row).get(kb) or {}).get("hp") == 0
+                              and (_party(row).get(kb) or {}).get("slot") == row["slot"]
+                              and any(isinstance(cmd, dict) and cmd.get("cmd") == "force_faint" and cmd.get("key") == kb
+                                      and type(cmd.get("frame")) is int and row.get("command_frame") == cmd["frame"]
+                                      and type(row.get("frame")) is int and row["frame"] >= cmd["frame"]
+                                      and row.get("seq") == cmd.get("seq") for cmd in received) for row in readbacks)
+            if not readback_ok:
+                reasons.append(f"b:force_faint_readback_invalid:{kb}")
         if kb not in post_b:
-            reasons.append(f"b:partner_missing_from_party:{kb}")
+            if not readback_ok:
+                reasons.append(f"b:partner_missing_from_party:{kb}")
+            else:
+                facts["b_cartridge_witness"][kb] = "force_faint_readback"
         elif post_b[kb].get("hp") != 0:
             reasons.append(f"b:cartridge_hp_not_zero:{kb}")
+        elif natural:
+            facts["b_cartridge_witness"][kb] = "await_snapshot"
     for key, mon in pre_b.items():
         if key not in partners and (post_b.get(key) or {}).get("hp") != mon.get("hp"):
             reasons.append(f"b:collateral_hp_change:{key}")
@@ -546,6 +728,16 @@ def _propagation_reasons(ev: dict, whole_party: bool) -> tuple[list[str], dict]:
     for lk in _as_list(after.get("links")):
         if isinstance(lk, dict) and lk.get("b_key") in partners and lk.get("status") == "alive":
             reasons.append(f"link_still_alive:{lk.get('area_id')}")
+    if natural:
+        for lk in _as_list(linked.get("links")):
+            if not isinstance(lk, dict) or lk.get("b_key") not in partners or lk.get("a_key") not in want_targets:
+                continue
+            exact = [row for row in _as_list(after.get("links")) if isinstance(row, dict)
+                     and all(row.get(field) == lk.get(field) for field in ("area_id", "a_key", "b_key"))]
+            if not exact:
+                reasons.append(f"dead_link_missing:{lk.get('area_id')}")
+            elif exact[0].get("status") not in ("alive", "dead"):
+                reasons.append(f"link_not_dead:{lk.get('area_id')}")
     return reasons, facts
 
 
@@ -556,6 +748,16 @@ def oracle_faint(ev: dict) -> tuple[str, list[str], dict]:
 
 def oracle_whiteout(ev: dict) -> tuple[str, list[str], dict]:
     reasons, facts = _propagation_reasons(ev, whole_party=True)
+    return ("PASS" if not reasons else "FAIL"), reasons, facts
+
+
+def oracle_faint_natural(ev: dict) -> tuple[str, list[str], dict]:
+    reasons, facts = _propagation_reasons(ev, whole_party=False, natural=True)
+    return ("PASS" if not reasons else "FAIL"), reasons, facts
+
+
+def oracle_whiteout_natural(ev: dict) -> tuple[str, list[str], dict]:
+    reasons, facts = _propagation_reasons(ev, whole_party=True, natural=True)
     return ("PASS" if not reasons else "FAIL"), reasons, facts
 
 
@@ -607,7 +809,8 @@ def oracle_boxsync(ev: dict) -> tuple[str, list[str], dict]:
     return ("PASS" if not reasons else "FAIL"), reasons, facts
 
 
-ORACLES = {"link": oracle_link, "boxsync": oracle_boxsync, "faint": oracle_faint, "whiteout": oracle_whiteout}
+ORACLES = {"link": oracle_link, "boxsync": oracle_boxsync, "faint": oracle_faint, "whiteout": oracle_whiteout,
+           "faint-natural": oracle_faint_natural, "whiteout-natural": oracle_whiteout_natural}
 
 
 def play_steps(name: str, box_capable: bool) -> list[tuple[str, str]]:
@@ -620,6 +823,8 @@ def play_steps(name: str, box_capable: bool) -> list[tuple[str, str]]:
         steps.append(("a", "withdrawn"))
     if name in ("faint", "whiteout"):
         steps += [("b", "pre"), ("a", "stage"), ("b", "await")]
+    elif name in ("faint-natural", "whiteout-natural"):
+        steps += [("b", "pre"), ("a", "stage"), ("a", "battle"), ("b", "await")]
     return steps
 
 
@@ -990,12 +1195,14 @@ def play_run(args, name: str, fixtures: dict, ident: dict, box_capable: bool) ->
         wait("both sides ready", lambda: "PLAY_READY" in result_text("a") and "PLAY_READY" in result_text("b"), 600)
         mark("start")
         snap_status("start")
-        a = step("a", "catch_a", {"op": "catch", "attempts": 4}, 1200)
+        natural = name in ("faint-natural", "whiteout-natural")
+        attempts = 1 if natural else 4
+        a = step("a", "catch_a", {"op": "catch", "attempts": attempts}, 1200)
         ka = (a.get("capture") or {}).get("key")
         if a.get("ok") and ka:
             if box_capable:
                 step("a", "boxed", {"op": "await_cmd", "cmd": "box_mon", "key": ka, "frames": 3600}, 300)
-            b = step("b", "catch_b", {"op": "catch", "attempts": 4}, 1200)
+            b = step("b", "catch_b", {"op": "catch", "attempts": attempts}, 1200)
             kb = (b.get("capture") or {}).get("key")
             if b.get("ok") and kb:
                 def linked():
@@ -1015,6 +1222,17 @@ def play_run(args, name: str, fixtures: dict, ident: dict, box_capable: bool) ->
                     step("a", "stage", op, 300)
                     step("b", "await", {"op": "await_cmd", "cmd": "force_faint", "key": kb, "frames": 3600}, 300)
                     time.sleep(3)
+                elif natural:
+                    step("b", "pre", {"op": "snapshot"}, 120)
+                    mark("stage")
+                    whole = name == "whiteout-natural"
+                    op = {"op": "synth_hp1", "all": True, "lead": ka} if whole else {
+                        "op": "synth_hp1", "keys": [ka], "lead": ka}
+                    staged = step("a", "stage", op, 120)
+                    if staged.get("ok"):
+                        step("a", "battle", {"op": "lose_native", "key": ka, "all": whole, "frames": 24000}, 600)
+                        step("b", "await", {"op": "await_cmd", "cmd": "force_faint", "key": kb, "frames": 3600}, 300)
+                        time.sleep(3)
             snap_status("after")
         for role in ("a", "b"):
             step(role, f"stop_{role}", {"op": "stop"}, 120)
