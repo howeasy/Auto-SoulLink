@@ -68,13 +68,19 @@ local function recorder(kind, addr)
             if protected_hits >= config.trace_cap then return end
             protected_hits = protected_hits + 1
         end
+        local side, mode = L.bus(L.SYM.hBattleTurn[2]), L.rw("wBattleMode")
+        local class, id = L.rw("wOtherTrainerClass"), L.rw("wOtherTrainerID")
+        local rival_classes = {[0x1B]=true, [0x1C]=true, [0x1D]=true, [0x1E]=true, [0x1F]=true}
+        local operation = qualified and side == 1 and mode == 2
+            and rival_classes[class] == true and config.expected ~= nil
+            and id == config.expected.trainer_id
         append(kind, {
             hook_addr = addr, pc = pc, sp = emu.getregister("SP"),
-            bank = bank, matched = matched, qualified = qualified,
-            mode = L.rw("wBattleMode"), battle_turn = L.bus(L.SYM.hBattleTurn[2]),
+            bank = bank, matched = matched, raw_qualified = qualified, qualified = operation,
+            mode = mode, battle_turn = side,
             hl = emu.getregister("HL"), flags = emu.getregister("F"),
-            trainer_class = L.rw("wOtherTrainerClass"),
-            trainer_id = L.rw("wOtherTrainerID"), cur_ot_mon = L.rw("wCurOTMon"),
+            trainer_class = class,
+            trainer_id = id, cur_ot_mon = L.rw("wCurOTMon"),
             cur_party_mon = L.rw("wCurPartyMon"), ot_party_count = L.rw("wOTPartyCount"),
             -- Always read the pinned bank via ROM, never accidentally read another bank's System Bus bytes.
             site_bytes = rom_hex(0x47DD), hook_bytes = rom_hex(addr),
@@ -215,7 +221,7 @@ if not ok then
     driver_errors = driver_errors + 1
     append("driver_error", {error = tostring(err)})
 end
-local final = {completed = ok, elapsed = elapsed, guest_writes = guest_writes,
+local final = {qualification_schema = "rival-operation/1", completed = ok, elapsed = elapsed, guest_writes = guest_writes,
                cpu_changes = cpu_changes, hook_hits = hits, driver_errors = driver_errors,
                wrong_bank_sample_limit = wrong_bank_sample_limit, hook_counts = hook_counts,
                mode_row_limit = mode_row_limit, mode_changes = mode_changes, mode_rows_dropped = mode_rows_dropped,

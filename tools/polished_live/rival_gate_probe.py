@@ -23,6 +23,7 @@ The Lua RESULT certifies recording completion, not the PC finding. The oracle ow
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -53,7 +54,7 @@ EXTRA_SYMBOLS = (
 HOOKS = {"gate": GATE, "next": NEXT, "last": LAST}
 
 
-def _scan(trace):
+def _scan(trace, *, operation=False):
     """Recording-integrity and per-row checks shared by every oracle: (reasons, gates).
 
     `gates` is None for a malformed trace, else a list of (row, clean) for every bank-and-PC-qualified gate row, where
@@ -72,7 +73,12 @@ def _scan(trace):
     from tools.polished_live.faint_probe import validate_hook_counts
 
     final = finals[0] if len(finals) == 1 else {}
-    why.extend(validate_hook_counts(trace, final, {
+    raw_trace = copy.deepcopy(trace)
+    if final.get("qualification_schema") == "rival-operation/1":
+        for row in raw_trace:
+            if row.get("kind") in HOOKS:
+                row["qualified"] = row.get("raw_qualified")
+    why.extend(validate_hook_counts(raw_trace, final, {
         name: {"bank": BANK, "addr": addr} for name, addr in HOOKS.items()
     }))
     counts = final.get("hook_counts")
@@ -108,10 +114,10 @@ def _scan(trace):
                 observed = f"{pc:#06x}" if type(pc) is int else repr(pc)
                 why.append(f"{code}: 0f:47DD callback observed PC={observed}")
             idx, party_idx, count = (e.get(k) for k in ("cur_ot_mon", "cur_party_mon", "ot_party_count"))
-            if (any(type(v) is not int for v in (idx, party_idx, count))
-                    or not 1 <= count <= 6 or not 0 <= idx < count or idx != party_idx):
+            if (not operation and (any(type(v) is not int for v in (idx, party_idx, count))
+                    or not 1 <= count <= 6 or not 0 <= idx < count or idx != party_idx)):
                 why.append(f"BAD_SELECTED_INDEX: wCurOTMon={idx!r}, wCurPartyMon={party_idx!r}, wOTPartyCount={count!r}")
-            if e.get("mode") != 2:
+            if not operation and e.get("mode") != 2:
                 why.append(f"NOT_TRAINER_BATTLE: wBattleMode={e.get('mode')!r} != 2")
         elif kind == "next" and e.get("pc") != NEXT:
             why.append(f"NEXT_PC_MISMATCH: 0f:47E0 callback observed PC={e.get('pc')!r}")
@@ -124,7 +130,7 @@ def _scan(trace):
             observed_bytes = b""
         if len(observed_bytes) != 6 or observed_bytes[:3] != PINNED_BYTES:
             why.append(f"SITE_BYTES_MISMATCH: gate ROM bytes={site!r}, expected six bytes beginning 218bd2")
-        if kind == "gate" and e.get("qualified") is True:
+        if kind == "gate" and e.get("pc") == GATE:
             qualified_gates.append((e, len(why) == before))
     return why, qualified_gates
 
@@ -185,7 +191,7 @@ def _rival_row_reasons(e, expected, site_hex) -> list[str]:
     return out
 
 
-def _witness_reasons(trace, gate, site_hex) -> list[str]:
+def _witness_reasons(trace, gate, site_hex, expected=FIXTURE_EXPECT) -> list[str]:
     """gate -> next -> last for the initial send-out: later, same battle identity, same selected indices."""
     start = next(i for i, e in enumerate(trace) if e is gate)
     identity = ("trainer_class", "trainer_id", "ot_party_count", "cur_ot_mon", "cur_party_mon")
@@ -194,7 +200,9 @@ def _witness_reasons(trace, gate, site_hex) -> list[str]:
         found = None
         for i in range(position + 1, len(trace)):
             e = trace[i]
-            if (e.get("kind") == kind and e.get("matched") is True and e.get("qualified") is True
+            if e.get("kind") == "gate" and e.get("bank") == BANK and e.get("pc") == GATE:
+                break  # a later send-in cannot complete this gate
+            if (e.get("kind") == kind and e.get("matched") is True and e.get("pc") == HOOKS[kind]
                     and e.get("bank") == BANK):
                 found, position = e, i
                 break
@@ -203,61 +211,89 @@ def _witness_reasons(trace, gate, site_hex) -> list[str]:
                        f"(ordered gate -> next -> last required)")
             return out
         differs = [k for k in identity if found.get(k) != gate.get(k)]
-        if found.get("mode") != 2:
-            differs.append("mode")
+        if not operation_qualified(found, expected):
+            differs.append("operation predicate")
+        out += _rival_row_reasons(found, expected, site_hex)
         if differs:
             out.append(f"WITNESS_MISMATCH: {kind} callback differs from the gate in {differs} "
                        f"(identity and selected indices must be unchanged through the send-out)")
     return out
 
 
-def evaluate_rival(trace, *, disclosure_sha256, expected=FIXTURE_EXPECT, site_hex=PINNED_SITE_HEX):
-    """The rival-card oracle (docs/polished/RIVAL_STAGING.md section 4), strictly stronger than `evaluate`.
+def operation_qualified(row, expected=FIXTURE_EXPECT):
+    """Only measured enemy-side rival callbacks qualify; absent side is never inferred."""
+    return (row.get("kind") in HOOKS
+            and type(row.get("bank")) is int and row["bank"] == BANK
+            and type(row.get("pc")) is int and row["pc"] == HOOKS[row["kind"]]
+            and type(row.get("battle_turn")) is int and row["battle_turn"] == 1
+            and type(row.get("mode")) is int and row["mode"] == 2
+            and type(row.get("trainer_class")) is int and row["trainer_class"] in RIVAL_CLASSES
+            and type(row.get("trainer_id")) is int and expected is not None
+            and row["trainer_id"] == expected["trainer_id"])
 
-    A qualified rival gate is a bank-0F, PC==47DD, mode-2 callback with trainer class in {1B..1F}, a byte trainer id,
-    equal valid selected indices and all six site bytes equal to the staged overlay's; with `expected` the fixture
-    identity (class 1B, id 03, two enemy mons) is required too. The first such gate needs an ordered next and last
-    witness of the same identity. Wrong-bank rows are counted and excluded; zero gate hits stay OPEN.
-    """
+
+def _operation_scan(trace, expected=FIXTURE_EXPECT):
+    why, raw_gates = _scan(trace, operation=True)
+    if raw_gates is None:
+        return why, None
+    final = trace[-1] if trace else {}
+    current = final.get("qualification_schema") == "rival-operation/1"
+    if "qualification_schema" in final and not current:
+        why.append("QUALIFICATION_SCHEMA: unknown qualification schema")
+    for row in trace:
+        if row.get("kind") not in HOOKS:
+            continue
+        if current and (type(row.get("qualified")) is not bool
+                        or row["qualified"] != operation_qualified(row, expected)):
+            why.append("QUALIFICATION_MISMATCH: recorded flag differs from measured operation predicate")
+        # A missing side prevents qualification only where all the other guards permit it.
+        candidate = dict(row, battle_turn=1)
+        if operation_qualified(candidate, expected) and type(row.get("battle_turn")) is not int:
+            why.append("MISSING_SIDE: OPEN; rival candidate lacks a measured integer hBattleTurn")
+    return why, [(r, clean) for r, clean in raw_gates if operation_qualified(r, expected)]
+
+
+def evaluate_rival(trace, *, disclosure_sha256, expected=FIXTURE_EXPECT, site_hex=PINNED_SITE_HEX):
+    """Raw callbacks remain evidence; only operation-qualified callbacks require a rival witness chain."""
     if not _is_site_hex(site_hex):
         raise ValueError(f"site_hex must be six lowercase hex bytes, got {site_hex!r}")
-    why, gates = _scan(trace)
+    why, gates = _operation_scan(trace, expected)
     if gates is None:
         return False, why
     why += _binding_reasons(trace, disclosure_sha256)
     if not gates:
-        why.append("NO_GATE_HIT: OPEN; no bank-and-PC-qualified 0f:47DD callback (not a PASS)")
+        for row in trace:
+            if row.get("kind") == "gate" and row.get("bank") == BANK:
+                why += _rival_row_reasons(row, expected, site_hex)
+                if row.get("mode") != 2:
+                    why.append("NOT_TRAINER_BATTLE: excluded raw gate is not a trainer battle")
+        why.append("NO_RIVAL_GATE: OPEN; no operation-qualified rival enemy send-in")
+        why.append("NO_GATE_HIT: OPEN; no operation-qualified gate (raw hits may exist)")
         return False, why
-    rival = []
-    for row, clean in gates:
-        extra = _rival_row_reasons(row, expected, site_hex)
-        why += extra
-        if clean and not extra:
-            rival.append(row)
-    for row in trace:
-        if row.get("kind") in ("next", "last") and row.get("matched") is True and row.get("bank") == BANK:
-            why += _rival_row_reasons(row, expected, site_hex)
-    if not rival:
-        why.append("NO_RIVAL_GATE: OPEN; qualified 0f:47DD callbacks exist but none is a clean rival trainer send-out")
-    else:
-        why += _witness_reasons(trace, rival[0], site_hex)
+    for row, _ in gates:
+        why += _rival_row_reasons(row, expected, site_hex)
+        idx, party_idx, count = (row.get(k) for k in ("cur_ot_mon", "cur_party_mon", "ot_party_count"))
+        if (any(type(v) is not int for v in (idx, party_idx, count))
+                or not 1 <= count <= 6 or not 0 <= idx < count or idx != party_idx):
+            why.append("BAD_SELECTED_INDEX: invalid selected enemy party index")
+    # The first next/last callbacks must belong to this same send-in, not a later battle.
+    why += _witness_reasons(trace, gates[0][0], site_hex, expected)
     return not why, why
 
 
 def evaluate_wild_control(trace, *, disclosure_sha256):
-    """The wild-battle control: a complete recording, an observed native wild battle (a mode row with wBattleMode==1)
-    and NO bank-and-PC-qualified gate callback at all. Wrong-bank rows are counted and excluded."""
-    why, gates = _scan(trace)
+    """PASS-as-control requires observed wild mode and zero rival-operation-qualified gates."""
+    why, gates = _operation_scan(trace)
     if gates is None:
         return False, why
     why += _binding_reasons(trace, disclosure_sha256)
     modes = [e.get("mode") for e in trace if e.get("kind") == "mode"]
     if gates:
-        why.append(f"WILD_QUALIFIED_HIT: {len(gates)} qualified 0f:47DD callback(s) in a wild-battle control")
+        why.append(f"WILD_QUALIFIED_HIT: {len(gates)} rival-operation gate(s) in wild control")
     if 2 in [m for m in modes if type(m) is int]:
         why.append("CONTROL_TRAINER_BATTLE: the control run entered a trainer battle (wBattleMode==2)")
     if not any(type(m) is int and m == 1 for m in modes):
-        why.append("WILD_NOT_OBSERVED: OPEN; no wBattleMode==1 transition row, so no wild battle is established")
+        why.append("WILD_NOT_OBSERVED: OPEN; no wBattleMode==1 transition row")
     return not why, why
 
 
@@ -270,7 +306,7 @@ def require_pinned_site(site: str) -> str:
 
 def verdict(reasons: list[str]) -> str:
     """Keep PC findings and zero-hit OPEN distinguishable from generic failures."""
-    for code in ("PC_IS_NEXT_INSTRUCTION", "PC_OTHER", "NO_GATE_HIT", "WILD_NOT_OBSERVED"):
+    for code in ("PC_IS_NEXT_INSTRUCTION", "PC_OTHER", "MISSING_SIDE", "NO_GATE_HIT", "WILD_NOT_OBSERVED"):
         if any(r.startswith(code + ":") for r in reasons):
             return code
     return "FAIL" if reasons else "PASS"
@@ -333,6 +369,7 @@ def load_disclosure(path: Path, fixture_bytes: bytes) -> dict:
 
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--rejudge", type=Path, help="offline trace.json; never starts an emulator or rewrites evidence")
     ap.add_argument("--setup", choices=SETUPS, required=True)
     ap.add_argument("--disclosure", type=Path, help="synth only: derive_rival_save disclosure JSON naming --fixture")
     ap.add_argument("--expect", choices=EXPECTATIONS, help="synth only: rival (default) or wild control oracle")
@@ -348,6 +385,8 @@ def parse_args(argv=None):
             ap.error(f"--{name.replace('_', '-')} must be positive")
     if not args.fixture.is_file():
         ap.error(f"fixture does not exist: {args.fixture}")
+    if args.rejudge is not None and (args.calibrate or args.route is not None or args.setup != "synth"):
+        ap.error("--rejudge requires synth, no route and no calibration")
     if args.calibrate and (args.setup != "synth" or args.route is not None):
         ap.error("--calibrate requires --setup synth and no --route")
     args.disclosure_info = args.disclosure_sha256 = None
@@ -460,8 +499,37 @@ def recording_reasons(text: str, elapsed: float = 0, timeout: float = float("inf
     return reasons
 
 
+def rejudge(args):
+    """A new labelled analysis, never overwrite the recording or its original result."""
+    raw = args.rejudge.read_bytes()
+    trace = json.loads(raw)
+    _, reasons = run_oracle(args, trace, PINNED_SITE_HEX)
+    hooks = [r for r in trace if isinstance(r, dict) and r.get("kind") in HOOKS]
+    missing = sum("battle_turn" not in r for r in hooks if r.get("bank") == BANK)
+    qualified = [r for r in hooks if operation_qualified(r)]
+    result = {"analysis": "OFFLINE REJUDGEMENT; original recording unchanged", "setup": "SYNTH",
+              "trace_sha256": hashlib.sha256(raw).hexdigest(), "oracle": args.expect,
+              "verdict": verdict(reasons), "reasons": reasons,
+              "status": "PASS" if not reasons else ("OPEN" if verdict(reasons) in
+                  ("MISSING_SIDE", "NO_GATE_HIT", "WILD_NOT_OBSERVED") else "FAIL"),
+              "missing_side_rows": missing, "qualified_gate_frames": [r["frame"] for r in qualified if r["kind"] == "gate"]}
+    if missing:
+        conditional = copy.deepcopy(trace)
+        for row in conditional:
+            if row.get("kind") in HOOKS and "battle_turn" not in row:
+                row["battle_turn"] = 1
+        _, conditional_reasons = run_oracle(args, conditional, PINNED_SITE_HEX)
+        result["conditional_source_model"] = {
+            "assumption": "UNMEASURED side=1, based on source enemy-pointer branch; NOT PHYSICAL PASS",
+            "verdict": verdict(conditional_reasons), "reasons": conditional_reasons}
+    print(json.dumps(result, indent=2))
+    return 0 if not reasons else 1
+
+
 def main(argv=None) -> int:
     args = parse_args(argv)
+    if args.rejudge is not None:
+        return rejudge(args)
     WORK.mkdir(parents=True, exist_ok=True)
     lane = Path(tempfile.mkdtemp(prefix=lane_prefix(args.setup), dir=WORK))
     rom, sha1, site = stage(lane, full_site=args.setup == "synth")
@@ -478,7 +546,7 @@ def main(argv=None) -> int:
     run.mkdir()
     config = run / "input.json"
     settings = {"steps": args.steps, "frames": args.frames, "trace_cap": args.trace_cap, "setup": args.setup,
-                "calibrate": args.calibrate, "expect": args.expect}
+                "calibrate": args.calibrate, "expect": args.expect, "expected": FIXTURE_EXPECT}
     if args.setup == "synth":
         settings["disclosure_sha256"] = args.disclosure_sha256
     config.write_text(json.dumps(settings), encoding="utf-8")
