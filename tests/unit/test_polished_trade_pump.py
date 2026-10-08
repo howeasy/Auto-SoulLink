@@ -25,7 +25,7 @@ env = svc.env
 
 
 class Pump(wp.Rig):
-    def __init__(self, *, enabled=True, source=None, player="a"):
+    def __init__(self, *, enabled=True, source=None, player="a", legacy_observers=False):
         self.lua = wp.lupa.LuaRuntime(unpack_returned_tuples=True)
         self.mons = wp.party()
         if player == "b":
@@ -36,6 +36,9 @@ class Pump(wp.Rig):
         self.deps, self.io, self.log = self.lua.execute(wp.HARNESS.replace("ROOTDIR", json.dumps(wp.ROOT)))(
             wp.overlay()[1], self.mem, self.img)
         self.deps.player = player
+        if legacy_observers:  # historical client predates the default-on Polished faint interfaces
+            self.deps.polished_faint_observer = False
+            self.deps.polished_active_faint = False
         if source is not None:
             self.lua.globals().pump_source = source
             self.lua.execute(f'''local original=dofile
@@ -320,7 +323,7 @@ def test_preapply_poison_is_one_cancellation_and_cannot_resurrect():
     assert len([x for x in p.log.lines.values() if "dev trade " in x]) == 1
 
 
-@pytest.mark.parametrize("result", [0, 1, 2, 255], ids=["zero", "none", "two", "invalid"])
+@pytest.mark.parametrize("result", [3, 1, 2, 255], ids=["invalid-three", "none", "two", "invalid"])
 def test_apply_done_is_never_consent_or_success(result):
     p = Pump()
     p.accepted(p.apply_command())
@@ -431,7 +434,7 @@ def test_default_off_matches_pre_pump_client_byte_for_byte():
     baseline = subprocess.check_output(
         ["git", "-C", str(ROOT), "show", "48172aa6cd6100e3463b8fa2966c68c6e5d3940b:lua/gen2/client.lua"],
         text=True, encoding="utf-8")
-    old, new = Pump(enabled=False, source=baseline), Pump(enabled=False)
+    old, new = Pump(enabled=False, source=baseline, legacy_observers=True), Pump(enabled=False, legacy_observers=True)
     traces = []
     for p in (old, new):
         p.command({"cmd": "trade_offer_ack", "ok": True, "token": "test"}, p.apply_command(),
@@ -817,3 +820,38 @@ def test_client_source_compiles_in_lua55():
 
     lua = LuaRuntime(unpack_returned_tuples=True)
     assert lua.eval("function(s) return assert(load(s)) ~= nil end")(CLIENT.read_text())
+
+
+def complete_received_mon(source=None):
+    from server.adapters import polished_codec as pc
+    p = Pump(source=source)
+    cmd = p.apply_command()
+    incoming = dict(p.mons[1], ot_id=p.mons[1]["ot_id"] ^ 0x1234)
+    blob = pc.encode_party_mon(incoming)
+    p.accepted(cmd)
+    p.frame()
+    # MODEL native REMOVE/compact/APPEND result: received mon is the last slot.
+    for i, byte in enumerate(blob):
+        p.mem[wp.SYM["wPartyMons"][1]+2*48+i] = byte
+    gen = p.mem[p.parts.profile.overlay.trade.lease.base+6]
+    p.put(5, 7)
+    p.put(7, gen)
+    p.put(8, 0)
+    p.frame(3)
+    done = p.sent("trade_done")
+    assert len(done) == 1 and not done[0].get("uncertain")
+    assert (done[0]["slot"], done[0]["new_key"], done[0]["new_species"]) == (2, pc.key(incoming), incoming["species_id"])
+    assert p.mem[p.parts.profile.overlay.trade.lease.base+5] == 8
+    assert not p.sent("menu_result")
+
+
+def test_complete_reports_received_party_mon_via_owed_trade_done():
+    complete_received_mon()
+
+
+def test_complete_pump_mutant_is_red():
+    source = CLIENT.read_text()
+    anchor = 'if done.disposition == "COMPLETE" then'
+    assert source.count(anchor) == 1
+    with pytest.raises(AssertionError):
+        complete_received_mon(source.replace(anchor, 'if false then'))

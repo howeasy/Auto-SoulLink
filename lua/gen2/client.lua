@@ -1168,6 +1168,22 @@ function Client.new(p)
                     return
                 end
                 if done and v.attempted then
+                    if done.disposition == "COMPLETE" then
+                        local party = current_party()
+                        local received = party and party.mons[#party.mons]
+                        if not received or received.is_egg then
+                            finish("completed trade post-image unavailable", true); v.retired = true; return
+                        end
+                        local ok, disposition, reason = call("release", v.gen)
+                        if not ok then finish(reason or disposition, true); v.retired = true; return end
+                        -- Native REMOVE/compact/APPEND: reuse vanilla's owed trade_done shape and last-slot readback.
+                        v.terminal, v.prepare, v.apply = true, nil, nil
+                        last_token = v.server_token or last_token
+                        report("trade_done", {token=v.server_token, slot=received.slot,
+                                              new_key=mon_key(received), new_species=received.species_id})
+                        self.pending_rescan = true
+                        return
+                    end
                     if done.disposition ~= "NOT_PERFORMED" then
                         finish("unexpected APPLY disposition", true); v.retired = true; return
                     end

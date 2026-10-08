@@ -156,7 +156,7 @@ end
 -- This validation is ADVISORY pre-screening only; passing stages a request for
 -- SlinkTradeValidateIncomingStaged, which remains the native acceptance authority.
 -- No server events are emitted. disposition() returns PENDING / NOT_PERFORMED /
--- CONSENTED / DECLINED / UNCERTAIN plus a reason; COMPLETE is impossible.
+-- CONSENTED / DECLINED / COMPLETE / UNCERTAIN plus a reason; COMPLETE requires native DONE 0.
 -- A responder PROMPT's DONE 0 is consent, never a completed trade. Its RELEASE
 -- must remain observable for a frame before APPLY. Any APPLY DONE other than 1
 -- poisons the visit. phase() returns role, phase for a future, separately owned pump.
@@ -537,6 +537,9 @@ function PT.compose(spec)
                     disposition=result == 0 and 'CONSENTED' or 'DECLINED'
                     reason=result == 0 and 'prompt consent only; no trade performed' or 'prompt declined'
                 end
+            elseif result == 0 then
+                disposition,reason='COMPLETE','native commit saved and verified'
+                phase='done'
             elseif result ~= 1 then
                 poisoned='unexpected DONE result '..tostring(result)
                 disposition,reason='UNCERTAIN',poisoned
@@ -551,7 +554,7 @@ function PT.compose(spec)
             if cancelled then return nil,'NOT_PERFORMED',reason end
             local done=self:poll_done()
             local prompt_done=role == 'responder' and (phase == 'consented' or phase == 'declined')
-            if not done or (done.disposition ~= 'NOT_PERFORMED' and not prompt_done) then
+            if not done or (done.disposition ~= 'NOT_PERFORMED' and done.disposition ~= 'COMPLETE' and not prompt_done) then
                 return nil,'UNCERTAIN',poisoned or 'not a safe DONE'
             end
             local yes,a,b=scoped(raw.release,raw,gen)
@@ -575,7 +578,7 @@ function PT.compose(spec)
         end
         function T:reset()
             if poisoned then return nil,'UNCERTAIN',poisoned end
-            if attempted and disposition ~= 'NOT_PERFORMED' then
+            if attempted and disposition ~= 'NOT_PERFORMED' and disposition ~= 'COMPLETE' then
                 return nil,'UNCERTAIN','unsettled visit cannot reset'
             end
             if not self:closed() then return nil,'PENDING','lease must close before reset' end
