@@ -505,12 +505,28 @@ def test_bad_pc_sample_does_not_satisfy_native_lifecycle():
     assert any("wrong_pc" in reason for reason in reasons)
 
 
-def mock_driver(encoder="good", case="cancel-menu", rom0=False, real_lease=False):
+def store_program_rom(code, start=0x4BB0):
+    """Code-only linked regions with operands that can impersonate store opcodes."""
+    rom, symbols = bytearray(0x200000), {"FarCall": [0, 0x10]}
+    for i, (first, last) in enumerate(P.STORE_CODE_SPANS):
+        addr = SITES[first]["addr"] if first in SITES else 0x4000 + i * 0x100
+        program = b"\x00"
+        if first == "SlinkTradeProposerService":
+            addr, program = start, code
+        symbols[first], symbols[last] = [0x7E, addr], [0x7E, addr + len(program)]
+        offset = 0x7E * 0x4000 + addr - 0x4000
+        rom[offset:offset + len(program)] = program
+    return bytes(rom), symbols
+
+
+def mock_driver(encoder="good", case="cancel-menu", rom0=False, real_lease=False, store_program=b"\x00"):
     """Run the actual driver in a paused Lua coroutine; invoke its registered CPU callbacks."""
     from lupa.lua55 import LuaRuntime
 
     lua = LuaRuntime(unpack_returned_tuples=True)
     lua.globals().mock_case = case
+    rom, symbols = store_program_rom(store_program)
+    lua.globals().mock_store_manifest = lua.table_from(P.build_native_store_sites(rom, symbols), recursive=True)
     lua.execute(r'''
         callbacks, frame_end, writes, exited = {}, nil, {}, false
         current_bank, current_pc, current_sp, current_frame = 0x7e, 0x4480, 0xc0ce, 100
@@ -567,6 +583,7 @@ def mock_driver(encoder="good", case="cancel-menu", rom0=False, real_lease=False
             if name == "SLINK_ROOT" then return "mock-root" end
             if name == "POL_CASE" then return mock_case end
             if name == "POL_FRAME_CAP" then return "12000" end
+            if name == "POL_STORE_SITES" then return "mock-store-sites" end
         end
         local lease = {OFF_LEASE=0, LEASE_SIZE=16, new=function() return {} end}
         dofile = function(path) if path:find("pol_lib", 1, true) then return L else return lease end end
@@ -578,6 +595,8 @@ def mock_driver(encoder="good", case="cancel-menu", rom0=False, real_lease=False
             captured_trace = trace
             return primary_encode(trace)
         end
+        L.slurp = function() return "{}" end
+        L.json.decode = function() return mock_store_manifest end
     ''')
     def convert(value):
         from lupa.lua55 import lua_type
@@ -659,8 +678,9 @@ def stop_driver(lua):
 
 
 @pytest.mark.parametrize("opcode", [0x12, 0x22, 0x32, 0x77, 0xEA])
-def test_native_lease_store_observes_accumulator_not_gbhawk_zero_placeholder(opcode):
-    lua, _ = mock_driver()
+def test_native_lease_store_observes_accumulator_not_gambatte_zero_placeholder(opcode):
+    program = b"\xea\xd0\x45" if opcode == 0xEA else bytes([0, 0, opcode])
+    lua, _ = mock_driver(store_program=program)
     lua.globals().store_opcode = opcode
     lua.execute("""
         current_pc = 0x4bb3
@@ -693,6 +713,30 @@ def test_native_lease_store_unknown_instruction_fails_closed():
     assert not any(e["kind"] == "rom_write" for e in trace)
     assert any(e["kind"] == "instrumentation_error" for e in trace)
 
+
+
+@pytest.mark.parametrize("immediate", [0x12, 0x22, 0x32, 0x77])
+def test_immediate_store_alias_cannot_be_recorded_as_accumulator_store(immediate):
+    lua, _ = mock_driver(store_program=bytes([0, 0x36, immediate, 0x77]))
+    lua.globals().store_immediate = immediate
+    lua.execute("""
+        current_pc = 0x4bb3
+        local old_bus, old_register = L.bus, emu.getregister
+        L.bus = function(a)
+            if a == 0x4bb1 then return 0x36 end
+            if a == 0x4bb2 then return store_immediate end
+            if a == 0x4bb3 then return 0x77 end -- a subsequent correcting A store
+            return old_bus(a)
+        end
+        emu.getregister = function(name)
+            if name == "A" then return 0x53 end
+            return old_register(name)
+        end
+        callbacks.pol_service_lease_0(L.SYM.wSlinkMailbox[2], 0)
+    """)
+    trace = stop_driver(lua)
+    assert not any(e["kind"] == "rom_write" for e in trace)
+    assert any(e["kind"] == "instrumentation_error" for e in trace)
 
 def test_actual_lua_bounds_wrong_bank_samples_per_site_and_keeps_qualified_evidence():
     from tools.polished_live.faint_probe import validate_hook_counts
@@ -1016,7 +1060,9 @@ def runner(tmp_path, monkeypatch, text=PASS, elapsed=1, defect=None):
     """Exercise main's verdict on real oracle traces, replacing only emulator I/O."""
     path = provenance(tmp_path)
     sym = path.parent / "polished_slink.sym"
-    sym.write_text("".join(f"{s['bank']:02x}:{s['addr']:04x} {name}\n" for name, s in SITES.items()),
+    rom_bytes, store_symbols = store_program_rom(b"\x77")
+    all_symbols = {name: [s["bank"], s["addr"]] for name, s in SITES.items()} | store_symbols
+    sym.write_text("".join(f"{bank:02x}:{addr:04x} {name}\n" for name, (bank, addr) in all_symbols.items()),
                    encoding="utf-8")
     manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest["symbols"] = {sym.name: hashlib.sha256(sym.read_bytes()).hexdigest()}
@@ -1032,7 +1078,12 @@ def runner(tmp_path, monkeypatch, text=PASS, elapsed=1, defect=None):
     monkeypatch.setattr(P, "FIXTURE_SHA256_PREFIX", hashlib.sha256(fixture.read_bytes()).hexdigest())
     monkeypatch.setattr(P, "EXTRA_SYMBOLS", ())
     monkeypatch.setattr(P, "plan", lambda args: original_plan(args, repo=tmp_path, work=work))
-    monkeypatch.setattr(P, "stage", lambda lane, _: (lane / "rom.gbc", "2" * 40))
+    def stage(lane, _):
+        rom = lane / "rom.gbc"
+        rom.write_bytes(rom_bytes)
+        return rom, "2" * 40
+
+    monkeypatch.setattr(P, "stage", stage)
     times = iter([100, 100 + elapsed] * 10)
     monkeypatch.setattr(P, "time", SimpleNamespace(monotonic=lambda: next(times)), raising=False)
     for key in ("POL_LANE", "POL_KIND", "POL_FIXTURE"):
@@ -1040,6 +1091,7 @@ def runner(tmp_path, monkeypatch, text=PASS, elapsed=1, defect=None):
 
     def launch(_lua, run, env, _timeout):
         run.mkdir(parents=True, exist_ok=True)
+        (run / "config.ini").write_text(json.dumps({"PreferredCores": {"GBC": "Gambatte"}}), encoding="utf-8")
         trace = good_trace(env["POL_CASE"])
         if defect is not None:
             trace = defect(trace)
@@ -1202,3 +1254,35 @@ def test_each_recorder_failure_kind_fails_with_its_own_name(kind):
     ok, reasons = P.evaluate("cancel-menu", renumber(trace[:2] + [extra] + trace[2:]))
     assert not ok
     assert any(kind in r for r in reasons), reasons
+
+
+@pytest.mark.parametrize("operand", [0x12, 0x22, 0x32, 0x77, 0xEA])
+def test_store_map_skips_immediates_and_inline_far_call_pointer_bytes(operand):
+    # ld [hl],n; ld hl,nn; rst FarCall + dwb; CB bitop; genuine ld [hl],a
+    code = bytes([0x36, operand, 0x21, operand, operand,
+                  0xD7, operand, operand, operand, 0xCB, operand, 0x77])
+    rom, symbols = store_program_rom(code)
+    sites = P.build_native_store_sites(rom, symbols)["sites"]
+    assert sites == {str(0x4BB0 + 11): {"opcode": 0x77, "bytes": [0x77]}}
+
+
+@pytest.mark.parametrize("code", [b"\xea\x12", b"\x36", b"\xd7\x12\x77", b"\xd3"])
+def test_store_map_refuses_truncated_or_invalid_code(code):
+    rom, symbols = store_program_rom(code)
+    with pytest.raises(ValueError, match="instruction crosses|invalid SM83"):
+        P.build_native_store_sites(rom, symbols)
+
+
+def test_store_map_refuses_linked_label_in_operand():
+    rom, symbols = store_program_rom(b"\x36\x77\x77")
+    symbols["SlinkTradeProposerService.bad"] = [0x7E, 0x4BB1]
+    with pytest.raises(ValueError, match="not an instruction start"):
+        P.build_native_store_sites(rom, symbols)
+
+
+def test_runner_records_requested_core_without_claiming_observation(tmp_path, monkeypatch):
+    _, launches = runner(tmp_path, monkeypatch)
+    assert P.main(["--case", "offer-reject", "--timeout", "12"]) == 0
+    result = json.loads((launches[0] / "oracle.json").read_text())
+    assert result["core"] == {"name": "Gambatte", "qualification": "requested, not observed",
+                              "source": "config.ini PreferredCores.GBC"}

@@ -74,6 +74,68 @@ MILESTONE_SITES = {
 # The entry is a JP trampoline: RET must resume at the gate's CALL continuation.
 RETURN_DELTA = 10
 
+# Code-only ranges, excluding padding, item tables and proposer text. Their
+# endpoints come from the provenance-verified linked .sym, never byte scanning.
+STORE_CODE_SPANS = (
+    ("SlinkTradeCheckHeader", "SlinkTradeFrameEnd"),
+    ("SlinkTradeItemAllowed", "SlinkTradeItemAllowedEnd"),
+    ("SlinkTradeWaitGate", "SlinkTradeGatesCodeEnd"),
+    ("SlinkTradeEntry", "SlinkTradeGatesEnd"),
+    ("SlinkTradeSnapshot", "SlinkTradeSnapshotEnd"),
+    ("SlinkTradeValidateRecord", "SlinkTradeValidateEnd"),
+    ("SlinkTradeProposerService", "SlinkTradeConfirmText"),
+)
+_SM83_TWO_BYTE = frozenset(range(0x06, 0x40, 8)) | {
+    0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0xCB, 0xC6, 0xCE, 0xD6,
+    0xDE, 0xE0, 0xE6, 0xE8, 0xEE, 0xF0, 0xF6, 0xF8, 0xFE,
+}
+_SM83_THREE_BYTE = frozenset({
+    0x01, 0x08, 0x11, 0x21, 0x31, 0xC2, 0xC3, 0xC4, 0xCA, 0xCC,
+    0xCD, 0xD2, 0xD4, 0xDA, 0xDC, 0xEA, 0xFA,
+})
+_SM83_INVALID = frozenset({0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD})
+_A_STORES = frozenset({0x12, 0x22, 0x32, 0x77, 0xEA})
+
+
+def build_native_store_sites(rom, symbols):
+    """Linear-decode staged proposer/helper code; never admit an operand byte.
+
+    Polished macros/rst.asm farcall/farjp emit rst $10 + inline dwb (four
+    bytes). The pinned FarCall ABI consumes that pointer, so it is data, not
+    three more instructions. Validate every linked code label's boundary too.
+    """
+    if symbols.get("FarCall") != [0, 0x10]:
+        raise ValueError("store-site decoder requires Polished rst $10 FarCall ABI")
+    sites, regions = {}, []
+    for start_name, end_name in STORE_CODE_SPANS:
+        bank, start = symbols[start_name]
+        end_bank, end = symbols[end_name]
+        if bank != 0x7E or end_bank != bank or not 0x4000 <= start < end <= 0x8000:
+            raise ValueError(f"invalid store-site code range: {start_name}")
+        offset = bank * 0x4000 + start - 0x4000
+        code = rom[offset:offset + end - start]
+        if len(code) != end - start:
+            raise ValueError(f"truncated store-site ROM range: {start_name}")
+        pos, starts, count = 0, set(), 0
+        while pos < len(code):
+            addr, opcode = start + pos, code[pos]
+            starts.add(addr)
+            if opcode in _SM83_INVALID:
+                raise ValueError(f"invalid SM83 opcode at {bank:02x}:{addr:04x}")
+            size = 4 if opcode == 0xD7 else 3 if opcode in _SM83_THREE_BYTE else 2 if opcode in _SM83_TWO_BYTE else 1
+            if pos + size > len(code):
+                raise ValueError(f"instruction crosses store-site code end: {end_name}")
+            if opcode in _A_STORES:
+                sites[str(addr)] = {"opcode": opcode, "bytes": list(code[pos:pos + size])}
+                count += 1
+            pos += size
+        for name, (label_bank, addr) in symbols.items():
+            if label_bank == bank and start <= addr < end and addr not in starts:
+                raise ValueError(f"code symbol is not an instruction start: {name}")
+        regions.append({"start_symbol": start_name, "end_symbol": end_name,
+                        "start": start, "end": end, "store_sites": count})
+    return {"bank": 0x7E, "rom_sha1": hashlib.sha1(rom).hexdigest(), "regions": regions, "sites": sites}
+
 
 def _hook_accounting(trace, final, complete, symbols, why):
     if str(REPO) not in sys.path:
@@ -584,6 +646,9 @@ def main(argv=None):
         raise ValueError(f"required data/setup symbols missing: {missing}")
     harness.SYMBOLS = tuple(dict.fromkeys((*required, *(s for s in HOOKS if s in rows))))
     rom, sha1 = stage(lane, run_plan)
+    store_sites = build_native_store_sites(rom.read_bytes(), rows)
+    store_path = lane / "native_store_sites.json"
+    store_path.write_text(json.dumps(store_sites, indent=2), encoding="utf-8")
     harness.ROM_SRC = harness.ROM = rom
     digest = hashlib.sha256(FIXTURE.read_bytes()).hexdigest()
     if not digest.startswith(FIXTURE_SHA256_PREFIX):
@@ -592,7 +657,8 @@ def main(argv=None):
     shutil.copyfile(FIXTURE, harness.SRAM / harness.SAVE_NAME)
     run = lane / "probe"
     started = time.monotonic()
-    text, pid = harness.launch("tools/polished_live/trade_service_probe.lua", run, {"POL_CASE": args.case}, args.timeout)
+    text, pid = harness.launch("tools/polished_live/trade_service_probe.lua", run,
+                               {"POL_CASE": args.case, "POL_STORE_SITES": store_path.as_posix()}, args.timeout)
     elapsed = time.monotonic() - started
     deadline_met = elapsed < args.timeout
     reasons = []
@@ -602,6 +668,12 @@ def main(argv=None):
         reasons.append("completion marker: require exactly one zero-failure PASS for selected case, no other RESULT")
     if not deadline_met:
         reasons.append("wall-clock deadline reached before launch/cleanup completed")
+    core = {"qualification": "requested, not observed", "source": "config.ini PreferredCores.GBC"}
+    try:
+        core["name"] = json.loads((run / "config.ini").read_text(encoding="utf-8"))["PreferredCores"]["GBC"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        core["name"] = None
+        reasons.append(f"requested core unavailable from config.ini: {exc}")
     path = run / "trace.json"
     try:
         trace = json.loads(path.read_text(encoding="utf-8"))
@@ -614,7 +686,8 @@ def main(argv=None):
                         for e in trace if e.get("kind") != "gsb"))
     result = {**run_plan, "staged_sha1": sha1, "fixture_sha256": digest, "emuhawk_pid": pid,
               "elapsed_seconds": elapsed, "deadline_seconds": args.timeout, "deadline_met": deadline_met,
-              "ok": not reasons, "reasons": reasons}
+              "core": core, "native_store_site_count": len(store_sites["sites"]),
+              "native_store_sites": str(store_path), "ok": not reasons, "reasons": reasons}
     (run / "oracle.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result, indent=2))
     return 1 if reasons else 0

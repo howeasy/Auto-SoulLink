@@ -23,6 +23,7 @@ local last_pump = -1
 local hook_counts, hook_sites, driver_errors = {}, {}, 0
 local WRONG_BANK_SAMPLE_LIMIT = 16
 local finished = false
+local store_manifest
 local BUDGET = CASE == "query-timeout" and 700 or 2400
 client.speedmode(400)
 
@@ -172,29 +173,40 @@ local function rec(kind)
     return function(metadata) snap(kind, metadata) end
 end
 
--- GBHawk supplies zero placeholders to bus-write callbacks. Its SM83 PC has
--- advanced past the store, while A is unchanged. Admit only native A stores;
--- never invent a byte from a timing-dependent read of the destination.
+-- BizHawk 2.11.1 Gambatte supplies zero placeholders to bus-write callbacks
+-- (GBHawk supplies the actual byte). Gambatte's SM83 PC has advanced past the
+-- store while A is unchanged. Require a staged-ROM instruction-start proof;
+-- never invent a byte from an immediate operand or a destination read.
 local function native_store_value(address)
     local pc = emu.getregister("PC")
-    if L.rombank() ~= S.SlinkTradeEntry[1] or pc < 0x4003 or pc >= 0x8000 then
+    if L.rombank() ~= store_manifest.bank or pc < 0x4001 or pc > 0x8000 then
         return nil, "lease write outside native ROM bank"
     end
-    local opcode = L.bus(pc - 1)
-    if opcode ~= 0x12 and opcode ~= 0x22 and opcode ~= 0x32 and opcode ~= 0x77 then
-        opcode = L.bus(pc - 3)
-        if opcode ~= 0xEA or (L.bus(pc - 2) | (L.bus(pc - 1) << 8)) ~= address then
-            return nil, "lease write is not a proven SM83 A store"
+    local start = pc - 1
+    local site = store_manifest.sites[tostring(start)]
+    if not site or #site.bytes ~= 1 then
+        start = pc - 3
+        site = store_manifest.sites[tostring(start)]
+        if not site or site.opcode ~= 0xEA or #site.bytes ~= 3 then
+            return nil, "lease write is not a proven instruction-start SM83 A store"
         end
+    end
+    for i, byte in ipairs(site.bytes) do
+        if L.bus(start + i - 1) ~= byte then return nil, "native store bytes differ from staged ROM" end
+    end
+    if site.opcode == 0xEA and (site.bytes[2] | (site.bytes[3] << 8)) ~= address then
+        return nil, "native absolute store target differs from callback address"
     end
     local value = emu.getregister("A")
     if type(value) ~= "number" or value < 0 or value > 255 or value ~= math.floor(value) then
         return nil, "native accumulator unavailable"
     end
-    return value, opcode
+    return value, site.opcode, start
 end
 -- Manual host accounting suppresses any callback triggered by Lua's debugger writes.
 local function install()
+    store_manifest = L.json.decode(L.slurp(assert(os.getenv("POL_STORE_SITES"), "POL_STORE_SITES unset")))
+    assert(store_manifest.bank == 0x7E and type(store_manifest.sites) == "table", "invalid native store-site map")
     shadow = lease_bytes()
     for off = 0, 15 do
         local offset = off
@@ -204,14 +216,14 @@ local function install()
                 if address ~= base + offset then
                     snap("instrumentation_error", {reason="lease write callback address mismatch"}) return
                 end
-                local value, opcode = native_store_value(address)
+                local value, opcode, store_site = native_store_value(address)
                 if value == nil then
                     snap("instrumentation_error", {reason=opcode}) return
                 end
                 local before = copy(shadow)
                 shadow[offset + 1] = value
                 snap("rom_write", {offset=offset, value=value, before=before, lease=copy(shadow),
-                    source="SM83 A store", opcode=opcode, callback_value=callback_value})
+                    source="SM83 A store", opcode=opcode, store_site=store_site, callback_value=callback_value})
             end)
             if not ok then die(why) end
         end, base + offset, "pol_service_lease_" .. offset, "System Bus")
@@ -393,7 +405,8 @@ if not L.to_overworld(20, 1, 60, 3000, "warp-pc2f") then die("engine warp failed
 L.check("POKECENTER_2F 8x4 at (5,3)", L.rw("wMapWidth") == 8 and L.rw("wMapHeight") == 4 and
         L.rw("wXCoord") == 5 and L.rw("wYCoord") == 3)
 L.idle(60) install() enabled = true
-snap("setup", {case=CASE, synth=true, token=TOKEN})
+snap("setup", {case=CASE, synth=true, token=TOKEN,
+    system_id=type(emu.getsystemid) == "function" and emu.getsystemid() or nil})
 for _ = 1, 6 do L.frame({Up=true}) end L.idle(10)
 local function wait_for(cond, bound, why, button)
     local start = emu.framecount()
