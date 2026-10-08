@@ -967,7 +967,7 @@ local function compose_polished(deps, decision)
                 assert(io_.domain_size("ROM") == size and Admission.sha1(byte, size) == decision.rom_sha1,
                        "dev trade ROM hash mismatch")
                 local PT = load("lua/gen2/polished_trade.lua")
-                return PT.compose({profile=profile, io=io_, dev=true,
+                return PT.compose({profile=profile, io=io_, dev=true, log=deps.log,
                     read_rom=function(bank, addr, n)
                         assert(type(bank) == "number" and bank % 1 == 0 and bank > 0
                                and type(addr) == "number" and addr % 1 == 0 and addr >= 0x4000

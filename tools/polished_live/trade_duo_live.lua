@@ -4,6 +4,15 @@ local L=dofile(assert(os.getenv("POL_DRIVER_ROOT")).."/tools/polished_live/pol_l
 local J=L.json
 local role=os.getenv("SLINK_PLAYER")
 local cold=os.getenv("POL_COLD")=="1"
+-- run.lua/entry refuse by console diagnostic; preserve it before the generic graph assertion.
+local original_console_log=console.log
+console.log=function(...)
+    local words={}
+    for i=1,select('#',...) do words[#words+1]=tostring(select(i,...)) end
+    local f=io.open(L.RUN.."/console.log","ab")
+    if f then f:write(table.concat(words," ").."\n") f:close() end
+    return original_console_log(...)
+end
 local function dump(name,value)
     local f=assert(io.open(L.RUN.."/"..name,"wb"))
     assert(f:write(J.encode(value))) f:close()
@@ -14,6 +23,7 @@ local function exists(name)
     return false
 end
 local ok,why=pcall(function()
+console.log("[trade-duo] global print type="..type(print))
 client.speedmode(300)
 for _,name in ipairs({"OWPlayerInput","SetInitialOptions.joypad_loop","YesNoBox","NoYesBox"}) do L.hook(name) end
 -- Explicit dev option, through the existing Entry.build seam. Private root

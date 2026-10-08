@@ -91,3 +91,22 @@ def test_symbol_contract_fits_real_json_decoder_and_full_sym_is_red_control():
     assert old is None and "too many JSON values" in why
     decoded = codec.decode(json.dumps(t.probe_symbols(syms)))
     assert decoded.NoYesBox[2] == syms["NoYesBox"][1]
+
+
+def compose_without_global_print():
+    import json
+
+    from tests.unit import test_polished_write_path as wp
+    from tests.unit.test_polished_client import _entry, _pair
+    lua = wp.lupa.LuaRuntime(unpack_returned_tuples=True)
+    mem = lua.table_from(wp.sysbus(wp.party()))
+    deps, _, log = lua.execute(wp.HARNESS.replace("ROOTDIR", json.dumps(wp.ROOT)))(wp.overlay()[1], mem, wp.seal_save(wp.Image()))
+    deps.polished_trade_dev = True
+    lua.globals().print = None  # MODEL of the live refusal: no Lua-function global print
+    parts, why = _pair(_entry(lua).build(deps))
+    assert parts and why is None
+    assert parts.dev_polished_trade is not None, list(log.lines.values())
+
+
+def test_composition_passes_explicit_logger_without_global_print():
+    compose_without_global_print()
