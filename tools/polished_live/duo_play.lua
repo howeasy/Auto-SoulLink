@@ -75,7 +75,7 @@ for _, name in ipairs({"OWPlayerInput", "SetInitialOptions.joypad_loop", "LoadBa
 end
 for name, kind in pairs({LoadBattleMenu = "root", SelectBattleMon = "party",
         ["BattleMenuPKMN_Loop.GetMenu"] = "switch_menu", ["MoveSelectionScreen.menu_loop"] = "move",
-        YesNoBox = "yesno", BattleTurn = "turn", TryPlayerSwitch = "turn",
+        YesNoBox = "yesno", BattleTurn = "turn", TryPlayerSwitch = "turn", BattleMenu_Run = "post_run",
         ["MoveSelectionScreen.use_move"] = "turn"}) do
     if L.ids[name] then L.unhook(name) end
     if L.SYM[name] then L.hook(name, ui(kind)) end
@@ -551,6 +551,8 @@ local function op_lose_native(step)
             btn, action = "A", "choose-existing-move"
         elseif native_ui == "yesno" then
             btn, action = "A", "use-next-mon-yes"
+        elseif native_ui == "post_run" then
+            btn, action = "A", "advance-native-run-result-text"
         elseif L.recent("BlinkCursor", 2) then
             btn, action = "A", "advance-native-text"
         elseif (native_ui == nil or native_ui == "turn") and emu.framecount() - native_ui_frame > 90 then

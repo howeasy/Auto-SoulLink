@@ -1158,7 +1158,9 @@ function L.pulse(button)
         reports[#reports+1]={event="faint",key="K",frame=frame};L.hits.BattleMenu_Fight=1
     elseif pressed and engine=="fainted" then
         if button=="Down" then y=2 elseif button=="Right" then x=2
-        elseif button=="A" and x==2 and y==2 then engine="overworld";mode=0;L.hits.BattleMenu_Run=1 end
+        elseif button=="A" and x==2 and y==2 then engine="run_text";native_ui="post_run";y=3;L.hits.BattleMenu_Run=1 end
+    elseif pressed and engine=="run_text" and button=="A" then
+        engine="overworld";mode=0
     end
     frame=frame+1
 end
