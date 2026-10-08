@@ -70,6 +70,39 @@ local function saving_byte(io)
     return integer(value, 0, 255) and value or nil
 end
 
+-- BOX3_STAGE2 §2: byte proof is independent of executor returns and permit receipts.
+-- Pure classifier input: frozen before/postimage snapshots, fresh after snapshot,
+-- source_valid, context_valid, emission_started, guard_refusal, pre_ignored and stats.
+-- Snapshots contain {bytes={domain={[address]=byte}}, party_count, complete=true}.
+-- pre_ignored names ONLY unpublished scratch or the planned inactive withdrawal tail.
+local function image_matches(want, have, ignored)
+    if not want or not have or have.complete ~= true or not integer(have.party_count, 0, 6) then return false end
+    if want.party_count ~= have.party_count then return false end
+    for domain, bytes in pairs(want.bytes) do
+        for at, value in pairs(bytes) do
+            if not (ignored and ignored[domain] and ignored[domain][at]) then
+                if not have.bytes[domain] or have.bytes[domain][at] ~= value then return false end
+            end
+        end
+    end
+    return true
+end
+
+function O.classify_box_write(e)
+    local uncertain = {outcome = "UNCERTAIN", reason = e.reason or "box write byte proof unavailable"}
+    if e.source_valid ~= true or e.context_valid ~= true then return uncertain end
+    if image_matches(e.postimage, e.after) and (e.cmd ~= "party_mon" or e.after.party_count > 0) then
+        return {outcome = "PROVED_COMPLETE", party_count = e.after.party_count, stats = e.stats}
+    end
+    if image_matches(e.before, e.after, e.pre_ignored) then
+        return {outcome = "PROVED_NOT_COMPLETE", party_count = e.after.party_count, reason = e.reason}
+    end
+    if e.guard_refusal == true and not e.emission_started then
+        return {outcome = "PROVED_NOT_COMPLETE", reason = e.reason}
+    end
+    return uncertain
+end
+
 -- ── the hold ────────────────────────────────────────────────────────────────────────────────────────────
 
 --- The overworld hold. check(kind) re-reads the whole predicate set every time it is asked, so a caller
@@ -240,8 +273,14 @@ function O.writes(profile, coords, io, Permit, policy, hold)
         return reason == "box_deposit" and (inside(spans.CartRAM, addr, n) or inside(spans.WRAM, addr, n))
     end
 
+    -- Polished-local observer: called BEFORE underlying I/O, including swallowed/throwing writes.
+    -- Legacy callers never install one; receipts and legacy return values remain unchanged.
+    local box_observer
     local gate = Permit.new({
-        write_u8 = io.write_u8,
+        write_u8 = function(addr, value, domain)
+            if box_observer then box_observer(addr, value, domain) end
+            return io.write_u8(addr, value, domain)
+        end,
         domains = {
             ["System Bus"] = {
                 bounds = function(addr, n, reason) return permitted(reason, addr, n) == true end,
@@ -300,6 +339,14 @@ function O.writes(profile, coords, io, Permit, policy, hold)
     function self:disarm() return gate:disarm() end
     function self:write_batch(spans_) return gate:write_batch(spans_) end
     function self:block() return block, block_length, mons_at, ots_at, nicks_at end
+    function self:observe_box_write(observer)
+        assert(box_observer == nil or observer == nil, "box observer already installed")
+        box_observer = observer
+    end
+    function self:box_context(token)
+        if token == nil then return policy.lifetime.capture() end
+        return policy.lifetime.valid(token) == true and hold:check("party_collection") == true
+    end
 
     local function wram(addr, n)
         assert(io.bank_valid(bank, addr, n) == true, "party WRAM bank unavailable")
@@ -857,6 +904,314 @@ function O.boxes(deps)
     -- A settle only exists after a native save witness; Polished composes no save site, so there is never one.
     function self.settle() return true end
     function self.settle_memorial() return true end
+    -- Read-only BOX3 planner. It uses the SAME compaction, sealing and stat codec as
+    -- the legacy executor; no permit is armed and allocation is chosen before staging.
+    -- All pokedb bytes and both record copies are frozen, including unused Banks bits.
+    local function clone(value)
+        if type(value) ~= "table" then return value end
+        local out = {}
+        for k, v in pairs(value) do out[k] = clone(v) end
+        return out
+    end
+    local function flat(label, domain)
+        local row = assert(coords[label], "missing box coordinate " .. label)
+        if domain == "CartRAM" then return row[1] * 0x2000 + row[2] - 0xA000 end
+        return row[1] * 0x1000 + row[2] - 0xD000
+    end
+    local function entry_address(bank, entry)
+        for _, section in ipairs({{"A", 1, 167}, {"B", 168, 195}, {"C", 196, 207}}) do
+            if entry >= section[2] and entry <= section[3] then
+                return flat("sBoxMons" .. bank .. section[1], "CartRAM") + (entry - section[2]) * 49
+            end
+        end
+        refuse("entry outside pokedb")
+    end
+    local function snapshot()
+        local party, raw = party_block()
+        local snap = {bytes = {["System Bus"] = {}, CartRAM = {}, WRAM = {}}, party_count = party.count}
+        for i, v in ipairs(raw) do snap.bytes["System Bus"][block + i - 1] = v end
+        local function span(domain, at, n)
+            for a = at, at + n - 1 do
+                local v = io_.read_u8(a, domain)
+                if not integer(v, 0, 255) then refuse("box proof read unavailable") end
+                snap.bytes[domain][a] = v
+            end
+        end
+        for box = 1, MEMORIAL do
+            span("CartRAM", flat("sNewBox" .. box, "CartRAM"), 33)
+            span("CartRAM", flat("sBackupNewBox" .. box, "CartRAM"), 33)
+        end
+        for bank = 1, 2 do
+            span("WRAM", flat("wPokeDB" .. bank .. "UsedEntries", "WRAM"), 26)
+            for entry = 1, 207 do span("CartRAM", entry_address(bank, entry), 49) end
+        end
+        local census_ = reader.read_boxes("gameplay")
+        if not census_ or not census_.complete or #census_.bad_eggs > 0 or #census_.unflagged > 0 then
+            refuse("box proof census incomplete")
+        end
+        -- The decoded census must agree with frozen raw pointers/entries, not
+        -- merely be complete on a second, potentially contradictory read.
+        local pointers = 0
+        for box = 1, MEMORIAL do
+            local at = flat("sNewBox" .. box, "CartRAM")
+            for slot = 0, PER_BOX - 1 do
+                if snap.bytes.CartRAM[at + slot] ~= 0 then pointers = pointers + 1 end
+            end
+        end
+        if pointers ~= #census_.mons then refuse("box proof census/raw pointers disagree") end
+        for _, mon in ipairs(census_.mons) do
+            local at, slot = flat("sNewBox" .. mon.box, "CartRAM"), mon.slot - 1
+            local bank = 1 + ((snap.bytes.CartRAM[at + 20 + (slot >> 3)] >> (slot & 7)) & 1)
+            if snap.bytes.CartRAM[at + slot] ~= mon.entry or bank ~= mon.bank then
+                refuse("box proof census/raw coordinates disagree")
+            end
+            local raw_entry, bytes = entry_address(mon.bank, mon.entry), from_hex(mon.raw_hex)
+            for i = 1, 49 do
+                if snap.bytes.CartRAM[raw_entry + i - 1] ~= bytes[i] then refuse("box proof census/raw entry differs") end
+            end
+        end
+        snap.complete = true
+        return snap, party, raw, census_
+    end
+    local function identity()
+        local player = reads.read_player()
+        if not player then refuse("box proof player identity unreadable") end
+        local options, why = live_options()
+        if not options then refuse(why) end
+        return {player = player.raw_hex, rom = profile.rom_sha1, artifact = profile.artifact, options = options,
+                option_bytes = {io_.read_u8(OPT1, "System Bus"), io_.read_u8(OPT2, "System Bus")}}
+    end
+    local function same(a, b)
+        if type(a) ~= type(b) then return false end
+        if type(a) ~= "table" then return a == b end
+        for k, v in pairs(a) do if not same(v, b[k]) then return false end end
+        for k in pairs(b) do if a[k] == nil then return false end end
+        return true
+    end
+    local function stats_of(mon)
+        return {hp = mon.hp, maxHP = mon.max_hp, level = mon.level, status = mon.status,
+                attack = mon.attack, defense = mon.defense, speed = mon.speed,
+                spAttack = mon.special_attack, spDefense = mon.special_defense}
+    end
+    local function context_valid(p, context)
+        return type(context) == "table" and type(context.valid) == "function" and context.valid() == true
+               and p.write_id == context.write_id and p.session == context.session
+               and p.player == context.player and p.wire_key == (context.wire_key or p.key)
+               and p.generation == context.generation and writes:box_context(p.read_token or p.token)
+               and same(p.identity, identity())
+    end
+    local function put(image, domain, at, values)
+        for i, v in ipairs(values) do image.bytes[domain][at + i - 1] = v end
+    end
+    local function ignore(p, domain, at, n)
+        p.pre_ignored[domain] = p.pre_ignored[domain] or {}
+        for a = at, at + n - 1 do p.pre_ignored[domain][a] = true end
+    end
+    function self.plan_box_write(cmd, key, context)
+        local ok, p = pcall(function()
+            assert(cmd == "box_mon" or cmd == "party_mon" or cmd == "memorialize", "unknown box command")
+            assert(type(context) == "table" and type(context.write_id) == "string" and context.write_id ~= ""
+                   and type(context.session) == "string" and context.session ~= "" and context.generation ~= nil
+                   and type(context.valid) == "function", "explicit box operation context required")
+            local plan = {cmd = cmd, key = key, wire_key = context.wire_key or key, player = context.player,
+                          write_id = context.write_id, session = context.session, generation = context.generation,
+                          token = writes:box_context(), identity = identity(), permit_log_start = #writes.log,
+                          pre_ignored = {}, emission_started = false, source_valid = false}
+            assert(context_valid(plan, context), "box operation context unavailable")
+            local before, party, raw, census_ = snapshot()
+            plan.before = before
+            local pmon, pwhy = find_key(party.mons, key)
+            local found, hits = nil, 0
+            for _, mon in ipairs(census_.mons) do
+                if mon.key == key then found, hits = mon, hits + 1 end
+            end
+            if pwhy or hits > 1 or (not pmon and not found) then
+                plan.reason = "missing or ambiguous expected source"
+                return plan
+            end
+            local function guard(why)
+                plan.guard_refusal, plan.reason = true, why
+                return plan
+            end
+            if cmd == "memorialize" then
+                plan.source_valid = not (pmon and found)
+                return guard("Polished memorialize is not composed")
+            end
+            if cmd == "box_mon" then
+                if not pmon or found then plan.reason = "deposit source inconsistent"; return plan end
+                plan.source_valid = true
+                if pmon.is_egg then return guard("egg in the party") end
+                if party.count <= 1 then return guard("last party mon") end
+                for _, mon in ipairs(party.mons) do
+                    if mon.slot >= pmon.slot and mail[mon.held_item] then return guard("party mail in the party") end
+                end
+                local box, slot
+                for b = 1, MEMORIAL - 1 do
+                    for s_ = 1, PER_BOX do
+                        if before.bytes.CartRAM[flat("sNewBox" .. b, "CartRAM") + s_ - 1] == 0 then
+                            box, slot = b, s_
+                            break
+                        end
+                    end
+                    if box then break end
+                end
+                if not box then return guard("no free box slot") end
+                local referenced = {{}, {}}
+                for _, copy in ipairs({"sNewBox", "sBackupNewBox"}) do
+                    for b = 1, MEMORIAL do
+                        local at = flat(copy .. b, "CartRAM")
+                        for s_ = 0, PER_BOX - 1 do
+                            local entry = before.bytes.CartRAM[at + s_]
+                            local bank = 1 + ((before.bytes.CartRAM[at + 20 + (s_ >> 3)] >> (s_ & 7)) & 1)
+                            if entry ~= 0 then referenced[bank][entry] = true end
+                        end
+                    end
+                end
+                local bank, entry, flag_at
+                for d = 1, 2 do
+                    for e = 1, 207 do
+                        local at = flat("wPokeDB" .. d .. "UsedEntries", "WRAM") + ((e - 1) >> 3)
+                        if not referenced[d][e] and (before.bytes.WRAM[at] & (1 << ((e - 1) & 7))) == 0 then
+                            bank, entry, flag_at = d, e, at
+                            break
+                        end
+                    end
+                    if bank then break end
+                end
+                if not bank then return guard("no free pokedb entry: native save required") end
+                local at = flat("sNewBox" .. box, "CartRAM")
+                local bits_at, mask = at + 20 + ((slot - 1) >> 3), 1 << ((slot - 1) & 7)
+                local sealed = Boxes.entry_from_party(blob_of(raw, pmon.slot))
+                plan.source = {slot = pmon.slot, record_at = block + mons_at + pmon.slot * s.End,
+                               ot_at = block + ots_at + pmon.slot * c.NAME_LENGTH,
+                               nickname_at = block + nicks_at + pmon.slot * c.MON_NAME_LENGTH}
+                plan.destination = {box = box, slot = slot, bank = bank, entry = entry, entries_at = at + slot - 1,
+                                    bits_at = bits_at, flag_at = flag_at, entry_at = entry_address(bank, entry)}
+                plan.sealed_entry = sealed
+                plan.postimage = clone(before)
+                plan.postimage.party_count = party.count - 1
+                put(plan.postimage, "System Bus", block, removed(raw, pmon.slot))
+                put(plan.postimage, "CartRAM", entry_address(bank, entry), sealed)
+                put(plan.postimage, "WRAM", flag_at, {before.bytes.WRAM[flag_at] | (1 << ((entry - 1) & 7))})
+                put(plan.postimage, "CartRAM", bits_at,
+                    {bank == 2 and (before.bytes.CartRAM[bits_at] | mask) or (before.bytes.CartRAM[bits_at] & ~mask & 255)})
+                put(plan.postimage, "CartRAM", at + slot - 1, {entry})
+                ignore(plan, "CartRAM", entry_address(bank, entry), 49)
+                plan.stats = stats_of(pmon)
+                return plan
+            end
+            if not found then
+                if pmon and not pmon.is_egg and (pmon.hp or 0) == 0 then
+                    plan.source_valid = true
+                    return guard("dead in the party (hp 0)")
+                end
+                plan.reason = "new withdrawal has no boxed source; retained operation evidence required"
+                return plan
+            end
+            if pmon then plan.reason = "both places without retained operation evidence"; return plan end
+            plan.source_valid = true
+            if found.is_egg then return guard("egg in the box") end
+            if mail[found.held_item] then return guard("mail in the box") end
+            if party.count >= c.PARTY_LENGTH then return guard("party full") end
+            local composed, composition_why = pcall(require_withdraw)
+            if not composed then return guard(tostring(composition_why)) end
+            local entry = hex_bytes(found.raw_hex, 49, "box entry")
+            local opts = plan.identity.options
+            local built, record, view, why = pcall(STATS.party_from_savemon, entry, {
+                apply_evs = opts.apply_evs, natures_on = opts.natures_on, perfect_ivs = opts.perfect_ivs,
+                base_stats = BASE, variant_record = VARIANT, move_pp = MOVE_PP})
+            if not built then return guard("stat rebuild refused: " .. tostring(record)) end
+            if not record then return guard("stat rebuild refused: " .. tostring(why)) end
+            local ot = hex_bytes(found.ot_raw_hex, 8, "OT name")
+            for i = 1, 3 do ot[8 + i] = entry[29 + i] end
+            local nick = hex_bytes(found.nickname_raw_hex, 11, "nickname")
+            local at, target = record_flat(found.box), party.count
+            local entries_at, bits_at = at + found.slot - 1, at + 20 + ((found.slot - 1) >> 3)
+            plan.source = {box = found.box, slot = found.slot, bank = found.bank, entry = found.entry,
+                           entries_at = entries_at, bits_at = bits_at, entry_at = entry_address(found.bank, found.entry)}
+            plan.sealed_entry = entry
+            plan.postimage = clone(before)
+            plan.postimage.party_count = party.count + 1
+            for _, field in ipairs({{mons_at, s.End, record}, {ots_at, c.NAME_LENGTH, ot},
+                                   {nicks_at, c.MON_NAME_LENGTH, nick}}) do
+                local dest = block + field[1] + target * field[2]
+                put(plan.postimage, "System Bus", dest, field[3])
+                ignore(plan, "System Bus", dest, field[2])
+            end
+            put(plan.postimage, "System Bus", block, {party.count + 1})
+            put(plan.postimage, "CartRAM", entries_at, {0})
+            put(plan.postimage, "CartRAM", bits_at, {before.bytes.CartRAM[bits_at] & ~(1 << ((found.slot - 1) & 7)) & 255})
+            plan.stats = stats_of(view)
+            return plan
+        end)
+        if ok then return p end
+        return nil, tostring(p)
+    end
+
+    -- Read-only reclassification, optionally finishing ONLY retained withdrawal pointer/Banks
+    -- cleanup. No new append, allocation, deposit repair or memorial repair is authorized.
+    function self.classify_box_write(p, context, cleanup)
+        -- A later proof may use a fresh hold, never a new session/save/checkpoint
+        -- generation. The caller's valid() must cover reset and ROM continuity.
+        p.read_token = writes:box_context()
+        local valid = pcall(function() assert(context_valid(p, context), "box context changed") end)
+        p.context_valid = valid
+        if not valid then p.reason = "box operation identity/options/context changed" end
+        local ok, after = pcall(snapshot)
+        p.after = ok and after or nil
+        valid = valid and pcall(function() assert(context_valid(p, context), "box context changed during readback") end)
+        p.context_valid = valid
+        if cleanup and valid and p.cmd == "party_mon" and p.source and p.postimage and p.after then
+            local ignored = {CartRAM = {[p.source.entries_at] = true, [p.source.bits_at] = true}}
+            if image_matches(p.postimage, p.after, ignored) then
+                local src, pre, got = p.source, p.before.bytes.CartRAM, p.after.bytes.CartRAM
+                if (got[src.entries_at] == pre[src.entries_at] or got[src.entries_at] == 0)
+                   and (got[src.bits_at] == pre[src.bits_at] or got[src.bits_at] == p.postimage.bytes.CartRAM[src.bits_at]) then
+                    for _, at in ipairs({src.entries_at, src.bits_at}) do
+                        local want = p.postimage.bytes.CartRAM[at]
+                        if got[at] ~= want then
+                            local wrote = pcall(function()
+                                assert(context_valid(p, context), "box cleanup context changed")
+                                writes:arm("box_deposit", function(d, a, n) return d == "CartRAM" and a == at and n == 1 end)
+                                writes:write_batch({{domain = "CartRAM", addr = at, bytes = {want}}})
+                            end)
+                            writes:disarm()
+                            -- Entries must be freshly proved clear BEFORE touching Banks.
+                            local read_ok, byte = pcall(io_.read_u8, at, "CartRAM")
+                            if not wrote or not read_ok or byte ~= want then break end
+                        end
+                    end
+                    local read_ok, fresh = pcall(snapshot)
+                    p.after = read_ok and fresh or nil
+                    p.context_valid = pcall(function() assert(context_valid(p, context)) end)
+                end
+            end
+        end
+        return O.classify_box_write(p)
+    end
+
+    -- Explicit-only adapter seam; entry/client do not negotiate or call it in this card.
+    -- Returns structured result AND retained operation evidence for same-ID reclassification.
+    function self.attempt_box_write(cmd, key, context)
+        local p, why = self.plan_box_write(cmd, key, context)
+        if not p then return {outcome = "UNCERTAIN", reason = why} end
+        if p.source_valid and p.postimage and not p.guard_refusal then
+            p.attempted = true
+            writes:observe_box_write(function()
+                p.emission_started = true
+            end)
+            local ran, failure = pcall(function()
+                local fn = cmd == "box_mon" and self.deposit or self.withdraw
+                local done, note = fn(key)
+                if not done then p.reason = tostring(note) end
+            end)
+            writes:observe_box_write(nil)
+            writes:disarm()
+            if not ran then p.reason = tostring(failure) end
+        end
+        p.permit_log_end = #writes.log
+        return self.classify_box_write(p, context), p
+    end
     return self
 end
 
