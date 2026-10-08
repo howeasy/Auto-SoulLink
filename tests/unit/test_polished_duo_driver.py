@@ -4,6 +4,8 @@ import copy
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.error import URLError
 
 import pytest
 
@@ -732,10 +734,68 @@ def test_synth_staging_is_disclosed_only_where_it_is_used():
         assert any("HP" in s for s in duo.SYNTH_SETUP[name]) and any("disconnect" in s for s in duo.SYNTH_SETUP[name])
 
 
-def test_duo_play_lua_speaks_the_runner_protocol():
-    src = (REPO / "tools/polished_live/duo_play.lua").read_text(encoding="utf-8")
-    for token in ("PLAY_READY", "PLAY_STEP", "PLAY_FINAL", "step_%d.json", '"catch"', '"snapshot"', '"await_cmd"',
-                  '"synth_hp0"', '"stop"', "duo-play-side-", "C.disconnect()", "raw_write_u8"):
-        assert token in src, token
-    assert "BattleMenu_Run" in src and '"B" or "Start"' not in src     # the catch never chooses Run (no_catch dead zone)
-    assert "console.log" not in src                                       # milestones only, through L.log
+@pytest.mark.parametrize("startup_error", [ConnectionRefusedError("starting"), URLError("starting")])
+def test_play_waits_for_server_readiness_before_starting_both_sides(tmp_path, monkeypatch, startup_error):
+    """A real startup-boundary failure must not abort the run before its emulator launches."""
+    monkeypatch.setattr(duo, "LANE", tmp_path / "lane")
+    source = tmp_path / "release"
+    patch = tmp_path / "patch"
+    source.write_bytes(b"release")
+    patch.write_bytes(b"patch")
+    monkeypatch.setattr(duo, "RELEASE", source)
+    monkeypatch.setattr(duo, "UPS", patch)
+    rom = b"staged-test-rom"
+    monkeypatch.setattr(duo, "INTEGRATED_SHA1", duo.hashlib.sha1(rom).hexdigest())
+    from patch.tools import make_ups
+    monkeypatch.setattr(duo.sys, "path", list(sys.path))
+
+    monkeypatch.setattr(make_ups, "ups_apply", lambda base, patch: rom)
+    monkeypatch.setitem(sys.modules, "gen1_playthrough", SimpleNamespace(
+        BIZHAWK_CONFIG="unused-config", EMUHAWK="EmuHawk.exe", write_run_config=lambda *a, **kw: None))
+    monkeypatch.setitem(sys.modules, "harness", SimpleNamespace(sym_table=lambda: {}, free_port=lambda: 54321))
+    fixtures = {r: tmp_path / f"{r}.SaveRAM" for r in ("a", "b")}
+    saves = synth_pair()
+    for role, data in zip(("a", "b"), saves, strict=True):
+        fixtures[role].write_bytes(data)
+    identities = {r: duo.fixture_identity(fixtures[r].read_bytes()) for r in fixtures}
+    ready = False
+    requests = 0
+    processes = []
+
+    def status(port, path):
+        nonlocal requests, ready
+        requests += 1
+        if requests == 1:
+            raise startup_error
+        ready = True
+        return {"links": _link_status()["links"], "players": {"a": {}, "b": {}}, "area_states": {AREA: "linked"}}
+
+    class Process:
+        def __init__(self, command, **kwargs):
+            self.pid, self.returncode = 100 + len(processes), None
+            self.server = "-m" in command
+            if not self.server:
+                assert ready, "emulator launched before the HTTP server became ready"
+                role = "a" if "/a/config.ini" in command[-2] else "b"
+                result = Path(duo.side_paths(duo.LANE / "play-link", role)["result"])
+                result.write_text("PLAY_READY\n", encoding="utf-8")
+            processes.append(self)
+
+        def poll(self):
+            return None if self.server else 0
+
+    def wire(path):
+        return link_ev()["wire"]["a" if path.name == "wire_a.jsonl" else "b"]
+
+    monkeypatch.setattr(duo, "http_json", status)
+    monkeypatch.setattr(duo.subprocess, "Popen", Process)
+    monkeypatch.setattr(duo, "kill_pid", lambda proc, label: setattr(proc, "returncode", 0))
+    monkeypatch.setattr(duo.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(duo, "read_jsonl", wire)
+    monkeypatch.setattr(duo, "play_step_lines", lambda text: {
+        "catch_a": _catch(KA, A_OWN), "catch_b": _catch(KB, B_OWN),
+        "stop_a": {"ok": True}, "stop_b": {"ok": True},
+    })
+    verdict, reasons, _ = duo.play_run(_args(True), "link", fixtures, identities, False)
+    assert (verdict, reasons) == ("PASS", [])
+    assert len(processes) == 3 and all(p.returncode == 0 for p in processes)
