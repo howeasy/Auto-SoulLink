@@ -102,6 +102,10 @@ class Pump(wp.Rig):
             self.machine.poke(a, value)
         else:
             self.mem[a] = value
+        if (getattr(self, "fail_after_once_address", None) == a
+                and value == self.fail_after_once_value):
+            self.fail_after_once_address = None
+            raise RuntimeError("one-shot fault AFTER publication store")
 
     def command(self, *commands, split=False):
         if split:
@@ -526,7 +530,7 @@ def test_prepare_lease_guard_mutants_are_killed(offset, expression):
 
 @pytest.mark.parametrize("fault", ["write", "release", "close", "reset", "withdraw"],
                          ids=["staging", "release", "close", "reset", "withdraw"])
-def test_attempted_apply_faults_never_claim_certain_refusal(fault):
+def test_apply_faults_follow_the_generation_publication_boundary(fault):
     p = Pump()
     p.accepted(p.apply_command())
     if fault == "write":
@@ -551,8 +555,15 @@ def test_attempted_apply_faults_never_claim_certain_refusal(fault):
         p.put(5, 0)
     p.frame(3)
     done = p.sent("trade_done")
-    assert len(done) == 1 and done[0]["uncertain"] is True and "new_key" not in done[0]
-    assert done[0].get("after_reset", False) == (fault == "reset")
+    if fault == "write":
+        # Staging failed before fresh generation; even the failed token close cannot start APPLY.
+        assert done == []
+        reports = [m for m in p.sent("menu_result") if m.get("choice") == 0]
+        assert len(reports) == 1 and reports[0].get("withdraw") is True
+        assert p.binder.disposition(p.binder)[0] == "NOT_PERFORMED"
+    else:
+        assert len(done) == 1 and done[0]["uncertain"] is True and "new_key" not in done[0]
+        assert done[0].get("after_reset", False) == (fault == "reset")
 
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"], ids=["crystal", "gold", "silver"])
@@ -662,26 +673,38 @@ def responder_accepted(p):
 
 
 @pytest.mark.parametrize("role", ["proposer", "responder"], ids=["proposer", "responder"])
-@pytest.mark.parametrize("published", [False, True], ids=["before-publication", "after-command"])
-def test_caller_uses_binder_arm_fault_disposition(role, published):
+@pytest.mark.parametrize("fault", ["staging", "command", "generation"],
+                         ids=["before-publication", "after-command", "after-fresh-generation"])
+def test_caller_uses_binder_arm_fault_disposition(role, fault):
     p = Pump()
     if role == "proposer":
         p.accepted(p.apply_command())
     else:
         responder_accepted(p)
     family = p.parts.profile.overlay.trade
-    p.fail_once_address = family.lease.base + 6 if published else family.staging.party.addr
+    base = family.lease.base
+    held_gen = p.mem[base + 6]
+    if fault == "generation":
+        p.fail_after_once_address = base + 6  # store fresh generation, THEN throw
+        p.fail_after_once_value = (held_gen + 1) % 256  # ignore the header's rewrite of the held generation
+    else:
+        p.fail_once_address = base + 6 if fault == "command" else family.staging.party.addr
     p.frame(3)
-    if published:
+    if fault == "generation":
+        assert p.mem[base + 6] == (held_gen + 1) % 256
         assert len(p.sent("trade_done")) == 1 and p.sent("trade_done")[0]["uncertain"] is True
         assert p.cancel_trace == []
+        assert not [m for m in p.sent("menu_result") if m.get("choice") == 0]
+        assert p.binder.disposition(p.binder)[0] == "UNCERTAIN"
     else:
+        assert p.mem[base + 6] == p.mem[base + 7] == held_gen
+        if fault == "command":
+            assert p.mem[base + 5] == family.commands.APPLY  # command alone did land, but was not published
         assert p.sent("trade_done") == []
         reports = [m for m in p.sent("menu_result") if m.get("choice") == 0]
         assert len(reports) == 1
         assert reports[0].get("withdraw", False) == (role == "proposer")
         assert p.binder.disposition(p.binder)[0] == "NOT_PERFORMED"
-        base = family.lease.base
         assert [p.mem[base + i] for i in range(12, 16)] == [0, 0, 0, 0]
 
 
@@ -724,7 +747,7 @@ def test_caller_does_not_cancel_terminal_decline(role):
     assert not p.cancel_trace
 
 
-def test_cancel_uncertainty_retires_without_reset_or_repeat():
+def test_cancel_token_fault_reports_not_performed_and_waits_for_closure(capfd):
     p = Pump()
     p.accepted()
     p.fail_write = True
@@ -734,14 +757,24 @@ def test_cancel_uncertainty_retires_without_reset_or_repeat():
     resets = []
     p.lua.globals().cancel_reset = lambda: resets.append(True)
     p.lua.execute("""return function(b)
-        b.closed=function() return true end
-        b.reset=function() cancel_reset(); return nil end
+        local reset=b.reset
+        b.reset=function(self) cancel_reset(); return reset(self) end
     end""")(p.binder)
     before = p.writes()
     p.frame(4)
     assert len(p.cancel_trace) == 1 and p.writes() == before and resets == []
-    assert p.binder.disposition(p.binder)[0] == "UNCERTAIN"
+    assert p.binder.closed(p.binder) is False
+    assert p.binder.disposition(p.binder)[0] == "NOT_PERFORMED"
     assert not p.sent("trade_done")
+    reports = [m for m in p.sent("menu_result") if m.get("choice") == 0]
+    assert len(reports) == 1 and reports[0].get("withdraw") is True
+    assert capfd.readouterr().out.count("trade visit cancelled before APPLY") == 1
+    p.put(5, 0)  # MODEL native token check/watchdog closes the lease, not a forged closed() answer
+    p.frame(4)
+    assert resets == [True] and len(p.cancel_trace) == 1 and p.writes() == before
+    assert not p.sent("trade_done")
+    assert [m for m in p.sent("menu_result") if m.get("choice") == 0] == reports
+    assert "trade visit cancelled before APPLY" not in capfd.readouterr().out
 
 
 @pytest.mark.parametrize("kind", ["cancel", "attempt"], ids=["drop-cancel", "pre-arm-attempted"])
