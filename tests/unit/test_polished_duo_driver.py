@@ -799,3 +799,34 @@ def test_play_waits_for_server_readiness_before_starting_both_sides(tmp_path, mo
     verdict, reasons, _ = duo.play_run(_args(True), "link", fixtures, identities, False)
     assert (verdict, reasons) == ("PASS", [])
     assert len(processes) == 3 and all(p.returncode == 0 for p in processes)
+
+
+@pytest.mark.parametrize("state", ["occupied", "empty", "invalid"])
+def test_play_snapshot_reads_the_production_box_census(state):
+    """The live recorder must observe deposited keys, not mistake {mons=...} for an empty array."""
+    from tests.unit.test_polished_boxes import Image, codec_key
+    from tests.unit.test_polished_boxes_census import Rig, deposited, seal_save
+
+    if state == "occupied":
+        image, planted = deposited()
+    else:
+        image, planted = Image(), {}
+        if state == "empty":
+            seal_save(image)
+    rig = Rig(image)
+    before = image.snap()
+    reads = rig.lua.table_from({
+        "read_party": rig.lua.eval("function() return {mons={}} end"),
+        "read_storage_box": rig.census.read_storage_box,
+    })
+    rig.lua.globals().emu = rig.lua.table_from({"framecount": rig.lua.eval("function() return 123 end")})
+    driver = (REPO / "tools/polished_live/duo_play.lua").read_text(encoding="utf-8")
+    # Execute the driver's actual read-back functions with the real production census over sealed SRAM.
+    chunk = driver[driver.index("local function pbyte("):driver.index("local function slot_of(")]
+    snapshot = rig.lua.execute("local P,L,PM = ...\n" + chunk + "\nreturn snapshot()",
+                              rig.lua.table_from({"reads": reads}),
+                              rig.lua.table_from({"rw": rig.lua.eval("function() return 0 end")}), rig.P)
+    got = sorted((mon["box"], mon["slot"], mon["key"]) for mon in snapshot["box"].values())
+    assert got == sorted((box - 1, slot - 1, codec_key(entry)) for (box, slot), entry in planted.items())
+    assert snapshot["box_why"] is None if state != "invalid" else "sSaveVersion 0000" in snapshot["box_why"]
+    assert image.snap() == before
