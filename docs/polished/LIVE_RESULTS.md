@@ -766,3 +766,20 @@ Trace sha256: corrected calibration `1ce96295ed630aa7fd58a7ba56e47a5a30bf9f6cb1c
 Card `g2p-rival-pred` (Codex Polished, commit `9affcc5b`). The probe now qualifies an OPERATION, not a site hit: bank/PC at the pinned site AND `hBattleTurn` = 1 AND `wBattleMode` = 2 AND `wOtherTrainerClass` in the rival set AND `wOtherTrainerID` = the configured rival (`rival_gate_probe.lua:74-79`; Python recomputes it independently and rejects forged flags). Raw hits are still recorded (`raw_qualified`). Coordinator re-checked: fresh run `synth-pdm83y_x` (owned PID 19156, overlay `877a477a`, derivative fixture `030c62ff...`, 300%) has exactly three operation-qualified rows, all at frame 9125: `0F:47DD/47E0/480D`, side 1, mode 2, class `$1B`, id 3, OT party count 2; four earlier wild callbacks are raw-qualified only. Oracle `RESULT: PASS rival-gate-probe (synth/rival, 0 reasons)`; trace sha256 `ece415ff903aa319de998955b95eaf34ad505d4c4573006544aea612474a994b`. Offline re-judgement of the older traces (`--rejudge`, no emulator): `synth-i_xfq96x` OPEN (MISSING_SIDE: its rows predate the side field; a source-conditional model assuming side 1 passes, which is not a physical PASS), `synth-xq6b4nrp` OPEN (no rival gate), `synth-1agu9bbq` PASS-as-control (zero operation-qualified gates). The three traces are committed under `tests/fixtures/polished/rival/` with pinned sha256. 365 probe/builder tests pass.
 
 Still open: the production discriminator. `lua/gen2/polished_rival.lua:135-146` already checks trainer mode, bank/PC, class and an OPTIONAL trainer id; it needs the explicit enemy-side check and a REQUIRED bound trainer identity (symbols at the callback: `hBattleTurn` 00:FFD1, `wBattleMode` 01:D233, `wOtherTrainerClass` 01:D235, `wOtherTrainerID` 01:D237, `wOTPartyCount` 01:D283). Not done: any rival swap write, other rival classes, 1x speed, a fixed-frame replay (the route is a timed native traversal, RNG/RTC dependent).
+
+## Held trade service, six serverless cases live on the current overlay (2026-10-08, SYNTH + TEST HOST, DEV). PASS (service-level)
+
+Card `g2p-svclive` (OMP 21080, probe fixes `6a754640`, merged `a73ce497c`). Overlay `cf03f53accefbc5f3fee9062846699e30c4c987b` (C5 bounded rollback, commit compile-disabled, `7e:573B` = 0), applied privately and sha1-checked before every launch. Fixture `75c7a5dc...` (unchanged after all runs). Disclosure in every receipt: SYNTH event flag `wEventFlags+4 |= $02` + engine warp to POKECENTER_2F; TEST HOST copies its own mon 0 into OT slot 0 for APPLY; no cable partner, server, SLink client or native commit. Evidence root `F:/slink-work/lanes/pol-svclive` (`receipts.json`, per-attempt `probe/{result,trace,oracle}`).
+
+| case | attempt | recorder | Python oracle |
+|---|---|---|---|
+| offer-reject | 1 | FAIL aborted, frame 991 | FAIL (probe defect: dot-call into the lease writer; zero-placeholder store values) |
+| offer-reject | 2 | PASS, frame 1229 | PASS |
+| cancel-menu | 1 | PASS, frame 1134 | PASS |
+| no-eligible | 1 | PASS, frame 1085 | PASS |
+| query-timeout | 1 | PASS, frame 1684 (QUERY entry to close: 600 frames) | PASS |
+| apply-done1 | 1 | PASS, frame 1232 | FAIL (recorder did not yet decode `ld [de],a` token stores) |
+| apply-done1 | 2 | PASS, frame 1232 | PASS: DONE result 1, generation = ack = 3, host RELEASE seen, party 5 -> 5, party checksum unchanged |
+| apply-invalid | 1 | PASS, frame 1231 | PASS |
+
+Both FAILs were instrument defects, fixed red-first in the probe (`trade_service_probe.lua`) before the single retry; no unchanged failing case was re-run. In every PASS the lease ends idle (command/available/mask 0), the script engine is restored and the native close/return order holds. `apply-done1` PASS is disabled-commit evidence (result 1 = not performed), never a trade. Not shown: a cable partner, the SLink client/server, an enabled commit.
