@@ -483,7 +483,6 @@ local function op_lose_native(step)
         end
         if foe and L.rw("wBattleMode") == 0 and L.ow_idle() then
             if not step.all and has_report("faint", step.key) then return finish(true) end
-            if not step.all then return finish(false, "battle-ended-before-linked-faint-wire") end
             -- No further setup writes: surviving HP1 mons fight a fresh native encounter.
             encounters = encounters + 1
             if encounters > 80 then return finish(false,"native-encounter-bound-80") end
