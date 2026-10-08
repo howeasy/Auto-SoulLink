@@ -174,7 +174,7 @@ ev.capture = cap
 -- the pair forms server-side when the partner's capture and ours are both in; the next link_panel carries it
 local function pair_rows(rows)
     for _, r in ipairs(rows or {}) do
-        local n, d = r:match("^Pairs alive|(%d+)/(%d+)$")
+        local n, d = r:match("^PAIRS (%d+)/(%d+)$")   -- compact rows: Gen2PolishedAdapter.info_panel_width() == line_max
         if n and tonumber(d) >= 1 then return true end
     end
     return false
@@ -295,6 +295,9 @@ L.check("C5 driver wrote only the 6 SYNTH setup bytes, none in the mailbox", #ev
 L.check("pages rendered", #ev.pages >= 1, #ev.pages)
 -- render fidelity against the rows the server SENT: page p shows rows 2p-1 and 2p of the pair link_panel
 local pr = ev.pair_rows or {}
+for i, r in ipairs(pr) do
+    L.check(fmt("server row %d fits the ROM line whole and has no '|' (%q)", i, r), #r <= PAN.line_max and not r:find("|", 1, true), #r)
+end
 for _, p in ipairs(ev.pages) do
     for l = 1, PAN.lines do
         local want = enc_line(pr[(p.page - 1) * PAN.lines + l] or "")   -- right-trimmed; keeps a blanked leading '|'

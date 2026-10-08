@@ -78,6 +78,17 @@ def _json(name):
 
 
 @cache
+def _panel_line_max() -> int:
+    """Glyphs per ROM panel line, from the pinned profile's overlay.panel block (not a constant here)."""
+    try:
+        line_max = _json("profile")["titles"]["polished"]["overlay"]["panel"]["line_max"]
+    except (KeyError, TypeError) as error:
+        raise ValueError("Polished profile has no overlay.panel.line_max") from error
+    _require(_integer(line_max, 1, 20), "Polished panel line_max must be 1..20")
+    return line_max
+
+
+@cache
 def _rom_sha1() -> str:
     with open(_ROOT / "data" / "polished_sources.lock.json", encoding="utf-8") as fh:
         return json.load(fh)["outputs"]["polishedcrystal"]["sha1"]
@@ -406,6 +417,14 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
 
     def native_trade_ui(self):
         return self._artifact_kind in _COMPANION
+
+    def info_panel_width(self):
+        # The Polished ROM panel is `lines` x `line_max` glyphs per page (profile overlay.panel), far narrower than the
+        # 20-column vanilla screen; the server builds its compact single-line rows for any width 0 < w <= 20. Wide
+        # `label|field|...` rows are unreadable here ('|' is unmapped, values cut at 16). 0 = no panel on a clean build.
+        if not self.supports_info_panel():
+            return 0
+        return _panel_line_max()
 
     def encounter_table(self, area_id):
         # a randomized cartridge shows only its own tables, never the vanilla ones beside it

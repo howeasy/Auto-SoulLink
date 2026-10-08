@@ -55,11 +55,7 @@ def read_jsonl(path: pathlib.Path) -> list:
     return out
 
 
-def split_row(r: str) -> list:
-    return r.split("|")
-
-
-def judge_server_rows(rows, links, area_states, badges, area_tag_expected="RT29") -> tuple[list, list]:
+def judge_server_rows(rows, links, area_states, badges, line_max=16) -> tuple[list, list]:
     """O2: the link_panel rows the server published, against the server's OWN persisted state. Returns (checks, failures)."""
     checks, fails = [], []
 
@@ -74,18 +70,20 @@ def judge_server_rows(rows, links, area_states, badges, area_tag_expected="RT29"
         return checks, fails
     alive = sum(1 for e in links if e.get("status") == "alive")
     dead_zones = sum(1 for v in area_states.values() if v == "dead_zone")
-    rr = [split_row(r) for r in rows]
-    need("O2 first pair row names player a's mon, level and the area",
-         len(rr) >= 1 and rr[0][:3] == [area_tag_expected, live[0]["a"]["nickname"][:10], str(live[0]["a"]["level"])],
-         rr[0][:3] if rr else "no rows")
-    need("O2 second pair row (empty label) names the PARTNER's mon and level",
-         len(rr) >= 2 and rr[1][:3] == ["", live[0]["b"]["nickname"][:10], str(live[0]["b"]["level"])],
-         rr[1][:3] if len(rr) > 1 else "no rows")
-    need("O2 'Pairs alive' equals the server's link count", f"Pairs alive|{alive}/{len(live)}" in rows,
-         f"want Pairs alive|{alive}/{len(live)} in {rows}")
-    need("O2 'Dead zones' equals the server's dead-zone count", f"Dead zones|{dead_zones}" in rows, f"want Dead zones|{dead_zones}")
-    need("O2 'Badges' equals the popcount of player a's badges", f"Badges|{popcount(badges)}/8" in rows,
-         f"badges {badges!r} -> Badges|{popcount(badges)}/8")
+    # OPEN-PANEL-PAGES: Gen2PolishedAdapter.info_panel_width() == 16 (the ROM panel's line_max), so the server sends the COMPACT
+    # single-line rows (server.py _build_link_panel), not the wide `label|field|...` rows. Order: SOUL LINK, blank, PAIRS a/b,
+    # BADGES n/8, DEAD ZONES n, then a blank and one line per pair: ' ' (alive; 'X' otherwise) + mine-theirs, names <= 8 glyphs.
+    need("O2 every row fits the ROM panel line and carries no '|' (the ROM cannot draw it)",
+         all(len(r) <= line_max and "|" not in r for r in rows), [r for r in rows if len(r) > line_max or "|" in r])
+    need("O2 title row is SOUL LINK", rows[:1] == ["SOUL LINK"], rows[:1])
+    need("O2 'PAIRS a/b' equals the server's link count", f"PAIRS {alive}/{len(live)}" in rows, f"want PAIRS {alive}/{len(live)} in {rows}")
+    need("O2 'DEAD ZONES n' equals the server's dead-zone count", f"DEAD ZONES {dead_zones}" in rows, f"want DEAD ZONES {dead_zones}")
+    need("O2 'BADGES n/8' equals the popcount of player a's badges", f"BADGES {popcount(badges)}/8" in rows,
+         f"badges {badges!r} -> BADGES {popcount(badges)}/8")
+    e0 = live[0]
+    want_pair = (("X" if e0.get("status") != "alive" else " ")
+                 + f"{e0['a']['nickname'][:8]}-{e0['b']['nickname'][:8]}")[:line_max]
+    need("O2 pair line names player a's mon then the PARTNER's mon, whole", want_pair in rows, f"want {want_pair!r} in {rows}")
     return checks, fails
 
 

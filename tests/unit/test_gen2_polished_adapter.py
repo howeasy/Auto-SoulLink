@@ -227,3 +227,31 @@ def test_explode_remains_gated_before_live_qualification(adapter, tmp_path, enab
     assert adapter.supports_explode_mode() is False
     assert any(command['cmd']=='force_faint' for command in state.queued_commands['b'])
     assert not any(command['cmd']=='force_explode' for command in state.queued_commands['b'])
+
+
+# ── OPEN-PANEL-PAGES: the ROM panel is 2 lines x 16 glyphs per page, so the server must send compact rows ─────
+def test_info_panel_width_is_the_rom_panel_line_width_on_companion_kinds_only():
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    panel = json.loads((root / "data/games/polished_crystal/profile.json").read_text("utf-8"))["titles"]["polished"]["overlay"]["panel"]
+    assert panel["line_max"] == 16 and panel["lines"] == 2
+    widths = {k: Gen2PolishedAdapter(artifact_kind=k).info_panel_width() for k in ("clean", "overlay", "rand_overlay")}
+    assert widths == {"clean": 0, "overlay": panel["line_max"], "rand_overlay": panel["line_max"]}
+    from server.adapters.gen2_gsc import Gen2GSCAdapter
+    assert Gen2GSCAdapter.info_panel_width(Gen2PolishedAdapter(artifact_kind="overlay")) == 0   # vanilla Gen 2 stays 0
+
+
+def test_link_panel_for_polished_is_compact_and_fits_the_rom_line(tmp_path):
+    from server.server import SLinkServer
+    from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo
+    s = SLinkServer(data_dir=str(tmp_path))
+    s.state.adapter = s.adapter = Gen2PolishedAdapter(artifact_kind="overlay")
+    s.state.links = [LinkEntry(area_id="route_29", a=MonInfo(key="aaa", level=2, species=19, nickname="Rattata"),
+                               b=MonInfo(key="bbb", level=50, species=169, nickname="CROBAT"), status=LinkStatus.ALIVE)]
+    s.state.area_states["route_30"] = AreaStatus.DEAD_ZONE
+    s.player_badges["a"] = 0b101
+    rows = s._build_link_panel("a")["rows"]
+    assert rows[0] == "SOUL LINK" and "PAIRS 1/1" in rows and "BADGES 2/8" in rows and "DEAD ZONES 1" in rows
+    assert " Rattata-CROBAT" in rows
+    assert all(len(r) <= 16 and "|" not in r for r in rows), rows
