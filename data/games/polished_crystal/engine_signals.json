@@ -480,7 +480,7 @@
           "symbol": "LoseMoney",
           "status": "RESOLVED",
           "phase": "before_heal_dispatch",
-          "semantics": "Native whiteout entry before money/text/pause/heal (engine/events/whiteout.asm:9-30,57-60). Script_Whiteout's callasm LoseMoney is the sole caller; hScriptBank/hScriptPos must identify that caller after its four-byte opcode has been consumed. Observation only: snapshot the party at the hook, before HealParty. This also fires for trainer forfeits with living party members; do not require all party HP to be zero.",
+          "semantics": "Native whiteout entry before money/text/pause/heal (engine/events/whiteout.asm:9-30,57-60). Script_Whiteout's callasm LoseMoney is the sole caller; hScriptBank/hScriptPos must identify that caller after its four-byte opcode has been consumed. The hook fires for every native whiteout, including trainer forfeits. The consumer snapshots the party at the hook, before HealParty, and reports a Soul Link whiteout only when every non-egg party mon has HP 0 (owner ruling 2026-10-08: a trainer forfeit is not a whiteout).",
           "event_role": "OBSERVATION",
           "maturity": "SOURCE_CANDIDATE",
           "physical_firing": "OPEN",

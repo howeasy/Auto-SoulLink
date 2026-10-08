@@ -252,9 +252,10 @@ SITES: tuple[dict, ...] = (
     S("whiteout_before_heal", "whiteout", "LoseMoney", "before_heal_dispatch",
       "Native whiteout entry before money/text/pause/heal (engine/events/whiteout.asm:9-30,57-60). "
       "Script_Whiteout's callasm LoseMoney is the sole caller; hScriptBank/hScriptPos must identify "
-      "that caller after its four-byte opcode has been consumed. Observation only: snapshot the party "
-      "at the hook, before HealParty. This also fires for trainer forfeits with living party members; "
-      "do not require all party HP to be zero.",
+      "that caller after its four-byte opcode has been consumed. The hook fires for every native whiteout, "
+      "including trainer forfeits. The consumer snapshots the party at the hook, before HealParty, and "
+      "reports a Soul Link whiteout only when every non-egg party mon has HP 0 "
+      "(owner ruling 2026-10-08: a trainer forfeit is not a whiteout).",
       find_hex=lambda s: _proof_bytes("whiteout_before_heal", s).hex().upper(), guards=_whiteout_guards),
     # ---- capture / acquisition ----
     S("capture_party", "capture_party", "PokeBallEffect", "post_insert_post_nickname_copy",

@@ -95,12 +95,15 @@ not a physical callback receipt. The row remains `SOURCE_CANDIDATE`,
 load/fire bank/PC/byte validation are separate work.
 
 **Snapshot the party at the hook**, before queued processing can cross `HealParty`.
-Do not require all party HP to be zero: Polished trainer forfeits enter the same
-native whiteout with living party members (`engine/battle/core.asm:4862-4890`;
-`engine/events/whiteout.asm:12-19`). Whether those living mons should be retired
-is owner policy, not a reason to misclassify the native entry. Link, Battle Tower
-and can-lose outcomes do not use this caller unless they actually enter
-`Script_Whiteout`; unrelated shared-dispatch calls must never emit this signal.
+The hook fires for every native whiteout, including trainer forfeits with living
+party members (`engine/battle/core.asm:4862-4890`;
+`engine/events/whiteout.asm:12-19`). **Owner ruling 2026-10-08: a trainer forfeit
+is not a Soul Link whiteout.** The consumer reports `whiteout` only when every
+non-egg party mon has HP 0 in the snapshot taken at this hook (the vanilla
+predicate). Native entry alone is not sufficient to report a Soul Link whiteout.
+Link, Battle Tower and can-lose outcomes do not use this caller unless they
+actually enter `Script_Whiteout`; unrelated shared-dispatch calls must never
+emit this signal.
 
 The retained `poison_faint` row is **N/A for faint reporting**: at 1 HP Polished
 cures poison rather than reducing HP to zero, otherwise it deals 1 HP damage
