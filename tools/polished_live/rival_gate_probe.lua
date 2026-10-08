@@ -71,7 +71,9 @@ local function recorder(kind, addr)
         append(kind, {
             hook_addr = addr, pc = pc, sp = emu.getregister("SP"),
             bank = bank, matched = matched, qualified = qualified,
-            mode = L.rw("wBattleMode"), trainer_class = L.rw("wOtherTrainerClass"),
+            mode = L.rw("wBattleMode"), battle_turn = L.bus(L.SYM.hBattleTurn[2]),
+            hl = emu.getregister("HL"), flags = emu.getregister("F"),
+            trainer_class = L.rw("wOtherTrainerClass"),
             trainer_id = L.rw("wOtherTrainerID"), cur_ot_mon = L.rw("wCurOTMon"),
             cur_party_mon = L.rw("wCurPartyMon"), ot_party_count = L.rw("wOTPartyCount"),
             -- Always read the pinned bank via ROM, never accidentally read another bank's System Bus bytes.
@@ -102,12 +104,96 @@ local function observe_mode()
     })
 end
 
+-- Source-derived route: RIVAL_STAGING section 3; each target is verified from WRAM,
+-- never inferred from elapsed input or screenshots. Record all native inputs for replay.
+local function calibrate()
+    local steps, milestones = {}, {}
+    local function save()
+        for name, value in pairs({["route.json"] = {steps = steps}, ["calibration.json"] = milestones}) do
+            local f = assert(io.open(L.RUN .. "/" .. name, "w"))
+            f:write(L.json.encode(value)); f:close()
+        end
+    end
+    local function mark(label)
+        milestones[#milestones + 1] = {label = label, frame = emu.framecount(), elapsed = elapsed,
+            group = L.rw("wMapGroup"), map = L.rw("wMapNumber"), x = L.rw("wXCoord"),
+            y = L.rw("wYCoord"), mode = L.rw("wBattleMode")}
+        save()
+    end
+    local function frame(button)
+        assert(elapsed < config.frames, "calibration total frame bound")
+        local prev = steps[#steps]
+        if prev and prev.buttons[1] == button then prev.frames = prev.frames + 1
+        else steps[#steps + 1] = {frames = 1, buttons = button and {button} or {}} end
+        L.frame(button and {[button] = true} or {})
+        elapsed = elapsed + 1
+        observe_mode()
+    end
+    local function idle(n) for _ = 1, n do frame() end end
+    local function pulse() frame(elapsed % 16 < 2 and "A" or nil) end
+    local function bounded(predicate, action, label)
+        local start = elapsed
+        while not predicate() do
+            if elapsed - start >= 1800 then mark("STALL " .. label); error("1800-frame stall: " .. label) end
+            action()
+        end
+        mark(label)
+    end
+    L.hook("OWPlayerInput")
+    bounded(function() return L.ow_idle() and L.rw("wMapGroup") == 24 and L.rw("wMapNumber") == 3 end,
+        pulse, "boot Route29")
+    idle(30)
+    assert(L.rw("wXCoord") == 48 and L.rw("wYCoord") == 12, "unexpected fixture coordinates")
+    if config.expect == "wild" then
+        bounded(function() return L.rw("wBattleMode") == 1 end,
+            function() frame(elapsed % 160 < 80 and "Left" or "Right") end, "wild control entered")
+        idle(600)
+        mark("wild control complete")
+        return
+    end
+    local function wild()
+        mark("wild entered")
+        if config.expect == "wild" then return true end
+        bounded(function() return L.rw("wBattleMode") == 0 and L.ow_idle() end, pulse, "wild ended")
+        idle(30)
+        return false
+    end
+    local route = {{"Left",4},{"Down",2},{"Left",6},{"Down",2},{"Left",7},{"Up",6},
+        {"Right",5},{"Up",3},{"Left",13},{"Up",1},{"Left",2},{"Up",2},{"Left",5},
+        {"Down",2},{"Left",5},{"Down",4},{"Left",7},{"Up",3},{"Left",11}}
+    local dirs = {Left={-1,0},Right={1,0},Up={0,-1},Down={0,1}}
+    for seg, row in ipairs(route) do
+        for tile = 1, row[2] do
+            if L.rw("wBattleMode") == 1 and wild() then mark("wild control complete"); return end
+            local x,y = L.rw("wXCoord"), L.rw("wYCoord")
+            local targetx,targety = x + dirs[row[1]][1],y + dirs[row[1]][2]
+            local group,map = L.rw("wMapGroup"),L.rw("wMapNumber")
+            if targetx == -1 then group,map,targetx = 26,4,39 end
+            bounded(function()
+                return L.rw("wMapGroup") == group and L.rw("wMapNumber") == map
+                    and L.rw("wXCoord") == targetx and L.rw("wYCoord") == targety
+            end, function()
+                if L.rw("wBattleMode") == 1 then wild() else frame(row[1]) end
+            end, "segment " .. seg .. " tile " .. tile)
+            idle(24)
+        end
+    end
+    assert(config.expect ~= "wild", "wild control route produced no encounter")
+    local before = hook_counts.last.qualified
+    bounded(function() return hook_counts.last.qualified > before and L.rw("wBattleMode") == 2
+        and L.rw("wOtherTrainerClass") == 0x1B and L.rw("wOtherTrainerID") == 3 end,
+        pulse, "rival last witness")
+    idle(60)
+    mark("calibration complete")
+end
+
 local function play()
     config = L.json.decode(L.slurp(assert(os.getenv("POL_PROBE_CONFIG"))))
     L.hook_at("rival_probe_gate", 0x0F, 0x47DD, recorder("gate", 0x47DD))
     L.hook_at("rival_probe_next", 0x0F, 0x47E0, recorder("next", 0x47E0))
     L.hook_at("rival_probe_last", 0x0F, 0x480D, recorder("last", 0x480D))
-    client.speedmode(400)
+    client.speedmode(300)
+    if config.calibrate then calibrate(); return end
     for _, step in ipairs(config.steps) do
         local buttons = {}
         for _, button in ipairs(step.buttons) do buttons[button] = true end

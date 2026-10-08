@@ -174,27 +174,27 @@ Release buttons between calibrated holds. At the final segment, four Left
 steps reach Route 29 (0,7), the fifth crosses to Cherrygrove (39,7), and six
 more reach (33,7); stop walking when the rival script takes control.
 
-| Buttons | Steps | Endpoint |
-|---|---:|---|
-| Left | 4 | (44,12) |
-| Down | 2 | (44,14) |
-| Left | 6 | (38,14) |
-| Down | 2 | (38,16) |
-| Left | 7 | (31,16) |
-| Up | 6 | (31,10) |
-| Right | 5 | (36,10) |
-| Up | 3 | (36,7) |
-| Left | 13 | (23,7) |
-| Up | 1 | (23,6) |
-| Left | 2 | (21,6) |
-| Up | 2 | (21,4) |
-| Left | 5 | (16,4) |
-| Down | 2 | (16,6) |
-| Left | 5 | (11,6) |
-| Down | 4 | (11,10) |
-| Left | 7 | (4,10) |
-| Up | 3 | (4,7) |
-| Left | 11 | Cherrygrove (33,7), rival trigger |
+| Buttons | Steps | Endpoint | SYNTH calibration endpoint frame (2026-10-08) |
+|---|---:|---|---:|
+| Left | 4 | (44,12) | 510 |
+| Down | 2 | (44,14) | 597 |
+| Left | 6 | (38,14) | 844 |
+| Down | 2 | (38,16) | 1965 |
+| Left | 7 | (31,16) | 2252 |
+| Up | 6 | (31,10) | 2499 |
+| Right | 5 | (36,10) | 2706 |
+| Up | 3 | (36,7) | 2833 |
+| Left | 13 | (23,7) | 4403 |
+| Up | 1 | (23,6) | 4450 |
+| Left | 2 | (21,6) | 4537 |
+| Up | 2 | (21,4) | 4624 |
+| Left | 5 | (16,4) | 5867 |
+| Down | 2 | (16,6) | 5954 |
+| Left | 5 | (11,6) | 7196 |
+| Down | 4 | (11,10) | 7363 |
+| Left | 7 | (4,10) | 8683 |
+| Up | 3 | (4,7) | 8810 |
+| Left | 11 | Cherrygrove (33,7), rival trigger | 9258 |
 
 Source geometry calculation: read the 270-byte `src/maps/Route29.ablk` and
 220-byte `src/maps/CherrygroveCity.ablk`, with widths 30 and 20 blocks
@@ -286,6 +286,77 @@ rollback, 1x qualification, naturally played story progression, or release
 readiness. `EXPLODE_RIVAL.md:604-607` keeps the client hook and consumed-write
 proof as later P1/P4 work. The recorder runs at 400%
 (`rival_gate_probe.lua:89`), so report that speed explicitly.
+
+
+### Live card g2p-rival-live, 2026-10-08 (SYNTH; strict gate result FAIL)
+
+Source cut `7f56228b5`; integrated UPS 3727 bytes; overlay SHA1
+`877a477a7dfc70b775ca3f46461d67abebe07083`. No ROM rebuild, client/server,
+WRAM setup, or rival swap was performed. Requested speed was **300%**, not
+1x qualification (the earlier 400% description above is superseded for this card).
+EmuHawk binary SHA256 `f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd`.
+
+The existing `tools/polished_live/derive_rival_save.py` produced the section 2
+hash exactly. Independent input/output comparison: 32790 bytes each; differences
+only `1782:00->01`, `1F0D:E4->E5`, `2582:00->01`, `2D0D:E4->E5`; all 22 RTC
+footer bytes preserved. This SYNTH staging skips story progression. Native
+CONTINUE accepted the derivative and normal buttons traversed the source-derived
+90-tile route. Section 3's added endpoint-frame column is the measured second
+calibration; input frames during five wild battles are excluded from tile counts.
+The driver used native A pulses to defeat those wild mons, not injected battle state.
+
+All raw evidence is under `F:/slink-work/lanes/pol-rival-live/out/`:
+
+| Receipt subdirectory | Evidence / result |
+|---|---|
+| `synth-xq6b4nrp/probe` | First calibration, PID 15176: retained FAIL. Reached city (33,7), but an old wild `last` callback prematurely satisfied the calibration stop. No rival completion claim. |
+| `synth-i_xfq96x/probe` | Corrected fresh-witness calibration, PID 8372: recording completed, 10145 elapsed frames, no guest writes/CPU changes. Rival gate/next/last all frame **10085**, bank 0F, PCs **47DD/47E0/480D**, mode 2, class **1B**, ID **03**, count **2**, indices **0/0**, site `218bd2fa0cd1`. **Strict whole-run FAIL**: five earlier wild gate hits (frames 994,3030,4861,6191,7760). Route calibration succeeded; this is not a P0 PASS. |
+| `synth-1agu9bbq/probe` | Independent original-fixture wild control, PID 33740: recording completed, 1379 elapsed frames, zero mutations. **FAIL**: qualified gate/next/last frame **780**, bank 0F, exact callback PCs, mode **1**, class/ID **0/0**, count **1**, indices **0/0**, **hBattleTurn=1**, same site bytes. |
+
+Each directory contains `trace.json`, `result.txt`, `route.json` (exact timed
+native buttons from boot), `calibration.json` (read-only position milestones),
+`input.json`, `config.ini`, and symbols. `disclosure.json` binds source SHA256
+`75c7a5dc30126f746567202cfb39fe583dfa04eb226063560541f6cbd29f36b8` and derivative
+`030c62ff898050d81d80dea19677e8520e2f707dae0c35f873d87e79cf7ac1ae`.
+`evidence-manifest.json` hashes the raw outputs. Corrected calibration trace SHA256:
+`1ce96295ed630aa7fd58a7ba56e47a5a30bf9f6cb1c79ffe157abb18e62eb41c`;
+its timed route SHA256 `c0dd9bced4e1a47843b6c2561639cd456487f73516d5d4225f150588d6c3ee7b`.
+Wild trace SHA256 `1e53789331507f5e436d5e3e11504a7805ce4b4f0581a31c249f1ee34c67a5b9`.
+The wild recorder additionally captured side/register diagnostics; calibration2
+predates those added fields. Raw receipts were not rewritten/rejudged into PASS.
+No fixed-route replay was run: the successful timed route is a calibration receipt,
+not proof of deterministic reuse across RTC/RNG states.
+
+**Source correction to the earlier wild-control premise:** the site is in
+`SendInUserPkmn+149` (`data/polished/polished_slink.sym:10490-10497`). Although
+`src/engine/battle/core.asm:37-45` skips the trainer send-out at that location for
+wild battles and `:80-85` also calls the routine for player send-out, the separate
+**wild enemy initialization** at `:8079-8086` explicitly sets WILD_BATTLE, calls
+LoadEnemyWildmon, SetEnemyTurn, and SendInUserPkmn. `:1240-1245` selects the enemy
+party pointer when hBattleTurn is nonzero. Thus the measured wild callback is
+consistent with native source; it is not evidence that the probe manufactured a
+trainer battle, nor merely a player-side callback. The claim that this raw site
+has no qualified wild hits is FALSE on this cut. Enemy-side alone cannot fix it.
+
+**Proposed next card, NOT implemented:** at the recorder callback's bank/PC
+qualification in `tools/polished_live/rival_gate_probe.lua`, retain raw callbacks
+but define a separate rival-operation predicate requiring hBattleTurn==1,
+wBattleMode==2, rival class in 1B..1F, and the expected trainer ID/party identity
+(1B/03/count2 for this fixture), with matching ordered next/last observations.
+Add wild-enemy and player-side red tests before changing qualification; do not
+reinterpret the current FAIL receipts as PASS. HL/F raw diagnostics have no
+acceptance role; combined-register API validity was not established by this card.
+
+Verification: `python -m pytest tests/unit/test_polished_derive_rival_save.py
+ tests/unit/test_polished_rival_gate_probe.py -q --basetemp F:/slink-work/tmp/rival-live-final`
+from the isolated worktree: **350 passed**. Ruff clean for the changed Python
+runner/test. New executable Lua calibration tests cover observed endpoints,
+1800-frame stall, total bound, and the stale-wild-witness mutant (red control).
+Both original test files passed before calibration changes (**345 passed**).
+All three owned emulator processes exited; no other PID was killed.
+Open: revised predicate/oracle independent review, fixed-route replay, actual
+swap application/consumption, all rival classes and physical 1x qualification.
+No claim is made for the unrelated trade/faint test files, which were not run.
 
 ## 5. Risks and implementation prerequisites
 

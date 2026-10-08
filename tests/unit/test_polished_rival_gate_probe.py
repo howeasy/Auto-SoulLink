@@ -313,6 +313,7 @@ memory = {read_u8 = function(addr)
 end}
 local L = {
     RUN = "mock",
+    SYM = {hBattleTurn = {0, 0xFFD1}},
     slurp = function() return "config" end,
     bus = function() return bank end,
     rw = function(name)
@@ -1034,3 +1035,81 @@ def test_lua_still_cannot_mutate_the_guest():
     source = (REPO / "tools/polished_live/rival_gate_probe.lua").read_text(encoding="utf-8")
     assert "denied memory." in source and "denied emu.setregister" in source
     assert "memory.write" not in source and "L.ww(" not in source and "L.wbytes" not in source
+
+
+@pytest.mark.parametrize("mode", ["success", "stall", "budget", "old-witness"],
+                         ids=["native-route", "npc-bound", "total-bound", "stale-mutant"])
+def test_calibration_uses_positions_and_fresh_trainer_witness(mode):
+    """Execute the real Lua calibration; no wall time or screenshots stand in for movement."""
+    from lupa.lua55 import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    g = lua.globals()
+    g.encoder_mode, g.wrong_callbacks, g.mock_cap = "normal", 0, 100000
+    g.mock_setup, g.mock_disc = "synth", "ab" * 32
+    g.encode_trace = lambda value: json.dumps(_lua_value(value))
+    g.stall, g.budget = mode == "stall", 100 if mode == "budget" else 18000
+    lua.execute(MOCK_DRIVER)
+    lua.execute(r"""
+        local L = dofile()
+        local x, y, group, map = 48, 12, 24, 3
+        cur_mode = 0
+        L.hook = function() end
+        L.ow_idle = function() return true end
+        L.rw = function(name)
+            local values = {wMapGroup=group, wMapNumber=map, wXCoord=x, wYCoord=y,
+                wBattleMode=cur_mode, wOtherTrainerClass=27, wOtherTrainerID=3, wOTPartyCount=2}
+            return values[name] or 0
+        end
+        L.json.decode = function()
+            return {steps={}, frames=budget, trace_cap=100000, setup="synth", calibrate=true, expect="rival"}
+        end
+        local oldframe = L.frame
+        L.frame = function(buttons)
+            if not stall then
+                if buttons.Left then x=x-1 elseif buttons.Right then x=x+1
+                elseif buttons.Up then y=y-1 elseif buttons.Down then y=y+1 end
+                if x == -1 then group,map,x=26,4,39 end
+                if group==26 and x==33 and y==7 and buttons.A then cur_mode=2 end
+            end
+            oldframe()
+        end
+        written = {}
+        io.open = function(path)
+            return {write=function(self,text) written[path]=text; output=text; return self end,
+                    close=function() end}
+        end
+    """)
+    source = (REPO / "tools/polished_live/rival_gate_probe.lua").read_text()
+    if mode == "old-witness":
+        anchor = 'hook_counts.last.qualified > before and L.rw("wBattleMode") == 2'
+        assert source.count(anchor) == 1
+        source = source.replace(anchor, 'hook_counts.last.qualified > 0')
+    lua.execute(source)
+    trace = json.loads(g.written["mock/trace.json"])
+    if mode in ("stall", "budget"):
+        assert g.recording_ok is False
+        reason = "1800-frame stall" if mode == "stall" else "total frame bound"
+        assert any(reason in r.get("error", "") for r in trace)
+    else:
+        assert g.recording_ok is True
+        milestones = json.loads(g.written["mock/calibration.json"])
+        if mode == "old-witness":
+            with pytest.raises(AssertionError):
+                assert milestones[-1]["mode"] == 2
+        else:
+            assert milestones[-1]["mode"] == 2
+            assert (milestones[-1]["group"], milestones[-1]["x"], milestones[-1]["y"]) == (26, 33, 7)
+            route = json.loads(g.written["mock/route.json"])
+            assert sum(r["frames"] for r in route["steps"]) == trace[-1]["elapsed"]
+
+
+def test_calibration_requires_disclosed_synth_and_no_timed_route(tmp_path):
+    fixture = tmp_path / "fixture.SaveRAM"
+    fixture.write_bytes(b"fixture")
+    with pytest.raises(SystemExit):
+        P.parse_args(["--setup", "played", "--fixture", str(fixture), "--calibrate"])
+    args = synth_args(tmp_path, "--calibrate")
+    assert args.calibrate is True
+    with pytest.raises(SystemExit):
+        synth_args(tmp_path, "--calibrate", "--route", str(tmp_path / "route.json"))
