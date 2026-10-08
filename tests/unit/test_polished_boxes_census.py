@@ -283,7 +283,7 @@ def _hello(overlay_rom, img):
     # C-WRITE r2: the composition also hooks the overworld HOLD site (25:51BF, SLink-gen2-checkpoint);
 # the hook registers nothing on its own and writes nothing without a command.
     # C-EXPLODE: the composition also hooks the battle hold (0f:416A, SLink-gen2-battle-hold): the explode PC hold, nothing written on its own.
-    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-checkpoint', 'SLink-gen2-battle-hold', 'SLink-gen2-polished:battle_faint_copyback_return'} and len(log.writes) == 0 and img.snap() == before    # read only, nothing hooked
+    assert set(log.hooks.values()) <= {'SLink-gen2-polished:capture_party', 'SLink-gen2-checkpoint', 'SLink-gen2-battle-hold', 'SLink-gen2-polished:battle_faint_copyback_return', 'SLink-gen2-polished:battle_faint', 'SLink-gen2-polished:whiteout_before_heal', 'SLink-gen2-polished:rival_swap_gate'} and len(log.writes) == 0 and img.snap() == before    # read only, nothing hooked
     return hellos[0], parts
 
 

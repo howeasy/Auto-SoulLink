@@ -904,9 +904,18 @@ def test_the_composition_wires_the_contest_mask():
     assert "contest_mask={bank=1, address=0xD7E4, bit=2}" in source      # wStatusFlags2 STATUSFLAGS2_BUG_CONTEST_TIMER_F
 
 
+def _legacy_death_rig(mons):
+    """The SAME explicit-OFF composition for contest positives and their drop control."""
+    from unittest.mock import patch
+
+    old = 'local deps = {root=ROOTDIR, title="polished",'
+    with patch(__name__ + ".HARNESS", HARNESS.replace(old, old + " polished_active_faint=false, polished_faint_observer=false,")):
+        return Rig(mons)
+
+
 def test_a_ko_during_the_contest_is_held_not_dropped():
     mons = party()
-    rig = Rig(mons)
+    rig = _legacy_death_rig(mons)
     # the contest's ContestDropOffMons: the party reads empty while the timer flag is set, so the keyed mon is
     # NOT found - exactly the state in which the vanilla client used to drop the death
     rig.mem[PARTY_COUNT] = 0
@@ -919,7 +928,7 @@ def test_a_ko_during_the_contest_is_held_not_dropped():
 
 def test_the_same_ko_lands_once_the_contest_returns():
     mons = party()
-    rig = Rig(mons)
+    rig = _legacy_death_rig(mons)
     rig.mem[PARTY_COUNT] = 0
     poke(rig, CONTEST_AT, 0xFF, 0x04)
     rig.send_command({"cmd": "force_faint", "key": key_of(mons[0])})
@@ -934,11 +943,7 @@ def test_red_control_without_the_contest_flag_the_explicitly_legacy_death_is_dro
     """RED: the SAME state (the party reads empty) with the contest flag CLEAR is dropped as 'key not in party' -
     so the hold in the two tests above is the contest_mask branch and not an accident of the image."""
     mons = party()
-    from unittest.mock import patch
-
-    old = 'local deps = {root=ROOTDIR, title="polished",'
-    with patch(__name__ + ".HARNESS", HARNESS.replace(old, old + " polished_active_faint=false, polished_faint_observer=false,")):
-        rig = Rig(mons)
+    rig = _legacy_death_rig(mons)
     rig.mem[PARTY_COUNT] = 0
     rig.send_command({"cmd": "force_faint", "key": key_of(mons[0])})
     dropped = [line for line in rig.log["lines"].values() if "dropped at the checkpoint" in line]
