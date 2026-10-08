@@ -1,0 +1,79 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "688945795e2656019247f5aaceb7b1d8791e900a",
+  "overlay_provenance_sha256": "2bd4a3d185c3bb4654a1228d3bf2af936b5c99c5f7f5f63173cfbeaad1fc651b",
+  "code_digest": "f8966ea4b76f92df29ac149c6d4123792eceb39429cdd935b54cafdfad4122dd",
+  "scenario_id": "live/hello-panel-true",
+  "lane": "F:/slink-work/lanes/pol-rcproof/hello",
+  "requirement_id": "LIVE-PANEL-HELLO",
+  "narrative": "docs/polished/LIVE_RESULTS.md — 'Panel hello on the current overlay'; F:/slink-work/lanes/pol-rcproof/EVIDENCE.md section 2b; lane-local wrapper F:/slink-work/lanes/pol-rcproof/hello_run.py -> harness.cmd_live, POL_STAGES=1",
+  "evidence_dir": "F:/slink-work/lanes/pol-rcproof/hello/live",
+  "evidence_file": "F:/slink-work/lanes/pol-rcproof/hello/live/wire/wire_a.jsonl",
+  "evidence_sha256": "efac3cdd21789fcb034c7943005bf360243992801eb8185482093013eaa2e5a3",
+  "evidence_size": 17915,
+  "evidence_note": "The claim is the content of the hello the real client sent to the real server, so the server-side wire log is the binding evidence.",
+  "secondary_evidence": [
+    {
+      "path": "F:/slink-work/lanes/pol-rcproof/hello/live/result.txt",
+      "sha256": "293525a7568d81c4f3c74273254dc715aa4cc9cf7760be6188d835117d767ca2",
+      "note": "client-side driver output, RESULT line :25"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-rcproof/hello/live/server.log",
+      "sha256": "9ef578d23f4e44f2a2e0d90e4c30c0a47f76a9a178591276c8c824017c0d74ac",
+      "note": "server admission line :14"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-rcproof/hello_run.py",
+      "sha256": "e1a840a5544e4eeb00755a74c7ef6e341d40eec8655d68c983743ae79be224ae",
+      "note": "lane-local wrapper: stages the committed UPS, then harness.cmd_live"
+    }
+  ],
+  "code_digest_note": "Computed, not transcribed: `python tools/verify_polished_release.py --root F:/slink-work/wt/pol-rcproof --print-code-digest` = f8966ea4... on the run worktree (HEAD 2959ee36a, clean; EVIDENCE.md:3 'no repo changes made'). 2959ee36a..499d1cab9 changes only tools/polished_live/writes_run.py, outside code_digest_files.",
+  "check_count": {
+    "ok": 11,
+    "failed": 0,
+    "source": "grep -c '^  \\[ok\\]' result.txt = 11, '[fail]' = 0, result.txt:25 'RESULT: PASS polished-live (0 checks failed) frame 516'"
+  },
+  "synth": [
+    "SYNTH fixture: the g2int-live warp save (75c7a5dc...). NOT SYNTH: lua/slink.lua composing the client, the real SLink server, the hello on the wire."
+  ],
+  "checks": [
+    {
+      "name": "run verdict",
+      "result": "PASS",
+      "observed": "result.txt:25 'RESULT: PASS polished-live (0 checks failed) frame 516'"
+    },
+    {
+      "name": "hello on the wire carries panel true and panel_abi 3",
+      "result": "PASS",
+      "observed": "wire_a.jsonl:2 c2s hello: \"panel\": true, \"panel_abi\": 3, \"companion_abi\": 3, \"sfx\": true"
+    },
+    {
+      "name": "hello rom_sha1 is the provenance overlay",
+      "result": "PASS",
+      "observed": "wire_a.jsonl:2 \"rom_sha1\": \"688945795e2656019247f5aaceb7b1d8791e900a\"; result.txt:14 'hello rom_sha1 is the client rehash'"
+    },
+    {
+      "name": "hello identity is polished_crystal/gen2_polished/overlay",
+      "result": "PASS",
+      "observed": "wire_a.jsonl:2 rom_type polished_crystal, foundation gen2_polished, artifact_kind overlay; result.txt:13"
+    },
+    {
+      "name": "server admitted the cartridge",
+      "result": "PASS",
+      "observed": "server.log:14 '[a] admission: admitted — cartridge sha1 matches the contract'"
+    },
+    {
+      "name": "0 Lua-originated writes and no panel write attempt",
+      "result": "PASS",
+      "observed": "result.txt:21-22 '... -- 0', '... -- 0'"
+    }
+  ],
+  "not_proven": [
+    "A panel page published by the real host; this run proves the advertisement, not paging.",
+    "The earlier 'panel false' hello (pol-phone live_stageA) was the Stage-1 overlay 34942315; it is superseded, not contradicted."
+  ]
+}

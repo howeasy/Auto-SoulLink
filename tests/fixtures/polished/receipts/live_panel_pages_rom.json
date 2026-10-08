@@ -1,0 +1,92 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "688945795e2656019247f5aaceb7b1d8791e900a",
+  "overlay_provenance_sha256": "2bd4a3d185c3bb4654a1228d3bf2af936b5c99c5f7f5f63173cfbeaad1fc651b",
+  "code_digest": "f8966ea4b76f92df29ac149c6d4123792eceb39429cdd935b54cafdfad4122dd",
+  "scenario_id": "panel/c0-c5-scripted-host",
+  "lane": "F:/slink-work/lanes/pol-rcproof/panel",
+  "requirement_id": "LIVE-PANEL-PAGES-ROM",
+  "narrative": "docs/polished/LIVE_RESULTS.md — 'Panel pages, ROM half, on the current overlay'; F:/slink-work/lanes/pol-rcproof/EVIDENCE.md section 2a; command `POL_LANE=F:/slink-work/lanes/pol-rcproof/panel python tools/polished_live/run_pol_panel.py`",
+  "evidence_dir": "F:/slink-work/lanes/pol-rcproof/panel/run",
+  "evidence_file": "F:/slink-work/lanes/pol-rcproof/panel/run/result.txt",
+  "evidence_sha256": "2304a83ba36247fcfd1828bf8fc9934eb118b5050b3e791b7831a8c640f2deb6",
+  "evidence_size": 3691,
+  "secondary_evidence": [
+    {
+      "path": "F:/slink-work/lanes/pol-rcproof/panel/run/panel.json",
+      "sha256": "5cfd9e87c8c6342d2f6ee1d41cbecd817edb24b1a4dcb16e87dde02903df72ec",
+      "note": "hook hits and the write audit"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-rcproof/panel/run/panel_2_page1.png",
+      "note": "screenshot; only confirms what the tilemap rows in result.txt show"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-rcproof/panel/run/panel_3_page2.png",
+      "note": "screenshot; only confirms what the tilemap rows in result.txt show"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-rcproof/panel/run/panel_4_back.png",
+      "note": "screenshot; only confirms what the tilemap rows in result.txt show"
+    }
+  ],
+  "code_digest_note": "Computed, not transcribed: `python tools/verify_polished_release.py --root F:/slink-work/wt/pol-rcproof --print-code-digest` = f8966ea4... on the run worktree (HEAD 2959ee36a, clean; EVIDENCE.md:3 'no repo changes made'). 2959ee36a..499d1cab9 changes only tools/polished_live/writes_run.py, outside code_digest_files.",
+  "check_count": {
+    "ok": 21,
+    "failed": 0,
+    "source": "grep -c '^  \\[ok\\]' = 21, grep -c '\\[fail\\]' = 0, result.txt:58 'RESULT: PASS pol-panel (0 checks failed) frame 806'"
+  },
+  "synth": [
+    "SYNTH (disclosed result.txt:11): wPokegearFlags $00 -> $87, wPhoneList 0000000000.",
+    "SYNTH host: the pages are published by the driver's scripted mailbox writer (pol_panel.lua writer()), NOT the real SLink server and lua panel host (EVIDENCE.md 2a).",
+    "SYNTH fixture: the g2int-live warp save (75c7a5dc...)."
+  ],
+  "checks": [
+    {
+      "name": "run verdict",
+      "result": "PASS",
+      "observed": "result.txt:58 'RESULT: PASS pol-panel (0 checks failed) frame 806'"
+    },
+    {
+      "name": "ROM booted is the provenance overlay",
+      "result": "PASS",
+      "observed": "result.txt:2 '[panel] boot frame 1 rom 688945795E2656019247F5AACEB7B1D8791E900A'"
+    },
+    {
+      "name": "C0 the SLink row is row 0 and A opens the submenu",
+      "result": "PASS",
+      "observed": "result.txt:14-15"
+    },
+    {
+      "name": "C1 PANEL cap advertised and the 69-byte mailbox span",
+      "result": "PASS",
+      "observed": "result.txt:12-13 'caps=07 = PANEL|SFX|SFX_NOTIFY', '$C60B..$C650 = 69'"
+    },
+    {
+      "name": "C2 page 1 renders SOUL LINK / PARTNER: RED with no extra keypress",
+      "result": "PASS",
+      "observed": "result.txt:16, :36-40"
+    },
+    {
+      "name": "C3 A advances to page 2 PAIRS 2/3 / BADGES 4/8",
+      "result": "PASS",
+      "observed": "result.txt:41-43"
+    },
+    {
+      "name": "C4 B closes back to the Phone list with no call placed and PANEL_STATE cleared",
+      "result": "PASS",
+      "observed": "result.txt:44-49"
+    },
+    {
+      "name": "C5 every panel write is inside the mailbox span and the audit is non-vacuous",
+      "result": "PASS",
+      "observed": "result.txt:53-54 '72 panel writes, 614..64E vs mailbox 60B..64F; outside: none', '72'"
+    }
+  ],
+  "not_proven": [
+    "Real-host paging: the server's link_panel -> lua panel:hold -> ROM render chain was not run live; that half has unit coverage only.",
+    "English text and the CGB palette only."
+  ]
+}

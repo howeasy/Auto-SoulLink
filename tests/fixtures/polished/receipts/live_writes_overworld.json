@@ -1,0 +1,112 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "688945795e2656019247f5aaceb7b1d8791e900a",
+  "overlay_provenance_sha256": "2bd4a3d185c3bb4654a1228d3bf2af936b5c99c5f7f5f63173cfbeaad1fc651b",
+  "code_digest": "f8966ea4b76f92df29ac149c6d4123792eceb39429cdd935b54cafdfad4122dd",
+  "scenario_id": "writes/overworld-faint-deposit-withdraw",
+  "lane": "F:/slink-work/lanes/pol-writes6889",
+  "requirement_id": "LIVE-WRITES-OVERWORLD",
+  "narrative": "docs/polished/LIVE_RESULTS.md — 'Overworld write path re-qualified on the current overlay'; command `python tools/polished_live/writes_run.py` (POL_LANE=F:/slink-work/lanes/pol-writes6889)",
+  "evidence_dir": "F:/slink-work/lanes/pol-writes6889/writes",
+  "evidence_file": "F:/slink-work/lanes/pol-writes6889/writes/result.txt",
+  "evidence_sha256": "f1ec2bca039275ff1c89152cf17b422957b5a54277a116eaaf907b2c85863d56",
+  "evidence_size": 44768,
+  "evidence_note": "result.txt is the driver's own output (the [ok] lines and RESULT). The byte images behind every exact-diff check are in trace.json; receipts.json is the lane's recompute of those diffs from the images.",
+  "secondary_evidence": [
+    {
+      "path": "F:/slink-work/lanes/pol-writes6889/writes/trace.json",
+      "sha256": "f6cc894afdded980e81fdc46757c3f3d8f31f5e1c0e17937696aab3aba6e9432",
+      "note": "full before/after images (CartRAM 0..0x7FFF, party block, pokedb allocation windows) and the write list per operation"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-writes6889/receipts.json",
+      "sha256": "b7f717634d85c9675bf21077f4213089df73b0f815f936f24ee0791e5a4a30d7",
+      "note": "independent recompute: changed set from the images equals the driver's; outside_expected empty for a/b/d; byte-identical to the cf03f53a lane"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-writes6889/runner.log",
+      "sha256": "c447a89723068674067804e65a84c23245e1d8dffffca227a90b3d16fc0e6ccc",
+      "note": "staged sha1, fixture sha256, owned PIDs (EmuHawk 14372 rc 0, server 31720 own-PID taskkill)"
+    }
+  ],
+  "code_digest_note": "The run worktree F:/slink-work/wt/pol-writes6889 was 2959ee36a plus the one-line docstring commit 499d1cab9 (tools/polished_live/writes_run.py, outside code_digest_files), so the digest is the one --print-code-digest computes at 2959ee36a (f8966ea4..., checked against F:/slink-work/wt/pol-rcproof at 2959ee36a). That worktree has since been removed.",
+  "check_count": {
+    "ok": 45,
+    "failed": 0,
+    "source": "grep -c '^  \\[ok\\]' = 45, grep -c '\\[fail\\]' = 0, result.txt:70 'RESULT: PASS pol-live-writes (0 checks failed) frame 936'"
+  },
+  "synth": [
+    "SYNTH fixture: the qualified warp save polished_overlay_warp.SaveRAM sha256 75c7a5dc...36b8 (party of 5 on Route 29).",
+    "Commands are queued through Client:handle_command (the client's own public entry), not delivered by a partner's event; one cartridge, no pairing."
+  ],
+  "checks": [
+    {
+      "name": "run verdict",
+      "result": "PASS",
+      "observed": "result.txt:70 'RESULT: PASS pol-live-writes (0 checks failed) frame 936'"
+    },
+    {
+      "name": "ROM booted is the provenance overlay with the overworld writer and box executor composed",
+      "result": "PASS",
+      "observed": "result.txt:2 'parts: pack polished_crystal kind overlay sha1 688945795e...; overworld writer=true boxes=true'"
+    },
+    {
+      "name": "force_faint: the bench mon's HP is 0, status 0, party count unchanged",
+      "result": "PASS",
+      "observed": "result.txt:23-25 '(a1) ... 0/0 (before 152/152)', '(a2) ... $00', '(a3) ... 5 -> 5'"
+    },
+    {
+      "name": "force_faint: every write is inside the target's +32/+34/+35 bytes",
+      "result": "PASS",
+      "observed": "result.txt:32 '(a4) ... 3 write(s), all in the target's three bytes'"
+    },
+    {
+      "name": "force_faint: exact diff subset, and its control fails",
+      "result": "PASS",
+      "observed": "result.txt:27 '(a5) EXACT diff ...', :30 '(a5c) CONTROL ... subset reported false'; recompute 1 changed of 3 allowed"
+    },
+    {
+      "name": "box_mon: party 5 -> 4 and the key leaves the party",
+      "result": "PASS",
+      "observed": "result.txt:39-40 '(b1a) wPartyCount went 5 -> 4', '(b1b) ... BFFFFF:D1C2:022:00'"
+    },
+    {
+      "name": "box_mon: the mon is in a gameplay box and its pokedb entry checksum verifies",
+      "result": "PASS",
+      "observed": "result.txt:43-44 '(b2b) ... present in a gameplay box', '(b3) ... B.verify -- true'"
+    },
+    {
+      "name": "box_mon: exact diff subset over declared ranges, and its control fails",
+      "result": "PASS",
+      "observed": "result.txt:48-50 '(b6a)', '(b6) EXACT diff subset ... exact', '(b6c) CONTROL ... FAILS'; :53 '(b4) every (b) write is inside a declared range'; recompute 110 changed of 193 allowed"
+    },
+    {
+      "name": "party_mon: party 4 -> 5, the key at the last slot, healed",
+      "result": "PASS",
+      "observed": "result.txt:57 '(d1a) 4 -> 5', :59 '(d1c) last=BFFFFF:D1C2:022:00', :60 '(d2) HP 152 == MaxHP 152 and status $00'"
+    },
+    {
+      "name": "party_mon: the box slot is cleared and the pokedb entry is never freed",
+      "result": "PASS",
+      "observed": "result.txt:62-65 '(d3a) ... in NO box', '(d3b) Entries $01 -> $00', '(d4) ... 0 entry byte(s), 0 flag byte(s) moved'"
+    },
+    {
+      "name": "party_mon: exact diff subset, and its control fails",
+      "result": "PASS",
+      "observed": "result.txt:66 '(d5) EXACT diff ... exact', :68 '(d5c) CONTROL ... subset reported false'; recompute 43 changed of 73 allowed"
+    },
+    {
+      "name": "independent recompute of the three diffs equals the driver's",
+      "result": "PASS",
+      "observed": "receipts.json verdicts.{a,b,d}.independent_recomputed = true, outside_expected = []"
+    }
+  ],
+  "not_proven": [
+    "(c) negatives NOT RUN: synthetic gate pokes wedge the frame loop; they need a real battle (result.txt:69).",
+    "Bench force_faint in the overworld only: no in-battle (active battler) faint and no PHYSICAL player faint.",
+    "One bank-1 deposit/withdraw: no bank-2 pokedb entry, no full box, no full party.",
+    "Single cartridge; no partner event drove the commands."
+  ]
+}
