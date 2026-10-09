@@ -185,7 +185,7 @@ OPTION_SUPPORT = {
                      "gen1_rby": {"ok": True, "why": "No patch needed — Explosion is move 153 and the choice is a plain RAM write."},
                      "gen1_purergb": {"ok": True, "why": "No patch needed — Explosion is a plain RAM write, same as vanilla Gen 1."},
                      "gen2_gsc": {"ok": True},
-                     "gen2_polished": {"ok": False, "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."},   # re-enable with the client card (docs/polished/BATTLE_FLOW.md)
+                     "gen2_polished": {"ok": True, "why": "Needs the companion patch on both players' games; includes the plain-faint fallback."},
                      "gen3_frlge_rr": {"ok": True},
                      "gen3_exp": {"ok": False, "why": "Explode Mode is not supported on the Emerald Expansion."}},
     "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
@@ -195,7 +195,7 @@ OPTION_SUPPORT = {
                         "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen2_gsc": {"ok": True},
-                        "gen2_polished": {"ok": False, "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."},   # needs a rewritten writer (BATTLE_FLOW.md F6)
+                        "gen2_polished": {"ok": True, "why": "Needs the companion patch on both players' games; RIVAL0, RIVAL1 and RIVAL2 only."},
                         "gen3_frlge_rr": {"ok": True},
                         "gen3_exp": {"ok": False, "why": "Needs the companion patch (gEnemyParty is encrypted), and the Emerald Expansion has none."}},
     "overworld_presence": {"all": False, "why": "Not available yet."},   # deferred post-RC, docs/gen3/TODO.md

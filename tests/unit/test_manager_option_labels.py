@@ -159,7 +159,8 @@ def test_the_new_run_form_seeds_every_default_on_option_checked():
 
 
 @pytest.mark.parametrize("key", ["explode_mode", "rival_team_swap"], ids=["explode", "rival"])
-def test_polished_battle_options_remain_unselectable_before_live_qualification(key):
+def test_polished_battle_options_are_selectable_with_the_companion(key):
     support = option_support(key, ["polished_crystal", "polished_crystal"])
-    assert support["ok"] is False
-    assert new_run_form()["support"]["gen2_polished"][key]["ok"] is False
+    assert support["ok"] is True
+    assert "companion" in support["why"].lower()
+    assert new_run_form()["support"]["gen2_polished"][key] == support

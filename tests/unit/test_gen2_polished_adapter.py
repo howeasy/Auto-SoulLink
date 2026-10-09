@@ -215,18 +215,23 @@ def test_a_client_reported_rom_content_leaves_the_player_with_no_tables():
     assert adopted.randomized and adopted.encounter_table("route_29") is None
 
 
+@pytest.mark.parametrize("kind,capable", [("clean", False), ("overlay", True), ("rand_overlay", True)],
+                         ids=["clean", "overlay", "randomized-companion"])
 @pytest.mark.parametrize("enabled", [False, True], ids=["off", "explicit-cli-on"])
-def test_explode_remains_gated_before_live_qualification(adapter, tmp_path, enabled):
+def test_explode_dispatch_requires_the_run_rule_and_a_companion(tmp_path, kind, capable, enabled):
     from server.state import SoulLinkState
     from tests.unit.polished_state_rig import seed_pair
 
+    adapter = Gen2PolishedAdapter(artifact_kind=kind)
     state = SoulLinkState(data_dir=str(tmp_path), adapter=adapter, explode_mode=enabled)
     state.activated = True
     seed_pair(state, "EFFFFF:D1C2:0A9:00", "CFFFFF:D1C2:037:40", a_party=True, b_party=True)
     state.handle_event("a", {"event": "faint", "key": "EFFFFF:D1C2:0A9:00"})
-    assert adapter.supports_explode_mode() is False
-    assert any(command['cmd']=='force_faint' for command in state.queued_commands['b'])
-    assert not any(command['cmd']=='force_explode' for command in state.queued_commands['b'])
+    assert adapter.supports_explode_mode() is capable
+    expected = "force_explode" if enabled and capable else "force_faint"
+    death_commands = [command["cmd"] for command in state.queued_commands["b"]
+                      if command["cmd"] in ("force_faint", "force_explode")]
+    assert death_commands == [expected]
 
 
 # ── OPEN-PANEL-PAGES: the ROM panel is 2 lines x 16 glyphs per page, so the server must send compact rows ─────

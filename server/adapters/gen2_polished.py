@@ -773,8 +773,10 @@ class Gen2PolishedAdapter(Gen2GSCAdapter):
 
     # ── boxes, sprites, trainers ─────────────────────────────────────────────────────
     def supports_explode_mode(self):
-        return False             # OPEN-EXPLODE-RIVAL: enable only with live proof and the Manager rows.
-                                  # Normal plain-faint enforcement is composed independently.
+        # PASS: F:/slink-work/lanes/pol-explodefix/*/probe/oracle.json (explode, active-faint,
+        # bench-faint) after echo fix ea90b9fd3. The Manager rows enable this in the same cut;
+        # OPEN-EXPLODE-RIVAL still needs receipt rebind at the freeze.
+        return self._artifact_kind in _COMPANION
 
     def supports_box_mon(self):
         # Party sync ON (owner 2026-10-08): deposit and withdraw are composed through O.client_boxes

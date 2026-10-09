@@ -390,11 +390,12 @@ def test_a_profile_without_the_sound_table_refuses_before_any_writer_exists():
     assert _pair(Sounds.sfx_codes(_ltable(lua, {"overlay": bad})))[0] is None
 
 
-def test_the_manager_offers_native_sounds_for_polished_and_only_for_that_row():
-    """server/manager.py OPTION_SUPPORT: the gen2_polished native_sounds row is ok; the other five
-    polished rows stay refused, and no other family's row moved.
+def test_the_manager_preserves_native_sounds_alongside_qualified_battle_options():
+    """server/manager.py OPTION_SUPPORT: native_sounds remains granted alongside the qualified
+    battle options, while phone_calls remains refused. Other families
+    keep their native_sounds rows.
 
-    RED CONTROL (applied): flip gen2_polished rival_team_swap to ok -> the count below breaks.
+    RED CONTROL: refuse a qualified option or grant phone_calls -> the exact set breaks.
     """
     import sys
     sys.path.insert(0, str(REPO))
@@ -405,10 +406,10 @@ def test_the_manager_offers_native_sounds_for_polished_and_only_for_that_row():
         if isinstance(entry, dict) and "ok" in entry:
             rows[option] = entry["ok"]
     assert rows["native_sounds"] is True
-    # battle_calc is the other granted row (flipped 2026-10-04 with the Polished calculator dataset)
-    assert sorted(o for o, ok in rows.items() if ok) == ["battle_calc", "native_sounds"], rows
-    for option in ("explode_mode", "rival_team_swap", "phone_calls"):
-        assert rows[option] is False
+    # The calculator and companion battle options coexist with the sound grant.
+    assert sorted(o for o, ok in rows.items() if ok) == [
+        "battle_calc", "explode_mode", "native_sounds", "rival_team_swap"], rows
+    assert rows["phone_calls"] is False
     golden = json.loads((REPO / "tests/fixtures/manager_tables_pre_gen3_exp.json").read_text(encoding="utf-8"))
     assert golden["support"]["gen2_polished"]["native_sounds"] == {"ok": True, "why": ""}
     # every other family's native_sounds row is untouched
