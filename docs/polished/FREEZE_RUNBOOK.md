@@ -1,56 +1,300 @@
-# Gen 2 / Polished freeze-cut runbook (2026-10-08; integration cut 4281d18c5, status card g2p-docs-cf03)
+# Polished RC freeze re-run runbook (2026-10-09)
 
-A RUNBOOK, not a result: nothing here has been executed as a freeze. Python commands run from the integration worktree with the project Python. A freeze is a single reviewed source cut with its own artifacts; it is not a release authorisation. Never relax a red lane to get a green cut.
+A plan, not a result or release authorisation. Run from the **single frozen integration checkout**, not from the old lane worktrees. This inventory covers all **15 LIVE ids** in `tests/polished_release_requirements.json` at `3061ca581`, plus the pending writer/duo/trade evidence. Do not re-stamp an old receipt: re-run its scenario on the frozen code, judge the new bytes, then bind the new evidence.
 
-0. **Authority.** `git status --short --branch`, `git rev-parse HEAD`, `git worktree list --porcelain`: record the exact cut and confirm no active writer or live lane collision. Re-derived integration HEAD: `4281d18c5d4c6d135ecbc296b6cc59e125e8ce09` (2026-10-08). Current overlay is `cf03f53accefbc5f3fee9062846699e30c4c987b`, UPS 3767 B; the C5 body cut `7f56228b5` / overlay `877a477a` is historical. **Decided (owner, 2026-10-06/07; relayed by coordinator card g2p-freeze2; no tree receipt yet):** explode = parity plus a plain-faint writer; three-outcome box contract GO with Gen 3 checked first; incoming-mon validation = current validator only; DEV trade never advertised; pre-APPLY uncertainty = NOT-PERFORMED; version `0.1.0` until first live receipts; landing = keep local. **Still needed:** memorial NOT_COMPLETE semantics, box-20 RETRIEVAL policy plus the quarantine exception, last-healthy parity, rival class set (SYNTH staging is already authorised, `RC_TRACKER.md` owner decisions), later version/stamping policy. Do not infer approval from a design memo; these decisions do not flip runtime capabilities or qualify a release.
-1. **Finish every digest and provenance edit first.** The Gen 2 digest (`tools/gen2_code_digest.py:26-47` CODE_SCOPE) covers `lua/*.lua`, `lua/gen2/**`, `lua/core/**`, `server/**/*.py` and the gen2 crystal/gold/silver packs (doc suffixes excluded); tests, docs, tools and patch are outside it but not outside artifact correctness. Comment inventory (do not change capability flags merely to match prose); the five-file non-assembly batch `3da22e3e` is integrated:
-   - **Done:** `server/adapters/gen2_polished.py:11,752-766` now describes own packs, composed writers and unchanged False capability flags; module-docstring-normalized AST is identical. `polished_writes.lua:2`, `polished_explode.lua:8-9,52-67`, `polished_trade_fp.lua:5-7` now describe composition/opt-in/default-OFF status; stripped Lua bytecode unchanged (`3da22e3e`).
-   - **Held-file follow-up:** `polished_overworld.lua:35,728-729,900-902` remains for its owning worker. **Done:** `polished_boxes.lua:24,33` distinguishes DEV mapping use from qualification and records memorial box20/index19 (`MEMORIALIZE.md:7-9`; `3da22e3e`).
-   - `tools/polished_live/duo.py:8` already labels the old SHA historical and points to the executable pin; no further prose fix needed there.
-   - `patch/polished/src/slink.asm:64` says four local stack bytes: its four pushes at `:48-52` use EIGHT. Its `:219-220,225,228-229,233-234`, plus `trade_frame.asm:3`, `trade_snapshot.asm:2`, `trade_validate.asm:2`, still call landed helpers/entries inert or stubs: the service calls the frame/snapshot/validator (`trade_service.asm:69,122,192`) and the gate/dispatcher enter held services (`trade_gate.asm:57-63`, `trade_dispatch.asm:136-141`). `trade_responder.asm:25-26,36-39` says the commit does not exist: it is built but its APPLY calls remain disabled (`slink.asm:244-245`, `trade_service.asm:43-46,206-209`).
-   The F1 keyed-faint description at `polished_explode.lua:25-29` is already corrected; do not queue it again. Any asm comment edit changes `sources_sha256` in `data/polished/overlay_provenance.json`, so it needs a real rebuild (`tools/build_polished_companion.py:414-415`), never a hand-edited hash.
-2. **Version decision before the build: decided `0.1.0` until first live receipts** (item 0). The Lua admission no longer compares a whole-ROM canonical SHA; the builder still computes `canonical_sha1`, `version_slot` and `canonical_spans` (`tools/build_polished_companion.py:390-423`), and receipts bind the exact overlay hash (`tools/verify_polished_release.py:324-339`). Use `--version 0.1.0`; later increments and owner-visible stamping scope remain the owner's call. `docs/polished/TITLE.md` is partly design history, not proof of requalification.
-3. **Isolated overlay build.** A new owned lane (`SLINK_WORK_ROOT=F:/slink-work/lanes/pol-freeze-<cut>`, never another worker's root): `python tools/build_polished_companion.py --version 0.1.0` (about 14 minutes, an estimate). Pass: exit 0, pinned clean build reproduced, no unrelated shifts, legal spans, UPS round trip, and sym/map/UPS/provenance from the same build. `--check` builds and verifies without publishing.
-4. **Regenerate dependent packs in order:** `python tools/gen_polished_beacon.py`, `python tools/gen_polished_profile.py`, `python tools/gen_polished_engine_sites.py`, then the same three with `--check` (entry points `:107-123`, `:501-511`, `:549-568`). The engine-sites generator writes BOTH `engine_signals.json` and `write_checkpoint.json` (`:41-42,567-568`); there is no separate checkpoint generator. Other current `gen_polished_*.py` generators, all with `--check`: `pack`, `forms`, `script_sites`, `trade_items` (writes `patch/polished/src/trade_items_table.asm`, so regenerate BEFORE the overlay build if changed), `calc`. `gen_upr_polished_ini.py --check` is the SRC-UPR-INI check. Review the whole diff (provenance, sym, map, UPS, profile, beacon, engine_signals, write_checkpoint); the verifier's SRC-PACK, SRC-FORMS, SRC-SCRIPT-SITES and SRC-UPR-INI must also pass.
-5. **Pin census.** Current overlay: `cf03f53accefbc5f3fee9062846699e30c4c987b`, UPS **3767 B** (`data/polished/overlay_provenance.json:63,85-88`; UPS file size independently checked). Repeat `rg -n -i '97628616|57f039b6|6e0062aa|deebb100|1a9094eb|26ed4a41|aecedbb2|add6c944|34942315|29ea04c2|2639|28 spans|28 runs|INTEGRATED_SHA1|OVERLAY_SYMS|ups_bytes|sources_sha256' tools tests data patch` (also `docs/polished` for historical prose); classify matches rather than blindly replacing them. Bounded rollback `33f3b08bf` (merge `8d80f1ea3`) produced this overlay; `877a477a` / 3727 B belongs to the historical C5 body cut `7f56228b5`. At this cut, `python tools/polished_pin_audit.py` reports **`130 pins; 0 STALE executable pins`**:
-   - **Executable current-overlay pins already updated:** `tools/polished_live/writes_run.py:53`, `trade_port_probe.py:31`, `duo.py:45` all pin `cf03f53a`. No older requested hash/UPS-size/span-count pin remains executable in these search roots. `tests/unit/test_upr_polished_pipeline.py:218,317` derives byte ownership; `test_gen_polished_engine_sites.py:80-81` derives spans from the final UPS; `test_polished_duo_driver.py:16` takes the driver's pin. `test_polished_companion.py:103` / `test_polished_trade_gate.py:254` use synthetic overlay geometry, not a historical release hash.
-   - **Historical prose, not an executable pin:** `duo.py:8` labels `97628616` as the old integration; it does not admit that overlay.
-   - **Historical measurement/manifest metadata, never a current-overlay admission pin:** `tests/unit/test_polished_trade_fp.py:6,49` records `34942315` (fixture hash enforced at `:76-79`); `tools/verify_polished_release.py:39-40` recounts `29ea04c2 -> 34942315` but reads current provenance at `:137-144`; `tests/polished_release_requirements.json:6,19` records the same old cut.
-   - **Every older committed LIVE receipt:** under `tests/fixtures/polished/receipts/`, `live_box_census.json:19`, `live_capture_party_only.json:13`, `live_hello_admitted.json:19`, `live_hello_gate_frame.json:24`, `live_no_box_mon.json:19`, `live_phone_entry.json:20` bind `34942315`; `live_pokegear_measurement.json:18`, `live_r1_manager_pair.json:23-25`, `live_r2_randomized_boot.json:26` (source overlay, executed cart is randomized), `live_r3_refusals.json:25-27`, `live_receptionist_stack.json:21` bind `29ea04c2`. HISTORICAL receipts are NEVER re-pinned by editing: they correctly go STALE.
-   - **Historical/design prose inventory (all under `docs/polished/`):** `CLIENT.md:4,1119`; `LIVE_PANEL.md:102`; `LIVE_RESULTS.md:12,622,687,691,706`; `LIVE_SOUNDS.md:95-97`; `LIVE_WRITES.md:1,13`; `PANEL.md:725`; `PHONE_SLOT.md:240`; `RC_STATUS.md:94-108`; `RC_TRACKER.md` (historical table columns; current-overlay header refreshed); `RIVAL_STAGING.md:305`; `TRADE.md:1279,1350,1381,1405,1407,1413,1415,1417,1438`; `TRADE_COMMIT_RESPONDER.md:5-6` (historical design; status line refreshed). In particular `TRADE.md:1415,1417` records **28 runs** / **2630 or 2639 B** on older overlays, not the current geometry. No `26ed4a41` match remains in the searched roots. Unrelated `2639` item ids, map addresses and patch hunk numbers are not overlay pins.
-   A count or address changes only if the build diff explains it ("update until green" is not proof). Re-derive any new executable pins from the frozen build, never paste. The base release SHA `6930b48a...` is not an overlay pin.
-6. **Shared-code order** (only if shared runtime or protocol changed, for example the three-outcome contract in `server/state.py`): `python -m pytest tests/unit -k gen3`, then `-k gen1`, `-k gen2`, `-k polished`; notify the Gen 1 and Gen 3 lane owners BEFORE changing shared state, protocol or `data/upr_jars.json` (old and new jar hashes; preserve protocol assertion identities). Then the full unit suite as **six manual shards, no xdist**, split `tests/unit/test_*.py` by file size, six independent pytest processes and distinct `--basetemp` directories under `F:/slink-work/tmp`. Set `SLINK_WORK_ROOT=F:/slink-work`, `PYTEST_DEBUG_TEMPROOT=F:/slink-work/tmp`. Last known green: **20733 passed / 5236 skipped at `766935aae`, supplied by coordinator, not rerun here** (no tree receipt). Recipe, run as Python from the integration root; retain each process's result and aggregate all six:
-   ```python
-   import os, subprocess, sys, uuid
-   from pathlib import Path
-   os.environ.update(SLINK_WORK_ROOT="F:/slink-work",
-                     PYTEST_DEBUG_TEMPROOT="F:/slink-work/tmp")
-   Path(os.environ["PYTEST_DEBUG_TEMPROOT"]).mkdir(parents=True, exist_ok=True)
-   shards, sizes = [[] for _ in range(6)], [0] * 6
-   for path in sorted(Path("tests/unit").glob("test_*.py"),
-                      key=lambda p: (-p.stat().st_size, p.name)):
-       i = min(range(6), key=lambda n: (sizes[n], n))
-       shards[i].append(path.as_posix())
-       sizes[i] += path.stat().st_size
-   run = uuid.uuid4().hex
-   processes = [subprocess.Popen([sys.executable, "-m", "pytest", "-q",
-                 "--basetemp", f"F:/slink-work/tmp/freeze-{run}-{i}", *files])
-                for i, files in enumerate(shards)]
-   codes = [process.wait() for process in processes]
-   print("shard exit codes:", codes)
-   raise SystemExit(int(any(codes)))
+Commands below are PowerShell. Every evidence destination is fresh under `$F`; retained input paths are explicit. Run each command block with `Reset-PolEnv` as shown: environment from a previous randomized/control case must not leak into an overlay run. Inputs outside the repo are prerequisites, not files shipped to players.
+
+Concurrency labels: **BUILD ALONE** means no other process may use the Polished build caches. **CLIENT SERIAL** means one client-driver job at a time in this checkout: `lua/slink.lua:19` truncates the shared root `slink_lua.log`, so private emulator/SaveRAM paths alone do not make these jobs evidence-isolated. A duo job owns two EmuHawks internally; do not split its halves. **PRIVATE** jobs may overlap one another and one CLIENT SERIAL job after the build is frozen, with distinct output lanes. Do not run tests concurrently with BUILD ALONE. Always stop only the PIDs a driver started; never kill by image name or delete through `.cache` junctions.
+
+1. **Finish fixes, then reserve and record the cut.** No active writer may change runtime, pack, assembly or provenance files after this point. Owner rulings: retire `LIVE-NO-BOX-MON`; in-battle negatives are unit/model-covered; only PHYSICAL natural in-battle faint S2n remains for `OPEN-WRITE-PATH`; S4n accepts whiteout event sent plus all partners dying through per-mon faint (`_handle_whiteout` stays unit-covered). Explode echo fix, capability/Manager flips, trade COMPLETE path and panel readability must be settled before their final runs. Retained examples are DEV, not PHYSICAL qualifications.
+
+   ```powershell
+   $PY = 'E:/Google Drive/SLink/.venv/Scripts/python.exe'
+   $env:SLINK_WORK_ROOT = 'F:/slink-work'
+   $env:PYTEST_DEBUG_TEMPROOT = 'F:/slink-work/tmp'
+   $cut = (git rev-parse --short=12 HEAD).Trim()
+   $F = "F:/slink-work/lanes/pol-freeze-$cut"
+   if (Test-Path $F) { throw 'Choose a fresh freeze attempt; retain the old evidence' }
+   New-Item -ItemType Directory $F | Out-Null
+   function Reset-PolEnv { Get-ChildItem Env:POL_* | Remove-Item }
+   $base = 'F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc'
+   $fixture = 'F:/slink-work/lanes/g2int-live/pol/fixture/polished_overlay_warp.SaveRAM'
+   $fixtureB = 'F:/slink-work/lanes/pol-ident/B.SaveRAM'
+   git status --short --branch
+   git rev-parse HEAD
+   Get-FileHash -Algorithm SHA256 $fixture,$fixtureB
    ```
-   Then `python tools/verify_gen2_release.py --list` and `--quick` (SOURCE/MODEL only, no release inference). Commit the candidate; record HEAD, the clean tree and the code digest.
-7. **Frozen-overlay live requalification** (one granted lane; private fixture copies; disclose each fixture's SYNTH ancestry, not just probe-originated writes; confirm the grant). Existing smokes: `writes_run.py` (RESULT: PASS pol-live-writes; unset any POL_STOP_AFTER_* scope reducers, but **(c) negatives remain hard-coded NOT RUN**, `writes.lua:542-548`); `duo.py` (PASS polished-duo-smoke plus duo-side-a/b; default shared SYNTH identity or distinct SYNTH derivative, `:14-20`); `sounds_run.py` (PASS pol-sounds), `run_pol_panel.py` (PASS pol-panel), `run_phone_ab.py` (PASS pol-phone; A/B differential needs declared POL_DRIVER/POL_ROM_UPS cases). Additional current probes under `tools/polished_live/`:
-   - `trade_port_probe.py --case special-entry|battle|decline|clean`: four separate invocations, not a literal pipe-separated argument; **SYNTH** event flag + engine warp, no cable partner/client (`:4-13,367-368`); clean is a negative-ROM control.
-   - `trade_service_probe.py --case offer-reject|cancel-menu|no-eligible|query-timeout|apply-done1|apply-invalid` (each separately; `--dry-run` plans only): **SYNTH** flag + warp and **TEST HOST** copies own mon into OT slot 0/sender for APPLY; no server/client/cable/native commit (`:36,44-46`).
-   - `dispatch_probe.py --fixture SAVE --route ROUTE --frames N`: **no synthetic staging, guest writes or CPU changes**, native buttons only (`:4-13`); the earlier D3 fixture itself is **SYNTH** (`docs/polished/LIVE_RESULTS.md:689-691`). PASS records dispatcher guards, not a prompt/trade.
-   - `faint_probe.py --setup played --fixture SAVE --route ROUTE --frames N`: only `played` setup is accepted (`:450`); **no probe-originated SYNTH setup**, client/server or writes (`faint_probe.lua:1-2`), but earlier F3 used a **SYNTH fixture** (`LIVE_RESULTS.md:704-708`). PASS is complete recording/order, not proof of a player faint/whiteout or F1 qualification (`faint_probe.py:6-7`).
-   - `rival_gate_probe.py --setup played|synth --fixture SAVE --route ROUTE`: choose one; **synth requires `--disclosure D.json`** from `derive_rival_save.py` and `--expect rival|wild` selects the native battle/control oracle (`:4-11,335-359`). Both modes are read-only; SYNTH is tool-built SaveRAM ancestry, not a probe-forced battle.
-   - `reload_probe.py --fixture SAVE --expected EXPECTED --route ROUTE` (or `--offline` without a route; `--dry-run` validates only): **no probe-originated SYNTH setup or writes**, native cold boot/input, supplied fixture ancestry must be disclosed; identity/census/cold-load evidence, not trade or writer authorisation (`:2-14,594-605`, `reload_probe.lua:37-45`).
-   These do not alone regenerate all manifest LIVE receipts, prove a long trade service or a duo trade, or close owner gaps. Keep recording PASS distinct from the Python oracle's verdict and from PHYSICAL qualification.
-8. **C-5, the LAST production-code-bound run:** `SLINK_C5_ROOT=F:/slink-work/lanes/g2r-live`, `SLINK_C5_GEN2_BUILD` and `SLINK_UPR_JAR` set to verified paths; `python tools/c5_runner.py provision`, `prove`, `list`, `run --sha <FROZEN_COMMIT>`, `status` (about 20 minutes). Not `--ready-only`, not `--carry`. Use the runner's CURRENT cell census (cc/gs/cg/ct), not the historical "10/10". One duo at a time, own-PID termination only. Any later digest-scoped edit stales the packet.
-9. **Install C-5:** `python tools/c5_install_receipts.py --lane F:/slink-work/lanes/g2r-live --dry-run`, then without `--dry-run`: it refuses a packet whose digest is not the current one. Receipt install is outside CODE_SCOPE; if a runtime fix is needed afterwards, revoke the freeze and re-run.
-10. **Verdicts:** `verify_gen2_release.py --lane coverage-map`, `--release-evidence`, then the full gate; `verify_polished_release.py --list` and `--json`. `python tools/verify_polished_release.py --list` at this cut still lists exactly **OPEN-WRITE-PATH, OPEN-EXPLODE-RIVAL, OPEN-TITLE-SPLASH, OPEN-PANEL-PAGES, OPEN-IN-GAME-TRADE**. These are the manifest's blocking ids, NOT a current implementation census (some descriptions still say landed modules are absent). Red is an honest outcome until closure evidence exists; a smoke duo is not a trade pass.
-11. **Landing: decided keep local** (owner, 2026-10-06/07; item 0). No master merge, push or release is authorised by this cut. A later master merge needs the owner's explicit yes and any push/release a separate yes; a local pass is not release readiness.
-12. **Cleanup after an approved landing only:** verify per tree `git -C <tree> status --short` and `git merge-base --is-ancestor <tip> <kept-ref>`, then `git worktree remove <tree>` and `git branch -d <branch>`; the registered detached worktree `F:/slink-work/lanes/g2r-live/r1` is a worktree, not a plain lane. Lanes under `F:/slink-work/lanes` are pruned only after their receipts are retained, by an audited helper (junction-safe: `c5_runner.py` drop_lane unlinks junctions before a writable rmtree), never by a recursive delete through a junction, and never by killing EmuHawk by image name. Do not touch other generations' trees.
+
+   Base release SHA1 is `6930b48af5844d373e3c9130f26d6dd1084cf4ed`; the common fixture SHA256 is `75c7a5dc30126f746567202cfb39fe583dfa04eb226063560541f6cbd29f36b8`. SYNTH ancestry: five level-50 mons, 99 balls and engine-warp position, followed by native SAVE. B is the disclosed second-trainer derivative (`derive_save.py`), not independently played. Current retained overlay is `688945795e2656019247f5aaceb7b1d8791e900a`; read final provenance rather than assuming it survives a new build.
+
+2. **BUILD ALONE: reproduce the clean/overlay build, before any emulator or unit shard.** Shared-cache concurrent private builds previously made BUILD-OVERLAY fail; do not run these alongside another build. If source/provenance must be published, complete that separately before recording the final cut. Assembly/item-table edits require a rebuild, not hand-edited hashes. Version remains `0.1.0` unless the owner changes that ruling.
+
+   ```powershell
+   & $PY tools/build_polished_syms.py --check
+   & $PY tools/build_polished_companion.py --check --version 0.1.0
+   ```
+
+   The verifier's exact BUILD-CLEAN-ROM command is the manifest authority if it changes; check it before executing. Pass requires clean reproduction, overlay byte/span checks, UPS round trip and published sym/map/provenance consistency. A nonzero exit is not permission to repeat an unchanged failed run.
+
+3. **Prepare artifacts and executable pins before the final freeze.** Re-derive beacon/profile/engine sites (the engine-sites generator also writes `write_checkpoint.json`), then commit any resulting artifact changes. A changed trade item table must precede the overlay build. After all changes, record the final HEAD and both digest/provenance hashes, then start the receipt runs. Do not patch a driver pin while receipt jobs are already running.
+
+   ```powershell
+   & $PY tools/gen_polished_beacon.py --check
+   & $PY tools/gen_polished_profile.py --check
+   & $PY tools/gen_polished_engine_sites.py --check
+   & $PY tools/gen_polished_pack.py --check
+   & $PY tools/gen_polished_forms.py --check
+   & $PY tools/gen_polished_script_sites.py --check
+   & $PY tools/gen_upr_polished_ini.py --check
+   & $PY tools/polished_pin_audit.py
+   & $PY tools/verify_polished_release.py --print-code-digest
+   Get-FileHash -Algorithm SHA256 data/polished/overlay_provenance.json
+   ```
+
+   `title_check.py`, `writes_run.py`, `rival_swap_live.py`, `explode_live.py`, `duo.py` and the trade test driver carry literal overlay pins. The rival route's calibration also binds its overlay. If the freeze rebuild changes the ROM, re-pin/recalibrate first and freeze again; an old route is not a new receipt.
+
+4. **Unit qualification, no emulator.** If shared state/protocol changed, run Gen 3 first, then Gen 1/Gen 2 checks before the full shards. This is the checked-in six-process runner, not a hand-kept file/count recipe.
+
+   ```powershell
+   & $PY -m pytest tests/unit -k gen3 -q
+   & $PY -m pytest tests/unit -k gen1 -q
+   & $PY -m pytest tests/unit -k gen2 -q
+   & $PY tools/run_unit_shards.py --shards 6 --out "$F/unit"
+   ```
+
+   Evidence: `$F/unit/s1.log` through `s6.log`, file lists and `failures.txt`. These may run concurrently with PRIVATE jobs only if the selected tests do not write a shared build cache; conservative schedule is to finish shards first. Skips are disclosed, never counted as live proof.
+
+5. **CLIENT SERIAL: LIVE-HELLO-ADMITTED, LIVE-HELLO-GATE-FRAME and LIVE-PANEL-HELLO, one shared hello-only run.** The new tree-owned wrapper replaces `F:/slink-work/lanes/pol-rcproof/hello_run.py`: apply the committed UPS, then use `harness.cmd_live` with stage 1. Real server, real client, common SYNTH fixture, no scripted partner.
+
+   ```powershell
+   Reset-PolEnv
+   & $PY tools/polished_live/hello_live.py --lane "$F/hello" --base $base --fixture $fixture --dry-run
+   & $PY tools/polished_live/hello_live.py --lane "$F/hello" --base $base --fixture $fixture
+   ```
+
+   New primary evidence: `$F/hello/live/result.txt` for LIVE-HELLO-ADMITTED and LIVE-HELLO-GATE-FRAME; `$F/hello/live/wire/wire_a.jsonl` for LIVE-PANEL-HELLO. Retain `server.log`, `gate_transitions.log`, `sent.jsonl` and `syms.json`. Existing receipt bindings are `pol-phone/live_stageA/result.txt` (both old hello ids) and `pol-rcproof/hello/live/wire/wire_a.jsonl` (panel hello). Judge actual hello `panel=true`, ABI, ROM rehash, admitted server contract and frame ordering; stage 1's PASS alone does not assert panel capability.
+
+6. **CLIENT SERIAL: LIVE-CAPTURE-PARTY-ONLY and LIVE-BOX-CENSUS, shared native catch run.** Requires the frozen companion-overlay cache produced by the build; harness stages that ROM and checks provenance. Native Route 29 input, common SYNTH fixture, real client/server.
+
+   ```powershell
+   Reset-PolEnv
+   $env:POL_KIND='overlay'; $env:POL_LANE="$F/capture"
+   $env:POL_FIXTURE=$fixture; $env:POL_STAGES='1234'; $env:POL_RUNNAME='live_stageA'
+   & $PY tools/polished_live/harness.py live
+   ```
+
+   New primary evidence for both: `$F/capture/live_stageA/result.txt`; retain `server.log`, `sent.jsonl`, wire and census records. Existing binding for both is `F:/slink-work/lanes/pol-phone/live_stageA/result.txt`. **Pre-freeze driver blocker:** `live.lua:444` still requires zero Lua-originated writes. Current box quarantine may legitimately write/deposit the first catch, which also changes the full-party catch setup. The capture/census driver must be adapted to current product behavior before this invocation can qualify these rows; do not disable box capability or suppress the failure merely to rebind an old receipt.
+
+7. **LIVE-R1-MANAGER-PAIR: Manager HTTP proof, no emulator.** Run its three modes sequentially; isolate the Manager's data directory. The current fork jar is `F:/slink-work/cache/polished/jar/PokeRandoZX.jar`; the old trusted-jar control is hardcoded by the driver to `E:/Google Drive/SLink/.cache/slink-upr/PokeRandoZX.jar` (must still be the older non-Polished jar, not silently replaced).
+
+   ```powershell
+   Reset-PolEnv
+   $env:POL_LANE="$F/random"
+   $env:POL_JAR='F:/slink-work/cache/polished/jar/PokeRandoZX.jar'
+   & $PY tools/polished_live/manager_r1.py jar
+   & $PY tools/polished_live/manager_r1.py nojar
+   & $PY tools/polished_live/manager_r1.py oldjar
+   $r1 = Get-Content "$F/random/r1_jar/summary.json" -Raw | ConvertFrom-Json
+   $mgr = "$F/random/r1_jar/mgr/$($r1.run_id)"
+   ```
+
+   New primary evidence: `$F/random/r1_jar/summary.json`; controls `r1_nojar/summary.json`, `r1_oldjar/summary.json`, calls, downloaded cartridges and contract. Existing binding: `F:/slink-work/lanes/pol-rand/r1_jar/summary.json`. Driver exit 0 is not an oracle: inspect HTTP statuses, trusted/fork/Polished fields, source overlay, both downloads and contract SHA1s. Nojar mode clears the env but can still discover a jar by other search paths: verify actual refusal. Run before R2/R3. It can overlap PRIVATE emulator jobs, not a build that republishes its source artifacts.
+
+8. **PRIVATE: regenerate R2's two SYNTH fixtures on the fresh R1 cartridge, not on an old randomized ROM.** Historical retained inputs are `F:/slink-work/lanes/pol-rand/s29/fixture/polished_rand_warp.SaveRAM` and `.../s30/fixture/polished_rand_warp.SaveRAM`; their old encounter tables do not determine the new pair's target. The checked-in setup supports `POL_POS`.
+
+   ```powershell
+   Reset-PolEnv
+   $env:POL_KIND='rand'; $env:POL_MGR_RUN=$mgr; $env:POL_PLAYER='a'
+   $env:POL_LANE="$F/random/s29"; $env:POL_POS='24,3,48,12'
+   $env:POL_FIXTURE="$F/random/s29/fixture/polished_rand_warp.SaveRAM"
+   & $PY tools/polished_live/harness.py setup
+   $env:POL_LANE="$F/random/s30"; $env:POL_POS='26,1,11,48'
+   $env:POL_FIXTURE="$F/random/s30/fixture/polished_rand_warp.SaveRAM"
+   & $PY tools/polished_live/harness.py setup
+   ```
+
+   Native intro/CONTINUE/save surrounds SYNTH party, balls and engine warp; retain both setup `synth.json` files and fixture hashes. Own private SaveRAM directories allow the two setups to run concurrently in separate shells after R1; the block above is the simpler serial schedule.
+
+9. **CLIENT SERIAL: LIVE-R2-RANDOMIZED-BOOT, two legs.** R2a observes adoption and five fled encounters. R2b catches a variant and proves its key/form and server presentation. The shown historical target `53,2` (Alolan Persian) is executable **only if the freshly generated ROM a's Route 30 encounter table contains it**. R1 uses new random seeds; inspect that cartridge's table and choose a present variant/map before freezing this input specification. Do not run an unchanged 30-encounter hunt for an absent target.
+
+   ```powershell
+   Reset-PolEnv
+   $env:POL_KIND='rand'; $env:POL_MGR_RUN=$mgr; $env:POL_PLAYER='a'
+   $env:POL_LANE="$F/random/live"; $env:POL_EXPECT_KIND='rand_overlay'
+   $env:POL_FIXTURE="$F/random/s29/fixture/polished_rand_warp.SaveRAM"
+   $env:POL_RUNNAME='r2a'; $env:POL_STAGES='15'; $env:POL_ENCOUNTERS='5'
+   $env:POL_MAP='24,3'; $env:POL_HEADER='1,30,9'; $env:POL_WALK='46,51'
+   & $PY tools/polished_live/harness.py live
+   $env:POL_FIXTURE="$F/random/s30/fixture/polished_rand_warp.SaveRAM"
+   $env:POL_RUNNAME='r2b'; $env:POL_STAGES='16'; $env:POL_HUNT='30'
+   $env:POL_MAP='26,1'; $env:POL_HEADER='1,13,27'; $env:POL_WALK='9,12'; $env:POL_TARGET='53,2'
+   & $PY tools/polished_live/harness.py live
+   ```
+
+   New primary evidence: `$F/random/live/r2b/result.txt`; secondary r2a result, both encounters.jsonl, server adoption/table output and wire. Existing binding: `F:/slink-work/lanes/pol-rand/live/r2b/result.txt`. SYNTH fixture, native encounter/catch, no synthetic species substitution. Same capture zero-write/setup incompatibility as step 6 must be resolved before R2b qualification. This LIVE item binds the **source overlay**; executed randomized SHA1 must also be recorded, not made equal to the overlay.
+
+10. **CLIENT SERIAL: LIVE-R3-REFUSALS, four cases; no standalone all-cases oracle.** Real harness plus inspected client/server/wire output. The explicit preparation below copies fresh ROM a, XORs one byte at `0x14E` or `0x1F8028`, and records changed offsets and SHA1s; never alter the Manager ROM. These offsets are historical beacon targets: confirm against frozen beacon data before making mutants. The lane-local preparation is specified here because there is no checked-in R3 all-cases producer/judge.
+
+    ```powershell
+    Reset-PolEnv
+    $prepareMutants = @'
+    import hashlib, json, sys
+    from pathlib import Path
+    source, out = Path(sys.argv[1]), Path(sys.argv[2])
+    data = source.read_bytes()
+    out.mkdir(parents=True, exist_ok=False)
+    rows = []
+    for name, offset in (("flip14e", 0x14E), ("flip1f8028", 0x1F8028)):
+        mutated = bytearray(data)
+        mutated[offset] ^= 1
+        path = out / (name + ".gbc")
+        path.write_bytes(mutated)
+        rows.append({"path": str(path), "offset": offset, "old": data[offset],
+                     "new": mutated[offset], "sha1": hashlib.sha1(mutated).hexdigest()})
+    (out / "mutants.json").write_text(json.dumps({"source": str(source),
+        "source_sha1": hashlib.sha1(data).hexdigest(), "mutations": rows}, indent=2))
+    '@
+    & $PY -c $prepareMutants "$mgr/roms/a.gbc" "$F/random/r3/input"
+    $env:POL_KIND='overlay'; $env:POL_LANE="$F/random/r3/clean"
+    $env:POL_FIXTURE=$fixture; $env:POL_STAGES='1'; $env:POL_RUNNAME='live'
+    & $PY tools/polished_live/harness.py live 2>&1 | Tee-Object "$F/random/r3_clean.out"
+    $env:POL_KIND='rand'; $env:POL_MGR_RUN=$mgr; $env:POL_PLAYER='a'; $env:POL_EXPECT_KIND='rand_overlay'
+    $env:POL_FIXTURE="$F/random/s29/fixture/polished_rand_warp.SaveRAM"
+    $env:POL_LANE="$F/random/r3/swap"; $env:POL_SWAP='1'
+    & $PY tools/polished_live/harness.py live 2>&1 | Tee-Object "$F/random/r3_swap.out"
+    Remove-Item Env:POL_SWAP
+    $env:POL_LANE="$F/random/r3/flip14e"; $env:POL_ROM="$F/random/r3/input/flip14e.gbc"
+    $env:POL_ROM_SHA1=(Get-FileHash -Algorithm SHA1 $env:POL_ROM).Hash.ToLower()
+    & $PY tools/polished_live/harness.py live 2>&1 | Tee-Object "$F/random/r3_flip14e.out"
+    $env:POL_LANE="$F/random/r3/flip1f8028"; $env:POL_ROM="$F/random/r3/input/flip1f8028.gbc"
+    $env:POL_ROM_SHA1=(Get-FileHash -Algorithm SHA1 $env:POL_ROM).Hash.ToLower()
+    & $PY tools/polished_live/harness.py live 2>&1 | Tee-Object "$F/random/r3_flip1f8028.out"
+    ```
+
+    New primary evidence: `$F/random/r3_swap.out`; bind all three control transcripts, `input/mutants.json` and wire/log files as secondary evidence. Existing binding: `F:/slink-work/lanes/pol-rand/r3_swap.out`. Clean overlay must admit; swapped contract must server-refuse; altered beacons must client-refuse with no hello. Harness FAIL on an intentionally refused boot is expected recording, not automatically a failed refusal oracle or a PASS. Manual judgment of the four outcomes is still required; no tree-owned all-cases oracle currently completes this receipt by itself.
+
+11. **LIVE-PHONE-ENTRY: historical driver exists, but no current qualifying driver. Do not execute unchanged.** Its reproducible historical invocation is below for the owning repair card. `run_phone_ab.py:17-18` ignores caller POL_LANE and always uses `F:/slink-work/lanes/pol-panel2`; `phone.lua:111` asserts the removed `SLink is linked.` text. This receipt's expectation also names that removed text. It needs an owner-approved obligation/driver cutover, not re-pinning or a fake current PASS.
+
+    ```powershell
+    Reset-PolEnv
+    $env:POL_KIND='overlay'; $env:POL_FIXTURE=$fixture
+    $env:POL_ROM_UPS=(Resolve-Path patch/dist/SLink-Polished.ups).Path
+    $env:POL_DRIVER='tools/polished_live/phone.lua'; $env:POL_RUNNAME="freeze-phone-$cut"
+    & $PY tools/polished_live/run_phone_ab.py
+    ```
+
+    Historical-driver output would be `F:/slink-work/lanes/pol-panel2/freeze-phone-$cut/result.txt` (cannot select `$F` without a driver change). Existing receipt binds `F:/slink-work/lanes/pol-phone/phone/result.txt`. SYNTH Pokegear flags and phone-list A/B matrix, native list/submenu/buttons/native-contact control. **Must run alone** after repair if it still has its fixed shared lane. Panel C0-C5 below is not a replacement for the full phone matrix by assumption.
+
+12. **PRIVATE: LIVE-RECEPTIONIST-STACK, exploration B.** Common SYNTH fixture; SYNTH event 33 (`EVENT_GAVE_MYSTERY_EGG_TO_ELM`) plus engine warp to POKECENTER_2F (20:1) at (5,3), then native receptionist input and stack sampling. No real trade/commit proof; it is the old measured stack obligation, not OPEN-IN-GAME-TRADE closure.
+
+    ```powershell
+    Reset-PolEnv
+    $env:POL_KIND='overlay'; $env:POL_LANE="$F/explore"; $env:POL_FIXTURE=$fixture; $env:POL_EXPLORE='B'
+    & $PY tools/polished_live/harness.py explore
+    ```
+
+    New primary evidence: `$F/explore/explore_B/result.txt`; retain stacks.json, route, screenshots and symbol resolution. Existing binding: `F:/slink-work/lanes/pol-live2/x/explore_B/result.txt`. Uses frozen shared overlay cache read-only.
+
+13. **PRIVATE: LIVE-POKEGEAR-MEASUREMENT, exploration C.** Common SYNTH fixture and disclosed Pokegear setup. The same lane is safe only sequentially; choose separate `$F/explore-c` for concurrency.
+
+    ```powershell
+    Reset-PolEnv
+    $env:POL_KIND='overlay'; $env:POL_LANE="$F/explore-c"; $env:POL_FIXTURE=$fixture; $env:POL_EXPLORE='C'
+    & $PY tools/polished_live/harness.py explore
+    ```
+
+    New primary evidence: `$F/explore-c/explore_C/result.txt`; retain icon tile/OAM/stack evidence. Existing binding: `F:/slink-work/lanes/pol-live2/x/explore_C/result.txt`. Native UI measurement, not real-host panel paging.
+
+14. **PRIVATE: LIVE-TITLE-SPLASH.** Fresh boot with no SaveRAM; tool owns separate overlay and clean-control EmuHawks sequentially. Both use the same judge; clean control must fail the wordmark oracle while overlay passes.
+
+    ```powershell
+    Reset-PolEnv
+    & $PY tools/polished_live/title_check.py --lane "$F/title" --base $base
+    ```
+
+    New primary evidence: `$F/title/evidence.json`; existing binding `F:/slink-work/lanes/pol-rcproof/title/evidence.json`. CGB entrance/settled/menu snapshots only, not DMG or alternate save/menu states. Closes OPEN-TITLE-SPLASH only when this LIVE row passes in the same verifier run.
+
+15. **CLIENT SERIAL: LIVE-WRITES-OVERWORLD.** Common SYNTH fixture; driver invokes real Client:handle_command (TEST HOST), not partner-driven kills. Unset scope reducers. In-battle (c) negatives remain explicitly NOT RUN live and owner-accepted as unit/model-covered.
+
+    ```powershell
+    Reset-PolEnv
+    $env:POL_KIND='overlay'; $env:POL_LANE="$F/writes"; $env:POL_FIXTURE=$fixture
+    & $PY tools/polished_live/writes_run.py
+    ```
+
+    New primary evidence: `$F/writes/writes/result.txt`; secondary `trace.json`, exact recomputed party/CartRAM/allocation differences and permit bounds for (a) bench force_faint, (b) box_mon, (d) party_mon. Existing binding `F:/slink-work/lanes/pol-writes6889/writes/result.txt`. Bank-1/one-mon proof, not persistence or a natural in-battle faint.
+
+16. **PRIVATE: LIVE-PANEL-PAGES-ROM, ROM half against scripted host.** Stages the committed UPS, not a mutable cached overlay. Common SYNTH fixture plus Pokegear flags/phone-list setup; C0-C5 protocol/paging/close and bounded mailbox spans.
+
+    ```powershell
+    Reset-PolEnv
+    $env:POL_KIND='overlay'; $env:POL_LANE="$F/panel-rom"; $env:POL_FIXTURE=$fixture
+    & $PY tools/polished_live/run_pol_panel.py
+    ```
+
+    New primary evidence `$F/panel-rom/run/result.txt`; secondary panel.json/screenshots. Existing binding `F:/slink-work/lanes/pol-rcproof/panel/run/result.txt`. No real server; does not substitute for host paging.
+
+17. **CLIENT SERIAL: LIVE-PANEL-HOST-PAGING.** Common SYNTH fixture; Pokegear flags/list writes; scripted TCP second identity derived from the save, normal hello/tick/capture events; one real native Route 29 catch by A; real server link_panel -> client hold/stage -> ROM pages. Include the compact/readable 16-glyph row oracle, not only equality with already-truncated text.
+
+    ```powershell
+    Reset-PolEnv
+    $env:POL_FIXTURE=$fixture
+    & $PY tools/polished_live/panel_host_live.py --lane "$F/panel-host" --timeout 2400
+    ```
+
+    New primary evidence `$F/panel-host/run/oracle.json`; retain result, wire, persisted links/status, page text and permits. Existing binding `F:/slink-work/lanes/pol-panelhost/run/oracle.json`; readability follow-up is `F:/slink-work/lanes/pol-panelfix/run/oracle.json`, not yet a replacement receipt by editing its hash.
+
+18. **CLIENT SERIAL: rival swap, pending OPEN-EXPLODE-RIVAL evidence (not yet a LIVE id).** Exactly the `calib-68894579` route; SYNTH scene-only fixture plus scripted second trainer; native feedback navigation, real client/server trainer event and swap consumer. Do not use `--fixed-route` for the normal qualified replay.
+
+    ```powershell
+    Reset-PolEnv
+    & $PY tools/polished_live/rival_swap_live.py --fixture 'F:/slink-work/lanes/pol-rival-live/fixture/rival.SaveRAM' --disclosure 'F:/slink-work/lanes/pol-rival-live/out/disclosure.json' --route 'F:/slink-work/lanes/pol-rival-live/out/calib-68894579/synth-o562jtrj/probe/route.json' --out "$F/rival" --frames 18000 --timeout 600
+    ```
+
+    Evidence is `$F/rival/synth-<allocated>/receipt.json`, trace/result/wire and partner/input declarations; allocation is printed by the driver. Current retained PASS `F:/slink-work/lanes/pol-explode2/rival/synth-90mk5ijy/receipt.json`. Dry-run with the same arguments plus `--dry-run` before an emulator grant; a mismatched overlay calibration requires a new route before the freeze.
+
+19. **PRIVATE: explode_live's three cases, pending writer evidence (not yet LIVE ids).** Each invocation allocates a new owned lane and uses direct Entry.build rather than the shared launcher log. SYNTH fixture/logical link; TEST HOST handle_command; native wild route/action/faint. Not server capability/partner qualification.
+
+    ```powershell
+    Reset-PolEnv
+    & $PY tools/polished_live/explode_live.py --case explode --fixture $fixture --route tools/polished_live/routes/faint_f3_route.json --lane "$F/explode" --timeout 600 --run
+    & $PY tools/polished_live/explode_live.py --case active-faint --fixture $fixture --route tools/polished_live/routes/faint_f3_route.json --lane "$F/explode" --timeout 600 --run
+    & $PY tools/polished_live/explode_live.py --case bench-faint --fixture $fixture --route tools/polished_live/routes/faint_f3_route.json --lane "$F/explode" --timeout 600 --run
+    ```
+
+    Evidence per case: `$F/explode/<case>-<allocated>/probe/oracle.json`, result.txt, input.json and trace.json. They may run concurrently with unique allocations after fixes/build freeze; the block is serial for clarity. Current retained active/bench PASS files are under `F:/slink-work/lanes/pol-explode2/explode/{active-faint-ee5f2c0cb766,bench-faint-4dc72c955269}/probe/oracle.json`. An explode recording PASS is not enough: inspect Python oracle and absence of commanded-death echo. Do not rerun a known echo failure until the fix lands.
+
+20. **CLIENT SERIAL: duo S2n and S4n, separate jobs with two own EmuHawks each.** Native catches/paired link; SYNTH HP=1 conditioning and weak-action setup disclosed by the driver, then native battle faint/copyback/whiteout. Do not replace these with the HP=0/reconnect controls or call SYNTH-conditioned deaths unqualified PHYSICAL evidence.
+
+    ```powershell
+    Reset-PolEnv
+    $env:POL_KIND='overlay'; $env:POL_DUO_LANE="$F/duo-s2n"; $env:POL_DUO_DEADLINE='900'
+    & $PY tools/polished_live/duo.py --scenario faint-natural --distinct-identities --fixture-a $fixture --fixture-b $fixtureB
+    $env:POL_DUO_LANE="$F/duo-s4n"
+    & $PY tools/polished_live/duo.py --scenario whiteout-natural --distinct-identities --fixture-a $fixture --fixture-b $fixtureB
+    ```
+
+    Evidence: `$F/duo-s2n/play-faint-natural/evidence.json` and `$F/duo-s4n/play-whiteout-natural/evidence.json`, both sides' result/trace, wire, server log and SYNTH disclosures. Prior launches used `F:/slink-work/lanes/pol-live/fixture/polished_overlay_warp.SaveRAM` (same disclosed fixture) and `pol-ident/B.SaveRAM`; verify bytes instead of trusting aliases. S2n needs owner PHYSICAL qualification separately. S4n bar is whiteout event sent plus all linked partners dying via per-mon faint; it does not prove `_handle_whiteout` caused the deaths.
+
+21. **BUILD ALONE, then a reserved trade job: trade_duo_live + native-save/cold CONTINUE.** This runner is hardcoded to `F:/slink-work/lanes/pol-tradeduo/{disabled,enabled,client}`. Coordinate with its owner: do not overwrite the retained builds/private client tree while that lane is active. Its two isolated build preparations must be sequential and match the frozen source. Enabled trade is a separately authorised TEST build, never published as the shipped UPS/profile.
+
+    ```powershell
+    & $PY tools/build_polished_companion.py --version 0.1.0 --test-output 'F:/slink-work/lanes/pol-tradeduo/disabled'
+    & $PY tools/build_polished_companion.py --version 0.1.0 --test-trade-enable --test-output 'F:/slink-work/lanes/pol-tradeduo/enabled'
+    Reset-PolEnv
+    & $PY tools/polished_live/trade_duo_live.py --fixture 'F:/slink-work/lanes/pol-svclive/apply-done1/attempt-0003/sram_overlay/pol overlay.SaveRAM' --name "freeze-$cut" --timeout 600
+    ```
+
+    Evidence: `F:/slink-work/lanes/pol-tradeduo/freeze-$cut/verdict.json`, manifest.json (both ROM identities/gate diff), before saves, state-after-trade.json, wire, durable-a/b.json and a/b g2 cold-ready snapshots. The runner does cold reload **only if both trades finish**; missing cold evidence is NOT_RUN, not PASS. SYNTH receptionist fixture, derived B identity and one server link seeded through normal state events; native client/receptionist/commit/save afterward. Trade COMPLETE fixes must land first. Shipped overlay's commit-disabled hash and enabled test hash differ: this test cannot satisfy a shipped-ROM-bound LIVE item by inventing equality. Owner must decide shipped enablement and the receipt contract before OPEN-IN-GAME-TRADE can close. No distinct trade LIVE item currently exists.
+
+22. **Rebind only judged new evidence, after all jobs finish.** Receipt writer records final HEAD/source hashes, `--print-code-digest`, provenance SHA256, executed ROM SHA1 (or source-overlay binding for R1/R2/R3), the new primary path/size/SHA256, secondary evidence and exact observed PASS checks. Preserve grade DEV; PHYSICAL is an owner act. Keep failed attempts; never overwrite their evidence or promote a recording PASS over a red oracle. `LIVE-PHONE-ENTRY` and the capture/R2/R3 gaps above must be fixed/disposed by their owners, not silently omitted. Any later digest-scoped edit revokes the cut and requires re-running affected receipts. Manifest/receipt/doc changes themselves are outside its code_digest_files.
+
+23. **BUILD ALONE: final verifier, including BUILD-OVERLAY, then owner decision.** All emulators/private builds must have finished so the full gate cannot race their caches. First list confirms the LIVE census and closure ids; targeted runs are diagnostic only. Full verifier consumes every receipt and re-hashes its evidence; CLOSED needs its closing LIVE item to PASS in the same run.
+
+    ```powershell
+    Reset-PolEnv
+    & $PY tools/verify_polished_release.py --list
+    & $PY tools/verify_polished_release.py --json | Tee-Object "$F/verifier.json"
+    ```
+
+    `--only` and `--no-release` are not release verdicts; red is honest. Keep the six-shard logs, build logs and final verifier JSON with this cut. Vanilla Gen 2/C-5 qualification remains a separate gate (`docs/gen2/C5_RUNBOOK.md`), not implied by Polished solo/duo receipts. Owner ruling remains keep local: no master merge, push, release or lane deletion is authorised by a green runbook invocation.
