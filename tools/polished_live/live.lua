@@ -213,9 +213,9 @@ local function walk_for_battle(label)
     end
     L.idle(2)
     if label == "STAGE2-run" then client.screenshot(L.RUN .. "/battle1.png") end
-    L.log(fmt("[live] %s: wild battle at frame %d (walk %d frames) enemy species %d hp %d type %d", label,
-              emu.framecount(), emu.framecount() - f, L.rw("wEnemyMonSpecies"), L.rw("wEnemyMonHP") * 256 + L.rw("wEnemyMonHP", 1),
-              L.rw("wBattleType")))
+    -- wEnemyMon* is not loaded yet here (it still holds the previous battle's mon); battle() logs the real foe
+    L.log(fmt("[live] %s: wild battle at frame %d (walk %d frames) type %d", label,
+              emu.framecount(), emu.framecount() - f, L.rw("wBattleType")))
 end
 
 -- the wild mon as the battle holds it: wEnemyMonForm = form (bits 0-4) | extspecies (bit 5) | gender/egg (6-7)
@@ -231,7 +231,10 @@ end
 local BALL_POCKET = 2  -- wCurPocket is 0-based (pack.asm: cp TM_HM - 1); BALL = 3
 local function battle(action, label)
     local foe = nil
-    local f_start, handled, last_act = emu.framecount(), -1, emu.framecount()
+    -- handled starts at this battle's first frame: L.hit.LoadBattleMenu is never cleared, so a menu hit from the
+    -- PREVIOUS battle must not count (it made enemy() read the last battle's wEnemyMon*)
+    local f_start = emu.framecount()
+    local handled, last_act = f_start, f_start
     local throws, prepped, prep_pulses = {}, -1, 0
     local caps0 = #cap_hits
     -- the battle is over once the overworld takes input again (wBattleMode is not a reliable end marker)
