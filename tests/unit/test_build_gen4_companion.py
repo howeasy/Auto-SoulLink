@@ -166,6 +166,26 @@ def test_output_refusal(out):
         planner.plan("hgss", [], out)
 
 
+@pytest.mark.parametrize("out,ok", [
+    ("/tmp/pytest-of-runner/out", True), ("/home/x/out", True), ("/out/../other", False),
+    ("//host/share/out", False), ("out", False), ("./out", False), ("/tmp/a:b", False),
+])
+def test_output_rule_on_a_posix_checkout(monkeypatch, out, ok):
+    """Linux CI has no drive letters: an absolute path is the allowed shape there. The C: ban is the
+    drive-letter half of the same rule (the parametrised refusals above), so the guard stays meaningful."""
+    monkeypatch.setattr(planner.os, "name", "posix")
+    if ok:
+        assert planner._out_dir(out) == out
+    else:
+        with pytest.raises(planner.Refused, match="OUT_"):
+            planner._out_dir(out)
+
+
+@pytest.mark.parametrize("out", ["D:/lanes/out", "F:/slink-work/tmp/x", "e:/a/b"])
+def test_drive_lettered_output_other_than_c_is_allowed(out):
+    assert planner._out_dir(out).lower() == out.lower().replace("\\", "/")
+
+
 @pytest.mark.parametrize("kind", ["missing", "pin", "modified", "root"])
 def test_pret_prerequisite_refusal(model, monkeypatch, kind):
     build, pret, _, _, _ = model

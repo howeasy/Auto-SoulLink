@@ -79,11 +79,16 @@ def _run(src: Path, out: Path, variant: str = "hgss") -> int:
     return synth.main(["party2", "--profile", variant, "--src", str(src), "--out", str(out)])
 
 
-def _owner(variant: str) -> bytes:
-    path = SAVES / OWNER[variant]
+def _owner_save(filename: str) -> Path:
+    # SAVES comes from gen4_fixtures.lane_root(), hence SLINK_WORK_ROOT.
+    path = SAVES / filename
     if not path.is_file():
-        pytest.skip(f"absent input save: {path}")
-    return path.read_bytes()
+        pytest.skip(f"OPEN Gen4 owner save: absent input {path}")
+    return path
+
+
+def _owner(variant: str) -> bytes:
+    return _owner_save(OWNER[variant]).read_bytes()
 
 
 def test_lead_level_rom_stats_roundtrip_and_original(tmp_path):
@@ -1213,7 +1218,8 @@ def test_lead12_independent_title_literals(title, profile, filename, species, hp
     rom = gen4_pins.default_locations().roms[title]
     if not rom.exists():
         pytest.skip(f"absent input: {rom}")
-    source = (SAVES / filename).read_bytes()
+    save = _owner_save(filename)
+    source = save.read_bytes()
     out, _ = synth.build_lead_level(
         source, profile, rom, 12, title=title
     )
@@ -1226,7 +1232,7 @@ def test_lead12_independent_title_literals(title, profile, filename, species, hp
         hp,
         stats,
     )
-    assert (SAVES / filename).read_bytes() == source
+    assert save.read_bytes() == source
 
 
 def test_hge_override_low_bit_refused():

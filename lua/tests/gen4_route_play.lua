@@ -459,7 +459,9 @@ end
 --   Right from node 0 = node 1). A on a party slot selects it (ov14_021F0794 -> [data+0x21] = 0x1E +
 --   slot) and parks the cursor on the toolbar's first button (STORE); A there -> state 0xA9 -> 0x5C
 --   (last-mon / mail / egg checks) -> ... -> 0x61 (choose box, cursor on the ACTIVE box); A ->
---   0x66..0x6B commits (ov14_021E6318: PCStorage_PlaceMonInBoxFirstEmptySlot + Party_RemoveMon) ->
+--   0x6A finds an empty slot index (ov14_021E9234), then 0x6B commits via ov14_021E637C ->
+--   ov14_021E61BC: PCStorage_PlaceMonInBoxByIndexPair + Party_RemoveMon (overlay_14.s:7582-7596,
+--   2641-2649,1404-1428,1130-1156). FirstEmptySlot is the OTHER destination-bit0x80 branch ->
 --   back to 0x5B. Exit: B at 0x5B -> "Continue Box operations?" (state 0x94, YesNo: B = No) -> No ->
 --   exit state 0xB3. The script then returns to its menus: B backs out of the sub-menu, B again is
 --   SWITCH OFF.

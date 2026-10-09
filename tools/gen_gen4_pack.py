@@ -1462,9 +1462,20 @@ def build_phase_cases(xm: XMap, images: Images, *, hge: bool = False) -> dict:
                           "start-up zero-fill clears it; the stale-RAM window between the reset and that clear (the chain can still "
                           "read the dead heap) is the PHYSICAL question this case measures (live_after_close must be 0)"}),
     ]
+    pc_callers = copy.deepcopy(PC_SITE_CALLERS)
+    if not hge:
+        # These real first-empty callers require destination bit0x80. The ordinary
+        # deposit route resolves an explicit slot instead; do not retain a false
+        # exercised-by-deposit claim even in the blocked caller inventory.
+        for caller in pc_callers["pc_place_first_in_box"][:2]:
+            caller["covered_by"] = []
+            caller["why_open"] = "alternative destination-bit0x80 placement branch; indexed deposit does not exercise it"
+    first_empty_rationale = ("deposit target (first free slot of the box) and the party-full acquisition store; static ARM9 on HG "
+                             "(the probe's static_pc), replaced into ov129 on hge" if hge else
+                             "alternative destination-bit0x80 first-empty placement and party-full acquisition store; "
+                             "not exercised by the native indexed deposit (overlay_14.s:1346-1369)")
     pc = _case("pc", "pc", ["pc_place_first_in_box", "pc_delete_by_index_pair"], "pc_place_first_in_box",
-               {"pc_place_first_in_box": "deposit target (first free slot of the box) and the party-full acquisition store; static ARM9 on HG "
-                                         "(the probe's static_pc), replaced into ov129 on hge",
+               {"pc_place_first_in_box": first_empty_rationale,
                 "pc_delete_by_index_pair": "withdraw/release removes a box mon: the opposite PC write"},
                pred_pc, {
                    "source": _LAUNCHED_APP_SRC + "; src/launch_application.c:406-408 (sOverlayTemplate_PCBox = {PCBox_Init, PCBox_Main, "
@@ -1474,7 +1485,7 @@ def build_phase_cases(xm: XMap, images: Images, *, hge: bool = False) -> dict:
                        f"{_P} src/scrcmd_c.c:1991: PCBox_LaunchApp sets unk4; the first deposit/withdraw is a menu action in PCBox_Main "
                        "(ov14), many frames after the launch, so the arm precedes it with a wide margin",
                        "disarm: PCBox_Exit then manager delete (src/overlay_manager.c:65-70); the last PC write is a menu action before it"]},
-               check_p, list(PC_LEGS), PC_SITE_CALLERS, PC_ACTIVATION, PC_EXIT, "BLOCKED_NO_FIXTURE")
+               check_p, list(PC_LEGS), pc_callers, PC_ACTIVATION, PC_EXIT, "BLOCKED_NO_FIXTURE")
     # Preserve the full paired-site caller inventory as OPEN; deposit does not exercise deletion/release.
     pc["name"] = "pc_withdraw_release"
     pc["blocked_reason"] = "OPEN: delete-by-index, WITHDRAW and RELEASE remain unqualified; " + _PC_WITHDRAW_OPEN
@@ -1485,19 +1496,40 @@ def build_phase_cases(xm: XMap, images: Images, *, hge: bool = False) -> dict:
                 caller["exercised_by"] = []
                 caller["why_open"] = caller.get("why_open") or "WITHDRAW/RELEASE route has not been qualified"
     pc["open"] = _open_from(pc["caller_matrix"])
-    producer = "pc_place_arm9_entry" if hge else "pc_place_first_in_box"
+    # Native HG/SS deposit: state 0x6A finds an empty index and stores it in
+    # work+E8 (overlay_14.s:7582-7596,2641-2649), then state 0x6B dispatches
+    # ov14_021E637C -> ov14_021E61BC -> PlaceMonInBoxByIndexPair (:1428,1152).
+    # FirstEmptySlot is the bit0x80 destination branch, not this route.
+    # Preserve hge pending its redirected/indexed-entry FILE proof.
+    producer = "pc_place_arm9_entry" if hge else "pc_place_by_index_pair"
     ids = [producer, "pc_place_first_in_box"] if hge else [producer]
     callers = copy.deepcopy(PC_SITE_CALLERS)
     if hge:
         callers[producer] = copy.deepcopy(callers["pc_place_first_in_box"])
+    else:
+        callers[producer] = [
+            _entry("direct", "ov14_021E61BC (native party-to-indexed-box deposit)",
+                   f"{_P} asm/overlay_14.s:1130-1156; transfer dispatch :1404-1428", PC_LEGS[2:3]),
+            _entry("direct", "ov14_021E611C (party/box swap with an occupied destination)",
+                   f"{_P} asm/overlay_14.s:1057-1092", [], "other PC action; occupied-target swap is not this deposit route"),
+            _entry("direct", "OVY_112 Pokewalker transfer callers",
+                   f"{_P} asm/overlay_112.s:12810,17763,18147,18251", [], "other overlay predicate (14 != 112)"),
+        ]
     deposit_route = [leg for leg in PC_LEGS if leg != "pc_withdraw_box_mon"]
+    rationale = ("native deposit; ARM9 entry/trampoline is the static-PC oracle, no withdraw claim" if hge else
+                 "native indexed deposit: FindFirstEmptySlot resolves an explicit index, then ov14_021E61BC calls "
+                 "PCStorage_PlaceMonInBoxByIndexPair (overlay_14.s:7582-7596,2641-2649,1428,1152); "
+                 "static ARM9 oracle, no first-empty-placement or withdraw claim")
     deposit = _case("pc", "pc", ids, producer,
-                    dict.fromkeys(ids, "native deposit; ARM9 entry/trampoline is the static-PC oracle, no withdraw claim"),
+                    dict.fromkeys(ids, rationale),
                     pred_pc, {key: pc[key] for key in ("source", "predicate_chain", "precedes_first_event")},
                     check_p, deposit_route, callers, PC_ACTIVATION, PC_EXIT, "ROUTE_LEGS_PARTLY_NEW")
     deposit["fixture_role"] = "pc_case"
     cases.append(deposit)
-    return {"phase_cases": cases, "phase_cases_blocked": [pc], "phase_cases_excluded": copy.deepcopy(PHASE_EXCLUDED)}
+    excluded = copy.deepcopy(PHASE_EXCLUDED)
+    if not hge:
+        del excluded["pc"]["pc_place_by_index_pair"]  # Now selected; retain the candidate partition.
+    return {"phase_cases": cases, "phase_cases_blocked": [pc], "phase_cases_excluded": excluded}
 
 
 def validate_phase_cases(title: dict) -> list[str]:
