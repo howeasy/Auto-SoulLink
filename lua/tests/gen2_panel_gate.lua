@@ -44,6 +44,9 @@
   from tests/live/test_gen2_panel_gate.py (sites + RAM from data/gen2/<title>_slink.sym).
   Result file: patch/build/gen2_panel_gate_result.txt. Printed: MENU, PANEL, FALLBACK, CONTROL, STRESS,
   STACK, RECEIPT (json after the tag); RESULT: PASS|FAIL last.
+  Opt-in diagnosis: SLINK_GEN2_PANEL_PROBE=1 requires provenance-bound native completion sites in
+  panel_facts.probe. It records full palettes, bank-5 palette writes and native return/+1/+2/+8/+60
+  samples; SLINK_GEN2_PANEL_PROBE_CYCLES appends B+6/no-client cycles at a fixed frame phase.
 --]]
 local P = {}
 P.RESULT = "patch/build/gen2_panel_gate_result.txt"
@@ -146,6 +149,7 @@ end
 
 function P.main(real, getenv, SG, F)
     local evidence = (live_api ~= nil and real == live_api) and "PHYSICAL" or "MODEL"
+    local probing = getenv("SLINK_GEN2_PANEL_PROBE") == "1"
     local root = getenv("SLINK_ROOT") or SLINK_ROOT or "."
     local lines, failures = {}, 0
     local function log(s)
@@ -199,6 +203,13 @@ function P.main(real, getenv, SG, F)
     ctx.log = log
     local json, title, pf, ov = ctx.json, ctx.env.title, ctx.panel_facts, ctx.overlay
     local function J(value) return assert(json.encode(value)) end
+    local clock_stage = getenv("SLINK_GEN2_PANEL_CLOCK_STAGE")
+    if clock_stage then
+        local staged = assert(json.decode(clock_stage))
+        assert(staged.schema == "gen2-panel-clock-stage-v1" and staged.staged_base_time_hex == "7fffffffffffffff",
+               "panel clock staging disclosure is invalid")
+        log("PANEL_CLOCK_STAGE " .. J(staged))
+    end
     local MB = ov.ram.wSlinkMailbox
     local function u8(addr) return api.read_u8(addr, "System Bus") end
     local function wram(site, n) return api.read_range(SG.wram_offset(site.bank, site.addr, n), n, "WRAM") end
@@ -211,6 +222,7 @@ function P.main(real, getenv, SG, F)
         {bus_domain="System Bus", rom_domain="ROM", bank_domain="System Bus", pc_register="PC", sp_register="SP",
          bank_address=ctx.profile.hram.hROMBank})
     local hits, handles, hook_errors = {}, {}, {}
+    local probe_native
     local function watch(id)
         local site = assert(pf.sites[id], "panel facts lack site " .. id)
         local valid = binding:validate({id=id, bank=site.bank, address=site.addr, expected_hex=site.hex,
@@ -220,6 +232,7 @@ function P.main(real, getenv, SG, F)
             local okc, hit = pcall(binding.context, binding, valid)
             if not okc then hook_errors[#hook_errors + 1] = tostring(hit) return end
             if hit then hits[id][#hits[id] + 1] = hit.frame end
+            if hit and probe_native then probe_native(id, hit) end
         end, "SLink-p41g-" .. id)
         assert(binding:valid_handle(handle), id .. ": hook registration failed")
         handles[#handles + 1] = handle
@@ -227,6 +240,10 @@ function P.main(real, getenv, SG, F)
     local hooked, hook_why = pcall(function()
         for _, id in ipairs({"SlinkPanel", "SlinkPanel.close", "SlinkStartMenuEntry", "FadeOutToWhite",
                              "FadeInFromWhite", "EnableSpriteUpdates", "DisableSpriteUpdates"}) do watch(id) end
+        if probing then
+            assert(type(pf.probe) == "table", "palette probe requires bound native facts")
+            for _, id in ipairs(pf.probe.completion_sites) do watch(id) end
+        end
     end)
     local function release()
         for _, h in ipairs(handles) do pcall(api.unregister, h) end
@@ -287,6 +304,7 @@ function P.main(real, getenv, SG, F)
             last_state = s
         end
     end
+    local probe_on_frame
     on_frame = function()
         note_state()   -- before the client's service: an AWAIT it stages this frame is still seen
         if client then
@@ -294,6 +312,7 @@ function P.main(real, getenv, SG, F)
             if not served then hook_errors[#hook_errors + 1] = "panel service: " .. tostring(why) end
         end
         note_state()
+        if probe_on_frame then probe_on_frame() end
         for _, a in ipairs(stack_pending) do
             if stack_handles[a] then pcall(api.unregister, stack_handles[a]); stack_handles[a] = nil end
         end
@@ -368,6 +387,72 @@ function P.main(real, getenv, SG, F)
         return {bgp1=wram(r.wBGPals1, 64), obp1=wram(r.wOBPals1, 64), bgp2=wram(r.wBGPals2, 64),
                 obp2=wram(r.wOBPals2, 64), attr=api.read_range(0x3800, 0x800, "VRAM")}
     end
+
+    -- Diagnostic-only: observe the native owner; never write palette memory or replace its return.
+    local probe_records, probe_active, probe_pending = {}, nil, {}
+    local function probe_point(record, label, origin)
+        if not probing then return end
+        local palettes = snapshot()
+        local values = {}
+        for name, site in pairs(pf.probe.ram) do
+            values[name] = site.addr >= 0xFF00 and u8(site.addr) or wram(site, 1)[1]
+        end
+        record.samples[#record.samples + 1] = {label=label, frame=frame(), origin=origin or json.null,
+            bgp1=json.array(palettes.bgp1), bgp2=json.array(palettes.bgp2),
+            obp1=json.array(palettes.obp1), obp2=json.array(palettes.obp2),
+            values=values, pc=api.register("PC"), rom_bank=u8(ctx.profile.hram.hROMBank),
+            wram_bank=u8(0xFF70), overworld=overworld(), menu=menu_up(), mailbox=u8(MB + 9)}
+    end
+    local function probe_begin(label)
+        if not probing then return end
+        probe_active = {label=label, start=frame(), phase=frame() % pf.probe.phase_mod,
+                        samples={}, native={}, writes={}}
+        probe_records[#probe_records + 1] = probe_active
+        probe_point(probe_active, "before")
+    end
+    local function probe_finish(same, returned)
+        if not probing then return end
+        probe_active.restored, probe_active.to_overworld = same, returned
+        probe_active.stop = frame()
+        probe_point(probe_active, "gate_sample")
+        probe_active = nil
+    end
+    if probing then
+        probe_native = function(id, hit)
+            if not probe_active then return end
+            probe_active.native[#probe_active.native + 1] = {id=id, frame=hit.frame, pc=hit.pc,
+                                                            rom_bank=hit.bank}
+            if pf.probe.returns[id] then
+                probe_point(probe_active, id, hit.frame)
+                for _, offset in ipairs({1, 2, 8, 60}) do
+                    probe_pending[#probe_pending + 1] = {record=probe_active, id=id,
+                                                        at=hit.frame + offset, origin=hit.frame, offset=offset}
+                end
+            end
+        end
+        probe_on_frame = function()
+            for i = #probe_pending, 1, -1 do
+                local pending = probe_pending[i]
+                if frame() >= pending.at then
+                    probe_point(pending.record, pending.id .. "+" .. pending.offset, pending.origin)
+                    table.remove(probe_pending, i)
+                end
+            end
+        end
+        for address = 0xD000, 0xD03F do
+            -- Preserve raw callback data; Gambatte reports zero here, not the written byte.
+            local handle = api.on_bus_write(function(_, value)
+                if not probe_active or u8(0xFF70) & 7 ~= 5 then return end
+                probe_active.writes[#probe_active.writes + 1] = {
+                    frame=frame(), pc=api.register("PC"), rom_bank=u8(ctx.profile.hram.hROMBank),
+                    address=address, observed=u8(address),
+                    callback_value=type(value) == "number" and value or json.null}
+            end, address, "SLink-panel-palette-" .. address, "System Bus")
+            assert(binding:valid_handle(handle), "palette write hook registration failed")
+            handles[#handles + 1] = handle
+        end
+        log("PALETTE_PROBE_FACTS " .. J(pf.probe))
+    end
     local function shot(name)
         local rel = fmt("patch/build/gen2_panel_gate_%s_%s.png", title, name)
         pcall(client_screenshot or function() end, root .. "/" .. rel)
@@ -430,6 +515,7 @@ function P.main(real, getenv, SG, F)
 
         -- CONTROL: a native full-screen submenu (OPTION) round trip restores the snapshot exactly.
         base = snapshot()
+        probe_begin("native_option")
         open_menu()
         local labels = menu().items
         local option
@@ -446,9 +532,10 @@ function P.main(real, getenv, SG, F)
         press("B")
         wait(menu_up, P.OPEN_BOUND)
         press("B")
-        to_overworld()
+        local native_returned = to_overworld()
         idle(P.SETTLE)
         local native = P.same(base, snapshot())
+        probe_finish(native, native_returned)
         check("CONTROL: a native OPTION round trip restores the snapshot", native == true, native)
         log("CONTROL " .. J({native_option=native == true and "restored" or native,
                              first_start_trip=menu_trip == true and "restored" or menu_trip}))
@@ -551,14 +638,24 @@ function P.main(real, getenv, SG, F)
 
         -- 3. CGB fade stress
         local stress, in_out, in_in, all_restored = {}, 0, 0, true
-        for i, spec in ipairs(P.STRESS) do
+        local stress_specs = P.STRESS
+        if probing then
+            stress_specs = {}
+            for _, spec in ipairs(P.STRESS) do stress_specs[#stress_specs + 1] = spec end
+            local count = assert(tonumber(getenv("SLINK_GEN2_PANEL_PROBE_CYCLES") or "30"))
+            assert(count >= 1 and count <= 300 and count % 1 == 0, "invalid palette probe cycle count")
+            for _ = 1, count do stress_specs[#stress_specs + 1] = {6, "B", false} end
+        end
+        for i, spec in ipairs(stress_specs) do
             local offset, button, with_client = spec[1], spec[2], spec[3]
             client = with_client
             panel:clear()
             if with_client then assert(panel:hold(P.ROWS)) end
             to_overworld()
             idle(P.SETTLE)
+            if probing then idle((pf.probe.phase - frame() % pf.probe.phase_mod) % pf.probe.phase_mod) end
             local before = snapshot()
+            probe_begin("stress_" .. i .. "_" .. button .. "_" .. offset .. "_" .. tostring(with_client))
             local c_from, o_from = closed_hits(), open_hits()
             local f_start = frame()
             local ok_menu = open_menu() and cursor_to_slink()
@@ -578,9 +675,10 @@ function P.main(real, getenv, SG, F)
                 step(down and {[button]=true} or {})
             end
             idle(P.REST)
-            to_overworld()
+            local stress_returned = to_overworld()
             idle(P.SETTLE)
             local same = P.same(before, snapshot())
+            probe_finish(same, stress_returned)
             all_restored = all_restored and same == true
             local fades_out = P.windows((function() local o = {} for _, f in ipairs(hits.FadeOutToWhite) do if f >= f_start then o[#o + 1] = f end end return o end)(),
                                         hits.DisableSpriteUpdates)
@@ -600,6 +698,12 @@ function P.main(real, getenv, SG, F)
               fmt("out %d in %d", in_out, in_in))
         log("STRESS " .. J({cycles=json.array(stress), in_fade_out=in_out, in_fade_in=in_in,
                                       all_restored=all_restored}))
+        if probing then
+            for _, record in ipairs(probe_records) do
+                record.samples, record.native, record.writes = json.array(record.samples), json.array(record.native), json.array(record.writes)
+                log("PALETTE_PROBE " .. J(record))
+            end
+        end
 
         -- 5. a real wild battle for the stack witness: walk the grass, RUN, back to the overworld.
         local map = ctx.facts.maps.Route29

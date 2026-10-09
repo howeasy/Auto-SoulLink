@@ -445,7 +445,36 @@ def _gen2_config(plan, path):
     path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
 
-GENS["gen2"].update(plan=_gen2_plan, config=_gen2_config)
+def _gen2_panel_clock(plan, destination):
+    """Panel-only SYNTH clock staging; never change CartRAM or saved RTC registers.
+
+    BizHawk bdddf4a58 StoreSaveRam applies InitialTime only in deterministic/movie mode.
+    Gambatte d49b895 cartridge.cpp:547-589 clamps a future saved baseTime to now; its
+    rtc.cpp:244-253 would otherwise add host elapsed time before cycle-based RTC starts.
+    Keep the captured register/counter phase, and remove only that wall-time delta.
+    """
+    source = destination.read_bytes()
+    if len(source) != 0x8000 + 22:
+        raise ValueError("panel clock staging requires a 32790-byte SaveRAM copy")
+    base = bytes.fromhex("7fffffffffffffff")
+    staged = source[:0x8000] + base + source[0x8008:]
+    destination.write_bytes(staged)
+    if destination.read_bytes() != staged:
+        raise ValueError("panel staged SaveRAM readback differs")
+    plan["env"]["SLINK_GEN2_PANEL_CLOCK_STAGE"] = json.dumps({
+        "schema": "gen2-panel-clock-stage-v1",
+        "disclosure": "SYNTH harness: copied RTC base timestamp only; CartRAM, saved RTC registers and immutable fixture retained",
+        "source_base_time_hex": source[0x8000:0x8008].hex(),
+        "staged_base_time_hex": base.hex(),
+        "cart_ram_sha256": hashlib.sha256(source[:0x8000]).hexdigest(),
+        "rtc_registers_hex": source[0x8008:].hex(),
+        "source_sha256": hashlib.sha256(source).hexdigest(),
+        "staged_sha256": hashlib.sha256(staged).hexdigest(),
+    })
+
+
+GENS["gen2"].update(plan=_gen2_plan, config=_gen2_config,
+                    fixture_stagers={"gen2_panel_gate": _gen2_panel_clock})
 
 
 def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
@@ -486,6 +515,9 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
             destination.unlink(missing_ok=True)
         else:
             shutil.copyfile(plan["fixture"], destination)
+            stager = (spec.get("fixture_stagers") or {}).get(Path(script).stem)
+            if stager is not None:
+                stager(plan, destination)
     elif rom_key in spec["patched"]:
         base_key, rom_rel, saveram_name = spec["patched"][rom_key]
         if rom_rel is None:
