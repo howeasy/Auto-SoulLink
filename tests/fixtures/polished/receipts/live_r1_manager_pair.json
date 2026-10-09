@@ -28,6 +28,11 @@
       "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\manager_r1_jar.out",
       "sha256": "53aba248ec3f0a9f4cec14d8d66d59d16c97f0bf2e4e789810277a2526d42298",
       "note": "Fresh freeze supporting observation/control"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r1_jar\\mgr\\run_20261009_012843\\roms\\b.gbc",
+      "sha256": "d62aaad85a0a9363590cdad54ee8d43c8e3690b3dcfd37b8ce677b74b608aa11",
+      "note": "Downloaded randomized b cartridge; sha1 c4af80829fb1c6fa58f1fe969c008fa2f48da9a9 matches summary/contract. Independently decoded via scan_randomized: Route29 [24,3] includes level3 species101 form4."
     }
   ],
   "synth": [
@@ -77,7 +82,7 @@
     {
       "name": "forms stay in the pool",
       "result": "PASS",
-      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+      "observed": "Independent scan_randomized of hash-bound b.gbc: JohtoGrass map[24,3] has [level3,species101,form4] in morning/day/night slots. Forms are present in generated encounter output; not inferred from the old receipt or SpeciesNNN log names."
     },
     {
       "name": "the write domain is recorded",
