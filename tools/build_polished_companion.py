@@ -40,7 +40,11 @@ import sys
 from datetime import UTC, datetime
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from _build_tools_bootstrap import ensure_rgbds, ensure_w64devkit  # noqa: E402
+from _build_tools_bootstrap import (  # noqa: E402
+    ensure_rgbds,
+    ensure_w64devkit,
+    space_free_toolchain,
+)
 from build_gen2_companion import (  # noqa: E402
     _replace_once,
     _sha256,
@@ -438,8 +442,10 @@ def build(*, check: bool = False, version: str | None = None,
     abi_line = f"DEF SLINK_ABI_VERSION EQU {ABI_VERSION}"
     if abi_line not in ABI.read_text(encoding="utf-8").splitlines():
         raise RuntimeError(f"{ABI.name} no longer declares `{abi_line}`")
-    rgbds_bin = rgbds_bin or ensure_rgbds(lock["rgbds_version"])
-    devkit_bin = w64devkit_bin or ensure_w64devkit()
+    rgbds_bin = space_free_toolchain(rgbds_bin or ensure_rgbds(lock["rgbds_version"]),
+                                    f"rgbds-{lock['rgbds_version']}")
+    devkit_bin = space_free_toolchain(w64devkit_bin or ensure_w64devkit(),
+                                     f"w64devkit-{lock['w64devkit_version']}")
     source_repo = repo_dir or work_root("cache") / "polished/src"
     cache = test_output / "cache/polished" if test_output is not None else (cache_dir or work_root("cache") / "polished")
 

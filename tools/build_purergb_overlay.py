@@ -28,7 +28,6 @@ import json
 import os
 import pathlib
 import shutil
-import subprocess
 import sys
 import zlib
 from datetime import UTC, datetime
@@ -38,15 +37,19 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "patch" 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import apply_purergb_overlay as overlay  # noqa: E402
 import rom_identity  # noqa: E402
-from _build_tools_bootstrap import ensure_rgbds, ensure_w64devkit  # noqa: E402
+from _build_tools_bootstrap import (  # noqa: E402
+    ensure_rgbds,
+    ensure_w64devkit,
+    space_free_toolchain,
+)
 from build_purergb_syms import (  # noqa: E402
     DATA_DIR,
     PURERGB_CACHE,
-    _binary_name,
     _git,
     _toolchain_record,
     _write_json,
     load_lock,
+    make_roms,
 )
 from make_ups import ups_apply, ups_create  # noqa: E402
 
@@ -140,16 +143,7 @@ def fresh_copy(repo_dir: pathlib.Path, lock: dict) -> pathlib.Path:
 
 
 def make(checkout: pathlib.Path, rgbds_bin: pathlib.Path, devkit_bin: pathlib.Path, lock: dict) -> str:
-    env = os.environ.copy()
-    env["PATH"] = os.pathsep.join([str(rgbds_bin), str(devkit_bin), env.get("PATH", "")])
-    cmd = [str(devkit_bin / _binary_name("make")), "-j4", *lock["make_targets"]]
-    print(f"[overlay] {' '.join(cmd)}  (cwd={checkout})", file=sys.stderr)
-    result = subprocess.run(cmd, cwd=str(checkout), env=env, capture_output=True, text=True)
-    if result.returncode != 0:
-        sys.stderr.write(result.stdout)
-        sys.stderr.write(result.stderr)
-        raise RuntimeError(f"make failed with exit code {result.returncode}")
-    return " ".join(["make", "-j4", *lock["make_targets"]])
+    return make_roms(checkout, rgbds_bin, devkit_bin, lock)
 
 
 def build(*, repo_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | None = None,
@@ -158,8 +152,10 @@ def build(*, repo_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | Non
     lock = load_lock()
     published = json.loads(PROVENANCE_PATH.read_text(encoding="utf-8"))["outputs"] if PROVENANCE_PATH.exists() else {}
     clean = repo_dir or PURERGB_CACHE
-    rgbds_bin = rgbds_bin or ensure_rgbds(lock["rgbds_version"])
-    devkit_bin = w64devkit_bin or ensure_w64devkit()
+    rgbds_bin = space_free_toolchain(rgbds_bin or ensure_rgbds(lock["rgbds_version"]),
+                                    f"rgbds-{lock['rgbds_version']}")
+    devkit_bin = space_free_toolchain(w64devkit_bin or ensure_w64devkit(),
+                                     f"w64devkit-{lock['w64devkit_version']}")
 
     checkout = fresh_copy(clean, lock)
     overlay.apply(checkout)

@@ -7,6 +7,9 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "tools"))
@@ -60,3 +63,134 @@ def test_bootstrap_has_both_rgbds_pins():
     assert RGBDS_PINS["v1.0.3"]["sha256"] == (
         "b66c23cb6d073dd3866ea30ef1ca5164549e0dae9ebe771957aff25e2658b0e3"
     )
+
+
+def _mock_pure_build(tmp_path, monkeypatch):
+    import build_purergb_syms as pure
+
+    repo = tmp_path / "source"
+    published = tmp_path / "published"
+    repo.mkdir()
+    published.mkdir()
+    outputs = {}
+    for key in ("pokered", "pokeblue", "pokegreen"):
+        raw = b"\0" * 0x160
+        (repo / f"{key}.gbc").write_bytes(raw)
+        outputs[key] = {"filename": f"{key}.gbc", "sha1": hashlib.sha1(raw).hexdigest()}
+        for ext in ("sym", "map"):
+            body = f"{key} {ext}\n".encode()
+            (repo / f"{key}.{ext}").write_bytes(body)
+            (published / f"{key}.{ext}").write_bytes(body)
+    lock = {"rgbds_version": "v1.0.3", "w64devkit_version": "2.10.0", "outputs": outputs,
+            "make_targets": [f"{key}.gbc" for key in outputs]}
+    monkeypatch.setattr(pure, "load_lock", lambda: lock)
+    monkeypatch.setattr(pure, "verify_source", lambda *args: repo)
+    monkeypatch.setattr(pure, "OUT_DIR", published)
+    monkeypatch.setattr(pure, "PROVENANCE_PATH", published / "provenance.json")
+    return pure, repo, published, lock
+
+
+@pytest.mark.parametrize("builder", ["clean", "overlay"], ids=["clean", "overlay"])
+def test_pure_build_compiles_host_tools_before_rom_targets(tmp_path, monkeypatch, builder):
+    import os
+
+    import build_purergb_overlay as overlay
+    pure, repo, _published, lock = _mock_pure_build(tmp_path, monkeypatch)
+    calls = []
+    devkit = tmp_path / "devkit"
+
+    def fake_make(argv, **kwargs):
+        calls.append(argv)
+        assert kwargs["env"]["PATH"].split(os.pathsep)[:2] == [str(tmp_path / "rgbds"), str(devkit)]
+        if "-C" not in argv:
+            assert len(calls) == 2 and calls[0][1:3] == ["-C", "tools"], "tools must be built before ROMs"
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pure.subprocess, "run", fake_make)
+    if builder == "clean":
+        assert pure.build_rom_syms(rgbds_bin=tmp_path / "rgbds", w64devkit_bin=devkit, check=True) == 0
+    else:
+        overlay.make(repo, tmp_path / "rgbds", devkit, lock)
+    assert len(calls) == 2 and calls[0][1:3] == ["-C", "tools"]
+    assert "-B" not in calls[1], "complete sym/map sets do not need a forced ROM rebuild"
+
+
+@pytest.mark.parametrize("builder", ["clean", "overlay"], ids=["clean", "overlay"])
+@pytest.mark.parametrize("missing", ["sym", "map"], ids=["missing-sym", "missing-map"])
+def test_existing_pure_rom_is_relinked_when_a_sidecar_is_missing(tmp_path, monkeypatch, builder, missing):
+    import build_purergb_overlay as overlay
+    pure, repo, published, lock = _mock_pure_build(tmp_path, monkeypatch)
+    (repo / f"pokered.{missing}").unlink()
+    commands = []
+
+    def fake_make(argv, **kwargs):
+        commands.append(argv)
+        if "-C" not in argv and "-B" in argv:
+            for key in lock["outputs"]:
+                for ext in ("sym", "map"):
+                    (repo / f"{key}.{ext}").write_bytes((published / f"{key}.{ext}").read_bytes())
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pure.subprocess, "run", fake_make)
+    if builder == "clean":
+        assert pure.build_rom_syms(rgbds_bin=tmp_path / "rgbds", w64devkit_bin=tmp_path / "devkit", check=True) == 0
+    else:
+        overlay.make(repo, tmp_path / "rgbds", tmp_path / "devkit", lock)
+    assert (repo / f"pokered.{missing}").is_file(), "a retained up-to-date ROM must not hide lost linker outputs"
+    assert "-B" in commands[-1]
+    assert not pure.PROVENANCE_PATH.exists(), "--check must not publish provenance"
+
+
+def test_recovered_pure_build_still_refuses_a_wrong_rom_sha1(tmp_path, monkeypatch):
+    pure, repo, published, _lock = _mock_pure_build(tmp_path, monkeypatch)
+    (repo / "pokered.sym").unlink()
+    before = {p.name: p.read_bytes() for p in published.iterdir()}
+
+    def fake_make(argv, **kwargs):
+        if "-C" not in argv:
+            (repo / "pokered.gbc").write_bytes(b"wrong ROM")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pure.subprocess, "run", fake_make)
+    with pytest.raises(RuntimeError, match="sha1 .* != locked"):
+        pure.build_rom_syms(rgbds_bin=tmp_path / "rgbds", w64devkit_bin=tmp_path / "devkit", check=True)
+    assert {p.name: p.read_bytes() for p in published.iterdir()} == before
+
+
+@pytest.mark.parametrize("builder", ["clean", "overlay"], ids=["clean", "overlay"])
+def test_host_tools_failure_stops_before_any_rom_make(tmp_path, monkeypatch, builder):
+    import build_purergb_overlay as overlay
+    pure, repo, _published, lock = _mock_pure_build(tmp_path, monkeypatch)
+    commands = []
+
+    def fake_make(argv, **kwargs):
+        commands.append(argv)
+        return SimpleNamespace(returncode=2, stdout="", stderr="host utility compile failed")
+
+    monkeypatch.setattr(pure.subprocess, "run", fake_make)
+    with pytest.raises(RuntimeError, match="make tools failed"):
+        if builder == "clean":
+            pure.build_rom_syms(rgbds_bin=tmp_path / "rgbds", w64devkit_bin=tmp_path / "devkit", check=True)
+        else:
+            overlay.make(repo, tmp_path / "rgbds", tmp_path / "devkit", lock)
+    assert len(commands) == 1 and commands[0][1:3] == ["-C", "tools"]
+
+
+@pytest.mark.parametrize("missing", [None, "sym", "map"], ids=["warm", "repair-sym", "repair-map"])
+def test_overlay_provenance_keeps_its_canonical_rom_recipe_after_recovery(tmp_path, monkeypatch, missing):
+    import build_purergb_overlay as overlay
+    pure, repo, _published, lock = _mock_pure_build(tmp_path, monkeypatch)
+    if missing:
+        (repo / f"pokered.{missing}").unlink()
+    calls = []
+
+    def fake_make(argv, **kwargs):
+        calls.append(argv)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pure.subprocess, "run", fake_make)
+    command = overlay.make(repo, tmp_path / "rgbds", tmp_path / "devkit", lock)
+    committed = json.loads((REPO_ROOT / "data/purergb/overlay_provenance.json").read_text())["command"]
+    assert command == committed, "host-tool preparation and recovery flags must not create artifact provenance drift"
+    assert calls[0][1:3] == ["-C", "tools"]
+    assert ("-B" in calls[1]) == bool(missing)

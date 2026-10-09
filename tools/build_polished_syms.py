@@ -44,7 +44,7 @@ import time
 import zlib
 from datetime import UTC, datetime
 
-from _build_tools_bootstrap import ensure_rgbds, ensure_w64devkit
+from _build_tools_bootstrap import ensure_rgbds, ensure_w64devkit, space_free_toolchain
 from slink_space import work_root
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -247,8 +247,10 @@ def build_rom_syms(
     build_dir = build_dir or work_root("cache") / "polished" / "build"
     export_source(repo, lock["source"]["commit"], build_dir)
 
-    rgbds_bin = rgbds_bin or ensure_rgbds(lock["rgbds_version"])
-    devkit_bin = w64devkit_bin or ensure_w64devkit()
+    rgbds_bin = space_free_toolchain(rgbds_bin or ensure_rgbds(lock["rgbds_version"]),
+                                    f"rgbds-{lock['rgbds_version']}")
+    devkit_bin = space_free_toolchain(w64devkit_bin or ensure_w64devkit(),
+                                     f"w64devkit-{lock['w64devkit_version']}")
 
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([str(rgbds_bin), str(devkit_bin), env.get("PATH", "")])
