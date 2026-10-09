@@ -18,6 +18,7 @@ are about its RULES, not about Polished working:
     (scenario, expected PASS checks, provenance sha256) and the COMPUTED code digest are all
     fail-closed;
   * an OPEN item whose Manager option now reads ok=True is a disagreement, not a completion.
+  * a player ZIP missing the published Polished UPS, or carrying different bytes, is red.
 
 Every RED CONTROL test below APPLIES its mutation, asserts the verifier goes red, and REVERTS.
 A control that never mutated anything proves nothing.
@@ -30,6 +31,8 @@ import hashlib
 import json
 import pathlib
 import sys
+import zipfile
+from types import SimpleNamespace
 
 import pytest
 
@@ -647,6 +650,44 @@ def test_a_jar_that_hashes_wrong_is_still_red(tmp_path, monkeypatch):
     monkeypatch.setattr(verifier, "JAR_PATH", jar)
     ok, detail = verifier._jar_pin(root)
     assert not ok and "the file hashes" in detail
+
+
+# (4) player ZIP companion binding
+
+
+@pytest.mark.parametrize("companion", ["matching", "missing", "mismatched"])
+def test_player_zip_requires_the_published_polished_companion(tmp_path, monkeypatch, companion):
+    item = {"id": "REL-PLAYER-ZIP", "kind": "RELEASE", "description": "player ZIP"}
+    root, manifest = _root(tmp_path, [item])
+    published = b"published Polished companion"
+    provenance_path = root / verifier.PROVENANCE
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance["output"]["ups"] = {"sha256": hashlib.sha256(published).hexdigest()}
+    _put(provenance_path, provenance)
+    tools = root / "tools"
+    tools.mkdir()
+    (tools / "check_release_zip.py").write_text("print('PASS synthetic ZIP hygiene')\n", encoding="utf-8")
+
+    def fake_build(*, version, out_dir, skip_generators, quiet, with_patch=False):
+        path = out_dir / f"SLink-player-{version}.zip"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr(f"SLink-player-{version}/README.md", "synthetic player build")
+            if with_patch and companion != "missing":
+                payload = published if companion == "matching" else b"another Polished companion"
+                archive.writestr(f"SLink-player-{version}/companion/SLink-Polished.ups", payload)
+        return path
+
+    monkeypatch.setitem(sys.modules, "make_release", SimpleNamespace(build_release=fake_build))
+    rows, errs = verifier.verify(root, manifest)
+    assert errs == []
+    row = _row(rows, item["id"])
+    if companion == "matching":
+        assert row.ok, _reasons(row)
+    else:
+        assert not row.ok
+        expected = ("missing required companion/SLink-Polished.ups" if companion == "missing"
+                    else "companion/SLink-Polished.ups sha256 mismatch")
+        assert expected in _reasons(row)
 
 
 # (4) partial runs

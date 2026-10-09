@@ -16,7 +16,7 @@ Checks
      --host/--port/--player are given).
   2. NO EXTRAS / NOTHING MISSING. With --manifest (the default) the member set must equal the
      manifest's, so a dev-only file fails by name even before the pattern check below. Members
-     that are optional by construction (the LuaSocket DLL, the companion patch) may be absent.
+     that are optional by construction (the LuaSocket DLL, companion patches and their metadata) may be absent.
   3. NO DEV-ONLY PATHS. tests/, .cache/, patch/build/, *.counter, *.baton, *.born, __pycache__,
      *.sav.
   4. GEN 3 FRLG CLOSURE. The 23 files the shipped lua/slink.lua -> gen3/entry.lua -> run.lua
@@ -132,7 +132,9 @@ def expected_members(m) -> tuple[dict[str, str], set[str], set[str]]:
     add("companion/SLink-RR.ups", m._COMPANION_UPS, opt=True)
     # Gen 2's overlay UPS ship only once that title's overlay row is ADMITTED (make_release.overlay_state),
     # so they are allowed members here, never required ones.
-    for f in m._GB_COMPANION_UPS + tuple(m._GEN2_OVERLAY_UPS.values()):
+    # Gen 3 patches and metadata use the same builder-owned companion set and remain optional.
+    for f in (m._GB_COMPANION_UPS + tuple(m._GEN2_OVERLAY_UPS.values())
+              + m._GEN3_COMPANION_FILES):
         add(f"companion/{f}", f"patch/dist/{f}", opt=True)
     add("companion/COMPANION_PATCH.md", m._COMPANION_README, opt=True)
     # A bundled pre-patched ROM is a gitignored build artifact: nothing to compare it to.
