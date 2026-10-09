@@ -647,7 +647,8 @@ NATURAL_DEFECTS = [
      f"b:cartridge_hp_not_zero:{KB}"),
     ("link_survives", lambda e: e["status"].update(after=_link_status()), f"link_still_alive:{AREA}"),
     ("link_disappeared", lambda e: e["status"]["after"].update(links=[]), f"dead_link_missing:{AREA}"),
-    ("link_memorial_is_not_dead", lambda e: e["status"].update(after=_link_status("memorial")), f"link_not_dead:{AREA}"),
+    ("link_memorial_without_kill_stamp_is_not_dead", lambda e: e["status"].update(after=_link_status("memorial")),
+     f"link_not_dead:{AREA}"),
     ("wrong_hp1_target", lambda e: e["steps"]["a"]["stage"]["synth_writes"][0].update(key=B_OWN[0]),
      "a:stage_wrong_target"),
     ("wrong_hp_address", lambda e: e["steps"]["a"]["stage"]["synth_writes"][0].update(wram=100000),
@@ -747,6 +748,19 @@ def test_natural_loss_passes_only_the_native_server_path(whole_party, path):
     verdict, reasons, facts = oracle(ev)
     assert (verdict, reasons, facts["server_path"]) == ("PASS", [], path)
     assert facts["expected_partners"] == facts["b_force_faint_keys"] == [KB]
+
+
+@pytest.mark.parametrize("whole_party", [False, True], ids=["faint", "whiteout"])
+def test_natural_loss_passes_when_the_server_already_memorialized_the_killed_pair(whole_party):
+    # Live S2n (pol-duo3 s2n1): A ran away promptly after its faint report, both clients reached a safe overworld and
+    # the server advanced dead -> memorial (stamped killed_at, cause battle) before the 'after' snapshot. That is the
+    # same kill one server stage later, not a surviving link.
+    ev = natural_ev(whole_party)
+    ev["status"]["after"] = _link_status("memorial")
+    ev["status"]["after"]["links"][0].update(killed_at="2026-10-08T23:58:18+00:00")
+    oracle = duo.oracle_whiteout_natural if whole_party else duo.oracle_faint_natural
+    verdict, reasons, _facts = oracle(ev)
+    assert (verdict, reasons) == ("PASS", [])
 
 
 @pytest.mark.parametrize("whole_party", [False, True], ids=["copyback_delay", "whiteout_queue_delay"])

@@ -811,7 +811,10 @@ def _propagation_reasons(ev: dict, whole_party: bool, natural: bool = False) -> 
                      and all(row.get(field) == lk.get(field) for field in ("area_id", "a_key", "b_key"))]
             if not exact:
                 reasons.append(f"dead_link_missing:{lk.get('area_id')}")
-            elif exact[0].get("status") not in ("alive", "dead"):
+            elif not (exact[0].get("status") == "dead"
+                      or (exact[0].get("status") == "memorial" and exact[0].get("killed_at"))):
+                # A kill the server already advanced dead -> memorial (killed_at stamped) once both clients reached a safe
+                # overworld is the same kill one stage later; a memorial row with no kill stamp proves nothing.
                 reasons.append(f"link_not_dead:{lk.get('area_id')}")
     return reasons, facts
 
