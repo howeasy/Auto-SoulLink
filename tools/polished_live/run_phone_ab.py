@@ -14,7 +14,7 @@ import pathlib
 import shutil
 import sys
 
-LANE_ROOT = pathlib.Path("F:/slink-work/lanes/pol-panel2")
+LANE_ROOT = pathlib.Path(os.environ.get("POL_LANE", "F:/slink-work/lanes/pol-panel2"))
 os.environ["POL_LANE"] = str(LANE_ROOT)
 os.environ.setdefault("POL_FIXTURE", "F:/slink-work/lanes/g2int-live/pol/fixture/polished_overlay_warp.SaveRAM")
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -27,7 +27,7 @@ from make_ups import ups_apply  # noqa: E402
 
 H.SYMBOLS = H.SYMBOLS + (
     "wPhoneList", "wNumSetBits", "wCurCaller", "wPokegearPhoneCursorPosition", "wPokegearPhoneScrollPosition",
-    "wPokegearPhoneSelectedPerson", "PokegearPhoneContactSubmenu", "PokegearPhoneContactSubmenu.Delete",
+    "wPokegearPhoneSelectedPerson", "wPokegearPhoneSubmenuCursor", "PokegearPhoneContactSubmenu", "PokegearPhoneContactSubmenu.Delete",
     "MakePhoneCallFromPokegear", "SlinkPhone_CallGate", "SlinkPhone_CallerName", "SlinkPhone_CanDelete",
     "SlinkPhone_CountSetBits", "wSlinkMailbox", "wSlinkMailboxEnd", "wSlinkPanelText",
     # round 4: without these, L.hook("SlinkPanel") asserted at load and three bisects died

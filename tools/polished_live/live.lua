@@ -1,12 +1,14 @@
 -- tools/polished_live/live.lua -- the Polished live stages, launched by `harness.py live`.
 -- The REAL entry path runs the client: lua/slink.lua -> (GB route) lua/gen2/entry.lua detect_title ->
 -- lua/gen2/run.lua -> Entry.build -> admit_polished/compose_polished. This driver only presses buttons and
--- registers READ-ONLY probes (frame/bank/SP/PC/stack reads). The only writes are the client's own (expected none).
+-- registers READ-ONLY probes (frame/bank/SP/PC/stack reads). Client writes are recorded; acquisition quarantine is expected.
 -- Stages (POL_STAGES, default 1234): 1 hello, 4 frame-wait stack fingerprint, 2 wild catch (+ run/fail-shake
 -- negatives), 3 box arrival (full-party catch) + census + native save.
 local L = dofile(os.getenv("SLINK_ROOT") .. "/tools/polished_live/pol_lib.lua")
 local fmt = string.format
 local J = L.json
+-- POL_PREPARE_FULL=1: native catch + SAVE only, no client; creates a private full-party fixture.
+local PREPARE = os.getenv("POL_PREPARE_FULL") == "1"
 local STAGES = os.getenv("POL_STAGES") or "1234"
 local function want(n) return STAGES:find(tostring(n), 1, true) ~= nil end
 -- randomized-cartridge runs (R2/R3) reuse every stage on another map/kind: POL_MAP "group,number", POL_HEADER
@@ -18,7 +20,7 @@ local MAP = nums(os.getenv("POL_MAP") or "24,3")
 local HEADER = nums(os.getenv("POL_HEADER") or "1,30,9")
 local WALK = nums(os.getenv("POL_WALK") or "46,51")
 local EXPECT_KIND = os.getenv("POL_EXPECT_KIND") or "overlay"
-client.speedmode(400)
+client.speedmode(300)
 L.log(fmt("[live] boot frame %d rom %s stages %s", emu.framecount(), gameinfo.getromhash(), STAGES))
 
 -- ── probes (registered BEFORE the client so both see every hit) ─────────────────────────────────
@@ -31,7 +33,8 @@ L.hook_at("capture_site", cap.bank, cap.addr, function(right_bank)
     if not right_bank then cap_other_bank = cap_other_bank + 1 return end
     cap_hits[#cap_hits + 1] = {frame = emu.framecount(), bank = L.rombank(), pc = emu.getregister("PC"),
         sp = emu.getregister("SP"), party_count = L.rw("wPartyCount"),
-        last_species = L.rw("wPartyMons", (math.max(L.rw("wPartyCount"), 1) - 1) * 48)}
+        last_species = L.rw("wPartyMons", (math.max(L.rw("wPartyCount"), 1) - 1) * 48),
+        last_struct = L.hex(L.wbytes("wPartyMons", (math.max(L.rw("wPartyCount"), 1) - 1) * 48, 48))}
 end)
 for _, name in ipairs({"OWPlayerInput", "LoadBattleMenu", "BattleMenu_Run", "PokeBallEffect", "PokeBallEffect.caught",
                        "PokeBallEffect.SendToPC", "BlinkCursor", "YesNoBox", "StartMenu", "SaveMenu", "SaveGameData",
@@ -86,11 +89,15 @@ for _, k in ipairs({"write_u8", "write_s8", "write_u16_le", "write_u16_be", "wri
         end
     end
 end
+local P, sent = {}, {hello = {}, capture = {}, other = {}}
+local last_gen, ticks, gen_changes, last_battle_end = nil, 0, {}, nil
+local function append(path, s) local f = io.open(path, "a") if f then f:write(s .. "\n") f:close() end end
+if not PREPARE then
 local t_build = os.clock()
 dofile(L.ROOT .. "/lua/slink.lua")
 L.log(fmt("[live] lua/slink.lua returned after %.1fs cpu; client %s", os.clock() - t_build, tostring(SLINK_GEN2_CLIENT ~= nil)))
 if not SLINK_GEN2_CLIENT then L.die("the Gen 2 route did not start a client (see slink_lua.log)") end
-local P = SLINK_GEN2_PARTS
+P = SLINK_GEN2_PARTS
 L.log(fmt("[live] parts: pack %s title %s kind %s qualification %s production_admitted %s rom %s",
           tostring(P.pack), tostring(P.title), tostring(P.artifact_kind), tostring(P.qualification),
           tostring(P.production_admitted), tostring(P.runtime_rom_sha1)))
@@ -101,9 +108,6 @@ L.log(fmt("[live] admission: admitted_by %s overlay_sha1 %s", tostring(P.admitte
 -- wire tap: the connector module is looked up per call (run.lua), so wrapping M.send/M.receive sees every line
 local C = package.loaded["connector"]
 local sent_path, recv_path = L.RUN .. "/sent.jsonl", L.RUN .. "/recv.jsonl"
-local sent = {hello = {}, capture = {}, other = {}}
-local last_gen, ticks, gen_changes, last_battle_end = nil, 0, {}, nil
-local function append(path, s) local f = io.open(path, "a") if f then f:write(s .. "\n") f:close() end end
 local orig_send, orig_recv = C.send, C.receive
 C.send = function(line, ...)
     local ok, msg = pcall(J.decode, line)
@@ -129,6 +133,8 @@ C.receive = function(...)
     return line
 end
 
+end -- client construction is deliberately absent in native fixture preparation
+
 -- ── continue into the game ──────────────────────────────────────────────────────────────────────
 if not L.to_overworld(MAP[1], MAP[2], 60, 8000, "continue") then L.die(fmt("CONTINUE did not reach map %d:%d", MAP[1], MAP[2])) end
 local first_ow = emu.framecount() - 60   -- to_overworld returns after 60 quiet idle frames
@@ -141,6 +147,7 @@ local x0, y0 = L.rw("wXCoord"), L.rw("wYCoord")
 L.log(fmt("[live] on map %d:%d at (%d,%d) party %d", MAP[1], MAP[2], x0, y0, L.rw("wPartyCount")))
 
 -- ── STAGE 1: hello ──────────────────────────────────────────────────────────────────────────────
+if not PREPARE then
 local f0 = emu.framecount()
 while not SLINK_GEN2_CLIENT.hello_sent do
     if emu.framecount() - f0 > 1800 then break end
@@ -160,7 +167,7 @@ if hello then
     L.check("STAGE1 hello identity polished_crystal/gen2_polished/" .. EXPECT_KIND,
             m.rom_type == "polished_crystal" and m.foundation == "gen2_polished" and m.artifact_kind == EXPECT_KIND)
     L.check("STAGE1 hello rom_sha1 is the client rehash", m.rom_sha1 == P.runtime_rom_sha1, tostring(m.rom_sha1))
-    L.check("STAGE1 hello party is the save's 5 mons", #(m.party or {}) == 5, #(m.party or {}))
+    L.check("STAGE1 hello party matches the fixture", #(m.party or {}) == tonumber(os.getenv("POL_PARTY_COUNT") or "5"), #(m.party or {}))
     L.log(fmt("[live] STAGE1 hello context: hello frame %d, TitleScreenMain last %s, MainMenu last %s, first-idle %s",
               hello.frame, tostring(L.hit.TitleScreenMain), tostring(L.hit.MainMenu), tostring(first_ow)))
     L.log(fmt("[live] STAGEA first OWPlayerInput frame %s, first gate-running end-of-frame %s, hello_sent first seen %s, hello wire frame %d",
@@ -173,6 +180,7 @@ if hello then
             fmt("hello %d vs MainMenu last %s", hello.frame, tostring(L.hit.MainMenu)))
 end
 L.idle(120) -- let the server reply land
+end
 
 -- ── STAGE 4: frame-wait stack fingerprint (read-only) ──────────────────────────────────────────
 if want(4) then
@@ -283,6 +291,32 @@ local function battle(action, label)
     return throws, #cap_hits - caps0, foe
 end
 
+local function native_save()
+    -- Native menu SAVE; no RAM edits. Client, when present, keeps scanning.
+    local s0 = emu.framecount()
+    while not L.after("StartMenu", s0) do
+        if emu.framecount() - s0 > 600 then L.log("[live] STAGE3 START menu never opened") break end
+        L.pulse("Start")
+    end
+    L.idle(30)
+    local row
+    for i = 1, L.rw("wMenuItemsList") do if L.rw("wMenuItemsList", i) == 4 then row = i end end
+    local s1 = emu.framecount()
+    local paused_frames = 0
+    while row and not L.after("SaveGameData", s1) and emu.framecount() - s1 < 2400 do
+        if L.after("SaveMenu", s1) then L.pulse("A") else L.pulse(L.rw("wMenuCursorY") == row and "A" or "Down") end
+    end
+    for _ = 1, 600 do
+        if L.rw("wGameLogicPaused") ~= 0 then paused_frames = paused_frames + 1 end
+        if L.recent("BlinkCursor", 2) then L.pulse("A") else L.frame() end
+    end
+    L.log(fmt("[live] STAGE3 native save: SaveGameData %s, wGameLogicPaused nonzero on %d sampled end-of-frames",
+              tostring(L.hit.SaveGameData), paused_frames))
+    L.to_overworld(nil, nil, 60, 3000, "STAGE3-after-save")
+    L.idle(600)
+    L.check("native SAVE executed", L.after("SaveGameData", s1))
+end
+
 if want(2) then
     -- negative 1: escape
     walk_for_battle("STAGE2-run")
@@ -318,15 +352,24 @@ if want(2) then
             end
             L.idle(240)
             local cap_ev = sent.capture[captures_before + 1]
+            if not PREPARE then
             L.check("STAGE2 client emitted `capture`", cap_ev ~= nil,
                     cap_ev and fmt("frame %d (hit %+d frames)", cap_ev.frame, cap_ev.frame - (hit and hit.frame or 0)) or "none")
             if cap_ev then L.log("[live] STAGE2 capture line: " .. J.encode(cap_ev.msg)) end
-            L.check("STAGE2 party 5 -> 6", party_before == 5 and L.rw("wPartyCount") == 6,
+            end
+            L.check("STAGE2 native capture grew party 5 -> 6 before quarantine", party_before == 5 and hit ~= nil and hit.party_count == 6,
                     party_before .. " -> " .. L.rw("wPartyCount"))
             break
         end
     end
     L.check("STAGE2 a wild mon was caught into the party", caught)
+end
+
+if PREPARE then
+    L.check("preparation has six party mons", L.rw("wPartyCount") == 6)
+    native_save()
+    L.check("native preparation has no client or Lua memory writes", SLINK_GEN2_CLIENT == nil and #lua_writes == 0)
+    L.finish("native-full-party-preparation")
 end
 
 if want(3) then
@@ -366,28 +409,7 @@ if want(3) then
     L.check("STAGE3 the box census followed the battle end (within 60 frames, periodic is 1800)",
             seen ~= nil and last_battle_end ~= nil and seen.frame - last_battle_end <= 60 and seen.frame >= last_battle_end - 30,
             seen and (seen.frame - (last_battle_end or 0)) or "none")
-    -- native save while the client keeps scanning: the census must withhold (wGameLogicPaused) during it
-    local s0 = emu.framecount()
-    while not L.after("StartMenu", s0) do
-        if emu.framecount() - s0 > 600 then L.log("[live] STAGE3 START menu never opened") break end
-        L.pulse("Start")
-    end
-    L.idle(30)
-    local row
-    for i = 1, L.rw("wMenuItemsList") do if L.rw("wMenuItemsList", i) == 4 then row = i end end
-    local s1 = emu.framecount()
-    local paused_frames = 0
-    while row and not L.after("SaveGameData", s1) and emu.framecount() - s1 < 2400 do
-        if L.after("SaveMenu", s1) then L.pulse("A") else L.pulse(L.rw("wMenuCursorY") == row and "A" or "Down") end
-    end
-    for _ = 1, 600 do
-        if L.rw("wGameLogicPaused") ~= 0 then paused_frames = paused_frames + 1 end
-        if L.recent("BlinkCursor", 2) then L.pulse("A") else L.frame() end
-    end
-    L.log(fmt("[live] STAGE3 native save: SaveGameData %s, wGameLogicPaused nonzero on %d sampled end-of-frames",
-              tostring(L.hit.SaveGameData), paused_frames))
-    L.to_overworld(nil, nil, 60, 3000, "STAGE3-after-save")
-    L.idle(600)
+    native_save()
 end
 
 -- ── STAGE 5: wild encounters on a randomized cartridge (fled; the facts are wEnemyMon* bytes) ──────
@@ -428,10 +450,10 @@ if want(6) then
                 local cap_ev = sent.capture[captures_before + 1]
                 L.check("STAGE6 client emitted capture", cap_ev ~= nil)
                 if cap_ev then L.log("[live] STAGE6 capture line: " .. J.encode(cap_ev.msg)) end
-                L.check("STAGE6 party grew by one", L.rw("wPartyCount") == party_before + 1,
+                L.check("STAGE6 native party grew by one before quarantine", hit ~= nil and hit.party_count == party_before + 1,
                         party_before .. " -> " .. L.rw("wPartyCount"))
-                local s = L.rw("wPartyCount") - 1
-                L.log(fmt("[live] STAGE6 new party slot %d: struct bytes %s", s + 1, L.hex(L.wbytes("wPartyMons", s * 48, 48))))
+                local s = party_before
+                L.log(fmt("[live] STAGE6 capture-time party slot %d: struct bytes %s", s + 1, hit and hit.last_struct or "missing"))
             else
                 L.check("STAGE6 failed throws never fire the capture site", hits == 0, hits)
             end
@@ -441,8 +463,15 @@ if want(6) then
 end
 
 -- ── wrap-up ─────────────────────────────────────────────────────────────────────────────────────
-L.check("no Lua-originated memory write during the whole run (client included)", #lua_writes == 0,
-        #lua_writes > 0 and table.concat(lua_writes, "; "):sub(1, 800) or 0)
+local wf = assert(io.open(L.RUN .. "/client_writes.json", "w"))
+wf:write(J.encode(lua_writes)) wf:close()
+if not want(2) and not want(3) and not want(6) then
+    L.check("no Lua-originated memory write in observation-only stages", #lua_writes == 0, #lua_writes)
+else
+    -- Capture quarantine is now enabled. This acquisition probe records its writes;
+    -- exact writer byte qualification belongs to writes.lua, not a zero-write claim.
+    L.log(fmt("[live] acquisition-stage client writes recorded: %d (not a write-path qualification)", #lua_writes))
+end
 local pw = P.panel_writes and P.panel_writes.log or {}
 L.check("the client's panel write path recorded no write attempt", #pw == 0, #pw)
 local st = SLINK_GEN2_CLIENT.signals and SLINK_GEN2_CLIENT.signals.status and SLINK_GEN2_CLIENT.signals:status()
