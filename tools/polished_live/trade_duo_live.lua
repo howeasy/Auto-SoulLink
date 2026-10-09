@@ -4,6 +4,15 @@ local L=dofile(assert(os.getenv("POL_DRIVER_ROOT")).."/tools/polished_live/pol_l
 local J=L.json
 local role=os.getenv("SLINK_PLAYER")
 local cold=os.getenv("POL_COLD")=="1"
+-- run.lua/entry refuse by console diagnostic; preserve it before the generic graph assertion.
+local original_console_log=console.log
+console.log=function(...)
+    local words={}
+    for i=1,select('#',...) do words[#words+1]=tostring(select(i,...)) end
+    local f=io.open(L.RUN.."/console.log","ab")
+    if f then f:write(table.concat(words," ").."\n") f:close() end
+    return original_console_log(...)
+end
 local function dump(name,value)
     local f=assert(io.open(L.RUN.."/"..name,"wb"))
     assert(f:write(J.encode(value))) f:close()
@@ -13,9 +22,17 @@ local function exists(name)
     if f then f:close() return true end
     return false
 end
+local function milestone(kind, detail)
+    local f=assert(io.open(L.RUN.."/milestones.jsonl","ab"))
+    f:write(J.encode({kind=kind,frame=emu.framecount(),detail=detail}).."\n") f:close()
+end
 local ok,why=pcall(function()
+console.log("[trade-duo] global print type="..type(print))
 client.speedmode(300)
 for _,name in ipairs({"OWPlayerInput","SetInitialOptions.joypad_loop","YesNoBox","NoYesBox"}) do L.hook(name) end
+for _,name in ipairs({"SlinkTradeCommit","SlinkTradeApplyCommit","SlinkTradePublishDone","SlinkTradeExit","SlinkTradeResponderExit"}) do
+    L.hook(name,function(matched) if matched then milestone("native",name) end end)
+end
 -- Explicit dev option, through the existing Entry.build seam. Private root
 -- contains the enabled build's provenance/profile, not changed shipped pins.
 local original_dofile=dofile
@@ -33,10 +50,18 @@ dofile=original_dofile
 assert(SLINK_GEN2_CLIENT and SLINK_GEN2_PARTS.dev_polished_trade,"enabled test graph failed to compose dev binder")
 local C=assert(package.loaded.connector)
 local hello,done,prompt=nil,nil,false
+local queries,abort_reason=0,nil
 local send,receive=C.send,C.receive
 C.send=function(line,...)
     local msg=J.decode(line)
     if msg.event=="hello" then hello=msg end
+    if msg.event=="trade_query" or msg.event=="trade_offer" or msg.event=="menu_result" or msg.event=="trade_done" then
+        milestone("send",msg)
+    end
+    if msg.event=="trade_query" then
+        queries=queries+1
+        if queries>1 then abort_reason="native QUERY repeated without completing the first visit" end
+    end
     if msg.event=="trade_done" then
         done=msg
         L.log("TRADE_DONE "..line)
@@ -50,6 +75,8 @@ C.receive=function(...)
     if line then
         local msg=J.decode(line)
         for _,cmd in ipairs(msg.commands or {}) do
+            if cmd.cmd=="apply_trade" or cmd.cmd=="trade_offer_ack" or cmd.cmd=="show_menu" then milestone("receive",cmd) end
+            if cmd.refused then abort_reason="server refusal: "..tostring(cmd.refused) end
             if cmd.cmd=="show_menu" then prompt=true L.log("NATIVE_RESPONDER_PROMPT") end
         end
     end
@@ -71,7 +98,7 @@ end
     end
     local noyes=L.hits.NoYesBox or 0 -- ignore any boot/CONTINUE prompt already passed
     t=emu.framecount()
-    while not done and not exists("stop") and emu.framecount()-t<18000 do
+    while not done and not abort_reason and not exists("stop") and emu.framecount()-t<18000 do
         if (L.hits.NoYesBox or 0)>noyes then
             noyes=L.hits.NoYesBox
             L.idle(24)
@@ -79,8 +106,12 @@ end
             L.idle(8)
             for _=1,3 do L.frame({A=true}) end
         elseif role=="a" or prompt then L.pulse("A") else L.frame() end
+        if queries>0 and not done and SLINK_GEN2_PARTS.dev_polished_trade:closed()
+           and SLINK_GEN2_PARTS.dev_polished_trade:disposition()~="COMPLETE" then
+            abort_reason="native trade visit closed before completion"
+        end
     end
-    assert(done and not done.uncertain and done.new_key,"trade did not complete: "..tostring(done and done.uncertain))
+    assert(done and not done.uncertain and done.new_key,abort_reason or ("trade did not complete: "..tostring(done and done.uncertain)))
     for _=1,180 do L.frame() end -- flush wire and native exit; no extra save or fabricated acknowledgment
     if client.saveram then client.saveram() end
     while not exists("stop") and emu.framecount()-t<90000 do L.frame() end

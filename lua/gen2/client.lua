@@ -1172,6 +1172,9 @@ function Client.new(p)
                         local party = current_party()
                         local received = party and party.mons[#party.mons]
                         if not received or received.is_egg then
+                            -- Native success holds until RELEASE; a transient decoder refusal must not retire it.
+                            v.postimage_deadline = v.postimage_deadline or (io.framecount() + family.timeouts.RELEASE)
+                            if io.framecount() <= v.postimage_deadline then return end
                             finish("completed trade post-image unavailable", true); v.retired = true; return
                         end
                         local ok, disposition, reason = call("release", v.gen)
@@ -1196,7 +1199,7 @@ function Client.new(p)
                 if disposition == "UNCERTAIN" or disposition == nil then
                     finish(reason or "binder unavailable", v.attempted); v.retired = true; return
                 end
-                if call("closed") == true or self.frame > v.deadline then
+                if call("closed") == true or (not v.attempted and self.frame > v.deadline) then
                     finish("visit closed or expired", v.attempted); return
                 end
                 -- Never answer OFFER / RELEASE PROMPT and publish APPLY in the same frame end.
