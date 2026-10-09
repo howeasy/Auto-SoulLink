@@ -44,6 +44,8 @@ Fail-closed rules, all of them load-bearing:
     RC therefore runs this on the lane host (F:/slink-work/lanes present).
   * A MANAGER item is an import and an assertion against the live server modules. The jar pin is
     compared both to `data/upr_jars.json` and, when the jar file is reachable, to its own bytes.
+  * A RELEASE item builds with companion patches and must pass ZIP hygiene. Its Polished UPS
+    must be present and hash to the SHA256 published in the current overlay provenance.
   * An OPEN item fails while it is open, always (`blocking_rc` is not a bypass: anything but
     true is a manifest error). Closing one requires `closed_by` to name a LIVE item that exists
     and PASSes in the same run.
@@ -68,6 +70,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -490,7 +493,7 @@ _MANAGER_CHECKS = {
 
 
 def check_release(item: dict, root: Path) -> Row:
-    """Build the player ZIP from this tree and run the zip hygiene gate over it."""
+    """Check patch-inclusive ZIP hygiene and bind its required Polished UPS to provenance."""
     row = Row(item["id"], "RELEASE", "PASS")
     tools = root / "tools"
     if not (tools / "check_release_zip.py").is_file():
@@ -502,7 +505,7 @@ def check_release(item: dict, root: Path) -> Row:
             sys.path.insert(0, str(tools))
         make_release = importlib.import_module("make_release")
         made = make_release.build_release(version="rc", out_dir=out_dir,
-                                          skip_generators=True, quiet=True)
+                                          skip_generators=True, quiet=True, with_patch=True)
     except Exception as exc:
         return row.fail(f"make_release.build_release failed: {type(exc).__name__}: {exc}")
     if not Path(made).is_file():
@@ -516,6 +519,23 @@ def check_release(item: dict, root: Path) -> Row:
         row.fail("check_release_zip timed out")
     elif code != 0:
         row.fail(f"check_release_zip exit {code}: {_tail(out, 2)}")
+    companion = "companion/SLink-Polished.ups"
+    try:
+        provenance = json.loads((root / PROVENANCE).read_text(encoding="utf-8"))
+        expected_sha = provenance["output"]["ups"]["sha256"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return row.fail(f"cannot read {companion} sha256 from {PROVENANCE}: {type(exc).__name__}: {exc}")
+    try:
+        with zipfile.ZipFile(zip_path) as archive:
+            actual_sha = hashlib.sha256(archive.read(f"SLink-player-rc/{companion}")).hexdigest()
+    except KeyError:
+        return row.fail(f"missing required {companion} in player ZIP")
+    except (OSError, zipfile.BadZipFile) as exc:
+        return row.fail(f"cannot read {companion} from player ZIP: {type(exc).__name__}: {exc}")
+    if actual_sha != expected_sha:
+        row.fail(f"{companion} sha256 mismatch: expected {expected_sha}, got {actual_sha}")
+    else:
+        row.detail += f"; Polished UPS sha256={actual_sha}"
     return row
 
 
