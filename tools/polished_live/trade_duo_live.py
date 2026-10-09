@@ -34,7 +34,8 @@ def sha(data):
 def probe_symbols(syms):
     from tools.polished_live import harness
     # The full ~70k-label SYM exceeds json_codec's 100k-value bound (each row is an array).
-    return {name: syms[name] for name in (*harness.SYMBOLS, "NoYesBox")}
+    return {name: syms[name] for name in (*harness.SYMBOLS, "NoYesBox", "SlinkTradeCommit", "SlinkTradeApplyCommit",
+                                         "SlinkTradePublishDone", "SlinkTradeExit", "SlinkTradeResponderExit")}
 
 
 def party(data):

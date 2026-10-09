@@ -22,10 +22,17 @@ local function exists(name)
     if f then f:close() return true end
     return false
 end
+local function milestone(kind, detail)
+    local f=assert(io.open(L.RUN.."/milestones.jsonl","ab"))
+    f:write(J.encode({kind=kind,frame=emu.framecount(),detail=detail}).."\n") f:close()
+end
 local ok,why=pcall(function()
 console.log("[trade-duo] global print type="..type(print))
 client.speedmode(300)
 for _,name in ipairs({"OWPlayerInput","SetInitialOptions.joypad_loop","YesNoBox","NoYesBox"}) do L.hook(name) end
+for _,name in ipairs({"SlinkTradeCommit","SlinkTradeApplyCommit","SlinkTradePublishDone","SlinkTradeExit","SlinkTradeResponderExit"}) do
+    L.hook(name,function(matched) if matched then milestone("native",name) end end)
+end
 -- Explicit dev option, through the existing Entry.build seam. Private root
 -- contains the enabled build's provenance/profile, not changed shipped pins.
 local original_dofile=dofile
@@ -48,6 +55,9 @@ local send,receive=C.send,C.receive
 C.send=function(line,...)
     local msg=J.decode(line)
     if msg.event=="hello" then hello=msg end
+    if msg.event=="trade_query" or msg.event=="trade_offer" or msg.event=="menu_result" or msg.event=="trade_done" then
+        milestone("send",msg)
+    end
     if msg.event=="trade_query" then
         queries=queries+1
         if queries>1 then abort_reason="native QUERY repeated without completing the first visit" end
@@ -65,6 +75,7 @@ C.receive=function(...)
     if line then
         local msg=J.decode(line)
         for _,cmd in ipairs(msg.commands or {}) do
+            if cmd.cmd=="apply_trade" or cmd.cmd=="trade_offer_ack" or cmd.cmd=="show_menu" then milestone("receive",cmd) end
             if cmd.refused then abort_reason="server refusal: "..tostring(cmd.refused) end
             if cmd.cmd=="show_menu" then prompt=true L.log("NATIVE_RESPONDER_PROMPT") end
         end

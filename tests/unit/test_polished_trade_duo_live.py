@@ -157,3 +157,29 @@ def test_complete_retries_transient_postimage_but_poison_never_releases(result):
         assert p.mem[base+5] == 7
         assert p.sent("trade_done")[0]["uncertain"] is True
         assert not any(w["addr"] == base+5 and w["value"] == 8 for w in p.writes()[before:])
+
+
+@pytest.mark.parametrize("armed", [False, True], ids=["pre-apply-expires", "native-commit-outlives-offer-deadline"])
+def test_offer_deadline_cannot_cancel_an_armed_native_commit(armed):
+    from tests.unit.test_polished_trade_pump import Pump
+    p = Pump()
+    p.accepted(*([p.apply_command()] if armed else []))
+    p.frame()
+    # MODEL elapsed native frames; preserve timeline continuity, not a savestate load.
+    p.io.frame += p.parts.profile.overlay.trade.timeouts.APPLY + 1
+    p.client.last_frame = p.io.frame
+    p.frame()
+    if not armed:
+        assert not p.sent("trade_done")
+        assert p.sent("menu_result")[-1]["choice"] == 0
+        assert p.binder.disposition(p.binder)[0] == "NOT_PERFORMED"
+        return
+    assert not p.sent("trade_done") and not p.cancel_trace
+    base = p.parts.profile.overlay.trade.lease.base
+    gen = p.mem[base+6]
+    p.put(5, 7)
+    p.put(7, gen)
+    p.put(8, 0)
+    p.frame(3)
+    assert len(p.sent("trade_done")) == 1 and not p.sent("trade_done")[0].get("uncertain")
+    assert p.mem[base+5] == 8

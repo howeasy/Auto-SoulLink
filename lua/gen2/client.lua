@@ -1199,7 +1199,7 @@ function Client.new(p)
                 if disposition == "UNCERTAIN" or disposition == nil then
                     finish(reason or "binder unavailable", v.attempted); v.retired = true; return
                 end
-                if call("closed") == true or self.frame > v.deadline then
+                if call("closed") == true or (not v.attempted and self.frame > v.deadline) then
                     finish("visit closed or expired", v.attempted); return
                 end
                 -- Never answer OFFER / RELEASE PROMPT and publish APPLY in the same frame end.
