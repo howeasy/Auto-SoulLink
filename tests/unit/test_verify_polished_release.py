@@ -640,16 +640,77 @@ def test_census_a_missing_or_empty_required_ids_is_a_manifest_error(tmp_path, va
 # (3) the jar
 
 
+_POLISHED_JAR_FILES = (
+    "com/dabomstew/pkrandom/config/polished_offsets.ini",
+    "com/dabomstew/pkrandom/constants/PolishedConstants.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler$Factory.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler$RomEntry.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler$Slot.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler$TrainerRecord.class",
+)
+
+
+def _manager_jar_fixture(tmp_path, monkeypatch, *, omitted=None, listed=True,
+                         label="release-capable fork, stamp v0.4.0 (patches 0001-0022)"):
+    import server.upr_pipeline as upr
+    root = tmp_path / "repo"
+    (root / "data").mkdir(parents=True)
+    selected = tmp_path / "selected.jar"
+    legacy = tmp_path / "private.jar"
+    for jar, payload in ((selected, b"selected fixture"), (legacy, b"legacy fixture")):
+        with zipfile.ZipFile(jar, "w") as zf:
+            for name in _POLISHED_JAR_FILES:
+                if jar == selected and name == omitted:
+                    continue
+                zf.writestr(name, payload)
+    sha = hashlib.sha256(selected.read_bytes()).hexdigest()
+    pins = {"old patches 0001-0021": hashlib.sha256(legacy.read_bytes()).hexdigest()}
+    if listed:
+        pins[label] = sha
+    path = root / "data/upr_jars.json"
+    _put(path, pins)
+    monkeypatch.setenv("SLINK_UPR_JAR", str(selected))
+    monkeypatch.setattr(upr, "UPR_JAR_ALLOWLIST", str(path))
+    # A trusted private decoy must never satisfy the gate for the Manager's selected jar.
+    monkeypatch.setattr(verifier, "JAR_PATH", legacy, raising=False)
+    return root, selected, sha, label
+
+
+@pytest.mark.parametrize("label", ["stamp v0.4.0 (patches 0001-0022)", "qualified forms fork"],
+                         ids=["new-release-label", "no-patch-range"])
+def test_jar_pin_accepts_the_manager_selected_release_jar_with_an_arbitrary_label(tmp_path, monkeypatch, label):
+    root, jar, sha, label = _manager_jar_fixture(tmp_path, monkeypatch, label=label)
+    ok, detail = verifier._jar_pin(root)
+    assert ok, detail
+    assert sha in detail and label in detail and str(jar) in detail
+
+
+def test_jar_pin_refuses_an_unlisted_manager_jar_even_with_a_trusted_private_decoy(tmp_path, monkeypatch):
+    root, _jar, sha, _label = _manager_jar_fixture(tmp_path, monkeypatch, listed=False)
+    ok, detail = verifier._jar_pin(root)
+    assert not ok and "not pinned in data/upr_jars.json" in detail and sha in detail
+
+
+@pytest.mark.parametrize("missing", _POLISHED_JAR_FILES,
+                         ids=["ini", "constants", "handler", "factory", "rom-entry", "wild-slot", "trainer-record"])
+def test_jar_pin_refuses_each_missing_polished_resource_or_class(tmp_path, monkeypatch, missing):
+    root, _jar, _sha, _label = _manager_jar_fixture(tmp_path, monkeypatch, omitted=missing)
+    ok, detail = verifier._jar_pin(root)
+    assert not ok and "missing Polished jar entries" in detail and missing in detail
+
+
 def test_an_unreachable_pinned_jar_is_red(tmp_path, monkeypatch):
     """OLD FALSE-GREEN: the jar pin returned True when the jar file could not be reached."""
     root = tmp_path / "repo"
     (root / "data").mkdir(parents=True)
     (root / "data" / "upr_jars.json").write_text(
         json.dumps({"patches 0001-0021": "e" * 64}), encoding="utf-8")
-    monkeypatch.setattr(verifier, "JAR_PATH", tmp_path / "no" / "such.jar")
+    import server.upr_pipeline as upr
+    monkeypatch.setattr(upr, "find_upr_jar", lambda: str(tmp_path / "no" / "such.jar"))
     ok, detail = verifier._jar_pin(root)
     assert not ok
-    assert "jar not reachable: the byte pin cannot be verified" in detail
+    assert "jar not reachable" in detail
 
 
 def test_a_jar_that_hashes_wrong_is_still_red(tmp_path, monkeypatch):
@@ -659,9 +720,33 @@ def test_a_jar_that_hashes_wrong_is_still_red(tmp_path, monkeypatch):
         json.dumps({"patches 0001-0021": "e" * 64}), encoding="utf-8")
     jar = tmp_path / "x.jar"
     jar.write_bytes(b"not the pinned jar")
-    monkeypatch.setattr(verifier, "JAR_PATH", jar)
+    import server.upr_pipeline as upr
+    monkeypatch.setattr(upr, "find_upr_jar", lambda: str(jar))
     ok, detail = verifier._jar_pin(root)
-    assert not ok and "the file hashes" in detail
+    assert not ok and "not pinned in data/upr_jars.json" in detail
+
+
+def test_jar_pin_refuses_when_the_manager_resolver_finds_nothing(tmp_path, monkeypatch):
+    import server.upr_pipeline as upr
+    monkeypatch.setattr(upr, "find_upr_jar", lambda: None)
+    ok, detail = verifier._jar_pin(tmp_path)
+    assert not ok and "Manager resolver found no jar" in detail
+
+
+def test_jar_pin_preserves_the_runtime_trust_refusal(tmp_path, monkeypatch):
+    import server.upr_pipeline as upr
+    root, _jar, _sha, _label = _manager_jar_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(upr, "jar_is_trusted", lambda path: False)
+    ok, detail = verifier._jar_pin(root)
+    assert not ok and "jar_is_trusted() refuses" in detail
+
+
+def test_jar_pin_refuses_an_allowlisted_corrupt_zip(tmp_path, monkeypatch):
+    root, jar, _sha, _label = _manager_jar_fixture(tmp_path, monkeypatch)
+    jar.write_bytes(b"not a ZIP")
+    _put(root / "data/upr_jars.json", {"corrupt": hashlib.sha256(jar.read_bytes()).hexdigest()})
+    ok, detail = verifier._jar_pin(root)
+    assert not ok and "not a readable ZIP" in detail
 
 
 # (4) player ZIP companion binding

@@ -89,7 +89,16 @@ ALLOWED_GRADES = frozenset({"DEV"})
 KINDS = ("SOURCE", "BUILD", "MODEL", "LIVE", "MANAGER", "RELEASE", "OPEN")
 
 # The pinned forms jar. Not reachable on a host is a FAIL: the byte pin cannot be verified there.
-JAR_PATH = Path("F:/slink-work/cache/polished/jar/PokeRandoZX.jar")
+# Patches 0016-0018 declare these classes; 0020/0021 harden the same handler.
+_POLISHED_JAR_ENTRIES = (
+    "com/dabomstew/pkrandom/config/polished_offsets.ini",
+    "com/dabomstew/pkrandom/constants/PolishedConstants.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler$Factory.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler$RomEntry.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler$Slot.class",
+    "com/dabomstew/pkrandom/romhandlers/PolishedCrystalRomHandler$TrainerRecord.class",
+)
 
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -423,30 +432,36 @@ def check_manager(item: dict, root: Path) -> Row:
 
 
 def _jar_pin(root: Path) -> tuple[bool, str]:
-    """The pinned forms jar: the pin in data/upr_jars.json must exist, and must be the bytes."""
+    """The Manager's resolved jar must be allowlisted and carry the Polished handler/resources."""
     import server.upr_pipeline as upr
 
-    pins = json.loads((root / "data/upr_jars.json").read_text(encoding="utf-8"))
-    wanted = None
-    for label, sha in pins.items():
-        if "0001-0021" in label:
-            wanted = (label, sha)
-    if wanted is None:
-        return False, "data/upr_jars.json has no 'patches 0001-0021' entry"
-    label, sha = wanted
-    if not _HEX64.match(sha):
-        return False, f"pin {sha!r} is not a sha256"
-    jar = JAR_PATH
-    if not jar.is_file():
-        return False, (f"jar not reachable: the byte pin cannot be verified "
-                       f"({jar}; pin {sha[:12]}, {label})")
-    actual = _sha256_file(jar)
-    if actual != sha:
-        return False, f"pinned jar {label!r} says {sha[:12]}, the file hashes {actual[:12]}"
+    found = upr.find_upr_jar()
+    if not found:
+        return False, "jar not reachable: the Manager resolver found no jar"
+    jar = Path(found)
+    try:
+        raw = jar.read_bytes()
+        pins = json.loads((root / "data/upr_jars.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return False, f"jar not reachable or allowlist unreadable: {exc}"
+    if not isinstance(pins, dict):
+        return False, "data/upr_jars.json is not a label-to-sha256 object"
+    actual = hashlib.sha256(raw).hexdigest()
+    labels = [label for label, sha in pins.items() if isinstance(label, str) and sha == actual]
+    if not labels:
+        return False, f"Manager jar {jar} sha256 {actual} is not pinned in data/upr_jars.json"
     # the same pin the runtime consults: a jar nobody may run is not a shipped jar
     if not upr.jar_is_trusted(str(jar)):
         return False, "the pin is in data/upr_jars.json but jar_is_trusted() refuses the file"
-    return True, f"jar {sha[:12]} pinned, byte-exact and trusted ({label})"
+    try:
+        # Inspect the bytes just hashed, so a replacement cannot mix pin and contents.
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            missing = sorted(set(_POLISHED_JAR_ENTRIES) - set(archive.namelist()))
+    except zipfile.BadZipFile as exc:
+        return False, f"Manager jar is not a readable ZIP: {exc}"
+    if missing:
+        return False, "missing Polished jar entries: " + ", ".join(missing)
+    return True, f"jar {actual} pinned, byte-exact and Polished-capable ({labels[-1]}; {jar})"
 
 
 def _randomizer_flag(root: Path) -> tuple[bool, str]:
