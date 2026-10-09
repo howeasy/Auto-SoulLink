@@ -1,7 +1,7 @@
 {
   "schema": "polished-release-requirements-v1",
-  "title": "Polished Crystal (gen2_polished) release candidate — the SOLO lane",
-  "rationale": "tools/verify_gen2_release.py is the Gen 2 release manifest and must not change: tests/unit/test_polished_release_guards.py pins its TITLES to (crystal, gold, silver) and its DUO_PAIRS to vanilla pairings. That is right — Polished Crystal is a SOLO title with no vanilla partner, so it has no duo matrix, no second fixture and no per-title live-gate set to extend. This manifest is the separate lane: one row per obligation, judged by tools/verify_polished_release.py.",
+  "title": "Polished Crystal (gen2_polished) release candidate \u2014 the SOLO lane",
+  "rationale": "tools/verify_gen2_release.py is the Gen 2 release manifest and must not change: tests/unit/test_polished_release_guards.py pins its TITLES to (crystal, gold, silver) and its DUO_PAIRS to vanilla pairings. That is right \u2014 Polished Crystal is a SOLO title with no vanilla partner, so it has no duo matrix, no second fixture and no per-title live-gate set to extend. This manifest is the separate lane: one row per obligation, judged by tools/verify_polished_release.py.",
   "overlay_provenance": "data/polished/overlay_provenance.json",
   "overlay_sha1_at_manifest": "fe8c57e1034059331ccf25d232ff757d675363b2",
   "receipts_dir": "tests/fixtures/polished/receipts",
@@ -17,7 +17,7 @@
   "live_receipt_rules": {
     "grade": "Every receipt is DEV. A lane author cannot promote their own run to PHYSICAL; that is an owner act recorded elsewhere.",
     "rom_binding": "rom_sha1_executed must equal data/polished/overlay_provenance.json's output.sha1 today. The phone-card commit moved the overlay 29ea04c2 -> 34942315, so every earlier receipt is STALE and red until re-run.",
-    "evidence_bytes": "evidence_file is hashed at judge time. A mismatch is tampering; an unreachable file is also red — a transcription nobody can check is not evidence. Run this on the lane host.",
+    "evidence_bytes": "evidence_file is hashed at judge time. A mismatch is tampering; an unreachable file is also red \u2014 a transcription nobody can check is not evidence. Run this on the lane host.",
     "code_digest": "UNRECORDED where the lane evidence did not print one. The narrative docs/polished/LIVE_RESULTS.md names commits; the evidence files do not, so the receipts carry UNRECORDED and not the doc's claim."
   },
   "required_ids": [
@@ -61,7 +61,12 @@
     "OPEN-EXPLODE-RIVAL",
     "OPEN-TITLE-SPLASH",
     "OPEN-PANEL-PAGES",
-    "OPEN-IN-GAME-TRADE"
+    "OPEN-IN-GAME-TRADE",
+    "LIVE-RIVAL-SWAP",
+    "LIVE-EXPLODE-EXPLODE",
+    "LIVE-EXPLODE-ACTIVE-FAINT",
+    "LIVE-EXPLODE-BENCH-FAINT",
+    "LIVE-SHIPPED-TRADE"
   ],
   "code_digest_files": [
     "lua/gen2/polished*.lua",
@@ -78,63 +83,99 @@
       "id": "SRC-BEACON",
       "kind": "SOURCE",
       "description": "companion overlay beacon.json over every changed byte",
-      "command": ["$PY", "tools/gen_polished_beacon.py", "--check"],
+      "command": [
+        "$PY",
+        "tools/gen_polished_beacon.py",
+        "--check"
+      ],
       "timeout": 300
     },
     {
       "id": "SRC-ENGINE-SITES",
       "kind": "SOURCE",
       "description": "engine_signals.json + write_checkpoint.json against the pinned release ROM",
-      "command": ["$PY", "tools/gen_polished_engine_sites.py", "--check"],
+      "command": [
+        "$PY",
+        "tools/gen_polished_engine_sites.py",
+        "--check"
+      ],
       "timeout": 300
     },
     {
       "id": "SRC-FORMS",
       "kind": "SOURCE",
       "description": "forms_index.json (regional forms are distinct mons)",
-      "command": ["$PY", "tools/gen_polished_forms.py", "--check"],
+      "command": [
+        "$PY",
+        "tools/gen_polished_forms.py",
+        "--check"
+      ],
       "timeout": 300
     },
     {
       "id": "SRC-PACK",
       "kind": "SOURCE",
       "description": "the whole Polished data pack: species/moves/items/evolutions/trainers/encounters/statics/gifts/map_names + charmap.lua",
-      "command": ["$PY", "tools/gen_polished_pack.py", "--check"],
+      "command": [
+        "$PY",
+        "tools/gen_polished_pack.py",
+        "--check"
+      ],
       "timeout": 600
     },
     {
       "id": "SRC-PROFILE",
       "kind": "SOURCE",
       "description": "profile.json from the overlay's own .sym geometry",
-      "command": ["$PY", "tools/gen_polished_profile.py", "--check"],
+      "command": [
+        "$PY",
+        "tools/gen_polished_profile.py",
+        "--check"
+      ],
       "timeout": 300
     },
     {
       "id": "SRC-SCRIPT-SITES",
       "kind": "SOURCE",
       "description": "givepoke/loadwildmon script sites against the release ROM",
-      "command": ["$PY", "tools/gen_polished_script_sites.py", "--check"],
+      "command": [
+        "$PY",
+        "tools/gen_polished_script_sites.py",
+        "--check"
+      ],
       "timeout": 300
     },
     {
       "id": "SRC-UPR-INI",
       "kind": "SOURCE",
       "description": "upr_polished_entries.ini spliced into the fork's polished_offsets.ini",
-      "command": ["$PY", "tools/gen_upr_polished_ini.py", "--check"],
+      "command": [
+        "$PY",
+        "tools/gen_upr_polished_ini.py",
+        "--check"
+      ],
       "timeout": 300
     },
     {
       "id": "BUILD-CLEAN-ROM",
       "kind": "BUILD",
       "description": "the pinned clean v3.2.3 ROM rebuilds and reproduces the lock, .sym and .map",
-      "command": ["$PY", "tools/build_polished_syms.py", "--check"],
+      "command": [
+        "$PY",
+        "tools/build_polished_syms.py",
+        "--check"
+      ],
       "timeout": 1800
     },
     {
       "id": "BUILD-OVERLAY",
       "kind": "BUILD",
       "description": "the SLink companion overlay rebuilds byte-for-byte, UPS round-trips, publishes nothing",
-      "command": ["$PY", "tools/build_polished_companion.py", "--check"],
+      "command": [
+        "$PY",
+        "tools/build_polished_companion.py",
+        "--check"
+      ],
       "timeout": 1800
     },
     {
@@ -165,7 +206,9 @@
       "id": "MODEL-PHONE",
       "kind": "MODEL",
       "description": "the Phone-card SLink contact (virtual id 38, five bank-24 call operands)",
-      "files": ["tests/unit/test_polished_phone_entry.py"]
+      "files": [
+        "tests/unit/test_polished_phone_entry.py"
+      ]
     },
     {
       "id": "MODEL-RANDOMIZER",
@@ -511,6 +554,76 @@
       "kind": "RELEASE",
       "description": "the player ZIP builds from this tree and passes the zip hygiene gate against HEAD",
       "timeout": 900
+    },
+    {
+      "id": "LIVE-RIVAL-SWAP",
+      "kind": "LIVE",
+      "description": "SYNTH scene and scripted second identity; real server/client swaps the partner party once at the native rival enemy-send-in gate and the battle continues.",
+      "receipt": "tests/fixtures/polished/receipts/live_rival_swap.json",
+      "expect_scenario": "rival/client-server-native-gate",
+      "expect_checks": [
+        "run verdict",
+        "native rival gate and bound trainer identity",
+        "one reply and exact confined partner party write",
+        "native battle continues with swapped enemy"
+      ]
+    },
+    {
+      "id": "LIVE-EXPLODE-EXPLODE",
+      "kind": "LIVE",
+      "description": "SYNTH/Test Host explode: native route and one bound command, exact writer diff and commanded-death echo suppression.",
+      "receipt": "tests/fixtures/polished/receipts/live_explode_explode.json",
+      "expect_scenario": "explode-live/explode",
+      "expect_checks": [
+        "run verdict",
+        "ROM and input binding",
+        "one bound command and exact write plan",
+        "full-memory diff confined to expected write set",
+        "native completion and commanded faint not echoed"
+      ]
+    },
+    {
+      "id": "LIVE-EXPLODE-ACTIVE-FAINT",
+      "kind": "LIVE",
+      "description": "SYNTH/Test Host active-faint: native route and one bound command, exact writer diff and commanded-death echo suppression.",
+      "receipt": "tests/fixtures/polished/receipts/live_explode_active_faint.json",
+      "expect_scenario": "explode-live/active-faint",
+      "expect_checks": [
+        "run verdict",
+        "ROM and input binding",
+        "one bound command and exact write plan",
+        "full-memory diff confined to expected write set",
+        "native completion and commanded faint not echoed"
+      ]
+    },
+    {
+      "id": "LIVE-EXPLODE-BENCH-FAINT",
+      "kind": "LIVE",
+      "description": "SYNTH/Test Host bench-faint: native route and one bound command, exact writer diff and commanded-death echo suppression.",
+      "receipt": "tests/fixtures/polished/receipts/live_explode_bench_faint.json",
+      "expect_scenario": "explode-live/bench-faint",
+      "expect_checks": [
+        "run verdict",
+        "ROM and input binding",
+        "one bound command and exact write plan",
+        "full-memory diff confined to expected write set",
+        "native completion and commanded faint not echoed"
+      ]
+    },
+    {
+      "id": "LIVE-SHIPPED-TRADE",
+      "kind": "LIVE",
+      "description": "Shipped normal launcher, two identities: native receptionist trade, both commit/trade_done, server re-key, native save and cold CONTINUE of both cartridges.",
+      "receipt": "tests/fixtures/polished/receipts/live_shipped_trade.json",
+      "expect_scenario": "trade/shipped-native-commit-cold-continue",
+      "expect_checks": [
+        "run verdict",
+        "shipped enabled overlay and normal launcher",
+        "both native commits and one trade_done each",
+        "server re-keyed without false faint",
+        "cold CONTINUE preserves both received mons and identities",
+        "both native save copies valid and exchanged"
+      ]
     }
   ],
   "open": [
@@ -539,12 +652,16 @@
     {
       "id": "OPEN-EXPLODE-RIVAL",
       "kind": "OPEN",
-      "status": "OPEN",
+      "status": "CLOSED",
       "blocking_rc": true,
-      "description": "Explode Mode and Rival Team Swap are composed for Polished; capability/Manager enablement and receipt binding are not freeze-qualified",
-      "blocker": "rival swap PASS live in pol-explode2; explode, active-faint and bench-faint PASS after echo fix ea90b9fd3 in F:/slink-work/lanes/pol-explodefix. Remaining: capability/Manager flip and receipt rebind at the freeze. These runs are lane evidence only, not new receipts",
-      "manager_options": ["explode_mode", "rival_team_swap"],
-      "evidence": "F:/slink-work/lanes/pol-explodefix/explode-3ced0b5ae425/probe/oracle.json; F:/slink-work/lanes/pol-explodefix/active-faint-eed2072c21ae/probe/oracle.json; F:/slink-work/lanes/pol-explodefix/bench-faint-23649423f2f7/probe/oracle.json (all ok=true, reasons=[]). Earlier rival PASS: F:/slink-work/lanes/pol-explode2/rival/synth-90mk5ijy/receipt.json. server/manager.py still refuses explode_mode and rival_team_swap pending freeze; docs/polished/EXPLODE_RIVAL.md"
+      "description": "Enabled Explode Mode and Rival Team Swap with all four freeze-bound DEV live checks required",
+      "blocker": "none: freeze-bound DEV receipts installed; SYNTH and scope limits retained",
+      "manager_options": [
+        "explode_mode",
+        "rival_team_swap"
+      ],
+      "evidence": "Required LIVE-RIVAL-SWAP, LIVE-EXPLODE-EXPLODE, LIVE-EXPLODE-ACTIVE-FAINT and LIVE-EXPLODE-BENCH-FAINT receipts",
+      "closed_by": "LIVE-RIVAL-SWAP"
     },
     {
       "id": "OPEN-TITLE-SPLASH",
@@ -572,12 +689,15 @@
     {
       "id": "OPEN-IN-GAME-TRADE",
       "kind": "OPEN",
-      "status": "OPEN",
+      "status": "CLOSED",
       "blocking_rc": true,
-      "description": "the in-game trade at the Cable Club receptionist has no hooked dispatch",
-      "blocker": "Shipped overlay commit enabled by owner ruling 2026-10-09 #6; normal client composes and advertises trade. Prior enabled fe8c57e trade + cold CONTINUE PASS: F:/slink-work/lanes/pol-tradeduo/attempt-006/verdict.json. RC closure still requires the final freeze-bound live receipt; status remains OPEN.",
-      "manager_options": ["pc_trade_npc"],
-      "evidence": "F:/slink-work/lanes/pol-live2/x/explore_B/result.txt:10 'the native link wait ran and timed out (no cable)'; docs/polished/TRADE.md"
+      "description": "Shipped native receptionist trade, both server re-keys and cold CONTINUE durability",
+      "blocker": "none: freeze-bound DEV receipts installed; SYNTH and scope limits retained",
+      "manager_options": [
+        "pc_trade_npc"
+      ],
+      "evidence": "tests/fixtures/polished/receipts/live_shipped_trade.json",
+      "closed_by": "LIVE-SHIPPED-TRADE"
     }
   ]
 }

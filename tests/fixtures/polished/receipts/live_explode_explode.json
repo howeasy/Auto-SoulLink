@@ -1,0 +1,63 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
+  "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
+  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
+  "scenario_id": "explode-live/explode",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade",
+  "requirement_id": "LIVE-EXPLODE-EXPLODE",
+  "narrative": "SYNTH/Test Host explode: native route and one bound command, exact writer diff and commanded-death echo suppression.",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\explode\\explode-615a97985038\\probe",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\explode\\explode-615a97985038\\probe\\oracle.json",
+  "evidence_sha256": "fd0b094b69c14e7e17e565ce549efca84e028e4730bda6fbf7fd90a2b1038512",
+  "evidence_size": 73321,
+  "evidence_note": "Original freeze-run oracle; no live rerun or original evidence overwritten.",
+  "secondary_evidence": [
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\explode\\explode-615a97985038\\probe\\trace.json",
+      "sha256": "9a5c1a88d47d13a9858e001562ceeb4284684fb875c2490802056fb5305c2ea0",
+      "note": "full images, writes and native markers"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\explode\\explode-615a97985038\\probe\\result.txt",
+      "sha256": "56ddf89190f050defde705f747d1f070b4a93f50b9e18c83e699aa7de025b8c1",
+      "note": "recorder result"
+    }
+  ],
+  "synth": [
+    "SYNTH warp fixture and logical link; TEST HOST handle_command; native wild route/action/faint."
+  ],
+  "checks": [
+    {
+      "name": "run verdict",
+      "result": "PASS",
+      "observed": "ok=true reasons=[]; oracle recomputed"
+    },
+    {
+      "name": "ROM and input binding",
+      "result": "PASS",
+      "observed": "config provenance ROM fe8c57e1"
+    },
+    {
+      "name": "one bound command and exact write plan",
+      "result": "PASS",
+      "observed": "oracle validates command/key/order and exact address/value list"
+    },
+    {
+      "name": "full-memory diff confined to expected write set",
+      "result": "PASS",
+      "observed": "oracle checks WRAM/CartRAM/VRAM/OAM/HRAM before/after"
+    },
+    {
+      "name": "native completion and commanded faint not echoed",
+      "result": "PASS",
+      "observed": "complete oracle checks consumption and wire"
+    }
+  ],
+  "not_proven": [
+    "Not real partner/server capability qualification.",
+    "One happy-path native battle; not all refusal cases."
+  ]
+}
