@@ -667,6 +667,85 @@ def test_a_jar_that_hashes_wrong_is_still_red(tmp_path, monkeypatch):
 # (4) player ZIP companion binding
 
 
+def _stamp(root, version, **extra):
+    """Write the record tools/stamp_release.py leaves in patch/dist/ (only the field the verifier reads)."""
+    path = root / "patch" / "dist" / "companion_version.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"schema": "slink-companion-version-v1", "version": version, **extra}),
+                    encoding="utf-8")
+
+
+def _release_root(tmp_path):
+    item = {"id": "REL-PLAYER-ZIP", "kind": "RELEASE", "description": "player ZIP"}
+    root, manifest = _root(tmp_path, [item])
+    (root / "tools").mkdir()
+    (root / "tools" / "check_release_zip.py").write_text("print('PASS')\n", encoding="utf-8")
+    return item, root
+
+
+def test_a_build_release_refusal_is_a_red_row_not_a_dead_verifier(tmp_path, monkeypatch):
+    item, root = _release_root(tmp_path)
+    _stamp(root, "v0.3.1")
+
+    def refusing_build(**kwargs):
+        print("ERROR - the companions are not stamped for this release:", file=sys.stderr)
+        sys.exit(1)
+
+    monkeypatch.setitem(sys.modules, "make_release", SimpleNamespace(build_release=refusing_build))
+    row = verifier.check_release(item, root)
+    assert not row.ok
+    assert "companions are not stamped for this release" in _reasons(row)
+
+
+def test_the_release_is_built_at_the_version_the_companions_were_stamped(tmp_path, monkeypatch):
+    item, root = _release_root(tmp_path)
+    _stamp(root, "v0.3.1")
+    seen = {}
+
+    def spy_build(**kwargs):
+        seen.update(kwargs)
+        raise SystemExit(1)
+
+    monkeypatch.setitem(sys.modules, "make_release", SimpleNamespace(build_release=spy_build))
+    verifier.check_release(item, root)
+    assert seen["version"] == "v0.3.1"
+    assert not seen.get("allow_unstamped")
+
+
+def test_an_unstamped_tree_is_red_and_never_builds(tmp_path, monkeypatch):
+    item, root = _release_root(tmp_path)
+    called = []
+    monkeypatch.setitem(sys.modules, "make_release",
+                        SimpleNamespace(build_release=lambda **kw: called.append(kw)))
+    row = verifier.check_release(item, root)
+    assert not row.ok and not called
+    assert "tools/stamp_release.py --version" in _reasons(row)
+
+
+@pytest.mark.parametrize("stamped", ["mixed", "dev", "v0.3.1-dev", "rc", ""])
+def test_a_mixed_or_dev_stamp_is_red_and_never_builds(tmp_path, monkeypatch, stamped):
+    item, root = _release_root(tmp_path)
+    _stamp(root, stamped)
+    called = []
+    monkeypatch.setitem(sys.modules, "make_release",
+                        SimpleNamespace(build_release=lambda **kw: called.append(kw)))
+    row = verifier.check_release(item, root)
+    assert not row.ok and not called
+    assert "tools/stamp_release.py --version" in _reasons(row)
+
+
+def test_a_corrupt_stamp_record_is_red_and_never_builds(tmp_path, monkeypatch):
+    item, root = _release_root(tmp_path)
+    path = root / "patch" / "dist" / "companion_version.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{not json", encoding="utf-8")
+    called = []
+    monkeypatch.setitem(sys.modules, "make_release",
+                        SimpleNamespace(build_release=lambda **kw: called.append(kw)))
+    row = verifier.check_release(item, root)
+    assert not row.ok and not called
+
+
 @pytest.mark.parametrize("companion", ["matching", "missing", "mismatched"])
 def test_player_zip_requires_the_published_polished_companion(tmp_path, monkeypatch, companion):
     item = {"id": "REL-PLAYER-ZIP", "kind": "RELEASE", "description": "player ZIP"}
@@ -689,6 +768,7 @@ def test_player_zip_requires_the_published_polished_companion(tmp_path, monkeypa
                 archive.writestr(f"SLink-player-{version}/companion/SLink-Polished.ups", payload)
         return path
 
+    _stamp(root, "v0.3.1")
     monkeypatch.setitem(sys.modules, "make_release", SimpleNamespace(build_release=fake_build))
     rows, errs = verifier.verify(root, manifest)
     assert errs == []

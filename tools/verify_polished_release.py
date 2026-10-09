@@ -62,8 +62,10 @@ run, which is never a verdict. Anything else is 1 (or 2 for an unreadable manife
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import importlib
+import io
 import json
 import re
 import subprocess
@@ -492,23 +494,55 @@ _MANAGER_CHECKS = {
 # ────────────────────────────────────────────────────────────── RELEASE
 
 
+_RELEASE_STAMP = Path("patch") / "dist" / "companion_version.json"
+_STAMPED_RELEASE = re.compile(r"v\d+\.\d+\.\d+")
+
+
+def _stamped_release(root: Path) -> tuple[str | None, str]:
+    """The release version the companions were stamped with (tools/stamp_release.py), or (None, why not).
+
+    Only one clean `vX.Y.Z` counts: a `mixed` or `dev` record vouches for no release, and the player ZIP is
+    never built with allow_unstamped."""
+    hint = "run tools/stamp_release.py --version vX.Y.Z"
+    path = root / _RELEASE_STAMP
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        version = doc["version"]
+    except OSError as exc:
+        return None, f"companions not stamped for a release: cannot read {_RELEASE_STAMP.as_posix()} ({type(exc).__name__}); {hint}"
+    except (ValueError, KeyError, TypeError) as exc:
+        return None, f"companions not stamped for a release: {_RELEASE_STAMP.as_posix()} is unusable ({type(exc).__name__}: {exc}); {hint}"
+    if not isinstance(version, str) or not _STAMPED_RELEASE.fullmatch(version):
+        return None, f"companions not stamped for a release: {_RELEASE_STAMP.as_posix()} says {version!r}; {hint}"
+    return version, ""
+
+
 def check_release(item: dict, root: Path) -> Row:
     """Check patch-inclusive ZIP hygiene and bind its required Polished UPS to provenance."""
     row = Row(item["id"], "RELEASE", "PASS")
     tools = root / "tools"
     if not (tools / "check_release_zip.py").is_file():
         return row.fail("tools/check_release_zip.py is missing")
+    version, why = _stamped_release(root)
+    if version is None:
+        return row.fail(why)
     out_dir = Path(tempfile.mkdtemp(prefix="polished-rel-"))
-    zip_path = out_dir / "SLink-player-rc.zip"
+    zip_path = out_dir / f"SLink-player-{version}.zip"
+    captured = io.StringIO()
     try:
         if str(tools) not in sys.path:
             sys.path.insert(0, str(tools))
         make_release = importlib.import_module("make_release")
-        made = make_release.build_release(version="rc", out_dir=out_dir,
-                                          skip_generators=True, quiet=True, with_patch=True)
+        # build_release refuses with sys.exit(1) after printing why to stderr; SystemExit is not an Exception.
+        with contextlib.redirect_stderr(captured):
+            made = make_release.build_release(version=version, out_dir=out_dir,
+                                              skip_generators=True, quiet=True, with_patch=True)
+    except SystemExit as exc:
+        reason = _tail(captured.getvalue(), 6) or "no reason printed"
+        return row.fail(f"make_release.build_release refused (exit {exc.code}): {reason}")
     except Exception as exc:
         return row.fail(f"make_release.build_release failed: {type(exc).__name__}: {exc}")
-    if not Path(made).is_file():
+    if not made or not Path(made).is_file():
         return row.fail(f"make_release returned no zip ({made})")
     zip_path = Path(made)
     code, out, timed_out = _run(
@@ -527,7 +561,7 @@ def check_release(item: dict, root: Path) -> Row:
         return row.fail(f"cannot read {companion} sha256 from {PROVENANCE}: {type(exc).__name__}: {exc}")
     try:
         with zipfile.ZipFile(zip_path) as archive:
-            actual_sha = hashlib.sha256(archive.read(f"SLink-player-rc/{companion}")).hexdigest()
+            actual_sha = hashlib.sha256(archive.read(f"SLink-player-{version}/{companion}")).hexdigest()
     except KeyError:
         return row.fail(f"missing required {companion} in player ZIP")
     except (OSError, zipfile.BadZipFile) as exc:
