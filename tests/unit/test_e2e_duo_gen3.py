@@ -4677,8 +4677,36 @@ def test_active_end_oracle_reads_the_engine_written_hp0(ph, monkeypatch, tmp_pat
     receipts = {"a": log.replace("K0", key), "b": "WRITES 0\nRESULT: PASS (idle)\n"}
     run.assert_active_end_gen3_saved(receipts)
     assert notes and "active_end" in notes[-1]
-    with pytest.raises(RuntimeError, match="WRITES 0"):
+    # the companion's own config / link_panel writes (reason native, inside its arena) are NOT game-state
+    # writes: the live b receipt ends `WRITES 11` on every companion run (timing decides how many)
+    with open(duo.gen3_profile_path("leafgreen"), encoding="utf-8") as handle:
+        base = json.load(handle)["native"]["BASE"]
+    native = [f"[client] [SLink-gen3] write native 0x{base + 0x800:08X} +4 frame 5",
+              f"[client] [SLink-gen3] write native 0x{base + 0x808:08X} +1 frame 5",
+              f"[client] [SLink-gen3] write native 0x{base + 0x6E0:08X} +32 frame 90",
+              f"[client] [SLink-gen3] write native 0x{base:08X} +2 frame 90"]
+
+    def idle(*lines):
+        n = sum("] write " in line for line in lines)
+        return "\n".join([*lines, f"WRITES {n}", "RESULT: PASS (idle)"]) + "\n"
+
+    run.assert_active_end_gen3_saved(dict(receipts, b=idle(*native, "RX link_panel key=-")))
+    # red: a game-state write on the idle side (a non-native reason, or native outside the arena)
+    for bad in ("[client] [SLink-gen3] write battle_faint 0x02024282 +2 frame 9",
+                "[client] [SLink-gen3] write overworld 0x02024284 +2 frame 9",
+                f"[client] [SLink-gen3] write native 0x{base + duo.GEN3_NATIVE_ARENA_SIZE:08X} +1 frame 9",
+                "[client] [SLink-gen3] write native 0x02024284 +2 frame 9"):
+        with pytest.raises(RuntimeError, match="idle peer wrote"):
+            run.assert_active_end_gen3_saved(dict(receipts, b=idle(*native, bad)))
+    # red: B was handed a state command (the partner's death, a party/box/memorial order)
+    for cmd in ("force_faint", "force_explode", "box_mon", "party_mon", "memorialize"):
+        with pytest.raises(RuntimeError, match="forbidden"):
+            run.assert_active_end_gen3_saved(dict(receipts, b=idle(*native, f"RX {cmd} key=B0")))
+    # red: the driver's WRITES total disagrees with the lines it logged, or is missing
+    with pytest.raises(RuntimeError, match=r"WRITES 1 but 0 parsed"):
         run.assert_active_end_gen3_saved(dict(receipts, b="WRITES 1\n"))
+    with pytest.raises(RuntimeError, match="missing"):
+        run.assert_active_end_gen3_saved(dict(receipts, b="RESULT: PASS (idle)\n"))
     healed = _saved(fixture, 3, [STARTER, PIDGEY])
     monkeypatch.setattr(run, "_gen3_flushed", lambda inst: healed if inst == "a" else fixture)
     with pytest.raises(RuntimeError, match="not 0"):
@@ -6422,3 +6450,10 @@ def test_the_missing_capture_event_failure_is_never_retried_for_any_scenario():
                     limit = duo.scenario_attempt_limit(name, game)
                     for attempt in range(1, limit + 1):
                         assert not duo.retryable_gen1_rng(game, {"a": text, "b": None}, attempt, limit, scenario=name), (name, game, attempt)
+
+
+def test_native_arena_size_is_the_abi_header_extent():
+    """The idle-peer oracle's arena scope is the companion ABI's reserved extent, not a copied guess."""
+    import re
+    abi = (Path(duo.REPO) / "patch" / "src" / "trade_targets" / "abi.h").read_text(encoding="utf-8")
+    assert int(re.search(r"#define SLINK_ARENA_SIZE (0x[0-9A-Fa-f]+)u", abi).group(1), 16) == duo.GEN3_NATIVE_ARENA_SIZE

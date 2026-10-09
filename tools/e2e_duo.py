@@ -2538,6 +2538,38 @@ def rival_swap_real_problems(text, source_party, rival_ids, native_lo, native_hi
     return problems, fact
 
 
+# The companion's reserved EWRAM arena (patch/src/trade_targets/abi.h SLINK_ARENA_SIZE; its base is the
+# title pack profile's native.BASE, firered.h SLINK_TARGET_ARENA_BASE). Every write the client's native
+# driver makes (lua/gen3/native.lua arms reason "native" with an allow predicate inside the mailbox/control
+# blocks): the config (CONTROL epoch/enable, TN_ENABLE) and link_panel (INFO) classes among them.
+GEN3_NATIVE_ARENA_SIZE = 0x1000
+GEN3_STATE_COMMAND_RE = r"(?m)^RX (?:force_\w+|box_mon|party_mon|memorialize|replace_rival_team)\b"
+
+
+def gen3_idle_peer_write_problems(label, text, native_lo, native_hi):
+    """An idle peer made no Soul Link GAME-STATE write. The companion legitimately writes its own mailbox
+    (config after hello, link_panel after RX link_panel) on every run, so a raw `WRITES 0` is the wrong
+    contract there and its count depends on timing. The contract is by scope: the driver's `WRITES n` line
+    must exist and equal the write lines it logged, every logged write must be reason `native` inside
+    [native_lo, native_hi), and no state-changing command (force_*/box_mon/party_mon/memorialize) arrived."""
+    text = text or ""
+    problems = []
+    total = re.search(r"(?m)^WRITES (\d+)$", text)
+    writes = re.findall(r"(?m)^\[client\] \[SLink-gen3\] write (\S+) 0x([0-9A-Fa-f]+) \+(\d+)", text)
+    if not total:
+        problems.append(f"{label}: missing /(?m)^WRITES \\d+$/")
+    elif int(total.group(1)) != len(writes):
+        problems.append(f"{label}: WRITES {total.group(1)} but {len(writes)} parsed write line(s)")
+    for reason, addr, size in writes:
+        lo = int(addr, 16)
+        if reason != "native" or lo < native_lo or lo + int(size) > native_hi:
+            problems.append(f"{label}: idle peer wrote {reason} 0x{lo:08X} +{size} outside the native arena "
+                            f"0x{native_lo:08X}..0x{native_hi:08X}")
+    if re.search(GEN3_STATE_COMMAND_RE, text):
+        problems.append(f"{label}: forbidden /{GEN3_STATE_COMMAND_RE}/ present")
+    return problems
+
+
 def gen3_tx(event, key):
     return GEN3_TX_RE.format(event=re.escape(event), key=re.escape(key))
 
@@ -10350,15 +10382,20 @@ class DuoRun:
     def assert_active_end_gen3_saved(self, results):
         """A2 under P+H: A's chain (active_faint_chain "command"), its saved party the fixture's
         with the key's HP 0 in slot 0 (the ENGINE wrote it: no SLink HP write, ACTIVE_KO) and no
-        boxed copy; B idle -- no write, no save, battery unchanged."""
+        boxed copy; B idle -- no game-state write (only its companion's own
+        native-arena config/link_panel writes), no state command, no save, battery unchanged."""
         self._gen3_flush_boundary()
         key = self._link_keys["a"]
         required, ordered, forbidden = active_faint_chain(key, "command")
         forbidden += [gen3_rx("memorialize", key), r"(?m)^TX whiteout "]
         problems = gen3_receipt_problems("a", results["a"], required=required, ordered=ordered,
                                          forbidden=forbidden)
-        problems += gen3_receipt_problems("b", results["b"], required=[r"(?m)^WRITES 0$"],
-                                          forbidden=[r"(?m)^SAVE_WITNESS_DUMP ", r"(?m)^RX force_faint "])
+        # B's companion writes its own config / link_panel mailbox on every run (and how many before the
+        # driver finishes is timing): the contract is "no Soul Link game-state write", by scope, not count.
+        with open(gen3_profile_path(self._gen3_title("b")), encoding="utf-8") as handle:
+            arena = json.load(handle)["native"]["BASE"]
+        problems += gen3_receipt_problems("b", results["b"], forbidden=[r"(?m)^SAVE_WITNESS_DUMP "])
+        problems += gen3_idle_peer_write_problems("b", results["b"], arena, arena + GEN3_NATIVE_ARENA_SIZE)
         party, boxes = self._gen3_saved("a")
         f_party, _ = self._gen3_fixture_saved("a")
         keys = [gen3_key(m) for m in party]
