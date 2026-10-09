@@ -1,236 +1,63 @@
-# Polished Crystal — RC status
+# Polished Crystal RC status
 
-Machine-checkable. Everything below is the output of one command:
+## Freeze 5f4732 — 2026-10-08
 
-```
-python tools/verify_polished_release.py            # every item
-python tools/verify_polished_release.py --list     # ids and kinds, runs nothing
-python tools/verify_polished_release.py --only LIVE-PHONE-ENTRY
-```
+This is the current receipt rebind, not release approval. Product cut `e0dc44314`, driver-only fix `d51f3e9c3`, shipped overlay `fe8c57e1034059331ccf25d232ff757d675363b2`.
 
-The manifest is `tests/polished_release_requirements.json`; the committed emulator receipts are
-`tests/fixtures/polished/receipts/*.json`; the runner is `tools/verify_polished_release.py`.
+Code digest: `5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1`. Receipt/docs changes preserve it. Every live receipt is DEV; SYNTH setup and unproven scope remain explicit.
 
-**Why a separate lane.** `tools/verify_gen2_release.py` is not touched and must not be.
-`tests/unit/test_polished_release_guards.py` pins its `TITLES` to `("crystal", "gold", "silver")`
-and its `DUO_PAIRS` to vanilla pairings, which is correct: Polished Crystal is a SOLO title with
-no vanilla partner, so it has no duo matrix, no second fixture and no per-title live-gate set.
-Appending it to `TITLES` would put a partner in every pairing that does not exist.
+## Current receipt gate
 
----
-
-## 1. Verdict: NOT AN RC CANDIDATE
-
-The gate is red, and every red is a real reason. None of them is the verifier being fussy.
-
-| # | Red | Why it is red | Who clears it |
-|---|---|---|---|
-| 1 | five OPEN items (one CLOSED) | `OPEN-WRITE-PATH`, `OPEN-MEMORIALIZE`, `OPEN-EXPLODE-RIVAL`, `OPEN-PANEL-PAGES`, `OPEN-IN-GAME-TRADE` are `status: OPEN, blocking_rc: yes`; `OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH` (2026-10-08) | the owning cards; each needs a `closed_by` LIVE receipt to flip |
-| 2 | three SOURCE cells red | `gen_polished_engine_sites`, `gen_polished_pack` and `gen_polished_profile` `--check` all fail | see §2 — this is a real commit-consistency defect, not an environment artefact |
-| 3 | five LIVE cells STALE | they ran overlay `29ea04c2`; the phone-card commit republished the overlay as `34942315` | re-run those five scenarios on the current overlay |
-| 4 | two BUILD cells | a full rgbds build; see §4 | the build host |
-| 5 | two MODEL cells red | `test_polished_lua.py` (1 failed), `test_gen_polished_engine_sites.py` (1 failed), `test_polished_rom_tables.py` (1 unexplained skip) | see §2 — the two failures are the same defect as row 2; the skip is a missing clone |
-
-Green today: all 4 MANAGER gates, 4 of 7 SOURCE cells, 4 of 6 MODEL cells, 6 of 11 LIVE cells
-(the six bound to `34942315…`), and the RELEASE ZIP.
-
-**MODEL detail.** `MODEL-RELEASE-GUARDS 2/2`, `MODEL-RANDOMIZER 7/7`, `MODEL-PHONE 1/1`,
-`MODEL-WRITES 5/5`. The two red cells:
-
-* `test_polished_lua.py` — `1 failed, 23 passed`. The assertion is
-  `lock_sha256 658caa2a… == 0585f64c…` — the CRLF artefact of §2.
-* `test_gen_polished_engine_sites.py` — `1 failed, 19 passed`, and this one carries **both**
-  digests: `lock_sha256 658caa2a… vs 0585f64c…` **and**
-  `build_provenance_sha256 f376ca44… vs d590e33a…`. The second half is checkout-independent.
-* `test_polished_rom_tables.py` — `SKIPPED [1] …: pokecrystal not cloned:
-  F:\slink-work\wt\pol-verify\.cache\gen2-build\pokecrystal`. An unexplained skip, so the cell is
-  red: the ROM tables are unverified here. Clone `pokecrystal` and re-run, or record why the
-  vanilla clone is not needed for a Polished RC.
-
----
-
-## 2. The three red SOURCE cells are one real defect
-
-`gen_polished_engine_sites.py --check`, `gen_polished_pack.py --check` and
-`gen_polished_profile.py --check` all fail, and all three fail on the same two digests.
-
-The committed packs record:
-
-```
-data/games/polished_crystal/engine_signals.json : "lock_sha256": "658caa2aeaae…", "build_provenance_sha256": "f376ca44f94d…"
-data/games/polished_crystal/profile.json       : same two values
-data/games/polished_crystal/charmap.lua         : same two values
-```
-
-The committed files actually hash to:
-
-```
-sha256(data/polished_sources.lock.json)          LF form 658caa2aeaae…   CRLF form 0585f64c2e55…
-sha256(data/polished/build_provenance.json)       LF and CRLF alike d590e33adf0d…
-```
-
-**`build_provenance.json` is the real drift.** It hashes to `d590e33adf0d…` at every commit since
-`b2ea20a5`, while all three packs record `f376ca44f94d…`. So the check fails in ANY checkout,
-including the canonical one. This is a committed-packs-vs-committed-inputs inconsistency at
-`c9f1ad14`, and it is exactly the class of thing the gate exists to catch.
-
-**`polished_sources.lock.json` is a worktree artefact, and it is worth knowing about.** With
-`core.autocrlf=true` (this worktree's setting) the working-tree copy is CRLF, so it hashes to
-`0585f64c…` instead of its blob's `658caa2a…`. In a checkout that normalises to LF this half of the
-diff disappears. So:
-
-* the `lock_sha256` half of these three failures is checkout-dependent — do not report it as drift;
-* the `build_provenance_sha256` half is real and must be fixed by re-running the three generators
-  (`gen_polished_engine_sites.py`, `gen_polished_pack.py`, `gen_polished_profile.py`) and
-  committing what they write.
-
-`tools/check_release_zip.py` already normalises CRLF before hashing (its `_norm`), which is why
-the ZIP gate is unaffected. The generators do not.
-
----
-
-## 3. LIVE: historical bindings and current-cut receipts
-
-The phone-card commit (`c9f1ad14`) republished the overlay from `29ea04c2…` to `34942315…`.
-A receipt binds only to the overlay `data/polished/overlay_provenance.json` publishes today.
-
-Bound and green (`34942315…`):
-
-| item | evidence |
-|---|---|
-| `LIVE-HELLO-ADMITTED` | `pol-phone/live_stageA/result.txt` + `server.log` |
-| `LIVE-HELLO-GATE-FRAME` | `pol-phone/live_stageA/result.txt` + `gate_transitions.log` |
-| `LIVE-CAPTURE-PARTY-ONLY` | `pol-phone/live_stageA/result.txt` |
-| `LIVE-BOX-CENSUS` | `pol-phone/live_stageA/result.txt` |
-| `LIVE-PHONE-ENTRY` | `pol-phone/phone/result.txt` — 75 `[ok]`, 0 `[fail]`, `RESULT: PASS pol-phone (0 checks failed) frame 2815` |
-
-STALE (`29ea04c2…`, must be re-run):
-
-| item | evidence | what a re-run has to redo |
+| ID | Result | Detail |
 |---|---|---|
-| `LIVE-R1-MANAGER-PAIR` | `pol-rand/r1_jar/summary.json` | re-randomize the pair from the new overlay |
-| `LIVE-R2-RANDOMIZED-BOOT` | `pol-rand/live/r2b/result.txt` (+ `r2a`) | boot, table adoption, the variant-form key |
-| `LIVE-R3-REFUSALS` | `pol-rand/r3_swap.out` (+ the three siblings) | both refusal layers against the new beacon |
-| `LIVE-RECEPTIONIST-STACK` | `pol-live2/x/explore_B/result.txt` | the trade receptionist frame-wait stack |
-| `LIVE-POKEGEAR-MEASUREMENT` | `pol-live2/x/explore_C/result.txt` | the Pokegear icon strip |
+| LIVE-HELLO-ADMITTED | PASS | live/hello-admitted 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-HELLO-GATE-FRAME | PASS | live/hello-gate-frame 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-CAPTURE-PARTY-ONLY | PASS | live/capture-party-only 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-BOX-CENSUS | PASS | live/box-census-refresh 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-R1-MANAGER-PAIR | PASS | r1/manager-randomized-pair 2026-10-08 grade=DEV rom=8af3b5a0 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-R2-RANDOMIZED-BOOT | FAIL | STALE: overlay the cartridge was derived from 29ea04c24a46d9210c899355fe752f32d2880de8 but data/polished/overlay_provenance.json publishes fe8c57e1034059331ccf25d232ff757d675363b2 — re-run this scenario on the current overlay; overlay_provenance_sha256 is 'UNRECORDED': a receipt must record the sha256 of the provenance it was written against; STALE: code_digest UNRECORDED is not the 5f4732503c4a computed from the current code_digest_files — re-run this scenario; expected check "the server presents the executed player's own cartridge table" is not recorded as PASS; expected check 'native party grew by exactly one at the variant capture hook, before client quarantine' is not recorded as PASS; expected check 'observation-only leg has zero Lua writes; variant-catch quarantine writes are retained separately and do not count as write-path qualification' is not recorded as PASS |
+| LIVE-R3-REFUSALS | PASS | r3/refusals 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-PHONE-ENTRY | PASS | phone/slink-contact-stage-1 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-RECEPTIONIST-STACK | PASS | explore/B-trade-receptionist-stack 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-POKEGEAR-MEASUREMENT | PASS | explore/C-pokegear-icon-strip 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-TITLE-SPLASH | PASS | title/wordmark-vs-clean-control 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-WRITES-OVERWORLD | PASS | writes/overworld-faint-deposit-withdraw 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-PANEL-PAGES-ROM | PASS | panel/c0-c5-scripted-host 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-PANEL-HELLO | PASS | live/hello-panel-true 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-PANEL-HOST-PAGING | PASS | panel/real-host-paging 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-RIVAL-SWAP | PASS | rival/client-server-native-gate 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-EXPLODE-EXPLODE | PASS | explode-live/explode 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-EXPLODE-ACTIVE-FAINT | PASS | explode-live/active-faint 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-EXPLODE-BENCH-FAINT | PASS | explode-live/bench-faint 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-SHIPPED-TRADE | PASS | trade/shipped-native-commit-cold-continue 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-DUO-NATURAL-FAINT | PASS | duo/play-faint-natural 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-DUO-NATURAL-WHITEOUT | PASS | duo/play-whiteout-natural 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| OPEN-WRITE-PATH | FAIL | closed_by 'LIVE-DUO-NATURAL-FAINT' is not a LIVE item that PASSes in this run: closing needs a real receipt |
+| OPEN-MEMORIALIZE | FAIL | closed_by 'LIVE-WRITES-OVERWORLD' is not a LIVE item that PASSes in this run: closing needs a real receipt |
+| OPEN-EXPLODE-RIVAL | FAIL | closed_by 'LIVE-RIVAL-SWAP' is not a LIVE item that PASSes in this run: closing needs a real receipt |
+| OPEN-TITLE-SPLASH | FAIL | closed_by 'LIVE-TITLE-SPLASH' is not a LIVE item that PASSes in this run: closing needs a real receipt |
+| OPEN-PANEL-PAGES | FAIL | closed_by 'LIVE-PANEL-HOST-PAGING' is not a LIVE item that PASSes in this run: closing needs a real receipt |
+| OPEN-IN-GAME-TRADE | FAIL | closed_by 'LIVE-SHIPPED-TRADE' is not a LIVE item that PASSes in this run: closing needs a real receipt |
 
-The R1/R2/R3 rows bind on `source_overlay_sha1`, not on the booted cartridge's own sha1: a
-randomized cartridge can never equal the overlay sha1, so binding on it would be red forever.
-The item declares `"bind": "source"` and the receipt carries the overlay it was derived from.
+## Source, build, model and release
 
-### 2026-10-08: five receipts bound to `68894579` and to a computed code digest
+Final `python -B tools/verify_polished_release.py --no-release` is pending clearance of the other source/build worker. No concurrent shared-cache build is authorized. RELEASE ZIP is excluded by that command and needs a separate gate.
 
-The overlay is now `688945795e2656019247f5aaceb7b1d8791e900a` (title wordmark, `1d750de2e`), so
-every receipt above is STALE on the ROM binding. Five new DEV receipts were written against it,
-and unlike the older ones they carry the code digest the verifier computes
-(`--print-code-digest` = `f8966ea4…`; the digest files are identical at `2959ee36a`, `499d1cab9` and `8edc811f2`):
+## Frozen behavior and limits
 
-| item | evidence | what it does NOT prove |
-|---|---|---|
-| `LIVE-TITLE-SPLASH` | `pol-rcproof/title/evidence.json`: overlay PASS, clean-ROM control FAIL (15 reasons) on the same judge | DMG; save/main-menu variants |
-| `LIVE-WRITES-OVERWORLD` | `pol-writes6889/writes/result.txt`, 45 `[ok]`; a/b/d exact diffs recomputed from `trace.json` | (c) negatives; in-battle/PHYSICAL faint; bank 2 |
-| `LIVE-PANEL-PAGES-ROM` | `pol-rcproof/panel/run/result.txt`, C0-C5, 21 `[ok]` | pages from the real host (a scripted writer published them) |
-| `LIVE-PANEL-HELLO` | `pol-rcproof/hello/live/wire/wire_a.jsonl:2`: `panel true`, `panel_abi 3` | paging |
-| `LIVE-PANEL-HOST-PAGING` | `pol-panelhost/run/oracle.json`: real server `link_panel` held, staged and rendered as 3 pages, 29 `[ok]` | readability: rows are cut to 16 glyphs; scripted partner B |
+- Shipped trade commit is enabled; normal launcher and two-sided native commit/server re-key/cold CONTINUE passed in shipped-002. shipped-001 FAIL is retained; a driver-only responder-entry guard fixed premature input. No power-loss/general rollback matrix is claimed.
+- Explode Mode and Rival Team Swap are enabled. Rival evidence covers RIVAL0/id3 with a scripted second identity. The three commanded Explosion/faint lanes use TEST HOST commands; they are not natural partner-event evidence.
+- Natural faint S2n and whiteout S4n are separate required receipts with disclosed HP=1 conditioning. S4n proves whiteout event sent and partner death via per-mon faint; `whiteout_handler_proved=false`.
+- Memorialize party/box origin to box20/index19 is RC parity best-effort, with exact diffs and controls. No persistent owed-burial/three-outcome recovery or save/reset durability is claimed.
+- Randomized boot R2 leg b remains failed/pending triage; its historical receipt has not been restamped. Native full-party preparation is freshly hashed and its six keys match the box-census reload.
+- Panel-host trace covers every advertised page (1..4), row widths <=16 and staged/rendered equality. Title proof includes the clean-ROM failing control; CGB fresh boot only.
 
-`OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH`; the verifier re-checks that closure on every run.
+## Reproduce
 
-### 2026-10-09 owner rulings
-
-* `LIVE-NO-BOX-MON` is **retired**, including its manifest census entry and receipt: the boxless-client obligation is superseded by `supports_box_mon=True` since `8c1b841e2`. `LIVE-WRITES-OVERWORLD` proves the deposit/withdraw memory effects; it is not a blanket durability claim.
-* In-battle write negatives are accepted as unit/model-covered, not an outstanding live gate. Duo S2n now PASSes as lane evidence at `F:/slink-work/lanes/pol-duo3/s2n3/play-faint-natural/evidence.json` (`server_path=faint_event`); `OPEN-WRITE-PATH` remains OPEN only for its receipt at the freeze.
-* Whiteout's RC bar accepts S4n's relabel: **whiteout event sent + all partners die via per-mon faint**. S4n PASS lane evidence is `F:/slink-work/lanes/pol-duo3/s4n2/play-whiteout-natural/evidence.json`, explicitly `whiteout_handler_proved=false`; `_handle_whiteout` stays unit-covered. Both duo runs disclose SYNTH HP=1 conditioning/lead rearrangement; no receipt or grade promotion here.
-* Rival swap PASSes live in `pol-explode2`; **explode, active-faint and bench-faint all PASS after echo fix `ea90b9fd3`** at `F:/slink-work/lanes/pol-explodefix/{explode-3ced0b5ae425,active-faint-eed2072c21ae,bench-faint-23649423f2f7}/probe/oracle.json` (`ok=true`, no reasons). `OPEN-EXPLODE-RIVAL` still awaits capability/Manager flip and receipt rebind at freeze.
-* **Memorialize is in RC 1**, owner ruling 2026-10-09: both mons of a dead linked pair move to **box 20, index 19**. New `OPEN-MEMORIALIZE` blocks until the `pol-memorial` executor and a live `writes_run` memorialize leg receipt at freeze; design is `docs/polished/MEMORIALIZE.md`.
-
-### Every receipt is DEV, and cannot promote itself
-
-The receipt schema accepts `grade: "DEV"` only. A lane author writing a receipt cannot mark their
-own run as a PHYSICAL release receipt; that is an owner act and belongs in a different record.
-The clients also still self-report `qualification DEV_OVERLAY_SHA1`, `production_admitted false`,
-and `signals.lua` names itself unproven on the capture site. The receipts say so rather than
-rounding it up.
-
-### `code_digest` is UNRECORDED everywhere, on purpose
-
-A case-insensitive search of all four lane directories for `digest`, a commit id, or `git` finds
-nothing: the lanes print the ROM sha1, not the tree. `docs/polished/LIVE_RESULTS.md` names
-`78dddd8b`, `e0fd92dd` and `c9f1ad14` for its runs, but a narrative claim is not evidence, so the
-receipts carry the explicit string `UNRECORDED` and a note saying which doc made the claim. This
-is the one field an RC should insist on next: make the harness print the production code digest
-(the way `tools/gen2_code_digest.py` computes it for Gen 2) so a receipt can bind to a tree.
-
-### Run this on the lane host
-
-The receipts are transcriptions. The verifier re-hashes each `evidence_file` and a mismatch is
-red — but a file that is **not reachable** is red too, deliberately. On a machine without
-`F:/slink-work/lanes`, all eleven LIVE cells read `evidence file not reachable`. That is the gate
-working: a transcription nobody can check is not evidence. Run the RC on the lane host.
-
----
-
-## 4. BUILD: the two rebuild cells do not finish here
-
-Both are full `rgbds` builds of the pinned v3.2.3 ROM and then of the overlay.
-
-* `BUILD-CLEAN-ROM` (`tools/build_polished_syms.py --check`) — runs past the 300 s ceiling of the
-  command runner this lane used. The verifier's own budget is 1800 s.
-* `BUILD-OVERLAY` (`tools/build_polished_companion.py --check`) — exits 1 in ~3 s with
-  `OSError: [WinError 145] The directory is not empty: F:\slink-work\cache\polished\companion-clean\gfx\pokemon\electrode_plain`
-  raised from `shutil.rmtree(build_dir)` at `tools/build_polished_syms.py:99`.
-
-That second one is a **Windows filesystem condition in a shared cache**, not a byte comparison:
-the tool never reached the comparison. It also means the tool mutates shared state outside the
-worktree (`F:/slink-work/cache/polished/companion-clean`), which two lanes cannot do at once.
-Run these two on the build host, sequentially, and clear the cache first if the rmtree races again.
-
----
-
-## 5. What the OPEN list is protecting
-
-| item | Manager row it is bound to | why it blocks an RC |
-|---|---|---|
-| `OPEN-WRITE-PATH` | none (no Manager option governs the write sink) | S2n PASS as lane evidence (`pol-duo3/s2n3/play-faint-natural/evidence.json`); receipt at the freeze. In-battle negatives remain unit/model-covered per owner 2026-10-09 |
-| `OPEN-MEMORIALIZE` | none (required lifecycle action, not a Manager option) | client refuses memorialize (`polished_overworld.lua:902/:1038`); RC 1 requires both dead-pair mons in box 20/index 19. Executor per `MEMORIALIZE.md` in flight (`pol-memorial`), then a live `writes_run` memorialize leg receipt at freeze |
-| `OPEN-EXPLODE-RIVAL` | `explode_mode`, `rival_team_swap` | rival swap PASS (`pol-explode2`); explode/active/bench all PASS after `ea90b9fd3` (`pol-explodefix`). Capability/Manager flip and receipt binding remain at freeze; lane evidence only |
-| `OPEN-TITLE-SPLASH` | none | **CLOSED** 2026-10-08 by `LIVE-TITLE-SPLASH` |
-| `OPEN-PANEL-PAGES` | none | paging live on `68894579` (ROM half, hello `panel=true`, real-host paging); rows unreadable on the 16-glyph ROM panel (`Gen2PolishedAdapter` inherits `info_panel_width()==0`). Fix `66bad891f` is on `claude/gen2-integration`, not this tree; its re-run `pol-panelfix/run/oracle.json` (sha256 `feee691c…`) PASS is receipt-ready at the frozen RC cut |
-| `OPEN-IN-GAME-TRADE` | `pc_trade_npc` | the receptionist stack is measured, but no dispatch is armed; the native path stops at `Special_WaitForLinkedFriend` |
-
-Where an item names a Manager row, the verifier cross-checks that the row is **still refused**.
-If someone flips `OPTION_SUPPORT['explode_mode']['gen2_polished']` to `ok=True` while
-`OPEN-EXPLODE-RIVAL` still reads `OPEN`, that is a disagreement and the item goes red. Where an
-item has no Manager row the check is silent rather than invented — `overworld_presence` has no
-`gen2_polished` cell at all, and binding the title splash to it would assert something the
-Manager never claimed.
-
----
-
-## 6. Owner decisions this RC still needs
-
-1. **Re-run the five stale LIVE scenarios on `34942315`,** or record a signed disposition that
-   they do not need re-running. The five are listed in §3.
-2. **Re-run the three generators** whose `--check` is red and commit what they write, or record
-   why `build_provenance.json` is allowed to move under the packs. See §2 — this one is a defect,
-   not a judgement call.
-3. **Freeze-bind the write path and implement memorialization.** S2n is now PASS lane evidence,
-   not yet a freeze receipt; RC 1 also requires box-20 burial (`OPEN-MEMORIALIZE`).
-4. **Say whether DEV evidence is acceptable for an RC.** The gate does not decide this. It
-   refuses to let a receipt call itself PHYSICAL, and it prints the grade in every row, but the
-   call is the owner's.
-5. **Make the harness print the production code digest.** Without it no receipt can bind to a
-   tree, and every one of these eleven carries `code_digest: UNRECORDED`.
-
----
-
-## 7. Reproducing
-
-```
-python tools/verify_polished_release.py --list
-python tools/verify_polished_release.py --only SRC-ENGINE-SITES --only LIVE-PHONE-ENTRY
-python -m pytest tests/unit/test_verify_polished_release.py -q      # 49 tests, the rules
+```powershell
+python -B tools/verify_polished_release.py --print-code-digest
+python -B tools/verify_polished_release.py --no-release
+python -B -m pytest tests/unit/test_verify_polished_release.py -q
 ```
 
-The lane host must have `F:/slink-work/lanes`, `F:/slink-work/cache/polished/release`,
-`F:/slink-work/cache/polished/src` and the pinned jar at
-`F:/slink-work/cache/polished/jar/PokeRandoZX.jar` for the cells that read them.
+The manifest is `tests/polished_release_requirements.json`. Receipt evidence paths must remain reachable on the lane host; hashes are verified at judgment time. Full --no-release output, when recorded below, remains a partial run and cannot authorize a release.

@@ -23,6 +23,11 @@
       "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\box-census\\live\\wire\\wire_a.jsonl",
       "sha256": "1193ab069939efdf73984f0d0bc9e362c88b62b70e82b5d0dd6768eb410c83d2",
       "note": "Fresh freeze supporting observation/control"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\full-party-preparation\\sram_overlay\\pol overlay.SaveRAM",
+      "sha256": "3ecb0c517fbb1a0db974745c282be106b2a81b713cd39b19197bf579e92c89bb",
+      "note": "Native prepared/saved six-mon fixture; all six decoded keys match subsequent box-census boot hello"
     }
   ],
   "synth": [
@@ -37,7 +42,7 @@
     {
       "name": "a native full-party catch reached a box; the six-mon fixture was prepared by native catch and SAVE without a client or RAM party edits, hashed, and reloaded",
       "result": "PASS",
-      "observed": "Native preparation: six mons, native SAVE, no client/Lua writes. Reload hello party6. Native full-party catch to PC; no capture hook; pc_boxes generation4 frame3300, 22 frames after battle, before periodic1800. No reboot in catch-to-census interval."
+      "observed": "Native preparation: six mons, native SAVE, no client/Lua writes. Reload hello party6. Native full-party catch to PC; no capture hook; pc_boxes generation4 frame3300, 22 frames after battle, before periodic1800. No reboot in catch-to-census interval. Native preparation SaveRAM now hashed as secondary evidence; decoded party6 and each key matches the next run hello."
     },
     {
       "name": "the census carried the box mon without a reboot",

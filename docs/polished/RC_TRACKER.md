@@ -1,16 +1,25 @@
 # Polished Crystal RC tracker
 
-**Not an RC.** Historical 2026-10-05 verifier run: `python tools/verify_polished_release.py` failed 18 items: 5 OPEN
-blocking items (`OPEN-WRITE-PATH`, `OPEN-EXPLODE-RIVAL`, `OPEN-TITLE-SPLASH`, `OPEN-PANEL-PAGES`,
-`OPEN-IN-GAME-TRADE`), 11 LIVE receipts reported stale against that run's overlay, and the
-BUILD-OVERLAY / MODEL-DATA cells (count from the 2026-10-05 coordinator run; this rewrite did not
-re-run the verifier to completion). The reasons are in `RC_STATUS.md`. No row below is
-**QUALIFIED ON THIS CUT**.
+## Current freeze: 5f4732 (2026-10-08)
 
-Rewritten 2026-10-05 against `claude/gen2-integration` HEAD `df26d343a` after a Codex source audit of
-the previous table. Everything here was checked with grep, `ls`, `git log`, `git cat-file` and
-`git merge-base --is-ancestor`. No emulator was run. Test counts are `pytest --collect-only`
-counts (collected, not passed); no row claims a pass that was not run for this rewrite.
+Product cut `e0dc443140db7511f4d7f611930444ecf23f458d`; driver-only consent fix
+`d51f3e9c356b1fc60d9f4f8c9a60be7c7ac71716`. Shipped overlay
+`fe8c57e1034059331ccf25d232ff757d675363b2`, code digest
+`5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1`.
+The manifest and `RC_STATUS.md` are the current gate record. The chronology below is historical;
+its old capability flags, OPEN counts and overlays do not override this section.
+
+| Feature | Frozen implementation and evidence |
+|---|---|
+| Native trade | Shipped commit enabled (`7e:573B=1`); normal launcher composes and advertises trade. `LIVE-SHIPPED-TRADE` binds shipped-002: both native commits, server re-key, both cold CONTINUE parties and main/backup save integrity PASS. |
+| Trade binder | Cancel is wired before APPLY; publication uses the fresh-generation boundary. Native responder-entry observation gates the driver's consent input. shipped-001 FAIL remains retained; driver-only fix produced shipped-002 PASS. |
+| Rival swap | Manager option enabled; configured RIVAL0/1/2 classes. `LIVE-RIVAL-SWAP` proves one native 0F:47DD enemy send-in for RIVAL0/id3 with a scripted second identity, not all rivals. |
+| Explosion and plain faints | Manager Explode option enabled. Three required DEV receipts cover native Explosion, active faint and bench hold/overworld faint, exact writes and commanded echo suppression. TEST HOST command delivery is disclosed. |
+| Box operations and memorialize | `supports_box_mon=True`; memorialize is implemented for party and box origins, box20/index19. RC contract is legacy parity best-effort; three-outcome owed-burial persistence is post-RC. Fresh a/b/d/e/f `LIVE-WRITES-OVERWORLD` closes `OPEN-MEMORIALIZE`; exact diffs and controls PASS. |
+| Natural faint / whiteout | `LIVE-DUO-NATURAL-FAINT` (S2n) closes `OPEN-WRITE-PATH`; `LIVE-DUO-NATURAL-WHITEOUT` (S4n) is also required. S4n's accepted bar is event sent plus partner deaths via per-mon faint; it does not prove the whiteout handler caused those deaths. |
+
+No self-promotion from DEV to PHYSICAL or release approval is implied. Remaining receipt/source
+results and the final partial-verifier census are recorded in `RC_STATUS.md`.
 
 ## Owner decisions (relayed by the coordinator; no owner-signed tree receipt)
 
@@ -30,7 +39,7 @@ Recorded 2026-10-08 from coordinator card `g2p-decisions`. These are relayed own
 * Version stamp: **0.1.0 until the first live receipts**.
 * Landing: **keep local; no master merge yet**. One reviewed landing after the box-contract merge, trade pump, commit step and a full verifier run; those prerequisites do not themselves authorise landing.
 
-**Still UNDECIDED:** memorial NOT_COMPLETE semantics; box-20 retrieval policy + quarantine exception; last-healthy parity; rival class set; later stamping policy; commit enablement; landing/push/release.
+**Historical undecided list at that card:** memorial NOT_COMPLETE semantics; box-20 retrieval policy + quarantine exception; last-healthy parity; rival class set; later stamping policy; commit enablement; landing/push/release. Later owner rulings enabled shipped commit, selected RIVAL0/1/2 and accepted RC memorial parity best-effort; landing/push/release still require separate authority.
 
 **2026-10-09 — DECIDED (card `g2p-rcrules`)**
 * Retire `LIVE-NO-BOX-MON` and its receipt: `supports_box_mon=True` supersedes the boxless-client obligation; `LIVE-WRITES-OVERWORLD` proves box moves.
@@ -51,11 +60,11 @@ Recorded 2026-10-08 from coordinator card `g2p-decisions`. These are relayed own
 | IMPLEMENTED | code is in the tree; it may have no test, or no live run |
 | MODEL-TESTED | a unit test on disk exercises it (Python model, or Lua under lupa where the row says so); it never ran on a cartridge |
 | LIVE-RUN | ran on an emulated cartridge in an older run, on the overlay sha1 named in the row. A sha1 is not a commit. These are DEV runs from `LIVE_RESULTS.md` or a lane result file, not PHYSICAL receipts |
-| QUALIFIED ON THIS CUT | the verifier's live receipts for the CURRENT code and overlay are green. **No row has this level** |
+| QUALIFIED ON THIS CUT | the verifier's live receipts for the CURRENT code and overlay are green. This describes evidence binding only, not owner release approval |
 
-**2026-10-08 later, card `g2p-rcclose` at `499d1cab9`: CURRENT overlay `688945795e2656019247f5aaceb7b1d8791e900a`, UPS 4166 B (title wordmark commit `1d750de2e`). Five DEV receipts bound to it and to the computed code digest `f8966ea4…` (`--print-code-digest`) PASS in the verifier: `LIVE-TITLE-SPLASH`, `LIVE-WRITES-OVERWORLD`, `LIVE-PANEL-PAGES-ROM`, `LIVE-PANEL-HELLO`, `LIVE-PANEL-HOST-PAGING`. `OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH`; `OPEN-WRITE-PATH` and `OPEN-PANEL-PAGES` stay OPEN on the points named in `tests/polished_release_requirements.json`. Rows below marked "on `68894579`" cite those receipts; everything else keeps its historical overlay.**
+**2026-10-08 later, card `g2p-rcclose` at `499d1cab9`: then-current overlay `688945795e2656019247f5aaceb7b1d8791e900a`, UPS 4166 B (title wordmark commit `1d750de2e`). Five DEV receipts bound to it and to the computed code digest `f8966ea4…` (`--print-code-digest`) PASS in the verifier: `LIVE-TITLE-SPLASH`, `LIVE-WRITES-OVERWORLD`, `LIVE-PANEL-PAGES-ROM`, `LIVE-PANEL-HELLO`, `LIVE-PANEL-HOST-PAGING`. `OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH`; `OPEN-WRITE-PATH` and `OPEN-PANEL-PAGES` stay OPEN on the points named in `tests/polished_release_requirements.json`. Rows below marked "on `68894579`" cite those receipts; everything else keeps its historical overlay.**
 
-**2026-10-08 source update at `4281d18c5`: CURRENT overlay `cf03f53accefbc5f3fee9062846699e30c4c987b`, UPS 3767 B (`overlay_provenance.json:63,85-88`), from bounded-rollback commit `33f3b08bf` (merge `8d80f1ea3`). `877a477a` is the historical C5-body cut (`7f56228b5`); `97628616` is older still. Pin audit: `130 pins; 0 STALE executable pins`.** The `deebb100` text below is the historical reference for the "live on" column. The integrated overlay then was `data/polished/overlay_provenance.json` `output.sha1`,
+**2026-10-08 source update at `4281d18c5`: then-current overlay `cf03f53accefbc5f3fee9062846699e30c4c987b`, UPS 3767 B (`overlay_provenance.json:63,85-88`), from bounded-rollback commit `33f3b08bf` (merge `8d80f1ea3`). `877a477a` is the historical C5-body cut (`7f56228b5`); `97628616` is older still. Pin audit: `130 pins; 0 STALE executable pins`.** The `deebb100` text below is the historical reference for the "live on" column. The integrated overlay then was `data/polished/overlay_provenance.json` `output.sha1`,
 `deebb1004d4f6123667d5d9e061ad0bf867ac021` (`deebb100`, commit `da7c9bad4`). The column "live on
 `deebb100`?" is the marker for which rows were run live on that overlay and which only on an
 older or lane overlay. Do not copy a sha1 between trees: read the file.
@@ -65,7 +74,7 @@ Older overlay sha1s that appear below (all are overlay sha1s, not commits): `29e
 (sound-only build, `ef7fdd60e`), `7461c828` (a pol-panel2 lane build; not committed as the
 integrated overlay).
 
-## Table of record
+## Historical table (superseded by the current freeze section)
 
 | feature | level | live on `deebb100`? | source and commits | tests and live records |
 |---|---|---|---|---|
