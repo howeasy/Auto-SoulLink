@@ -31,7 +31,7 @@ Start from an unmodified dump. Radical Red is built for one exact release:
 | | md5 |
 |---|---|
 | Radical Red, clean | `8529f3a45d32bce4da637976fcf269d4` |
-| Radical Red, patched | `b9b8304c0c189bfbe54e9fc8df33c486` |
+| Radical Red, patched | `a3e8102b73c2548a502e19f5edbad803` |
 
 | Patch | Clean ROM md5 | Patched ROM md5 |
 |---|---|---|

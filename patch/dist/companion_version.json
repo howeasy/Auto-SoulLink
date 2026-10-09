@@ -1,27 +1,54 @@
 {
-  "schema": "slink-companion-version-v1",
-  "version": "mixed",
+  "schema": "slink-companion-version-v2",
+  "version": "v0.4.0",
   "families": {
-    "rb": "v0.3.0",
-    "pure": "v0.3.0",
-    "gen2": "dev",
-    "gen3": "v0.3.0"
+    "rb": {
+      "mode": "stamped",
+      "version": "v0.4.0"
+    },
+    "pure": {
+      "mode": "stamped",
+      "version": "v0.4.0"
+    },
+    "gen3": {
+      "mode": "stamped",
+      "version": "v0.4.0"
+    },
+    "gen2": {
+      "mode": "as-built",
+      "provenance": "data/gen2/overlay_provenance.json",
+      "provenance_sha256": "10898a960d0001672f686ee038499e1cbb26924cf6883ffa33adf002d9127f28",
+      "files": {
+        "SLink-Crystal.ups": "473cf2ba869442c52a472ac2c6d620d5cab2f8270c9a5bff72e79355dc5cb6ca",
+        "SLink-Gold.ups": "7f56020d196fe03ab715c311274b3136968fdf3470b03e15bdad6ef68e3891ee",
+        "SLink-Silver.ups": "408f8a576c252ba7366056f750812db4d1b738c2ff38bb0b911de58936ad5025"
+      }
+    },
+    "polished": {
+      "mode": "as-built",
+      "provenance": "data/polished/overlay_provenance.json",
+      "provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
+      "files": {
+        "SLink-Polished.ups": "1c16c1559fa85253e52b1e0592e9c727fa1f721ef5bab2cd2f92061fb6472e30"
+      }
+    }
   },
-  "stamped": "2026-10-03",
+  "stamped": "2026-10-09",
   "files": {
-    "SLink-RR.ups": "d0378bdf71e2bbcdf75e819095a0c0f29b4532378411979417a5a0dad949d55e",
-    "SLink-RB-Red.ups": "7ca4a277f782b424fa24a611c6463d5fd43f5267a4eb8282dc6136aff9a7b316",
-    "SLink-RB-Blue.ups": "28aaa2c12768da9247e709d501df45353397817b30c3cdbfc49685c1c0e3659e",
-    "SLink-PureRed.ups": "ef5200aa75760e80e98068f6996d8e28f4b197099b00f17c12276ac2f466b25e",
-    "SLink-PureBlue.ups": "75a0568c91894507083460c4e5500482af37aa944873e3d4b0b6e656ab5704d6",
-    "SLink-PureGreen.ups": "1f132a282d85e9508f7b9201023f28c91e5892e37129f0e48d17b0a2b0602407",
+    "SLink-RR.ups": "17adade6ecfadada15b49b4ed7319146035f64bc9ee674d0d53c3d9202be25d2",
+    "SLink-RB-Red.ups": "13272994e70291aefe501902aac75a7d3ad663c54929af621365cd1e981c4d8f",
+    "SLink-RB-Blue.ups": "fc7c825880b3a0ba912c4c06a1f9b4327f2e73534597f95c4010b39b97b810e5",
+    "SLink-PureRed.ups": "00e00be32805da37a4a00bceeead2cdb86d9e614d172b395a1eacd444292b57d",
+    "SLink-PureBlue.ups": "44dc90f0cdc2ee45bf0aa3204ac380bc328cf77816b249dbfafc804d729829b4",
+    "SLink-PureGreen.ups": "f1edfeefab1f79d9beadc9ec8d3b6a4a9c0b79cfd3619a58dc7b41913d70cc1b",
     "SLink-Crystal.ups": "473cf2ba869442c52a472ac2c6d620d5cab2f8270c9a5bff72e79355dc5cb6ca",
     "SLink-Gold.ups": "7f56020d196fe03ab715c311274b3136968fdf3470b03e15bdad6ef68e3891ee",
     "SLink-Silver.ups": "408f8a576c252ba7366056f750812db4d1b738c2ff38bb0b911de58936ad5025",
-    "SLink-FireRed.ups": "4e129da28f8b3b0471bfd419cba4a6776a6ddd8c9633987e8bcd9500c8516bd0",
-    "SLink-LeafGreen.ups": "ac2ce48423a38f6f0f2ab9c9f038dfa2a6c697bf227e10691f6fefc43b28f7dc",
-    "SLink-Emerald.ups": "5009e87ca064a556b70bb0ca4b865bdd83ee28f13df7e7c0303dfc8ed9b08d99",
-    "gen3_companions.json": "5ffdf8cd2f7344fa35ed3fe064a7768e6751a88b1cb3a8d508cbeca4e7ba0f06",
-    "companion_pins.json": "84fff3591d60a39cf29ad045966167ae63fe550efff05be4fb1839c7431656a0"
+    "SLink-FireRed.ups": "2dcce06e525ce0f7d9a5ca8a5ce25ede3497b175c65655e6720f6054cebf8166",
+    "SLink-LeafGreen.ups": "1327c0b02d6fe4c295e81f01a8c4e663eaae81d95d06e1853a721ef53d1fa331",
+    "SLink-Emerald.ups": "2bc228869690ac9eeb171c4990ba32eec0171c0fae7b985f1a133408b19bd77d",
+    "gen3_companions.json": "62a993243cf90aaedde47dd4891543b1256d198b1b0762c98794b6d8b29abb11",
+    "companion_pins.json": "f48cd9c119bebadca20cbe4a230046f22091c29c7f767785a43e1f884612b81a",
+    "SLink-Polished.ups": "1c16c1559fa85253e52b1e0592e9c727fa1f721ef5bab2cd2f92061fb6472e30"
   }
 }

@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_emerald",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "2516b924686efe6f0f7cb5496b78f3159e7783273076f970c47fbc7f661e57d0",
+  "sha256": "a2dc43e053e136786becab06a56fd8dee9fdf4b7995d67e077bf861b55a34a9f",
   "titles": {
     "emerald": {
       "artifacts": {
@@ -642,11 +642,12 @@
         },
         "companion": {
           "equivalent_sha1s": [
+            "9aff3d2a43790424e9a11b324d7a4259e64d8ee7",
             "f1fbbd794c26be1b50a8c61ca0cc2f44b0a8433b"
           ],
           "production": true,
-          "rom_md5": "d42abd51a4252ca80f53416630549944",
-          "rom_sha1": "9aff3d2a43790424e9a11b324d7a4259e64d8ee7",
+          "rom_md5": "d883d333fc138b573c14aa7d5c74256d",
+          "rom_sha1": "edbb041ff5215880a5f1c054eda18df28ae60a0b",
           "sites": {
             "battle_begin": {
               "address": 134440800,
