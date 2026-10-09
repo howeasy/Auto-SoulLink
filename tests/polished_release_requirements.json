@@ -57,6 +57,7 @@
     "MGR-JAR-PIN",
     "REL-PLAYER-ZIP",
     "OPEN-WRITE-PATH",
+    "OPEN-MEMORIALIZE",
     "OPEN-EXPLODE-RIVAL",
     "OPEN-TITLE-SPLASH",
     "OPEN-PANEL-PAGES",
@@ -519,20 +520,31 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "force_faint and box_mon: a linked mon must be killable and depositable through the armed Polished write sink",
-      "blocker": "only remaining live requirement: a PHYSICAL in-battle natural faint (duo S2n). Owner ruling 2026-10-09 accepts in-battle write negatives as unit/model-covered, so (c) is not a live RC gate. Overworld bench force_faint, box_mon and party_mon exact diffs PASS in LIVE-WRITES-OVERWORLD on overlay 688945795e; supports_box_mon is True since 8c1b841e2. Commanded active/bench faint PASS in pol-explode2 is not the natural-faint receipt",
+      "blocker": "S2n PASS as lane evidence; receipt at the freeze",
       "manager_row": null,
       "manager_row_note": "no Manager option governs the write sink; the consistency check binds only named options",
-      "evidence": "tests/fixtures/polished/receipts/live_writes_overworld.json; tests/unit/test_polished_write_path.py (in-battle negatives accepted by owner 2026-10-09); docs/polished/BATTLE_FLOW.md F6. Owner also accepts S4n whiteout event sent + all partners die via per-mon faint; this is not handler-caused death proof and _handle_whiteout stays unit-covered"
+      "evidence": "F:/slink-work/lanes/pol-duo3/s2n3/play-faint-natural/evidence.json (PASS, server_path=faint_event); F:/slink-work/lanes/pol-duo3/s4n2/play-whiteout-natural/evidence.json (PASS, whiteout event sent + all partners die via per-mon faint, whiteout_handler_proved=false). SYNTH-conditioned lane evidence only, no new receipt or grade promotion. Also tests/fixtures/polished/receipts/live_writes_overworld.json; in-battle negatives remain unit/model-covered per owner 2026-10-09"
+    },
+    {
+      "id": "OPEN-MEMORIALIZE",
+      "kind": "OPEN",
+      "status": "OPEN",
+      "blocking_rc": true,
+      "description": "RC 1 requires both mons of a dead linked pair to be moved to memorial box 20 (index 19), per owner ruling 2026-10-09",
+      "blocker": "client refuses memorialize (lua/gen2/polished_overworld.lua:902/:1038); executor per docs/polished/MEMORIALIZE.md in flight (pol-memorial); needs a live writes_run memorialize leg receipt at the freeze",
+      "manager_row": null,
+      "manager_row_note": "no Manager option governs dead-pair memorialization; this is a required Soul Link lifecycle action, not an augmentation",
+      "evidence": "docs/polished/MEMORIALIZE.md"
     },
     {
       "id": "OPEN-EXPLODE-RIVAL",
       "kind": "OPEN",
       "status": "OPEN",
       "blocking_rc": true,
-      "description": "Explode Mode and Rival Team Swap are composed for Polished; remaining echo fix and capability/Manager enablement are not freeze-qualified",
-      "blocker": "rival swap, commanded active-faint and bench-faint PASS live in F:/slink-work/lanes/pol-explode2; remaining: client explode echo fix (in flight) plus capability/Manager flip at freeze. These runs are lane evidence only, not new receipts in this card; frozen-cut rebind is still required",
+      "description": "Explode Mode and Rival Team Swap are composed for Polished; capability/Manager enablement and receipt binding are not freeze-qualified",
+      "blocker": "rival swap PASS live in pol-explode2; explode, active-faint and bench-faint PASS after echo fix ea90b9fd3 in F:/slink-work/lanes/pol-explodefix. Remaining: capability/Manager flip and receipt rebind at the freeze. These runs are lane evidence only, not new receipts",
       "manager_options": ["explode_mode", "rival_team_swap"],
-      "evidence": "F:/slink-work/lanes/pol-explode2/rival/synth-90mk5ijy/receipt.json (PASS); explode/active-faint-ee5f2c0cb766/probe/oracle.json and explode/bench-faint-4dc72c955269/probe/oracle.json under that lane (ok=true, reasons=[]). server/manager.py OPTION_SUPPORT still refuses explode_mode and rival_team_swap pending freeze; docs/polished/EXPLODE_RIVAL.md"
+      "evidence": "F:/slink-work/lanes/pol-explodefix/explode-3ced0b5ae425/probe/oracle.json; F:/slink-work/lanes/pol-explodefix/active-faint-eed2072c21ae/probe/oracle.json; F:/slink-work/lanes/pol-explodefix/bench-faint-23649423f2f7/probe/oracle.json (all ok=true, reasons=[]). Earlier rival PASS: F:/slink-work/lanes/pol-explode2/rival/synth-90mk5ijy/receipt.json. server/manager.py still refuses explode_mode and rival_team_swap pending freeze; docs/polished/EXPLODE_RIVAL.md"
     },
     {
       "id": "OPEN-TITLE-SPLASH",

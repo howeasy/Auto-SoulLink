@@ -25,7 +25,7 @@ The gate is red, and every red is a real reason. None of them is the verifier be
 
 | # | Red | Why it is red | Who clears it |
 |---|---|---|---|
-| 1 | four OPEN items (one CLOSED) | `OPEN-WRITE-PATH`, `OPEN-EXPLODE-RIVAL`, `OPEN-PANEL-PAGES`, `OPEN-IN-GAME-TRADE` are `status: OPEN, blocking_rc: yes`; `OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH` (2026-10-08) | the owning cards; each needs a `closed_by` LIVE receipt to flip |
+| 1 | five OPEN items (one CLOSED) | `OPEN-WRITE-PATH`, `OPEN-MEMORIALIZE`, `OPEN-EXPLODE-RIVAL`, `OPEN-PANEL-PAGES`, `OPEN-IN-GAME-TRADE` are `status: OPEN, blocking_rc: yes`; `OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH` (2026-10-08) | the owning cards; each needs a `closed_by` LIVE receipt to flip |
 | 2 | three SOURCE cells red | `gen_polished_engine_sites`, `gen_polished_pack` and `gen_polished_profile` `--check` all fail | see §2 — this is a real commit-consistency defect, not an environment artefact |
 | 3 | five LIVE cells STALE | they ran overlay `29ea04c2`; the phone-card commit republished the overlay as `34942315` | re-run those five scenarios on the current overlay |
 | 4 | two BUILD cells | a full rgbds build; see §4 | the build host |
@@ -138,9 +138,10 @@ and unlike the older ones they carry the code digest the verifier computes
 ### 2026-10-09 owner rulings
 
 * `LIVE-NO-BOX-MON` is **retired**, including its manifest census entry and receipt: the boxless-client obligation is superseded by `supports_box_mon=True` since `8c1b841e2`. `LIVE-WRITES-OVERWORLD` proves the deposit/withdraw memory effects; it is not a blanket durability claim.
-* In-battle write negatives are accepted as unit/model-covered, not an outstanding live gate. `OPEN-WRITE-PATH` now requires only a **PHYSICAL in-battle natural faint**, duo S2n. The commanded active/bench faint passes in `pol-explode2` do not substitute for that natural-faint receipt.
-* Whiteout's RC bar accepts S4n's relabel: **whiteout event sent + all partners die via per-mon faint**. This is not live proof that `_handle_whiteout` causes those deaths; `_handle_whiteout` stays unit-covered. No new receipt or grade promotion is recorded here.
-* Rival swap, commanded active-faint and bench-faint PASS live in `F:/slink-work/lanes/pol-explode2`. `OPEN-EXPLODE-RIVAL` remains OPEN for the client explode echo fix (in flight), then the capability/Manager flip at freeze and receipt rebind.
+* In-battle write negatives are accepted as unit/model-covered, not an outstanding live gate. Duo S2n now PASSes as lane evidence at `F:/slink-work/lanes/pol-duo3/s2n3/play-faint-natural/evidence.json` (`server_path=faint_event`); `OPEN-WRITE-PATH` remains OPEN only for its receipt at the freeze.
+* Whiteout's RC bar accepts S4n's relabel: **whiteout event sent + all partners die via per-mon faint**. S4n PASS lane evidence is `F:/slink-work/lanes/pol-duo3/s4n2/play-whiteout-natural/evidence.json`, explicitly `whiteout_handler_proved=false`; `_handle_whiteout` stays unit-covered. Both duo runs disclose SYNTH HP=1 conditioning/lead rearrangement; no receipt or grade promotion here.
+* Rival swap PASSes live in `pol-explode2`; **explode, active-faint and bench-faint all PASS after echo fix `ea90b9fd3`** at `F:/slink-work/lanes/pol-explodefix/{explode-3ced0b5ae425,active-faint-eed2072c21ae,bench-faint-23649423f2f7}/probe/oracle.json` (`ok=true`, no reasons). `OPEN-EXPLODE-RIVAL` still awaits capability/Manager flip and receipt rebind at freeze.
+* **Memorialize is in RC 1**, owner ruling 2026-10-09: both mons of a dead linked pair move to **box 20, index 19**. New `OPEN-MEMORIALIZE` blocks until the `pol-memorial` executor and a live `writes_run` memorialize leg receipt at freeze; design is `docs/polished/MEMORIALIZE.md`.
 
 ### Every receipt is DEV, and cannot promote itself
 
@@ -189,8 +190,9 @@ Run these two on the build host, sequentially, and clear the cache first if the 
 
 | item | Manager row it is bound to | why it blocks an RC |
 |---|---|---|
-| `OPEN-WRITE-PATH` | none (no Manager option governs the write sink) | only a PHYSICAL in-battle natural faint receipt (duo S2n) remains; in-battle negatives are unit/model-covered per owner ruling 2026-10-09. Overworld a/b/d PASS in `LIVE-WRITES-OVERWORLD`; commanded active/bench faint PASS in `pol-explode2` |
-| `OPEN-EXPLODE-RIVAL` | `explode_mode`, `rival_team_swap` | rival swap, active-faint and bench-faint PASS live (`pol-explode2`); client explode echo fix in flight, then capability/Manager flip at freeze. New runs are not receipt-bound by this card |
+| `OPEN-WRITE-PATH` | none (no Manager option governs the write sink) | S2n PASS as lane evidence (`pol-duo3/s2n3/play-faint-natural/evidence.json`); receipt at the freeze. In-battle negatives remain unit/model-covered per owner 2026-10-09 |
+| `OPEN-MEMORIALIZE` | none (required lifecycle action, not a Manager option) | client refuses memorialize (`polished_overworld.lua:902/:1038`); RC 1 requires both dead-pair mons in box 20/index 19. Executor per `MEMORIALIZE.md` in flight (`pol-memorial`), then a live `writes_run` memorialize leg receipt at freeze |
+| `OPEN-EXPLODE-RIVAL` | `explode_mode`, `rival_team_swap` | rival swap PASS (`pol-explode2`); explode/active/bench all PASS after `ea90b9fd3` (`pol-explodefix`). Capability/Manager flip and receipt binding remain at freeze; lane evidence only |
 | `OPEN-TITLE-SPLASH` | none | **CLOSED** 2026-10-08 by `LIVE-TITLE-SPLASH` |
 | `OPEN-PANEL-PAGES` | none | paging live on `68894579` (ROM half, hello `panel=true`, real-host paging); rows unreadable on the 16-glyph ROM panel (`Gen2PolishedAdapter` inherits `info_panel_width()==0`). Fix `66bad891f` is on `claude/gen2-integration`, not this tree; its re-run `pol-panelfix/run/oracle.json` (sha256 `feee691c…`) PASS is receipt-ready at the frozen RC cut |
 | `OPEN-IN-GAME-TRADE` | `pc_trade_npc` | the receptionist stack is measured, but no dispatch is armed; the native path stops at `Special_WaitForLinkedFriend` |
@@ -211,8 +213,8 @@ Manager never claimed.
 2. **Re-run the three generators** whose `--check` is red and commit what they write, or record
    why `build_provenance.json` is allowed to move under the packs. See §2 — this one is a defect,
    not a judgement call.
-3. **Decide the write path.** Without `OPEN-WRITE-PATH` there is no Soul Link: a linked mon
-   cannot be fainted on the partner's behalf. Every other OPEN item is polish by comparison.
+3. **Freeze-bind the write path and implement memorialization.** S2n is now PASS lane evidence,
+   not yet a freeze receipt; RC 1 also requires box-20 burial (`OPEN-MEMORIALIZE`).
 4. **Say whether DEV evidence is acceptable for an RC.** The gate does not decide this. It
    refuses to let a receipt call itself PHYSICAL, and it prints the grade in every row, but the
    call is the owner's.
