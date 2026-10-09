@@ -89,7 +89,7 @@ the ZIP gate is unaffected. The generators do not.
 
 ---
 
-## 3. LIVE: six cells bind to the current overlay, five are STALE
+## 3. LIVE: historical bindings and current-cut receipts
 
 The phone-card commit (`c9f1ad14`) republished the overlay from `29ea04c2…` to `34942315…`.
 A receipt binds only to the overlay `data/polished/overlay_provenance.json` publishes today.
@@ -102,7 +102,6 @@ Bound and green (`34942315…`):
 | `LIVE-HELLO-GATE-FRAME` | `pol-phone/live_stageA/result.txt` + `gate_transitions.log` |
 | `LIVE-CAPTURE-PARTY-ONLY` | `pol-phone/live_stageA/result.txt` |
 | `LIVE-BOX-CENSUS` | `pol-phone/live_stageA/result.txt` |
-| `LIVE-NO-BOX-MON` | `pol-phone/live_stageA/server.log` (`skip quarantine: … client has no box executor`; the string `box_mon` occurs 0 times) |
 | `LIVE-PHONE-ENTRY` | `pol-phone/phone/result.txt` — 75 `[ok]`, 0 `[fail]`, `RESULT: PASS pol-phone (0 checks failed) frame 2815` |
 
 STALE (`29ea04c2…`, must be re-run):
@@ -135,6 +134,13 @@ and unlike the older ones they carry the code digest the verifier computes
 | `LIVE-PANEL-HOST-PAGING` | `pol-panelhost/run/oracle.json`: real server `link_panel` held, staged and rendered as 3 pages, 29 `[ok]` | readability: rows are cut to 16 glyphs; scripted partner B |
 
 `OPEN-TITLE-SPLASH` is CLOSED by `LIVE-TITLE-SPLASH`; the verifier re-checks that closure on every run.
+
+### 2026-10-09 owner rulings
+
+* `LIVE-NO-BOX-MON` is **retired**, including its manifest census entry and receipt: the boxless-client obligation is superseded by `supports_box_mon=True` since `8c1b841e2`. `LIVE-WRITES-OVERWORLD` proves the deposit/withdraw memory effects; it is not a blanket durability claim.
+* In-battle write negatives are accepted as unit/model-covered, not an outstanding live gate. `OPEN-WRITE-PATH` now requires only a **PHYSICAL in-battle natural faint**, duo S2n. The commanded active/bench faint passes in `pol-explode2` do not substitute for that natural-faint receipt.
+* Whiteout's RC bar accepts S4n's relabel: **whiteout event sent + all partners die via per-mon faint**. This is not live proof that `_handle_whiteout` causes those deaths; `_handle_whiteout` stays unit-covered. No new receipt or grade promotion is recorded here.
+* Rival swap, commanded active-faint and bench-faint PASS live in `F:/slink-work/lanes/pol-explode2`. `OPEN-EXPLODE-RIVAL` remains OPEN for the client explode echo fix (in flight), then the capability/Manager flip at freeze and receipt rebind.
 
 ### Every receipt is DEV, and cannot promote itself
 
@@ -183,8 +189,8 @@ Run these two on the build host, sequentially, and clear the cache first if the 
 
 | item | Manager row it is bound to | why it blocks an RC |
 |---|---|---|
-| `OPEN-WRITE-PATH` | none (no Manager option governs the write sink) | overworld half live on `68894579` (`LIVE-WRITES-OVERWORLD`) and `supports_box_mon` is True since `8c1b841e2`; still no in-battle (active battler) / PHYSICAL faint receipt and no (c) negatives under a real battle |
-| `OPEN-EXPLODE-RIVAL` | `explode_mode`, `rival_team_swap` | both writers exist as pure Lua modules and neither is wired |
+| `OPEN-WRITE-PATH` | none (no Manager option governs the write sink) | only a PHYSICAL in-battle natural faint receipt (duo S2n) remains; in-battle negatives are unit/model-covered per owner ruling 2026-10-09. Overworld a/b/d PASS in `LIVE-WRITES-OVERWORLD`; commanded active/bench faint PASS in `pol-explode2` |
+| `OPEN-EXPLODE-RIVAL` | `explode_mode`, `rival_team_swap` | rival swap, active-faint and bench-faint PASS live (`pol-explode2`); client explode echo fix in flight, then capability/Manager flip at freeze. New runs are not receipt-bound by this card |
 | `OPEN-TITLE-SPLASH` | none | **CLOSED** 2026-10-08 by `LIVE-TITLE-SPLASH` |
 | `OPEN-PANEL-PAGES` | none | paging live on `68894579` (ROM half, hello `panel=true`, real-host paging); rows unreadable on the 16-glyph ROM panel (`Gen2PolishedAdapter` inherits `info_panel_width()==0`). Fix `66bad891f` is on `claude/gen2-integration`, not this tree; its re-run `pol-panelfix/run/oracle.json` (sha256 `feee691c…`) PASS is receipt-ready at the frozen RC cut |
 | `OPEN-IN-GAME-TRADE` | `pc_trade_npc` | the receptionist stack is measured, but no dispatch is armed; the native path stops at `Special_WaitForLinkedFriend` |
