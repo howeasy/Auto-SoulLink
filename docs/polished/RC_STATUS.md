@@ -60,6 +60,8 @@ Code digest: `856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9`.
 | SRC-UPR-INI | PASS | exit 0 (0s)  F:\slink-work\wt\g2-int\data\polished\upr_polished_entries.ini is current |
 
 Exit code 1. GATE FAILED — 0 manifest error(s), 1 item(s): MODEL-DATA
+
+MODEL-DATA's one non-pass was an absent input, not a red: `test_polished_rom_tables.py:198` skips when the pinned clean Crystal ROM is missing from the worktree's own `.cache/gen2-build/pokecrystal`, and this worktree had none. After copying the pinned ROM (sha1 `f4cd194b`, matching `data/gen2_sources.lock.json`) into that ignored path, `--only MODEL-DATA` passed 7/7 files (`F:/slink-work/lanes/pol-freeze2/verify/only_model_data.txt`). That is a partial re-run; a single clean full `--no-release` with the ROM present is still owed.
 Output: `F:/slink-work/lanes/pol-freeze2/verify/no_release.txt`. RELEASE ZIP is excluded by `--no-release` and needs a separate gate.
 
 Full unit suite at the cut (6 shards): 27307 passed, 1 failed, 1553 skipped. The one failure is `tests/unit/test_gen3_expansion_wild_rom.py::test_compiled_wild_table_matches_source_set_zero_and_keeps_duplicate_headers`, a known Gen 3 expansion red outside Polished.
