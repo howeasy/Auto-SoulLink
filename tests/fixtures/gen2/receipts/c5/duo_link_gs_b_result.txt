@@ -1,0 +1,37 @@
+DUO_GEN2 {"artifact_kind":"overlay","attempt":1,"binding_sha256":"0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19","case":"silver_battle","fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","player":"b","rom_sha1":"19ec9d144f4b7a7dc187f39a48a09d1f9c2f9346","scenario":"link","title":"silver"}
+CLIENT {"artifact_kind":"rand_overlay","binding_sha256":"0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19","pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"19ec9d144f4b7a7dc187f39a48a09d1f9c2f9346","title":"silver"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3224
+TX {"area_id":"route_29","artifact_kind":"rand_overlay","badges":0,"ball_count":10,"companion_abi":3,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_
+HELLO {"ball_count":10,"frame":3344,"has_pokeballs":true,"ot_id":51084}
+  phase loaded @3344
+RX resolved_areas
+RX config
+RX dead_keys
+RX link_panel
+BOOTED {"frame":3374,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 A4FC:C78C:9E
+  phase walk @3374 xy=53,12
+  phase battle @3877 xy=52,12
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5195,"key":"F589:C78C:9F","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":159}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"F589:C78C:9F","level":2,"maxHP":15,"nickname":"CROCONAW","player":"b","seq":64,"species_id":159,"stats":{"level":2,"maxH
+CAPTURE_SENT {"frame":5195,"key":"F589:C78C:9F","seq":64}
+CAUGHT F589:C78C:9F
+RX box_mon key=F589:C78C:9F
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":65}
+TX {"event":"stats_cache","key":"F589:C78C:9F","player":"b","seq":68,"stats":{"level":2,"maxHP":15}}
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":5942,"text":"POLIWHIRL and CROCONAW linked!"}
+RX party_mon key=F589:C78C:9F
+RX link_panel
+TX {"event":"sync_retrieve_done","key":"F589:C78C:9F","player":"b","seq":92}
+  phase save @5943 xy=52,12
+RX link_panel
+  phase saved @6311 xy=52,12
+MYKEY 0 A4FC:C78C:9E
+MYKEY 1 F589:C78C:9F
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"0bd501454d9f56d3345f474da8bdffc2551bac38087c713759f25cc01089b9ba","client_saves":1,"flushed_matches":true,"frame":6341,"gate_saves":1,"save_completed_frame":6311,"saveram_bytes":32790,"saveram_path":"F:/slink-work/lanes/gen2-c5-2f2284e47/r1/patch/build/saveram_link_c5479831_b/g2r b.SaveRAM","snapshot_path":"F:/slink-work/lanes/gen2-c5-2f2284e47/r1/patch/build/e2e_link_c5479831_b_witness.SaveRAM"}
+RECEIPT {"artifact_kind":"rand_overlay","attempt":1,"binding_sha256":"0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19","booted":{"frame":3374,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":5195,"key":"F589:C78C:9F","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":159},"case":"silver_battle","client":{"artifact_kind":"rand_overlay","binding_sha256":"0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19","pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"19ec9d144f4b7a7dc187f39a48a09d1f9c2f9346","title":"silver"},"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3344,"has_pokeballs":true,"ot_id":51084},"input_mode":"normal_buttons","key":"F589:C78C:9F","player":"b","rom_sha1":"19ec9d144f4b7a7dc187f39a48a09d1f9c2f9346","save":{"cartram_bytes":32768,"cartram_sha256":"0bd501454d9f56d3345f474da8bdffc2551bac38087c713759f25cc01089b9ba","client_saves":1,"flushed_matches":true,"frame":6341,"gate_saves":1,"save_completed_frame":6311,"saveram_bytes":32790,"saveram_path":"F:/slink-work/lanes/gen2-c5-2f2284e47/r1/patch/build/saveram_link_c5479831_b/g2r b.SaveRAM","snapshot_path":"F:/slink-work/lanes/gen2-c5-2f2284e47/r1/patch/build/e2e_link_c5479831_b_witness.SaveRAM"},"scenario":"link","schema":"gen2-duo-link-v1","title":"silver"}
+RESULT: PASS (caught F589:C78C:9F)

@@ -1366,7 +1366,509 @@
         },
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "scenario": "link",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_link_cc_a_result.txt",
+              "sha256": "15e077942ac5e458c69695228dc27c6251498d430b5a7773375f39b09264f203"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_link_cc_b_result.txt",
+              "sha256": "21d1e5dcec00aa4afd46e7e37c71cf92bb904676e0231a4b3bc936db85cf52a1"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_link_cc_pydec_result.txt",
+              "sha256": "96e1cf0c564d10f5d1a7574fb78543880ae52bf34cbf55763ff12bd42bc0b278"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_faint",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_cc_a_result.txt",
+              "sha256": "d52eda6be8f96f43ad966b240792934ceceb6beea964f3087a27bb6149c6649f"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_cc_b_result.txt",
+              "sha256": "eebde772466d27c87bdbfabd926a1742ccc0729e1704ef95261cd8b0b4fe37ce"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_cc_pydec_result.txt",
+              "sha256": "e05bde3415adc8ce8437629cc6380d41aa313a4bed7dd02ac1e42d3864b9990f"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_faint_active",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_cc_a_result.txt",
+              "sha256": "9137388e45c2f5628ad389e91d5e459a7f10b292af740f3685b04c05fc7355db"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_cc_b_result.txt",
+              "sha256": "5183ce7d0f88468e989c7badf51d839b95c0d10f70267968d093cb2389af6f64"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_cc_pydec_result.txt",
+              "sha256": "78e438b40fb0530d89443f82e918ea1171574cc2e6e3494a026159202b4b9dff"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_admit_wrong_rom",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_admit_wrong_rom_cc_a_result.txt",
+              "sha256": "c1a87bb24e41714ddf54ce805f97ede65278d7d428be7ee0f3bf5f5230baca21"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_admit_wrong_rom_cc_b_result.txt",
+              "sha256": "c25699189ac1c3d63b49c361ed464f52065b364151cecf99b51b780f65de14f6"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_admit_wrong_rom_cc_pydec_result.txt",
+              "sha256": "f62fbcba1119cfb5dc226ede8b19d64b560d0f99aa27fac1a836f2d9bfb4b57e"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_reconnect",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_cc_a_result.txt",
+              "sha256": "73ab40993c52d5fcb7729a299ca16bef7ff9260f24d90c6ef52263b191a15075"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_cc_b_result.txt",
+              "sha256": "d97c0dc66c295a59a1037848ff2f9c63772794fae406f787aea8764738a403de"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_cc_pydec_result.txt",
+              "sha256": "c7510b7bfb92d32ae3ccd656e4cd4eb7c912a6cc9d16eaa51fd6bd35692d8c60"
+            },
+            "a_same_save": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_cc_a_same_save_result.txt",
+              "sha256": "ff7ae4dd6e409744abc1c57f572a50d0fa55cf1deffd629ee05920c9c79df3e9"
+            },
+            "a_wrong_save": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_cc_a_wrong_save_result.txt",
+              "sha256": "ef5a9332c7a161344b1d4c19fa1aa1b33bcb4fdb85ccd6dddb18f7758816b577"
+            }
+          },
+          "staged_saves": {
+            "same_save": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_cc_a_same_save_seed.SaveRAM",
+              "sha256": "6ca52a50b99f24fbc2702530a5737e006faebf9a31f42d20c7b5ca3306f7814f"
+            },
+            "wrong_save": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_cc_a_wrong_save_seed.SaveRAM",
+              "sha256": "e2298243d3b10965b354184f1778d946a0909402c57b4ccaff574f819cfcc6dd",
+              "case": "crystal_battle_ot2"
+            }
+          },
+          "witness_snapshots": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_cc_a_witness.SaveRAM",
+              "sha256": "6ca52a50b99f24fbc2702530a5737e006faebf9a31f42d20c7b5ca3306f7814f"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_soft_reset",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_soft_reset_cc_a_result.txt",
+              "sha256": "13ce86f263e2ac143bd16e50028d5afeed3bd5a3af5b36d8fcba01968048f887"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_soft_reset_cc_b_result.txt",
+              "sha256": "bf29088dd5295d362bb7467e8f4d9aa681a4a1eeacf5b32a10429e2264fc08df"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_soft_reset_cc_pydec_result.txt",
+              "sha256": "f3dc2c75c5fdd7d36a89293b29b323ba2124faec5faa4c5626b3e7cad4fd120b"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_type_clause",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_type_clause_cc_a_result.txt",
+              "sha256": "697a872a9de5f16aabdb73c3b59da18da50a5b8478946284ec2dbb08b04e2f0d"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_type_clause_cc_b_result.txt",
+              "sha256": "0a55866b7ef59ed7e6c803d486cbb290225264fe1cf0efe4cc578b1090261665"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_type_clause_cc_pydec_result.txt",
+              "sha256": "fc6eaace42b0038403484e717a647c54828f2546783dce3564a4b68c321f24df"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_gender_clause",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gender_clause_cc_a_result.txt",
+              "sha256": "11da7c0053afc100e277acdd2c1c842baffdaa5fa6b9af1be78a7593eeeae6bf"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gender_clause_cc_b_result.txt",
+              "sha256": "7640aed4fcb7ff54a8f3b63261442d5fbd2f35cbed5f6377c6a143a31ddea043"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gender_clause_cc_pydec_result.txt",
+              "sha256": "adf520b0dbce9c2340cee8178abe6b6b95810df6c0a2975450c3f614c74b197d"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_new",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_new_cc_a_result.txt",
+              "sha256": "de9f29eb52c878dc1e7a8345c2df1ec1e1f8f1cad28411074c8304158cf313db"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_new_cc_b_result.txt",
+              "sha256": "b915e6dac7196ccd3c11d10e5229c3d4b590258b131d556c660f5ebebaae35f2"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_new_cc_pydec_result.txt",
+              "sha256": "2c76dcb5b401c1310f74fe2174846d009c0a7e8952f8c8b7bee6e4c0588d2fdb"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_evolve",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_evolve_cc_a_result.txt",
+              "sha256": "051c03a403dad4c876bce62e26329e64cdbb62712b48f3abf42d4884907dd61b"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_evolve_cc_b_result.txt",
+              "sha256": "48516d37dabc0c1898ab245b513cc6d220a8e8c26c11160dfb184c46f589825e"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_evolve_cc_pydec_result.txt",
+              "sha256": "f4b5ff5bf64482b2fbbe4cd8725523f4384a364851b80d3ab062b9d91442d055"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_decline_new",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_decline_new_cc_a_result.txt",
+              "sha256": "f210e4b8d2f897141596641787911ffe5342edaa417b7c5c975fd5d7eb40a09e"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_decline_new_cc_b_result.txt",
+              "sha256": "dda83d5502251376c07946089aee0e925955aaf13ea39a088bec6f0db8d20adc"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_decline_new_cc_pydec_result.txt",
+              "sha256": "64228a1bfbec96bddf2ad4af5559cbe86e702b7d2ecae73c5016b7e986e52736"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_timeout",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_timeout_cc_a_result.txt",
+              "sha256": "cc93f6263ca02a1b6aaeb846993e8ab3160bb72c037db2550f9ea60b61e67e59"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_timeout_cc_b_result.txt",
+              "sha256": "100c1e71c06dd13f83031bc6c20a7241c3944ddf4cd00d12fe115adce5a9b93e"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_timeout_cc_pydec_result.txt",
+              "sha256": "1e151c56b7586d16d87a7f8e81c1fd64a867172b5f0a434931b27b84fcbe87f3"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_reset_wait",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_wait_cc_a_result.txt",
+              "sha256": "85c5030c0f2e89ebdaf84f2e35bcb18418a6d0b78cdc2b2a5cd1df87c6f6d675"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_wait_cc_b_result.txt",
+              "sha256": "1514f92f8376ec34880bffc8838fe2c30aa33e0e8b2bd191bc4aebbb30351712"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_wait_cc_pydec_result.txt",
+              "sha256": "d851ad2c2d6f87a5a9bf2468d6649e771619883c04fa2ac64985a4d25e7dd3e4"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_reset_commit",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_commit_cc_a_result.txt",
+              "sha256": "e2de56b6786603224d68bddb76376792ba21a5299a0b0273cfa041827e3fb3a7"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_commit_cc_b_result.txt",
+              "sha256": "09174e22e97b896bb949b59d7b5b36f8fbff4c29e244a7cb2e998430bc2fc3cd"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_commit_cc_pydec_result.txt",
+              "sha256": "3c99dbc364b44417c85965c24420fc97a0f614c81cfa19f178f1767b1dc45702"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_refuse_item",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_refuse_item_cc_a_result.txt",
+              "sha256": "0a0fc08a5de6ef62bc39251eb9f5289c53974582d3f7d0c1f4bc0e1313686469"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_refuse_item_cc_b_result.txt",
+              "sha256": "9eaf946a95305f4c57609070bf184da46e70460cb4abc981a2a7ee26c27326af"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_refuse_item_cc_pydec_result.txt",
+              "sha256": "a94c41183fae8792651fedd2daf05f5535138e0ab896db19468a2b01aa73a20d"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_whiteout",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_cc_a_result.txt",
+              "sha256": "bf62ab44eb2cb6a62acd28b5ebe03ba2c628149a628f0ee82a2f01e73fc74a37"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_cc_b_result.txt",
+              "sha256": "2f540f3fe79b2e92806196f421f1c57ed4e172399190f32efe6660e442315f09"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_cc_pydec_result.txt",
+              "sha256": "10e048c02154dbc7653317d88135d4668f0b8521951706973e18ded426ca3e4b"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_pc_ops",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_pc_ops_cc_a_result.txt",
+              "sha256": "93920ae3dbf18658c4477570e45fcb8eddd6ac1d6fc9fceee795642f0df7cf66"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_pc_ops_cc_b_result.txt",
+              "sha256": "f7f30b16b55aee21e30ff823f00d1265d8c4f6eee190a33c807320f2ae61295d"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_pc_ops_cc_pydec_result.txt",
+              "sha256": "7571fc76aa606e4ab86d9d94bad996c6af8295c82518edfd294606880589c5db"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_changebox",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_changebox_cc_a_result.txt",
+              "sha256": "50b52d3e09c066021a1076c5a807bb64a1e8ab0151db51772ed7714d3a72163e"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_changebox_cc_b_result.txt",
+              "sha256": "c194014082aa7f835ea99567109b94cf3dba25d34152aa04987e8be220fa36d2"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_changebox_cc_pydec_result.txt",
+              "sha256": "05c856b8f1959a03a900f940ad7982b961df885311310f9241d4a8fd2e765790"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_poison",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_poison_cc_a_result.txt",
+              "sha256": "ccba737b13cc11207c9892a3a6c518c135d559f0a945299f32b9df051267b60c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_poison_cc_b_result.txt",
+              "sha256": "d1ab4d5dbdcf2a58b1f3783bdec3d2c7d612ad795b3e1112458b6413747746e0"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_poison_cc_pydec_result.txt",
+              "sha256": "72b430b6d9e3022165463d63b430f8b6d11ab77e4b404a4db9d98bd2e37d31b4"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_whiteout_rebuild",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_rebuild_cc_a_result.txt",
+              "sha256": "a4d32ada1b2307c0ef464138f64e68c22bfe41e211e2210172dda6c92c3b60ba"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_rebuild_cc_b_result.txt",
+              "sha256": "c441fe1021f332ca80cab830d55865a866d822251c5142151040dcd1458a5db9"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_rebuild_cc_pydec_result.txt",
+              "sha256": "6e967450610c419cec719a2798220aab90b1892eae602c9f9d5b7443debed91b"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_ball_gate",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_ball_gate_cc_a_result.txt",
+              "sha256": "b425caec2b0d819eee1171fb58e889ab0b3316928af258023e0b40bf2b5eda20"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_ball_gate_cc_b_result.txt",
+              "sha256": "482c2b0275312a15ec42b1bcaa77716e6fa6c77943609fce0c70c50f091be134"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_ball_gate_cc_pydec_result.txt",
+              "sha256": "0ae15d1de5433277c7c9738abf9980dfa8fda23ce9fe5a5b284aa8764c0e8beb"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_egg_hatch",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_egg_hatch_cc_a_result.txt",
+              "sha256": "1e7f2328a0ac24da19cc7e4da95b97048ebc08045f251db90ad7702a989a524f"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_egg_hatch_cc_b_result.txt",
+              "sha256": "93ff7dff2b157fd972d0e9d2ca0ea183e448b7cfafb56d9737224a4e590bbb81"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_egg_hatch_cc_pydec_result.txt",
+              "sha256": "927d6477fa1bbb1d21535655c48f225816812fee4788e1450dd21b8606ac04a8"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_gift",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gift_cc_a_result.txt",
+              "sha256": "16a5c76795bc71ad84223801dd2d13982edc88702982c260e87ae0fb0af18b56"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gift_cc_b_result.txt",
+              "sha256": "df1f67799eff136d85979de17cea754b048393511ba1dc2ac3fd75d8700a5b0a"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gift_cc_pydec_result.txt",
+              "sha256": "b9e8654707eff2b90f98fae9db9858a8ecf0e0e94be6568bdd9e0a8f3112eb5f"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_boxed_capture",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_boxed_capture_cc_a_result.txt",
+              "sha256": "a514d9da39a0be6f5374ab4b795fadb004efb376f4fba0aab49dce356ac9fbac"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_boxed_capture_cc_b_result.txt",
+              "sha256": "ab99d5d039e4ec4ae7031aac104ba6f5c3a520cbd41b83a80d8a9a6d86cf7065"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_boxed_capture_cc_pydec_result.txt",
+              "sha256": "5e2b791a73fca38161cca385678d494e1a59d4b590c0875addb66357b349865c"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_npc_trade",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_npc_trade_cc_a_result.txt",
+              "sha256": "9fae88d82a2fc0f818d7ff7419e01a8c899b567937d90d71c042282c8349ac15"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_npc_trade_cc_b_result.txt",
+              "sha256": "9c32a0a8f3775933cd1b887b7d097c15d258ae78945f0619905337f6b9a2ad0d"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_npc_trade_cc_pydec_result.txt",
+              "sha256": "e8747e89788a7d99803747c73dc431a073db0df0ddd8d24c60113503313ba968"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_faint_active_trainer",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_trainer_cc_a_result.txt",
+              "sha256": "1fca8979d463a532522a68343d3379433903d8b27ccd18a588201398dcf8fd39"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_trainer_cc_b_result.txt",
+              "sha256": "54140d406c3b1c7d21b53594fc07f3059a56a6c19b7f248e9e27a56639a192d8"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_trainer_cc_pydec_result.txt",
+              "sha256": "00a8b2226b35635a42a5383f59ced9b938fcc4b81ed8a2b0973ce268690204c4"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_evolution",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_evolution_cc_a_result.txt",
+              "sha256": "10d6fde426a5413c20fc0e9d5a3035e2aa294b04838a08caee4206135e2323bd"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_evolution_cc_b_result.txt",
+              "sha256": "95056e9e9ef5d653441f1206e74484f684633d087b3402f664df5ee23641b17a"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_evolution_cc_pydec_result.txt",
+              "sha256": "cfefdbcbe4f4dfdda2b1e7bc22afbf7feda35dc016505dd41d9459e05df2d729"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_species_clause",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_species_clause_cc_a_result.txt",
+              "sha256": "0090ae189825c8679140a485caea3f7baa5b67fbf6742ea5e720fd03a25bab67"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_species_clause_cc_b_result.txt",
+              "sha256": "9357c90413e38bd297248132332a88da44ce68a5e87e7df37a36b8b384dd38bd"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_species_clause_cc_pydec_result.txt",
+              "sha256": "3ee2a6e74d2f7f00810db6c37306276a8335bdde3cd56d7501f7ebee97938335"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "duo.gold.silver.overlay",
@@ -1454,7 +1956,509 @@
         },
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "scenario": "link",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_link_gs_a_result.txt",
+              "sha256": "5f30cab730bc23a13cac5bb6dccd54b1e65e21c9f37e5bfa89028ad0248d3939"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_link_gs_b_result.txt",
+              "sha256": "b383b499999d300bad6e01bf25701b2bfc14567d82bebab3872749f7fa845655"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_link_gs_pydec_result.txt",
+              "sha256": "622d25627c31e0db516a3cf8376cbfd317a703a8fca8114dbb2ebbf0aaaebd89"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_faint",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_gs_a_result.txt",
+              "sha256": "feac66c8bee918547d18ac8f399f06814709efc9eb301fe5a84be0f81c93ed43"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_gs_b_result.txt",
+              "sha256": "1eae54d0ff1210a64b1af3986087ff134f5babd442f2c3a6391ed6934320cfe3"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_gs_pydec_result.txt",
+              "sha256": "877ff05066999f9d30e0f370536db7439ada3a7d9a7c85daa7d7e9b486dbb9bf"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_faint_active",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_gs_a_result.txt",
+              "sha256": "7d07c2f1dc22d59f0fd0cd0c1a7d271561a3d35e525bbe5d41cc87a4d14d96c1"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_gs_b_result.txt",
+              "sha256": "b4b5031a4b99a410ff3b5bc111c4912ceb8c248703e768b3e885b392cb5d9552"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_gs_pydec_result.txt",
+              "sha256": "346f5c4e818f0453587414ce565a512c30604ba1dee19f8f90818451ee15ea28"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_admit_wrong_rom",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_admit_wrong_rom_gs_a_result.txt",
+              "sha256": "859dcfa6d9ea155a2660fc7e099dc09c3b172e6c6f449e94a1353c688da41cd6"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_admit_wrong_rom_gs_b_result.txt",
+              "sha256": "092329e924617eab1be4323840672ab164e993812d3ffa11c550ff56ec3c5352"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_admit_wrong_rom_gs_pydec_result.txt",
+              "sha256": "87410d66436b60770e4df167f81f413647c791c0516729eb7d9a54fcee3c47a5"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_soft_reset",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_soft_reset_gs_a_result.txt",
+              "sha256": "e8edc3afd0e0b66c3808ad132ddc7d1388b66783aa0a473fcb7a9aae63b9addf"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_soft_reset_gs_b_result.txt",
+              "sha256": "f74905e9b3fb9f75a51719d32b2dd07494293af7421f1f0da34993a957f3fd78"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_soft_reset_gs_pydec_result.txt",
+              "sha256": "3f5e38ca6c49bd3e548b81d5e90acda3e7ed1dc9e7cfaa90d6253da8a406bf8b"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_gender_clause",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gender_clause_gs_a_result.txt",
+              "sha256": "b76667031a17c883dd268854d2a2704b61545cd7d3721328f32613eac6e3fcb0"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gender_clause_gs_b_result.txt",
+              "sha256": "e185fe53c7d6123f40a1e834200d13fe0ea586903c3e11e38b3b6b7d33d172cc"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gender_clause_gs_pydec_result.txt",
+              "sha256": "73af1facf543b0ae2b0e88901c9894869a6499344fc9b9a1f289f331cd0d5f20"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_reconnect",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_a_result.txt",
+              "sha256": "159e44dbf8dadd8f6a19dde5c5773497845fea3d9b3c548fa8a7bfdff382031b"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_b_result.txt",
+              "sha256": "540b240e60e250f3fa70e3ea48798b7f624ada6b3eac77ca958c801f27d73618"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_pydec_result.txt",
+              "sha256": "96f229569b192b5008d986e5de94ac99f37c111ddea66d0220647c8c03636dd0"
+            },
+            "a_same_save": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_a_same_save_result.txt",
+              "sha256": "c82593f9647d40eef5d74851200970abe0674a15ee929167b154dfa44e03696f"
+            },
+            "a_wrong_save": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_a_wrong_save_result.txt",
+              "sha256": "e0f07c43baef0d5b88891875f8d4d5061d74c7f8bf13bf1855ff23b8165e4846"
+            }
+          },
+          "staged_saves": {
+            "same_save": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_a_same_save_seed.SaveRAM",
+              "sha256": "2f924c122dd84ac65b2f041e2371195225352e94c37ad3edee5d4e5afd56c5f1"
+            },
+            "wrong_save": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_a_wrong_save_seed.SaveRAM",
+              "sha256": "37a469b1ed2e6f1ca72b923aa3ac4ad9628166df567aa68bfbcef7bfb07ad7fa",
+              "case": "gold_battle_ot2"
+            }
+          },
+          "witness_snapshots": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_reconnect_gs_a_witness.SaveRAM",
+              "sha256": "2f924c122dd84ac65b2f041e2371195225352e94c37ad3edee5d4e5afd56c5f1"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_new",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_new_gs_a_result.txt",
+              "sha256": "2d94d7cc25a80f00633fae59d5b6b2bf092ea8d36848767ab22f4a5939243098"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_new_gs_b_result.txt",
+              "sha256": "69636933f7d5c08bbac2a852989d5bb36b71e574b2bb6c01dd9993435a718165"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_new_gs_pydec_result.txt",
+              "sha256": "555904e3c43d2bee3dd1867861faa5f5877c72618c8587768cabef68dd59967b"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_evolve",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_evolve_gs_a_result.txt",
+              "sha256": "429e4ba6d63b5a0bf1857a2eab4a75bfc3d43bb7034f6662c3ce0b34b7157d5f"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_evolve_gs_b_result.txt",
+              "sha256": "7242e99611020deb33d8537d6b2ea363d1c011cd365dcf49c510930d7d4a77e6"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_evolve_gs_pydec_result.txt",
+              "sha256": "a740d78c057ea264ba29dfb07860ea59113d71b41d0a2af93a00061d79746052"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_decline_new",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_decline_new_gs_a_result.txt",
+              "sha256": "9ddffc48009f31d4277caefc9e95f85460fc39dfc731ec51a64e81c43ef36b7c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_decline_new_gs_b_result.txt",
+              "sha256": "d05f111e6a8bedae5e4db642b9e02bc64677ac0d21e58309cf3f3de71c1c2f62"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_decline_new_gs_pydec_result.txt",
+              "sha256": "5d487cce9f89697502b1215859332aab968c16e371d74b4c1f97f4164f8027c3"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_timeout",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_timeout_gs_a_result.txt",
+              "sha256": "792f04f14bb0f33af8958726d8721272c0ba2c7de2e548bbe24860ea59e1f425"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_timeout_gs_b_result.txt",
+              "sha256": "f46bb3cf8a964930a756e64b0011584770ea6420429ce7a7fdfc595b5f2beeb0"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_timeout_gs_pydec_result.txt",
+              "sha256": "5971d6178d1e6e44cbc7aa4ab0722bcf3a4ca49fe00987da3b971601ec01ed71"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_reset_wait",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_wait_gs_a_result.txt",
+              "sha256": "cfc9f3207e1799d5ab61404d0e061a1e745d5793bde4dc53587e976a9ec6de26"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_wait_gs_b_result.txt",
+              "sha256": "405a5103ecf13199ef872bcc908028b872f5837a7b84aae5a32ac32af662b4ed"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_wait_gs_pydec_result.txt",
+              "sha256": "3e3e504b9860de79b08a8918f1fd919828c3fe6c85f7869b96d6b5dfef5e00f6"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_reset_commit",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_commit_gs_a_result.txt",
+              "sha256": "4dd73e5d023238a974a6c0555d10cd95b886106b8acc64178e7d932c38a52ae9"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_commit_gs_b_result.txt",
+              "sha256": "0e8ef842398eadfde28940e2c052d4b2da452cfc65fdb628f9760581ef51cc6c"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_commit_gs_pydec_result.txt",
+              "sha256": "9cec8416b5cdeb9902602ba3e123a8bf32005d7b4a21fad36b0dc1a85a14f394"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_refuse_item",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_refuse_item_gs_a_result.txt",
+              "sha256": "c7452df035b0e1b44cea0a1fef13745df7b398bb127f6bc9c519a7b75398990b"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_refuse_item_gs_b_result.txt",
+              "sha256": "ddc8a705d734462636755e3d4bcdda41dbb2c369e2ace9dea3734ecc14c25445"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_refuse_item_gs_pydec_result.txt",
+              "sha256": "6c8d51e158385c47e89845587d1556f4d09fc5f91bad441adf831f1fa34ee083"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_whiteout",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_gs_a_result.txt",
+              "sha256": "b08d785aaef6ee9952311d17c3b1228b79716f4116a8841cab372c9435919497"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_gs_b_result.txt",
+              "sha256": "06977c9d41eda6d6ee3c8d6aebe533f6a4311bbf91b3b1d74e231f7f12ffc06d"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_gs_pydec_result.txt",
+              "sha256": "ac0df01e341f168d5cac0a9f8f56fc16db57e094ebd03129cbdeb139f21723a7"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_pc_ops",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_pc_ops_gs_a_result.txt",
+              "sha256": "0f322a37b8da11115cfb58d09b400a159c6358d64cac2cf7012ed0254d53f24c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_pc_ops_gs_b_result.txt",
+              "sha256": "e64c862b9f949981175acaa371dad737ef89e85f74263fc17d2ea77d173fa0d5"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_pc_ops_gs_pydec_result.txt",
+              "sha256": "55c74a61492e6bc6d687050094f69193197949a5f91cbdbebb8cf671e3d477c2"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_whiteout_rebuild",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_rebuild_gs_a_result.txt",
+              "sha256": "d2c10604d5a69447f76d58b9650b3ae9f238541955625f6cba9aafff20bb24d0"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_rebuild_gs_b_result.txt",
+              "sha256": "c160a4a92c9dfad80a7f1fc41f947f3780404238f0abca4e60d3c00647cf7530"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_whiteout_rebuild_gs_pydec_result.txt",
+              "sha256": "25bb04006e67f3c15bbf6996e971c625caabf1e468223dd10390c969de527d93"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_ball_gate",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_ball_gate_gs_a_result.txt",
+              "sha256": "f0b206f90ab817bc4dcac4f58b6962c67aed444eda96c61a00b2f121814240ab"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_ball_gate_gs_b_result.txt",
+              "sha256": "87d264bf7641fa81a770bb35a36b8218ea1f4d2f2a25f418cc39059b82a82633"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_ball_gate_gs_pydec_result.txt",
+              "sha256": "cc2c022c202e63210eb30b5226d1f72c9c1c21180dfb09c38d1629b28b772a7a"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_egg_hatch",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_egg_hatch_gs_a_result.txt",
+              "sha256": "ee148eb785e32d019df061e5726d06d3427b5d85cd65540e3c0b009f7a9578e4"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_egg_hatch_gs_b_result.txt",
+              "sha256": "5754b434a6897469ce19494f3bd2883b9a32c2683bf911df89d36db2414cfbf6"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_egg_hatch_gs_pydec_result.txt",
+              "sha256": "99b489bfdd598c103ae4d0b448900ddfa535ed499a0ec6564aaf78fd0e2f84e6"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_gift",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gift_gs_a_result.txt",
+              "sha256": "8fd5601a87679197834c8e511c978e2c8b367d7b04428216692ffd1e24fa7157"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gift_gs_b_result.txt",
+              "sha256": "24017df071cb67010b57db7e73a0788be5890b5dabfc6f9b6dc7ed929974b239"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_gift_gs_pydec_result.txt",
+              "sha256": "a49505b0ac1f265286214977d91a9931facb97033b7c7ca37095811a728a77ac"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_boxed_capture",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_boxed_capture_gs_a_result.txt",
+              "sha256": "5794cec50dbaccf793dd3e4698290919b14cabd558a2b5dfc99e6f366251fe02"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_boxed_capture_gs_b_result.txt",
+              "sha256": "1887f59296b003aaf6c4916acb9d73963224c621b2d0e743807d6d515dab196c"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_boxed_capture_gs_pydec_result.txt",
+              "sha256": "8e7b80d0b8f45e295d90835e3a133f749e315371d6e482995374a6cd20080c5f"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_npc_trade",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_npc_trade_gs_a_result.txt",
+              "sha256": "75cc1492c8416273f36d02c1f6e574eef7a36b67b8af81affad602215065e14a"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_npc_trade_gs_b_result.txt",
+              "sha256": "323a126e7bf7acdac7c57be619b92fd22cb1cd8468189b7c3c84d1296388eb09"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_npc_trade_gs_pydec_result.txt",
+              "sha256": "220707c0d651beac76dcc31b3d8834db4094cc5d0977a6c46867cd86d1e58cc6"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_faint_active_trainer",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_trainer_gs_a_result.txt",
+              "sha256": "0ab4fd0884394e7ca965e1297d9eedfb609a4730eed694b0d0fdf0303f0e6cb4"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_trainer_gs_b_result.txt",
+              "sha256": "1730346e1e14d945b3f8046fc5a58db7aac3743e54356457afff64a7af4a9ea8"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_faint_active_trainer_gs_pydec_result.txt",
+              "sha256": "0faf1811e79f0939a102147f073a92305c589f0fe673866f9becae0de9f3ca00"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_evolution",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_evolution_gs_a_result.txt",
+              "sha256": "792daeb52bf4ab9287d146c1563be934f476104aa3da09cfad575bf0f82ab18d"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_evolution_gs_b_result.txt",
+              "sha256": "e6188fa907c7d04000e77e6857022991a8f61aea78a26d218f09b8c065d5954b"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_evolution_gs_pydec_result.txt",
+              "sha256": "f1e118a8ab6fa609a365f294d0f02bb7887a304d176c467e430f671e3247bc94"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_type_clause",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_type_clause_gs_a_result.txt",
+              "sha256": "c6533b4305ac562d98871a96e15bdf0c76b5caa35b7205ad787cf7b0a7dc5200"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_type_clause_gs_b_result.txt",
+              "sha256": "2f529dfa22f5c7ace1db43a11c10f9783222546004e6ca5a0fdb13e931a7249e"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_type_clause_gs_pydec_result.txt",
+              "sha256": "206bead56dc5246178178229787d3991b93a524a0c200fa4e6d87aacaef56f0c"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_changebox",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_changebox_gs_a_result.txt",
+              "sha256": "a8bbb22bdc5e596a0f896e1d401796f34196b08cae3d5f8efe9aa072186b5234"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_changebox_gs_b_result.txt",
+              "sha256": "c120aa305f794f24b07225b90bc5a8542a126a330ecd2efa8c11c9299ec1fadd"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_changebox_gs_pydec_result.txt",
+              "sha256": "a5818cb72dcbfb6e31dc373668d074d1a6b0f43436de059e2e5b5d216539d16c"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_species_clause",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_species_clause_gs_a_result.txt",
+              "sha256": "3e8c29a0aed2dd167278eea909d8d9a88e96233e4b3dffc88b5361855704800c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_species_clause_gs_b_result.txt",
+              "sha256": "328666f26d64de6a7115d14435203c3c63e12ed369e44f4e5f4aeac2fb8f48be"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_species_clause_gs_pydec_result.txt",
+              "sha256": "659350f1638a59d990cb5b34d8b1aef0ce7c4e2dcf777057cbb5ebae239205e4"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_poison",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_poison_gs_a_result.txt",
+              "sha256": "1d078db8f2a71c71d3f03811d7a946b323fad9c2c73134822b9d6a0ae3643a04"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_poison_gs_b_result.txt",
+              "sha256": "16343f1d751d75f3278bf00de671c27e710bc3a756a7267b2e9d1b79fa372002"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_poison_gs_pydec_result.txt",
+              "sha256": "6a142d990497f72f67f6b9addbd2ac1c0fe369b82659f9d028d2bb09d47eeb7e"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "duo.crystal.gold.overlay",
@@ -1490,7 +2494,144 @@
         },
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "scenario": "link",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_link_cg_a_result.txt",
+              "sha256": "02d0645635357560f64d3b04d751af1816ce7a916c0d363e399af1f2c0320481"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_link_cg_b_result.txt",
+              "sha256": "19c5e5a83669ed498ecfae930341d9f75c7b204a9cd6fb5f8469e94855ba9f3d"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_link_cg_pydec_result.txt",
+              "sha256": "d0378cd49fe3b546fa7ac2862f7705b13f552249742393a47459b058831d4ddb"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_decline_new",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_decline_new_cg_a_result.txt",
+              "sha256": "16efb46758be5bb4b78ac20d225f2d8921f394fe80b592bb0e0bd42ef2ca0d9a"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_decline_new_cg_b_result.txt",
+              "sha256": "ba98ff88f38ba121ebe2089dee2837aeb2e3625caca651aa5367b5f639bfbc2b"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_decline_new_cg_pydec_result.txt",
+              "sha256": "12623a7c10a384d4a373d4b54f3bd7a5764f4908e028c4bc6e65512f26618841"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_evolve",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_evolve_cg_a_result.txt",
+              "sha256": "548cc4478a8dd452ff15bfddaa4975ee3bfa313fbcd0a63aec2d3bda882dad27"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_evolve_cg_b_result.txt",
+              "sha256": "0cc58f547e98e4cbe1a63a1ff69b3db665dcef2a3b17f6623f3672db7048c343"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_evolve_cg_pydec_result.txt",
+              "sha256": "78134f418a2afa4347768212443ef7f0812b159e36553407279402cd2a85d6f0"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_new",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_new_cg_a_result.txt",
+              "sha256": "00d339177214eaa2483353911ec7f039abd72675666935024eaa0e8d332c1759"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_new_cg_b_result.txt",
+              "sha256": "adcd2dc3f456fdcc47a5690c85749f13192125b91b20250e0279f58474807c65"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_new_cg_pydec_result.txt",
+              "sha256": "b7269583885297f65fd891ea0cce3288dc0bebe9a99cf6534b1251c0a565db92"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_refuse_item",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_refuse_item_cg_a_result.txt",
+              "sha256": "d5f2ece83f3c429e5ab0baaed61b653bcc0971d52f5bc276f0144f5891ad1f22"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_refuse_item_cg_b_result.txt",
+              "sha256": "78ace733aa29c8961d5e9516ee7f81aa6774603d7aa7cd458224996d91e4fb6d"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_refuse_item_cg_pydec_result.txt",
+              "sha256": "5fbe7388a3f171c641184053d56b34f7e3ad9ac81245360afc5fe23a09fc1641"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_reset_commit",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_commit_cg_a_result.txt",
+              "sha256": "95ebd904120cc592cb0fe645370df63785896b241885f7abf8dc9303c3134741"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_commit_cg_b_result.txt",
+              "sha256": "e33753e0dc5da790191b892c452005c541fb5d15e378b2f066a039076ccae928"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_commit_cg_pydec_result.txt",
+              "sha256": "5cfbae559454660ad35fe91b5b1e595411657ffd56b69e4aad1baed94f89a48e"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_reset_wait",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_wait_cg_a_result.txt",
+              "sha256": "a5a91adc71aff34146ffb2d14c5aeaa202223c22f1f17a28110ff1efb0b7e764"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_wait_cg_b_result.txt",
+              "sha256": "fbc99a6edfa9c233541926f8d8d45a17534649334f1815ca91b8badb865455aa"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_reset_wait_cg_pydec_result.txt",
+              "sha256": "5085f2fabbd4b380cab79005c0f7659d7c88887f6ef23f28fb29aed5ad765515"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_trade_timeout",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_timeout_cg_a_result.txt",
+              "sha256": "a0add98a4ea53cb4df64faab5e997a7f73c216c2778fe8e5e5127a43289ea1a3"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_timeout_cg_b_result.txt",
+              "sha256": "6b1c87ccacb555cbf5266bed818c1d1ece3248066286cbefb34e997f85e04475"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/overlay/duo_trade_timeout_cg_pydec_result.txt",
+              "sha256": "3f43cc337db57a2a666af5e13f2b2c6b583d9714ddf95b964bfe2dad1a05af9c"
+            }
+          }
+        }
+      ]
     }
   ]
 }

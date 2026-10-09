@@ -1,0 +1,36 @@
+DUO_GEN2 {"artifact_kind":"overlay","attempt":1,"binding_sha256":"6cbff0ccacd355387c9525aa3a83e7aa4cc9690c1e30d96813b8e8d2ce3a9450","case":"crystal_battle","fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","player":"a","rom_sha1":"d5f342db9c8745fcb0df97932a83d0205c165a00","scenario":"gen2_reconnect","title":"crystal"}
+CLIENT {"artifact_kind":"overlay","binding_sha256":"6cbff0ccacd355387c9525aa3a83e7aa4cc9690c1e30d96813b8e8d2ce3a9450","pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d5f342db9c8745fcb0df97932a83d0205c165a00","title":"crystal"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3182
+TX {"area_id":"route_29","artifact_kind":"overlay","badges":0,"ball_count":10,"companion_abi":3,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":4
+HELLO {"ball_count":10,"frame":3305,"has_pokeballs":true,"ot_id":46401}
+  phase loaded @3305
+RX resolved_areas
+RX config
+RX dead_keys
+RX link_panel
+BOOTED {"frame":3335,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 F794:B541:9E
+  phase walk @3441 xy=53,12
+  phase battle @3791 xy=53,12
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5434,"key":"C886:B541:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"C886:B541:10","level":2,"maxHP":13,"nickname":"PIDGEY","player":"a","seq":45,"species_id":16,"stats":{"level":2,"maxHP":
+CAPTURE_SENT {"frame":5434,"key":"C886:B541:10","seq":45}
+CAUGHT C886:B541:10
+RX box_mon key=C886:B541:10
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"a","seq":46}
+TX {"event":"stats_cache","key":"C886:B541:10","player":"a","seq":49,"stats":{"level":2,"maxHP":13}}
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":8222,"text":"PIDGEY and RATTATA linked!"}
+RX party_mon key=C886:B541:10
+RX link_panel
+TX {"event":"sync_retrieve_done","key":"C886:B541:10","player":"a","seq":141}
+  phase save @8224 xy=53,12
+RX link_panel
+  phase saved @8889 xy=53,12
+MYKEY 0 F794:B541:9E
+MYKEY 1 C886:B541:10
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"e12df3324190d333d6571922fda52d3db63fac524e1d30af982f732c275bf9d0","client_saves":1,"flushed_matches":true,"frame":8919,"gate_saves":1,"save_completed_frame":8889,"saveram_bytes":32790,"saveram_path":"F:/slink-work/lanes/gen2/fs1/patch/build/saveram_gen2_reconnect_s481_a/gen2 crystal overlay.SaveRAM","snapshot_path":"F:/slink-work/lanes/gen2/fs1/patch/build/e2e_gen2_reconnect_s481_a_witness.SaveRAM"}
+RECONNECT_READY {"frame":8919,"key":"C886:B541:10","phase":"initial","player":"a"}

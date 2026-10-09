@@ -1,0 +1,526 @@
+{
+ "artifact_kind": "overlay",
+ "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+ "binding_sha256": "1f9b89bc1be2fe9fc62f502365131eac5dac3495d4b2c91e8c3e8d271844403b",
+ "code_digest": {
+  "commit": "926fa17178f1ad63a40753a84a9945bfa26493f2",
+  "digest": "49a338779ea7e0b5a4d9ab2ededb8d0cf3eb5ad5c615b8f539b8334770034338",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
+ "corpus_frames": 211680,
+ "evidence_level": "PHYSICAL",
+ "facts": {
+  "allow": [
+   {
+    "bank": 19,
+    "hi": 32768,
+    "lo": 16384,
+    "name": "SLink service bank"
+   },
+   {
+    "bank": 0,
+    "hi": 122,
+    "lo": 99,
+    "name": "SlinkDelayFrameBridge"
+   },
+   {
+    "bank": 0,
+    "hi": 145,
+    "lo": 128,
+    "name": "SlinkResetSoundBridge"
+   },
+   {
+    "bank": 0,
+    "hi": 154,
+    "lo": 145,
+    "name": "SlinkTitleBridge"
+   },
+   {
+    "bank": 0,
+    "hi": 256,
+    "lo": 154,
+    "name": "SlinkMainMenuBridge"
+   },
+   {
+    "bank": 4,
+    "hi": 28078,
+    "lo": 28066,
+    "name": "SlinkStartMenuEntry"
+   }
+  ],
+  "control": 52970,
+  "hrombank": 65439,
+  "init": {
+   "entry": 1489,
+   "hi": 1549,
+   "lo": 1541,
+   "name": "Init WRAM0 clear"
+  },
+  "overlay_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+  "regions": [
+   {
+    "hi": 55677,
+    "lo": 55675,
+    "name": "wSpecialPhoneCallID",
+    "slink_allow": [
+     "SLink service bank"
+    ],
+    "wram_bank": 1
+   }
+  ],
+  "span": [
+   49625,
+   49664
+  ]
+ },
+ "fixture": "gold_battle",
+ "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
+ "harness_write_scopes": [],
+ "input_mode": "normal_buttons",
+ "legs": {
+  "panel": {
+   "allowed_writes": 148953,
+   "armed_frame": 1,
+   "boot_clear": {},
+   "boot_writes": 0,
+   "clock_setup": null,
+   "control": {
+    "lua_addr": 49645,
+    "lua_caught": true,
+    "lua_kind": "harness",
+    "lua_source": "main",
+    "native_addr": 52970,
+    "native_allowed": 11449,
+    "native_caught": true,
+    "native_flagged": 12695,
+    "native_writers": {
+     "00:0068 SlinkDelayFrameBridge+0x5": 11449,
+     "00:01CE VBlank_Normal.done_oam+0x4": 12453,
+     "00:021D VBlank_Cutscene.skip_lcd+0x4": 190,
+     "00:0607 Init.ByteFill+0x2": 1,
+     "33:41DF BattleAnimDelayFrame.wait+0x0": 51
+    }
+   },
+   "corpus_frames": 12862,
+   "driver": null,
+   "evidence_level": "PHYSICAL",
+   "fixture": "gold_battle",
+   "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
+   "gate": "lua/tests/gen2_panel_gate.lua",
+   "init_entries": [
+    1
+   ],
+   "inner_completed": true,
+   "leg": "panel",
+   "lua_callbacks_fired": 0,
+   "lua_writes": {
+    "client": {
+     "lua/write_permit.lua": 16
+    },
+    "harness": {}
+   },
+   "observed_rom_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+   "overlay_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+   "qualification_attempt_id": "r2q3",
+   "regions": {
+    "wSpecialPhoneCallID": {
+     "hi": 55677,
+     "lo": 55675,
+     "lua": {},
+     "lua_fired": 0,
+     "native": {
+      "00:0607 Init.ByteFill+0x2": 2,
+      "00:3120 CopyBytes.CopyByte+0x2": 2
+     },
+     "other_bank": 0,
+     "slink": {},
+     "wram_bank": 1
+    }
+   },
+   "schema": "gen2-w6-leg-v1",
+   "span": [
+    49625,
+    49664
+   ],
+   "violation_count": 0,
+   "violations": [],
+   "writers": {
+    "13:4006 SlinkService+0x6": 11449,
+    "13:4009 SlinkService+0x9": 11449,
+    "13:400C SlinkService+0xc": 11449,
+    "13:400F SlinkService+0xf": 11449,
+    "13:4012 SlinkService+0x12": 11449,
+    "13:4017 SlinkService+0x17": 11449,
+    "13:4026 SlinkService+0x26": 1,
+    "13:402A SlinkService+0x2a": 1,
+    "13:402D SlinkService+0x2d": 1,
+    "13:403D SlinkService.sample+0xe": 11448,
+    "13:4045 SlinkService.remember+0x0": 11448,
+    "13:4049 SlinkService.remember+0x4": 11449,
+    "13:4C89 SlinkPanel+0xb": 15,
+    "13:4C8C SlinkPanel+0xe": 15,
+    "13:4C8F SlinkPanel+0x11": 15,
+    "13:4CBE SlinkPanel.page+0x2a": 16,
+    "13:4CC9 SlinkPanel.ready+0x0": 8,
+    "13:4CF4 SlinkPanel.ready+0x2b": 1,
+    "13:4CFA SlinkPanel.close+0x4": 15,
+    "13:4CFD SlinkPanel.close+0x7": 15,
+    "13:4D00 SlinkPanel.close+0xa": 15,
+    "13:4E38 SlinkPhoneService.armed_valid+0x6": 11449,
+    "13:4F59 SlinkSfxService.reset_blocked+0x0": 11449,
+    "13:4F5D SlinkSfxService.reset_blocked+0x4": 11449,
+    "13:4F60 SlinkSfxService.reset_blocked+0x7": 11449
+   }
+  },
+  "sfx": {
+   "allowed_writes": 67932,
+   "armed_frame": 1,
+   "boot_clear": {
+    "00:0607 Init.ByteFill+0x2": 39
+   },
+   "boot_writes": 39,
+   "clock_setup": null,
+   "control": {
+    "lua_addr": 49645,
+    "lua_caught": true,
+    "lua_kind": "harness",
+    "lua_source": "main",
+    "native_addr": 52970,
+    "native_allowed": 5237,
+    "native_caught": true,
+    "native_flagged": 6421,
+    "native_writers": {
+     "00:0068 SlinkDelayFrameBridge+0x5": 5237,
+     "00:01CE VBlank_Normal.done_oam+0x4": 6178,
+     "00:021D VBlank_Cutscene.skip_lcd+0x4": 190,
+     "00:0607 Init.ByteFill+0x2": 2,
+     "33:41DF BattleAnimDelayFrame.wait+0x0": 51
+    }
+   },
+   "corpus_frames": 6473,
+   "driver": null,
+   "evidence_level": "PHYSICAL",
+   "fixture": "gold_battle",
+   "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
+   "gate": "lua/tests/gen2_sfx_gate.lua",
+   "init_entries": [
+    1,
+    5602
+   ],
+   "inner_completed": true,
+   "leg": "sfx",
+   "lua_callbacks_fired": 0,
+   "lua_writes": {
+    "client": {
+     "lua/write_permit.lua": 11
+    },
+    "harness": {}
+   },
+   "observed_rom_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+   "overlay_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+   "qualification_attempt_id": "r2q3",
+   "regions": {
+    "wSpecialPhoneCallID": {
+     "hi": 55677,
+     "lo": 55675,
+     "lua": {},
+     "lua_fired": 0,
+     "native": {
+      "00:0607 Init.ByteFill+0x2": 4,
+      "00:3120 CopyBytes.CopyByte+0x2": 2
+     },
+     "other_bank": 0,
+     "slink": {},
+     "wram_bank": 1
+    }
+   },
+   "schema": "gen2-w6-leg-v1",
+   "span": [
+    49625,
+    49664
+   ],
+   "violation_count": 0,
+   "violations": [],
+   "writers": {
+    "00:0086 SlinkResetSoundBridge+0x6": 1,
+    "00:008A SlinkResetSoundBridge+0xa": 1,
+    "00:008D SlinkResetSoundBridge+0xd": 1,
+    "13:4006 SlinkService+0x6": 5237,
+    "13:4009 SlinkService+0x9": 5237,
+    "13:400C SlinkService+0xc": 5237,
+    "13:400F SlinkService+0xf": 5237,
+    "13:4012 SlinkService+0x12": 5237,
+    "13:4017 SlinkService+0x17": 5237,
+    "13:4026 SlinkService+0x26": 2,
+    "13:402A SlinkService+0x2a": 2,
+    "13:402D SlinkService+0x2d": 2,
+    "13:403D SlinkService.sample+0xe": 5235,
+    "13:4045 SlinkService.remember+0x0": 5235,
+    "13:4049 SlinkService.remember+0x4": 5237,
+    "13:4E38 SlinkPhoneService.armed_valid+0x6": 5237,
+    "13:4F2E SlinkSfxService.play+0xf": 10,
+    "13:4F31 SlinkSfxService.play+0x12": 10,
+    "13:4F34 SlinkSfxService.play+0x15": 10,
+    "13:4F45 SlinkSfxService.hold+0xc": 1,
+    "13:4F49 SlinkSfxService.count+0x0": 1,
+    "13:4F54 SlinkSfxService.count+0xb": 62,
+    "13:4F59 SlinkSfxService.reset_blocked+0x0": 5133,
+    "13:4F5D SlinkSfxService.reset_blocked+0x4": 5165,
+    "13:4F60 SlinkSfxService.reset_blocked+0x7": 5165
+   }
+  },
+  "u1": {
+   "allowed_writes": 1063258,
+   "armed_frame": 1,
+   "boot_clear": {},
+   "boot_writes": 0,
+   "clock_setup": {
+    "base_sha256": "84ecf8e7d885bbd1231678efb79a6dfbcb17603d5788603efa38ce758f4ba26b",
+    "builder": "tools/gen2_synth_fixtures.py",
+    "cartram_sha256": "44acf2ef55bba944362bf79e04930013b365d5f7dd934a8dc01652c7f98b0d88",
+    "field": "BizHawk gambatte RTC trailer",
+    "game_hour": 11,
+    "host_time": 1791553814,
+    "new_hex": "000000006ac8f11600100101050026fd9c0010010105",
+    "old_hex": "000000006ab46dc400000010060026fd9c0000001006",
+    "schema": "gen2-clock-setup-v1",
+    "sha256": "c9177a83dc2f42913ced37d0de29d8768bb87156b7223b4ab8fb2887b0fe5de2",
+    "source_facts": [
+     "home/time.asm FixTime: game time = wStartHour/Minute/Second + RTC",
+     "libgambatte cartridge.cpp:504-580: the 22-byte RTC trailer"
+    ],
+    "start_time": [
+     9,
+     58,
+     55
+    ],
+    "title": "gold"
+   },
+   "control": {
+    "lua_addr": 49645,
+    "lua_caught": true,
+    "lua_kind": "harness",
+    "lua_source": "main",
+    "native_addr": 52970,
+    "native_allowed": 81789,
+    "native_caught": true,
+    "native_flagged": 224720,
+    "native_writers": {
+     "00:0068 SlinkDelayFrameBridge+0x5": 81789,
+     "00:01CE VBlank_Normal.done_oam+0x4": 154391,
+     "00:021D VBlank_Cutscene.skip_lcd+0x4": 37289,
+     "00:0607 Init.ByteFill+0x2": 1,
+     "33:41DF BattleAnimDelayFrame.wait+0x0": 33039
+    }
+   },
+   "corpus_frames": 192345,
+   "driver": {
+    "files": {
+     "lua/tests/duo/gen2_faint_inputs.lua": {
+      "ref": "926fa17178f1ad63a40753a84a9945bfa26493f2",
+      "sha256": "e9f448a62ed055fa47c5bd27b59ed3f11326f78fbcd6e7c95b570251b0c9b026"
+     },
+     "lua/tests/gen2_frame_align.lua": {
+      "ref": "926fa17178f1ad63a40753a84a9945bfa26493f2",
+      "sha256": "d8a133468935eade8a4fe260649a127bbe5cbba9b963f56a222d28565e6515a4"
+     },
+     "lua/tests/gen2_pc_inputs.lua": {
+      "ref": "926fa17178f1ad63a40753a84a9945bfa26493f2",
+      "sha256": "e75c8697d8a659113a5a573d2a80d18e6cb565faba80c9ad1bd100aaf3e1829b"
+     },
+     "lua/tests/gen2_poison_inputs.lua": {
+      "ref": "926fa17178f1ad63a40753a84a9945bfa26493f2",
+      "sha256": "0703936e9cd9dde9b5d4a7124ff2a68ffdf039a607c6cd2983448d6c94063c82"
+     },
+     "lua/tests/gen2_walk.lua": {
+      "ref": "926fa17178f1ad63a40753a84a9945bfa26493f2",
+      "sha256": "a23d52070817e2588753d5363c586832eca4e37164a1ddfbe2c2bd2b370ce3cc"
+     },
+     "tests/live/test_gen2_frame_align.py": {
+      "ref": "926fa17178f1ad63a40753a84a9945bfa26493f2",
+      "sha256": "9ca437688b74ad6c04a0dc1d8a9624ecbd6d281d5d3061afdea4d5a96ba76fd7"
+     }
+    },
+    "ref": "head"
+   },
+   "evidence_level": "PHYSICAL",
+   "fixture": "gold_battle_errand",
+   "fixture_sha256": "9ddbf7d9b3261805860a8116bfa3d7a3165f60c0d1fa47a5ab25e5ac822a7c70",
+   "gate": "lua/tests/gen2_frame_align.lua",
+   "init_entries": [
+    1
+   ],
+   "inner_completed": true,
+   "leg": "u1",
+   "lua_callbacks_fired": 0,
+   "lua_writes": {
+    "client": {},
+    "harness": {}
+   },
+   "observed_rom_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+   "overlay_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+   "poison_setup": {
+    "base_fixture": "gold_battle_errand",
+    "base_sha256": "9ddbf7d9b3261805860a8116bfa3d7a3165f60c0d1fa47a5ab25e5ac822a7c70",
+    "builder": "tools/gen2_synth_fixtures.py",
+    "checksums": "restored (primary + backup)",
+    "edits": {
+     "balls": [
+      [
+       "MASTER_BALL",
+       5
+      ]
+     ],
+     "party_status": {
+      "hp": 8,
+      "slot": 0,
+      "status": 8
+     }
+    },
+    "fields": [
+     {
+      "backup": 3319,
+      "new_hex": "0105ff00000000000000000000000000000000000000000000",
+      "offset": 0,
+      "old_hex": "050fff00000000000000000000000000000000000000000000",
+      "primary": 9317,
+      "size": 25,
+      "symbol": "wBalls",
+      "wram": 54781
+     },
+     {
+      "backup": 4336,
+      "new_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005080000080014000c000c00090009000a",
+      "offset": 0,
+      "old_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005000000140014000c000c00090009000a",
+      "primary": 10386,
+      "size": 48,
+      "symbol": "wPartyMon1",
+      "wram": 55850
+     },
+     {
+      "cart": 11625,
+      "new_hex": "efe8",
+      "offset": 0,
+      "old_hex": "01e9",
+      "size": 2,
+      "symbol": "sChecksum",
+      "wram": null
+     },
+     {
+      "cart": 32365,
+      "new_hex": "efe8",
+      "offset": 0,
+      "old_hex": "01e9",
+      "size": 2,
+      "symbol": "sBackupChecksum",
+      "wram": null
+     }
+    ],
+    "schema": "gen2-synth-disclosure-v1",
+    "sha256": "84ecf8e7d885bbd1231678efb79a6dfbcb17603d5788603efa38ce758f4ba26b",
+    "source_facts": [
+     "constants/pokemon_data_constants.asm MON_STATUS/MON_HP; macros/ram.asm party_struct",
+     "data/games/gen2_<title>/items.json ids; engine/items/items.asm pocket layout"
+    ],
+    "title": "gold"
+   },
+   "poison_start_phase": "tick",
+   "qualification_attempt_id": "r2q4",
+   "regions": {
+    "wSpecialPhoneCallID": {
+     "hi": 55677,
+     "lo": 55675,
+     "lua": {},
+     "lua_fired": 0,
+     "native": {
+      "00:0607 Init.ByteFill+0x2": 2,
+      "00:3120 CopyBytes.CopyByte+0x2": 2
+     },
+     "other_bank": 0,
+     "slink": {},
+     "wram_bank": 1
+    }
+   },
+   "schema": "gen2-w6-leg-v1",
+   "span": [
+    49625,
+    49664
+   ],
+   "synth_psn": true,
+   "violation_count": 0,
+   "violations": [],
+   "writers": {
+    "13:4006 SlinkService+0x6": 81789,
+    "13:4009 SlinkService+0x9": 81789,
+    "13:400C SlinkService+0xc": 81789,
+    "13:400F SlinkService+0xf": 81789,
+    "13:4012 SlinkService+0x12": 81789,
+    "13:4017 SlinkService+0x17": 81789,
+    "13:4026 SlinkService+0x26": 1,
+    "13:402A SlinkService+0x2a": 1,
+    "13:402D SlinkService+0x2d": 1,
+    "13:403D SlinkService.sample+0xe": 81788,
+    "13:4045 SlinkService.remember+0x0": 81788,
+    "13:4049 SlinkService.remember+0x4": 81789,
+    "13:4E38 SlinkPhoneService.armed_valid+0x6": 81789,
+    "13:4F59 SlinkSfxService.reset_blocked+0x0": 81789,
+    "13:4F5D SlinkSfxService.reset_blocked+0x4": 81789,
+    "13:4F60 SlinkSfxService.reset_blocked+0x7": 81789
+   }
+  }
+ },
+ "observed_rom_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+ "overlay_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+ "result": "PASS",
+ "rom_sha1": "51b076ac7eba099a273ff7aff5c64ccb790825dd",
+ "schema": "gen2-w6-gate-v1",
+ "title": "gold",
+ "violation_count": 0,
+ "writers": {
+  "00:0086 SlinkResetSoundBridge+0x6": 1,
+  "00:008A SlinkResetSoundBridge+0xa": 1,
+  "00:008D SlinkResetSoundBridge+0xd": 1,
+  "13:4006 SlinkService+0x6": 98475,
+  "13:4009 SlinkService+0x9": 98475,
+  "13:400C SlinkService+0xc": 98475,
+  "13:400F SlinkService+0xf": 98475,
+  "13:4012 SlinkService+0x12": 98475,
+  "13:4017 SlinkService+0x17": 98475,
+  "13:4026 SlinkService+0x26": 4,
+  "13:402A SlinkService+0x2a": 4,
+  "13:402D SlinkService+0x2d": 4,
+  "13:403D SlinkService.sample+0xe": 98471,
+  "13:4045 SlinkService.remember+0x0": 98471,
+  "13:4049 SlinkService.remember+0x4": 98475,
+  "13:4C89 SlinkPanel+0xb": 15,
+  "13:4C8C SlinkPanel+0xe": 15,
+  "13:4C8F SlinkPanel+0x11": 15,
+  "13:4CBE SlinkPanel.page+0x2a": 16,
+  "13:4CC9 SlinkPanel.ready+0x0": 8,
+  "13:4CF4 SlinkPanel.ready+0x2b": 1,
+  "13:4CFA SlinkPanel.close+0x4": 15,
+  "13:4CFD SlinkPanel.close+0x7": 15,
+  "13:4D00 SlinkPanel.close+0xa": 15,
+  "13:4E38 SlinkPhoneService.armed_valid+0x6": 98475,
+  "13:4F2E SlinkSfxService.play+0xf": 10,
+  "13:4F31 SlinkSfxService.play+0x12": 10,
+  "13:4F34 SlinkSfxService.play+0x15": 10,
+  "13:4F45 SlinkSfxService.hold+0xc": 1,
+  "13:4F49 SlinkSfxService.count+0x0": 1,
+  "13:4F54 SlinkSfxService.count+0xb": 62,
+  "13:4F59 SlinkSfxService.reset_blocked+0x0": 98371,
+  "13:4F5D SlinkSfxService.reset_blocked+0x4": 98403,
+  "13:4F60 SlinkSfxService.reset_blocked+0x7": 98403
+ }
+}

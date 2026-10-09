@@ -575,7 +575,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/crystal.panel_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal.panel_gate.json",
+              "sha256": "d11d3295a09cefb3728e26f7b9a15a7aa454b337ef1fbd41874c634dbb8f2316"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.panel.gold",
@@ -591,7 +600,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/gold.panel_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold.panel_gate.json",
+              "sha256": "685207f3f863eaaaf35ce92502291b1d3e5aa69734b33791ac0646ef42733b73"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.panel.silver",
@@ -607,7 +625,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/silver.panel_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver.panel_gate.json",
+              "sha256": "8972b435992f7087d217a01711a9a473529a7585f320d366a94510508e65ccb8"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.sfx.crystal",
@@ -622,7 +649,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/crystal.sfx_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal.sfx_gate.json",
+              "sha256": "a246f198aa6b847d606e64aebe3ba5539bd3439b4af54c1be70b675c2efd12b9"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.sfx.gold",
@@ -637,7 +673,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/gold.sfx_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold.sfx_gate.json",
+              "sha256": "66a8b0de677f503ca5bb93a8990c9683f135c74081c0166ab87d3f869cfbec61"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.sfx.silver",
@@ -652,7 +697,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/silver.sfx_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver.sfx_gate.json",
+              "sha256": "f1b9f56c9f624a80f3cad9aedc0e8a7756d2a377019f7987485f11603fe831c5"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.w6.crystal",
@@ -667,7 +721,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/crystal.w6_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal.w6_gate.json",
+              "sha256": "ec79fcff22ceb69ce6569b7555bcfc1ddceab5f2cfac461255de5023300b22e5"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.w6.silver",
@@ -682,7 +745,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/silver.w6_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver.w6_gate.json",
+              "sha256": "f451ca43a6a816f3dc7475cf7bac830ea87a9ec7c927dc7227b9aa8253814c6d"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.w6.gold",
@@ -697,7 +769,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/gold.w6_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold.w6_gate.json",
+              "sha256": "8a6a9f4292bea88c3127812b6caa6bb7a5a412003731db137ec8942584f39c4c"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.phone.crystal",
@@ -712,7 +793,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/crystal.phone_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal.phone_gate.json",
+              "sha256": "9be27ba45cb6e17f44c422edb9b865f3c80ce883c759fad0c8920c829a74ae2c"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.phone.gold",
@@ -727,7 +817,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/gold.phone_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold.phone_gate.json",
+              "sha256": "0349cc12c8cc40af8b53dc718d16c88ed7c2e1d323001e9f5a800340d70ddaab"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.phone.silver",
@@ -742,7 +841,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/silver.phone_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver.phone_gate.json",
+              "sha256": "9fb26f347369fb4e6ed6b222f22ccaa607b20f4d18f19d820bd040866757a176"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.sp-lowwater.crystal",
@@ -758,7 +866,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/crystal.sp_lowwater_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal.sp_lowwater_gate.json",
+              "sha256": "f92e2019e95bef22469f97dbbafcde8e53d9ad22e58c0005a358e91c4fce091a"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.sp-lowwater.gold",
@@ -774,7 +891,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/gold.sp_lowwater_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold.sp_lowwater_gate.json",
+              "sha256": "2c894337edb76173f2909a8134478bb816a01f8d5aa02b69974b16dbc0b71b06"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.sp-lowwater.silver",
@@ -790,7 +916,16 @@
         "artifact_kind": "overlay",
         "receipt_path": "tests/fixtures/gen2/receipts/overlay/silver.sp_lowwater_gate.json"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver.sp_lowwater_gate.json",
+              "sha256": "d29504f7a0784e5ddb08bfe8f66b9e3ec8e7f39ee06d2563caf85801a15b914f"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.inspect-run",
@@ -833,7 +968,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal.engine_sites.json",
+              "sha256": "470a13652400ef839b6ae970f3bab32929b0f088c63157674fee44ddabd173f6"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.engine-sites.gold.overlay",
@@ -848,7 +992,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold.engine_sites.json",
+              "sha256": "d29725d7825649a0ed25feb83a596c95ccc22f119c56f528db6f4f7be47f04f5"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.engine-sites.silver.overlay",
@@ -863,7 +1016,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver.engine_sites.json",
+              "sha256": "b7588f9eaab098519de5935279edbdc6a78260f9aca9ffd5f92aa5c036e8a631"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.write-window.crystal.overlay",
@@ -881,7 +1043,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/crystal.write_window.json",
+              "sha256": "7b56bb7cc465e909660af021b0c13b25839540c5fe5ddd47836a747834362d03"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.write-window.gold.overlay",
@@ -899,7 +1070,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/gold.write_window.json",
+              "sha256": "c567250088de5cc65e06002e4ee58e2b51fef2bcedd9d79e033f2201c32e3fdb"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.write-window.silver.overlay",
@@ -917,7 +1097,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/silver.write_window.json",
+              "sha256": "b177ffb662db0709620292884dbc9eb5cd1de28aa0480612eadb91c262e54c8a"
+            }
+          }
+        }
+      ]
     },
     {
       "id": "new-gates.qualification.crystal_town.overlay",
@@ -946,7 +1135,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/crystal_town.qualification.json",
-              "sha256": "93ffee2c43dd9fe7449475597bb9e3812aec8c66db2479f7b818588195d19e1a"
+              "sha256": "b801d0585f7d01691fe22321991c79440f79412173785856fc29b4fe519b227c"
             }
           }
         }
@@ -979,7 +1168,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/crystal_battle.qualification.json",
-              "sha256": "ff1f4805c9c5571430640f5c99ed308d3b28b0914acc1ac00681ea2f3270299d"
+              "sha256": "1477441e212eeab9c67930136262340a53dcc62ddec18f2d6d37bd1bd2969b77"
             }
           }
         }
@@ -1002,7 +1191,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/crystal_town_ot2.qualification.json",
-              "sha256": "d8da1330b851cedbfc8ba88e600210346aa32f2fb5d0a87eb474e0c11327773f"
+              "sha256": "da26eaf5e5182099a3389a2a175b92aeab88dd81bb1de6a699272073a386b649"
             }
           }
         }
@@ -1025,7 +1214,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/crystal_battle_ot2.qualification.json",
-              "sha256": "44e310a8fc2d04bb1abb4c3265991045f9e293a40d9f2eebb2e11ac22e277ed9"
+              "sha256": "6faf2ec57d836f8e19e73c6adeaf669382e97895546550387f699ac7724a0732"
             }
           }
         }
@@ -1058,7 +1247,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/gold_town.qualification.json",
-              "sha256": "78d66da68e2765325855e775fdfb0fb2228643939d690ee8cb58a0553815a143"
+              "sha256": "7c6438492ef64716ab57ae8bc267fe0a9a7eda81748aeff5616edf4b36aa0127"
             }
           }
         }
@@ -1091,7 +1280,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/gold_battle.qualification.json",
-              "sha256": "8012a36b9cf9ee1cb8472cf4ef313fd61f67d0e7f3db6fafc57cc043b102621b"
+              "sha256": "00c93008f12f8574b6ce9a21aa65d8b516c1108277b3b701925690ac194283d5"
             }
           }
         }
@@ -1114,7 +1303,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/gold_battle_ot2.qualification.json",
-              "sha256": "232700307b6bf7a1acad9d8bf933cedb0e0bbc4cc07ecf8a98b79e92e9787842"
+              "sha256": "ddbd452731f974d9000eaa8ca453631b55dd83f42e2d1830b41c5886af0f5500"
             }
           }
         }
@@ -1137,7 +1326,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/gold_battle_errand.qualification.json",
-              "sha256": "6a630b37e1448adc14a66be42b67eb5b5db32c65667302e916f513f9f9261d1c"
+              "sha256": "84c7242dd95c5f535ee4bd2c4b56beee58dce1ed9feeb4cb8aa889bdb39df950"
             }
           }
         }
@@ -1160,7 +1349,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/silver_battle_errand.qualification.json",
-              "sha256": "8298fc1fcc09520798cbcc866f5419c5aba873afb8d00912cd68204ba345d46f"
+              "sha256": "4345fdcd69228b91c87f9023703a71ef1cb517f1618be2fcd33bedfefd5e51bc"
             }
           }
         }
@@ -1183,7 +1372,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/crystal_battle_ot2_errand.qualification.json",
-              "sha256": "6bae6f3648c0ec816e771c1db8113976e82895fb9d6732f7bce4c4a241a1b7aa"
+              "sha256": "5cc7499c35c84cd090f70c938bcd76afc823028548ca7ccdaa70092cbfc5679b"
             }
           }
         }
@@ -1206,7 +1395,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/crystal_battle_errand.qualification.json",
-              "sha256": "0cfd13920771fef04dce400044c15c5e7ddd7d24ed7ebd8ddc10e060e46673b7"
+              "sha256": "6f14147e0c41757a9620c0326f4f2552d749cd141e8b01016ac86244aa8b7c6f"
             }
           }
         }
@@ -1239,7 +1428,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/silver_town.qualification.json",
-              "sha256": "3e97ee000298cda9675ea823cc46b7f82e86bb51b3962f26bad6bd3fcb4d411b"
+              "sha256": "5b00977cc9c4230d24af1c7908d31eebf199a694060a9cd7f6be5ba99630e0e8"
             }
           }
         }
@@ -1272,7 +1461,7 @@
           "receipts": {
             "receipt": {
               "path": "tests/fixtures/gen2/receipts/overlay/silver_battle.qualification.json",
-              "sha256": "9ff773f66fc1792c58950db889f440f2eb7835a02b71c90f3ea68e52b7160306"
+              "sha256": "4b52b3359d3413ea5f9129333809c9f193c8bc458c6fb2819de6a7b62d52c02a"
             }
           }
         }
@@ -1293,7 +1482,16 @@
         ],
         "artifact_kind": "overlay"
       },
-      "proofs": []
+      "proofs": [
+        {
+          "receipts": {
+            "receipt": {
+              "path": "tests/fixtures/gen2/receipts/overlay/live_new_gates.inspect_run.json",
+              "sha256": "81edb8e5cebbcf3773b0d7aa2a7f41d34786d59cc7bc3bd587b4e297c94ba718"
+            }
+          }
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,112 @@
+{
+ "schema": "gen2-c5-duo-cell-v1",
+ "receipt_marker": "gen2.requirement.C-5",
+ "evidence_level": "PHYSICAL",
+ "cell": "c5/cc/gen2_c5_wrong_rom",
+ "covers": [
+  "G-c"
+ ],
+ "pair": "cc",
+ "game": "gen2_new",
+ "scenario": "gen2_c5_wrong_rom",
+ "sha": "2f2284e47c6c2881e0dfd449f40cd92fab17780d",
+ "code_digest": "49a338779ea7e0b5a4d9ab2ededb8d0cf3eb5ad5c615b8f539b8334770034338",
+ "contract": {
+  "upr_version": "4.6.1-slink3",
+  "settings_sha256": "4fd067816f27c0ab4567c8249ebd70c2875eb0e3d3b9b22b87fdc7baa42e4a2c",
+  "categories": [
+   "starters",
+   "statics",
+   "trainers",
+   "wild"
+  ],
+  "players": {
+   "a": {
+    "fingerprint": "",
+    "rom_sha1": "f5a690f22c03cd1b667dde1ccd16c26e7f8196f0",
+    "seed": "49284025970885"
+   },
+   "b": {
+    "fingerprint": "",
+    "rom_sha1": "99f0dbef0bc3b1a22ad95ba418dc3ffda7e44026",
+    "seed": "192750777378789"
+   }
+  }
+ },
+ "provision": {
+  "pair": "cc",
+  "titles": {
+   "a": "crystal",
+   "b": "crystal"
+  },
+  "jar_sha256": "db4bc65c3a0c1761ffc70db6a5c0f495635ab3e0e3c8a99640f34fbb1fb833ac",
+  "spec": {
+   "wild": "random",
+   "wild_restriction": "none",
+   "wild_block_legendaries": true,
+   "wild_min_catch_rate": 5,
+   "wild_levels": 0,
+   "starters": "random",
+   "statics": "random",
+   "static_levels": 0,
+   "trainers": "random",
+   "trainers_similar_strength": false,
+   "trainers_rival_starter": false,
+   "trainers_block_legendaries": true,
+   "trainers_match_typing": false,
+   "trainers_levels": 0,
+   "trainers_force_evolved": 0,
+   "tms": "unchanged",
+   "tm_compat": "unchanged",
+   "tm_sanity": false,
+   "tm_keep_field": false,
+   "field_items": "unchanged",
+   "field_items_ban_bad": false,
+   "tutors": "unchanged",
+   "tutor_compat": "unchanged",
+   "tutor_sanity": false,
+   "tutor_keep_field": false,
+   "trades": "given_and_requested",
+   "trades_items": false,
+   "trades_ivs": false,
+   "trades_nicknames": false,
+   "trades_ots": false,
+   "fastest_text": true,
+   "catching_tutorial": false,
+   "ban_lucky_egg": false,
+   "bw_exp": false
+  },
+  "summary": "wild encounters random, minimum catch rate 5, starters random, static encounters random, trainer teams random, in-game trades random given and requested",
+  "players": {
+   "a": {
+    "rom_sha1": "f5a690f22c03cd1b667dde1ccd16c26e7f8196f0",
+    "kind": "rand_companion",
+    "seed": 49284025970885,
+    "overlay_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00"
+   },
+   "b": {
+    "rom_sha1": "99f0dbef0bc3b1a22ad95ba418dc3ffda7e44026",
+    "kind": "rand_companion",
+    "seed": 192750777378789,
+    "overlay_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00"
+   }
+  }
+ },
+ "receipts": {
+  "receipts/c5/duo_c5_wrong_rom_cc_a_result.txt": "ecc31782b89cc74dfbadd21a859085f88e313b59aef5a953b7257323cfb22f22",
+  "receipts/c5/duo_c5_wrong_rom_cc_a_witness.SaveRAM": "0d38825d5f3daf25ede5c90204c08ff01c689a32cb35095fa7fddcbe7312dfce",
+  "receipts/c5/duo_c5_wrong_rom_cc_b_result.txt": "4164a8d1c42a77345a5ca3d198d6ef023ad34137eec1a43746e310d5bd1f80f8",
+  "receipts/c5/duo_c5_wrong_rom_cc_b_witness.SaveRAM": "bafe918a616e64449e417e7b99459cbc8fc7d64ce861bf9e380134ef5215e56c",
+  "receipts/c5/duo_c5_wrong_rom_cc_pydec_result.txt": "dcc93c443ad2b834167199fb71a6f714a0d46fff04c89dc434fb6142ab6e24bd"
+ },
+ "disclosures": {
+  "SYNTH": [
+   "fixture RTC trailer set by tools/gen2_synth_fixtures.day_clock (e2e_duo clock_setup)"
+  ],
+  "HARNESS": [
+   "tools/c5_runner.py _shim: each instance executes the Manager-provisioned randomized ROM (server.cartridges.provision, pinned jar) in place of the overlay stage; the Manager's rom_contract.json + roms/ sit in the server data dir",
+   "lua/tests C-5 driver change (SLINK_GEN2_RANDOMIZED): the scripted gate keeps the overlay row's facts/view; duo_gen2_main accepts production artifact_kind rand_overlay"
+  ],
+  "NATIVE": "the randomized cartridge, the production client admission and the server contract binding are the behaviour under test and run natively"
+ }
+}

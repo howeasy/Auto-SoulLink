@@ -1,0 +1,35 @@
+DUO_GEN2 {"artifact_kind":"overlay","attempt":1,"binding_sha256":"6cbff0ccacd355387c9525aa3a83e7aa4cc9690c1e30d96813b8e8d2ce3a9450","case":"crystal_battle_ot2","fixture_sha256":"e2298243d3b10965b354184f1778d946a0909402c57b4ccaff574f819cfcc6dd","player":"b","rom_sha1":"d5f342db9c8745fcb0df97932a83d0205c165a00","scenario":"gen2_gender_clause","title":"crystal"}
+CLIENT {"artifact_kind":"overlay","binding_sha256":"6cbff0ccacd355387c9525aa3a83e7aa4cc9690c1e30d96813b8e8d2ce3a9450","pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d5f342db9c8745fcb0df97932a83d0205c165a00","title":"crystal"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3182
+TX {"area_id":"route_29","artifact_kind":"overlay","badges":0,"ball_count":10,"companion_abi":3,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":4
+HELLO {"ball_count":10,"frame":3305,"has_pokeballs":true,"ot_id":44068}
+  phase loaded @3305
+RX resolved_areas
+RX config
+RX dead_keys
+RX link_panel
+BOOTED {"frame":3335,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 21BC:AC24:9E
+  phase walk @3335 xy=53,12
+  phase battle @3610 xy=52,12
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":7680,"key":"EC9C:AC24:13","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":19}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"EC9C:AC24:13","level":2,"maxHP":13,"nickname":"RATTATA","player":"b","seq":72,"species_id":19,"stats":{"level":2,"maxHP"
+CAPTURE_SENT {"frame":7680,"key":"EC9C:AC24:13","seq":72}
+CAUGHT EC9C:AC24:13
+RX box_mon key=EC9C:AC24:13
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":74}
+TX {"event":"stats_cache","key":"EC9C:AC24:13","player":"b","seq":77,"stats":{"level":2,"maxHP":13}}
+  phase save @7747 xy=52,12
+  phase saved @8412 xy=52,12
+MYKEY 0 21BC:AC24:9E
+CLAUSE_CAPTURE {"area_id":"route_29","frame":8442,"gender":"male","key":"EC9C:AC24:13","species_id":19,"types":["Normal"]}
+RX play_sound sound=22
+CLAUSE_VERDICT {"frame":8462,"verdict":"partner_rejected"}
+  phase settle @8462 xy=52,12
+  phase save @8600 xy=52,12
+  phase saved @9096 xy=52,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"67744f309ead7926418ceeb57500c36a0a84f131b7e4d23d41ad7cadd3f7ec6d","client_saves":2,"flushed_matches":true,"frame":9126,"gate_saves":2,"save_completed_frame":9096,"saveram_bytes":32790,"saveram_path":"F:/slink-work/lanes/gen2/fs2/patch/build/saveram_gen2_gender_clause_s501_b/gen2 crystal overlay.SaveRAM","snapshot_path":"F:/slink-work/lanes/gen2/fs2/patch/build/e2e_gen2_gender_clause_s501_b_witness.SaveRAM"}
+RECEIPT {"artifact_kind":"overlay","attempt":1,"binding_sha256":"6cbff0ccacd355387c9525aa3a83e7aa4cc9690c1e30d96813b8e8d2ce3a9450","booted":{"frame":3335,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":7680,"key":"EC9C:AC24:13","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":19},"case":"crystal_battle_ot2","clause":"gender","client":{"artifact_kind":"overlay","binding_sha256":"6cbff0ccacd355387c9525aa3a83e7aa4cc9690c1e30d96813b8e8d2ce3a9450","pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d5f342db9c8745fcb0df97932a83d0205c165a00","title":"crystal"},"fixture_sha256":"e2298243d3b10965b354184f1778d946a0909402c57b4ccaff574f819cfcc6dd","gender":"male","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3305,"has_pokeballs":true,"ot_id":44068},"input_mode":"normal_buttons","key":"EC9C:AC24:13","path":"clause_observed","player":"b","rom_sha1":"d5f342db9c8745fcb0df97932a83d0205c165a00","save":{"cartram_bytes":32768,"cartram_sha256":"67744f309ead7926418ceeb57500c36a0a84f131b7e4d23d41ad7cadd3f7ec6d","client_saves":2,"flushed_matches":true,"frame":9126,"gate_saves":2,"save_completed_frame":9096,"saveram_bytes":32790,"saveram_path":"F:/slink-work/lanes/gen2/fs2/patch/build/saveram_gen2_gender_clause_s501_b/gen2 crystal overlay.SaveRAM","snapshot_path":"F:/slink-work/lanes/gen2/fs2/patch/build/e2e_gen2_gender_clause_s501_b_witness.SaveRAM"},"scenario":"gen2_gender_clause","schema":"gen2-duo-gender-clause-v1","species_id":19,"title":"crystal","types":["Normal"],"verdict":"partner_rejected"}
+RESULT: PASS (gender clause partner_rejected EC9C:AC24:13 (clause_observed))

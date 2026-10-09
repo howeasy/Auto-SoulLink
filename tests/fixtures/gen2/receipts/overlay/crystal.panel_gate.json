@@ -1,0 +1,53 @@
+{
+ "artifact_kind": "overlay",
+ "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+ "binding_sha256": "6cbff0ccacd355387c9525aa3a83e7aa4cc9690c1e30d96813b8e8d2ce3a9450",
+ "checks": {
+  "fade_stress": true,
+  "fallback": true,
+  "menu": true,
+  "panel": true
+ },
+ "client_write_scope": "panel (lua/gen2/panel.lua permit, WRAM0 tilemap/attrmap/mailbox)",
+ "code_digest": {
+  "commit": "2f2284e47c6c2881e0dfd449f40cd92fab17780d",
+  "digest": "49a338779ea7e0b5a4d9ab2ededb8d0cf3eb5ad5c615b8f539b8334770034338",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
+ "core_mode": "CGB",
+ "evidence_level": "PHYSICAL",
+ "fixture": "crystal_battle",
+ "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+ "harness_write_scopes": [],
+ "input_mode": "normal_buttons",
+ "minimum_sp": {
+  "armed": 256,
+  "below_sp_writes": 0,
+  "bottom": 49152,
+  "early_hits": 40,
+  "low_water_addr": 49285,
+  "low_water_frame": 12336,
+  "low_water_sp": 49285,
+  "margin_bytes": 133,
+  "pushes_seen": 102,
+  "span_frames": 9274,
+  "top": 49407
+ },
+ "observed_rom_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00",
+ "overlay_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00",
+ "qualification_attempt_id": "r2q1",
+ "result": "PASS",
+ "rom_sha1": "d5f342db9c8745fcb0df97932a83d0205c165a00",
+ "schema": "gen2-panel-gate-v1",
+ "title": "crystal"
+}

@@ -1,0 +1,53 @@
+{
+ "artifact_kind": "overlay",
+ "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+ "binding_sha256": "0f519bffa9dc90bc0709c3202f49a45790412050e341b9b38907dd8e8e75bc19",
+ "checks": {
+  "fade_stress": true,
+  "fallback": true,
+  "menu": true,
+  "panel": true
+ },
+ "client_write_scope": "panel (lua/gen2/panel.lua permit, WRAM0 tilemap/attrmap/mailbox)",
+ "code_digest": {
+  "commit": "2f2284e47c6c2881e0dfd449f40cd92fab17780d",
+  "digest": "49a338779ea7e0b5a4d9ab2ededb8d0cf3eb5ad5c615b8f539b8334770034338",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
+ "core_mode": "CGB",
+ "evidence_level": "PHYSICAL",
+ "fixture": "silver_battle",
+ "fixture_sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
+ "harness_write_scopes": [],
+ "input_mode": "normal_buttons",
+ "minimum_sp": {
+  "armed": 253,
+  "below_sp_writes": 0,
+  "bottom": 57091,
+  "early_hits": 40,
+  "low_water_addr": 57239,
+  "low_water_frame": 12483,
+  "low_water_sp": 57239,
+  "margin_bytes": 148,
+  "pushes_seen": 96,
+  "span_frames": 9527,
+  "top": 57343
+ },
+ "observed_rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+ "overlay_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+ "qualification_attempt_id": "r2q6",
+ "result": "PASS",
+ "rom_sha1": "209e0b46340f67221d6e5c24d7b1125ac35c9d1d",
+ "schema": "gen2-panel-gate-v1",
+ "title": "silver"
+}
