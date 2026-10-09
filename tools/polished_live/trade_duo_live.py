@@ -1,4 +1,4 @@
-"""ISOLATED enabled trade + cold CONTINUE, never publishes shipped ROM pins.
+"""Shipped native trade + cold CONTINUE; --test-build selects the isolated dev build.
 
 SYNTH: retained receptionist fixture, derived second identity, exactly one link
 seeded through State hello/capture events. Receptionist onward uses native input,
@@ -18,11 +18,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+from tools.polished_live.overlay_pin import overlay_sha1  # noqa: E402
+
+sys.path.insert(0, str(ROOT))
 from server.adapters import polished_codec as pc  # noqa: E402
 from tools.polished_live import duo, reload_probe  # noqa: E402
 
 LANE = Path("F:/slink-work/lanes/pol-tradeduo")
-SHIPPED = "688945795e2656019247f5aaceb7b1d8791e900a"
+SHIPPED = overlay_sha1()
 FIXTURE = Path("F:/slink-work/lanes/pol-svclive/apply-done1/attempt-0003/sram_overlay/pol overlay.SaveRAM")
 DISCLOSURE = "SYNTH: retained receptionist fixture, second identity derivative, one ALIVE link seeded via server events; trade menus/commit/trade_done native"
 
@@ -146,16 +149,21 @@ def stage_root(enabled):
 
 
 def run(args):
+    from tools.build_gen2_companion import _symbols, ups_apply
     from tools.gen1_playthrough import BIZHAWK_CONFIG, EMUHAWK, write_run_config
     from tools.polished_live import harness
-    disabled = (LANE/"disabled/cache/polished/companion-overlay/polishedcrystal-3.2.3.gbc").read_bytes()
-    assert hashlib.sha1(disabled).hexdigest() == SHIPPED, "disabled build failed reproduction"
-    enabled = LANE/"enabled"
-    rom = (enabled/"cache/polished/companion-overlay/polishedcrystal-3.2.3.gbc").read_bytes()
-    root, syms, rom_sha = stage_root(enabled)
-    gate = 0x7E*0x4000+0x573B-0x4000
-    assert disabled[gate] == 0 and rom[gate] == 1
-    diff = [i for i, (a, b) in enumerate(zip(disabled, rom, strict=True)) if a != b]
+    if args.test_build:
+        enabled = LANE/"enabled"
+        rom = (enabled/"cache/polished/companion-overlay/polishedcrystal-3.2.3.gbc").read_bytes()
+        root, syms, rom_sha = stage_root(enabled)
+    else:
+        root = ROOT
+        syms = _symbols(ROOT/"data/polished/polished_slink.sym")
+        rom = ups_apply(duo.RELEASE.read_bytes(), (ROOT/"patch/dist/SLink-Polished.ups").read_bytes())
+        rom_sha = hashlib.sha1(rom).hexdigest()
+        assert rom_sha == overlay_sha1(), "shipped overlay differs from provenance"
+    gate_bank, gate_addr = syms["SlinkTradeCommitEnabled"]
+    assert rom[gate_bank*0x4000+gate_addr-0x4000] == 1
     run_dir = LANE/args.name
     run_dir.mkdir(exist_ok=False)
     a = args.fixture.read_bytes()
@@ -168,8 +176,8 @@ def run(args):
     events = seed_server(srvdir, saves, rom_sha)
     (srvdir/"rom_contract.json").write_text(json.dumps(duo.contract_for(rom_sha)))
     manifest = {"disclosure": DISCLOSURE, "derivation": derivation, "seed_events": events,
-                "test_rom_sha1": rom_sha, "disabled_sha1": SHIPPED, "changed_offsets": diff,
-                "gate": {"bank": 126, "addr": 0x573B, "old": 0, "new": 1}, "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()}
+                "rom_sha1": rom_sha, "shipped_overlay_sha1": overlay_sha1(), "test_build": args.test_build,
+                "gate": {"bank": gate_bank, "addr": gate_addr, "value": 1}, "source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()}
     (run_dir/"manifest.json").write_text(json.dumps(manifest, indent=2))
     port, http = harness.free_port(), harness.free_port()
     processes = {}
@@ -182,7 +190,8 @@ def run(args):
         write_run_config(BIZHAWK_CONFIG, p["config"], saveram_dir=p["sram_dir"], purergb=True)
         Path(p["run"], "syms.json").write_text(json.dumps(probe_symbols(syms)))
         env = dict(os.environ, **duo.side_env(p, role, "127.0.0.1", port))
-        env.update(SLINK_ROOT=root.as_posix(), POL_DRIVER_ROOT=ROOT.as_posix(), POL_COLD="1" if cold else "0")
+        env.update(SLINK_ROOT=root.as_posix(), POL_DRIVER_ROOT=ROOT.as_posix(), POL_COLD="1" if cold else "0",
+                   POL_TRADE_DEV="1" if args.test_build else "0")
         proc = subprocess.Popen([EMUHAWK, "--lua="+(ROOT/"tools/polished_live/trade_duo_live.lua").as_posix(),
                                  "--config="+p["config"], p["rom"]], cwd=ROOT, env=env)
         processes[role] = proc
@@ -266,6 +275,7 @@ def main():
     p.add_argument("--fixture", type=Path, default=FIXTURE)
     p.add_argument("--name", required=True, help="new private attempt name; never overwrite a receipt")
     p.add_argument("--timeout", type=int, default=600)
+    p.add_argument("--test-build", action="store_true", help="explicit old isolated test build/dev composition; default uses shipped normal launcher")
     return run(p.parse_args())
 
 

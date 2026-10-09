@@ -36,18 +36,19 @@ end
 -- Explicit dev option, through the existing Entry.build seam. Private root
 -- contains the enabled build's provenance/profile, not changed shipped pins.
 local original_dofile=dofile
-dofile=function(path)
+if os.getenv("POL_TRADE_DEV")=="1" then dofile=function(path)
     local value=original_dofile(path)
     if path==L.ROOT.."/lua/gen2/entry.lua" then
         local build=value.build
         value.build=function(deps) deps.polished_trade_dev=true return build(deps) end
     end
     return value
-end
+end end
 SLINK_HOST,SLINK_PORT,SLINK_PLAYER=os.getenv("SLINK_HOST"),tonumber(os.getenv("SLINK_PORT")),role
-dofile(L.ROOT.."/lua/gen2/run.lua")
+dofile(L.ROOT.."/lua/slink.lua")
 dofile=original_dofile
-assert(SLINK_GEN2_CLIENT and SLINK_GEN2_PARTS.dev_polished_trade,"enabled test graph failed to compose dev binder")
+local binder=SLINK_GEN2_PARTS and (SLINK_GEN2_PARTS.polished_trade or SLINK_GEN2_PARTS.dev_polished_trade)
+assert(SLINK_GEN2_CLIENT and binder,"enabled graph failed to compose trade binder")
 local C=assert(package.loaded.connector)
 local hello,done,prompt=nil,nil,false
 local queries,abort_reason=0,nil
@@ -106,8 +107,7 @@ end
             L.idle(8)
             for _=1,3 do L.frame({A=true}) end
         elseif role=="a" or prompt then L.pulse("A") else L.frame() end
-        if queries>0 and not done and SLINK_GEN2_PARTS.dev_polished_trade:closed()
-           and SLINK_GEN2_PARTS.dev_polished_trade:disposition()~="COMPLETE" then
+        if queries>0 and not done and binder:closed() and binder:disposition()~="COMPLETE" then
             abort_reason="native trade visit closed before completion"
         end
     end

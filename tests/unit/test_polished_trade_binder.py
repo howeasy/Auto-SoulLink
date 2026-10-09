@@ -18,6 +18,7 @@ from lupa.lua55 import LuaRuntime
 from tests.unit import test_polished_trade_responder as resp, test_polished_trade_service as svc
 
 env = svc.env
+shipped_env = svc.shipped_env
 
 ROOT = svc.REPO
 PATH = ROOT / "lua/gen2/polished_trade.lua"
@@ -163,7 +164,9 @@ class Binder:
 
 
 def test_default_off(env):
-    b = Binder(env, dev=False)
+    profile = copy.deepcopy(PROFILE)
+    profile["overlay"]["trade"]["production"] = False
+    b = Binder(env, dev=False, profile=profile)
     assert b.api is None and "development proposer trade disabled" in b.error
     assert b.writes == []
 
@@ -1577,3 +1580,10 @@ def test_apply_complete_releases_and_resets(env):
 def test_complete_result_mutant_is_red(env):
     with pytest.raises(AssertionError):
         complete_apply(env, ("elseif result == 0 then", "elseif false then"))
+
+
+def test_production_advertises_only_with_enabled_rom(shipped_env, env):
+    live = Binder(shipped_env, dev=False)
+    assert live.api is not None and live.call("advertised") is True
+    disabled = Binder(env, dev=False)
+    assert disabled.api is None and "production trade commit gate disabled" in disabled.error

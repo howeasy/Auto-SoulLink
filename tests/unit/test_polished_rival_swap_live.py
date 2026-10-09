@@ -207,7 +207,9 @@ def test_dry_run_has_no_launch_or_staging(tmp_path, monkeypatch, capsys):
         return original(cmd, **kwargs)
     monkeypatch.setattr(r.subprocess, "Popen", read_only_git)
     out = tmp_path/"must-not-exist"
-    assert r.main(["--dry-run", "--out", str(out)]) == 0
+    route = tmp_path/"native-input-model.json"
+    route.write_text(json.dumps({"steps": [{"frames": 1, "buttons": []}]}))
+    assert r.main(["--dry-run", "--out", str(out), "--route", str(route)]) == 0
     assert not out.exists() and '"setup": "SYNTH"' in capsys.readouterr().out
 
 

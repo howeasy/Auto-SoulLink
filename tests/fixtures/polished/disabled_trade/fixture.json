@@ -1,0 +1,777 @@
+{
+  "description": "Explicit historical commit-disabled MODEL control; production tests use shipped overlay separately. Native symbols are inherited from the pinned clean SYM.",
+  "source_commit": "a31b3308cec5da1009ac62cca77512f96513b511",
+  "overlay_sha1": "688945795e2656019247f5aaceb7b1d8791e900a",
+  "clean_sym_sha256": "be1ca87ad487ade20701ed71fcae4e99bf16b908af727b84575c862b73ea2955",
+  "ups_sha256": "e83548e085ba06f3a671ce01b937984bf2be64222c03fc9ee9fb1a0acdbada57",
+  "overlay_symbols": {
+    "SlinkDelayFrameBridge": [
+      0,
+      112
+    ],
+    "SlinkDelayFrameBridgeEnd": [
+      0,
+      137
+    ],
+    "SlinkResetSoundBridge": [
+      0,
+      137
+    ],
+    "SlinkResetSoundBridgeEnd": [
+      0,
+      154
+    ],
+    "SlinkPhone_CountSetBits": [
+      0,
+      16180
+    ],
+    "SlinkPhone_CheckCellNum": [
+      0,
+      16188
+    ],
+    "SlinkPhone_CallerName": [
+      0,
+      16197
+    ],
+    "SlinkPhone_CanDelete": [
+      0,
+      16210
+    ],
+    "SlinkPhone_CallGate": [
+      0,
+      16219
+    ],
+    "SlinkPhoneCallerName": [
+      0,
+      16248
+    ],
+    "SlinkPhoneBridgeEnd": [
+      0,
+      16264
+    ],
+    "SlinkMainMenuLoopBridge": [
+      0,
+      16274
+    ],
+    "SlinkMainMenuLoopBridgeEnd": [
+      0,
+      16289
+    ],
+    "SlinkTitleBridge": [
+      0,
+      16289
+    ],
+    "SlinkTitleBridgeEnd": [
+      0,
+      16296
+    ],
+    "SlinkService": [
+      126,
+      16384
+    ],
+    "SlinkService.sample": [
+      126,
+      16431
+    ],
+    "SlinkService.remember": [
+      126,
+      16453
+    ],
+    "SlinkPanel": [
+      126,
+      16463
+    ],
+    "SlinkServiceEnd": [
+      126,
+      16463
+    ],
+    "SlinkPanel.page": [
+      126,
+      16477
+    ],
+    "SlinkPanel.nostage": [
+      126,
+      16519
+    ],
+    "SlinkPanel.waitkey": [
+      126,
+      16523
+    ],
+    "SlinkPanel.ready": [
+      126,
+      16526
+    ],
+    "SlinkPanel.close": [
+      126,
+      16565
+    ],
+    "SlinkPanel.WaitForStage": [
+      126,
+      16576
+    ],
+    "SlinkPanel.poll": [
+      126,
+      16578
+    ],
+    "SlinkPanel.WaitForButton": [
+      126,
+      16591
+    ],
+    "SlinkPanel.release": [
+      126,
+      16591
+    ],
+    "SlinkPanel.press": [
+      126,
+      16603
+    ],
+    "SlinkPanelFallback": [
+      126,
+      16616
+    ],
+    "SlinkPanelEnd": [
+      126,
+      16644
+    ],
+    "SlinkSfxService": [
+      126,
+      16644
+    ],
+    "SlinkSfxService.play": [
+      126,
+      16673
+    ],
+    "SlinkSfxService.hold": [
+      126,
+      16699
+    ],
+    "SlinkSfxService.count": [
+      126,
+      16715
+    ],
+    "SlinkSfxService.clear": [
+      126,
+      16727
+    ],
+    "SlinkSfxService.reset_blocked": [
+      126,
+      16731
+    ],
+    "SlinkSfxService.sounds": [
+      126,
+      16739
+    ],
+    "SlinkPrintVersion": [
+      126,
+      16743
+    ],
+    "SlinkSfxServiceEnd": [
+      126,
+      16743
+    ],
+    "SlinkVersionText": [
+      126,
+      16752
+    ],
+    "SlinkVersionText.text": [
+      126,
+      16752
+    ],
+    "SlinkVersionText.end": [
+      126,
+      16765
+    ],
+    "SlinkVersionFieldEnd": [
+      126,
+      16772
+    ],
+    "SlinkTradeCheckHeader": [
+      126,
+      16896
+    ],
+    "SlinkTradeCheckHeader.refuse": [
+      126,
+      16933
+    ],
+    "SlinkTradeCheckToken": [
+      126,
+      16935
+    ],
+    "SlinkTradeCheckToken.byte": [
+      126,
+      16945
+    ],
+    "SlinkTradeCheckToken.refuse": [
+      126,
+      16964
+    ],
+    "SlinkTradeClose": [
+      126,
+      16969
+    ],
+    "SlinkTradeFrameEnd": [
+      126,
+      16980
+    ],
+    "SlinkTradeItemAllowed": [
+      126,
+      17024
+    ],
+    "SlinkTradeAllowedItems": [
+      126,
+      17039
+    ],
+    "SlinkTradeItemAllowedEnd": [
+      126,
+      17039
+    ],
+    "SlinkTradeAllowedItemsEnd": [
+      126,
+      17295
+    ],
+    "SlinkTradeWaitGate": [
+      126,
+      17408
+    ],
+    "SlinkTradeWaitGate.native": [
+      126,
+      17420
+    ],
+    "SlinkTradeTimeoutGate": [
+      126,
+      17424
+    ],
+    "SlinkTradeTimeoutGate.native": [
+      126,
+      17447
+    ],
+    "SlinkTradeGatesCodeEnd": [
+      126,
+      17451
+    ],
+    "SlinkTradeEntry": [
+      126,
+      17536
+    ],
+    "SlinkTradeGatesEnd": [
+      126,
+      17540
+    ],
+    "SlinkTradeSnapshot": [
+      126,
+      17664
+    ],
+    "SlinkTradeSnapshot.done": [
+      126,
+      17715
+    ],
+    "SlinkTradeValidateSnapshot": [
+      126,
+      17719
+    ],
+    "SlinkTradeValidateSnapshot.done": [
+      126,
+      17773
+    ],
+    "SlinkTradeReleaseSnapshot": [
+      126,
+      17777
+    ],
+    "SlinkTradeSnapshotPartyPointer": [
+      126,
+      17778
+    ],
+    "SlinkTradeSnapshotPartyPointer.refuse": [
+      126,
+      17805
+    ],
+    "SlinkTradeSnapshotOffset": [
+      126,
+      17807
+    ],
+    "SlinkTradeSnapshotOffset.next": [
+      126,
+      17810
+    ],
+    "SlinkTradeSnapshotCopy": [
+      126,
+      17815
+    ],
+    "SlinkTradeSnapshotCompare": [
+      126,
+      17822
+    ],
+    "SlinkTradeSnapshotCompare.refuse": [
+      126,
+      17833
+    ],
+    "SlinkTradeSnapshotEnd": [
+      126,
+      17835
+    ],
+    "SlinkTradeValidateRecord": [
+      126,
+      17920
+    ],
+    "SlinkTradeValidateRecord.limit": [
+      126,
+      17951
+    ],
+    "SlinkTradeValidateRecord.refuse": [
+      126,
+      17969
+    ],
+    "SlinkTradeValidateRecord.done": [
+      126,
+      17970
+    ],
+    "SlinkTradeValidateText": [
+      126,
+      17974
+    ],
+    "SlinkTradeValidateText.next": [
+      126,
+      17976
+    ],
+    "SlinkTradeValidateText.refuse": [
+      126,
+      17988
+    ],
+    "SlinkTradeValidateText.ok": [
+      126,
+      17991
+    ],
+    "SlinkTradeValidateText.done": [
+      126,
+      17992
+    ],
+    "SlinkTradeValidateIncomingStaged": [
+      126,
+      17995
+    ],
+    "SlinkTradeValidateIncomingStaged.done": [
+      126,
+      18034
+    ],
+    "SlinkTradeValidateIncoming": [
+      126,
+      18038
+    ],
+    "SlinkTradeValidateIncoming.done": [
+      126,
+      18066
+    ],
+    "SlinkTradeValidateEnd": [
+      126,
+      18070
+    ],
+    "SlinkTradeDispatch": [
+      126,
+      18176
+    ],
+    "SlinkTradeDispatchCodeEnd": [
+      126,
+      18298
+    ],
+    "SlinkTradePromptEntry": [
+      126,
+      18304
+    ],
+    "SlinkTradeDispatchEnd": [
+      126,
+      18307
+    ],
+    "SlinkTradeProposerService": [
+      126,
+      18944
+    ],
+    "SlinkTradeWaitApply": [
+      126,
+      19191
+    ],
+    "SlinkTradeWaitApply.next": [
+      126,
+      19196
+    ],
+    "SlinkTradeWaitApply.wait": [
+      126,
+      19202
+    ],
+    "SlinkTradeWaitRelease": [
+      126,
+      19306
+    ],
+    "SlinkTradeWaitRelease.wait": [
+      126,
+      19309
+    ],
+    "SlinkTradeExit": [
+      126,
+      19354
+    ],
+    "SlinkTradeZeroContext": [
+      126,
+      19363
+    ],
+    "SlinkTradeZeroContext.clear": [
+      126,
+      19368
+    ],
+    "SlinkTradeWriteHeader": [
+      126,
+      19373
+    ],
+    "SlinkTradeNextGeneration": [
+      126,
+      19392
+    ],
+    "SlinkTradeCaptureContext": [
+      126,
+      19403
+    ],
+    "SlinkTradeCaptureContext.copy": [
+      126,
+      19410
+    ],
+    "SlinkTradePublishDone": [
+      126,
+      19435
+    ],
+    "SlinkTradePublishDone.token": [
+      126,
+      19451
+    ],
+    "SlinkTradeWaitAck": [
+      126,
+      19478
+    ],
+    "SlinkTradeWaitAck.wait": [
+      126,
+      19479
+    ],
+    "SlinkTradeWaitAck.refuse": [
+      126,
+      19499
+    ],
+    "SlinkTradeWaitFrame": [
+      126,
+      19501
+    ],
+    "SlinkTradeWaitFrame.refuse": [
+      126,
+      19521
+    ],
+    "SlinkTradeCheckSaved": [
+      126,
+      19523
+    ],
+    "SlinkTradeCheckParty": [
+      126,
+      19530
+    ],
+    "SlinkTradeCheckParty.refuse": [
+      126,
+      19549
+    ],
+    "SlinkTradeCheckMask": [
+      126,
+      19551
+    ],
+    "SlinkTradeCheckMask.shift": [
+      126,
+      19570
+    ],
+    "SlinkTradeCheckMask.refuse": [
+      126,
+      19577
+    ],
+    "SlinkTradeSlotInMask": [
+      126,
+      19579
+    ],
+    "SlinkTradeSlotInMask.shift": [
+      126,
+      19584
+    ],
+    "SlinkTradeSlotInMask.test": [
+      126,
+      19591
+    ],
+    "SlinkTradeCheckOwnSlot": [
+      126,
+      19595
+    ],
+    "SlinkTradeCheckOwnSlot.refuseParty": [
+      126,
+      19634
+    ],
+    "SlinkTradeCheckOwnSlot.refuse": [
+      126,
+      19635
+    ],
+    "SlinkTradeCheckHeldFrame": [
+      126,
+      19637
+    ],
+    "SlinkTradeCheckHeldFrame.refuse": [
+      126,
+      19660
+    ],
+    "SlinkTradeConfirmText": [
+      126,
+      19662
+    ],
+    "SlinkTradeWaitText": [
+      126,
+      19675
+    ],
+    "SlinkTradeProposerServiceEnd": [
+      126,
+      19696
+    ],
+    "SlinkTradeResponderService": [
+      126,
+      20480
+    ],
+    "SlinkTradeResponderService.decline": [
+      126,
+      20641
+    ],
+    "SlinkTradeResponderWait": [
+      126,
+      20649
+    ],
+    "SlinkTradeResponderWait.next": [
+      126,
+      20654
+    ],
+    "SlinkTradeResponderWait.wait": [
+      126,
+      20660
+    ],
+    "SlinkTradeResponderWait.applyPhase": [
+      126,
+      20715
+    ],
+    "SlinkTradeResponderRelease": [
+      126,
+      20796
+    ],
+    "SlinkTradeResponderRelease.wait": [
+      126,
+      20799
+    ],
+    "SlinkTradeResponderExit": [
+      126,
+      20844
+    ],
+    "SlinkTradeResponderExit.closed": [
+      126,
+      20859
+    ],
+    "SlinkTradeResponderOfferText": [
+      126,
+      20862
+    ],
+    "SlinkTradeResponderServiceEnd": [
+      126,
+      20881
+    ],
+    "SlinkTradeCommit": [
+      126,
+      21248
+    ],
+    "SlinkTradeCommit.Mutation": [
+      126,
+      21370
+    ],
+    "SlinkTradeCommit.Player2": [
+      126,
+      21410
+    ],
+    "SlinkTradeCommit.Append": [
+      126,
+      21414
+    ],
+    "SlinkTradeCommit.Evolved": [
+      126,
+      21477
+    ],
+    "SlinkTradeCommit.Refused": [
+      126,
+      21518
+    ],
+    "SlinkTradeCommit.Uncertain": [
+      126,
+      21522
+    ],
+    "SlinkTradeCommit.Restore": [
+      126,
+      21530
+    ],
+    "SlinkTradeCommit.Preflight": [
+      126,
+      21607
+    ],
+    "SlinkTradeCommit.Mail": [
+      126,
+      21735
+    ],
+    "SlinkTradeCommit.Alive": [
+      126,
+      21809
+    ],
+    "SlinkTradeCommit.NextAlive": [
+      126,
+      21827
+    ],
+    "SlinkTradeCommit.Good": [
+      126,
+      21838
+    ],
+    "SlinkTradeCommit.Bad": [
+      126,
+      21840
+    ],
+    "SlinkTradeCommit.PrepareDisplay": [
+      126,
+      21842
+    ],
+    "SlinkTradeCommit.DisplayRecord": [
+      126,
+      21939
+    ],
+    "SlinkTradeCommit.DVs": [
+      126,
+      21954
+    ],
+    "SlinkTradeCommit.ID": [
+      126,
+      21973
+    ],
+    "SlinkTradeCommit.Egg": [
+      126,
+      21998
+    ],
+    "SlinkTradeCommit.CheckAppend": [
+      126,
+      22003
+    ],
+    "SlinkTradeCommit.Record": [
+      126,
+      22019
+    ],
+    "SlinkTradeCommit.Exact": [
+      126,
+      22038
+    ],
+    "SlinkTradeCommit.NextByte": [
+      126,
+      22042
+    ],
+    "SlinkTradeCommit.CheckIdentity": [
+      126,
+      22050
+    ],
+    "SlinkTradeCommit.Names": [
+      126,
+      22093
+    ],
+    "SlinkTradeCommit.GoodAppend": [
+      126,
+      22135
+    ],
+    "SlinkTradeCommit.BadAppend": [
+      126,
+      22137
+    ],
+    "SlinkTradeCommit.Compare": [
+      126,
+      22139
+    ],
+    "SlinkTradeCommit.CheckSave": [
+      126,
+      22150
+    ],
+    "SlinkTradeCommit.BadSave": [
+      126,
+      22216
+    ],
+    "SlinkTradeCommit.SavedSpan": [
+      126,
+      22221
+    ],
+    "SlinkTradeApplyCommit": [
+      126,
+      22235
+    ],
+    "SlinkTradeApplyCommit.Publish": [
+      126,
+      22249
+    ],
+    "SlinkTradeApplyCommit.Hold": [
+      126,
+      22269
+    ],
+    "SlinkTradeCommitSaveText": [
+      126,
+      22315
+    ],
+    "SlinkTradeCommitEnabled": [
+      126,
+      22331
+    ],
+    "SlinkTradeCommitRollback": [
+      126,
+      22332
+    ],
+    "SlinkTradeCommitRollbackVerify": [
+      126,
+      22352
+    ],
+    "SlinkTradeCommitRollbackVerified": [
+      126,
+      22367
+    ],
+    "SlinkTradeCommitEnd": [
+      126,
+      22372
+    ],
+    "SlinkTitleLogoRow0": [
+      126,
+      22528
+    ],
+    "SlinkTitleLogoRow1": [
+      126,
+      22537
+    ],
+    "SlinkTitleBand": [
+      126,
+      22546
+    ],
+    "SlinkTitleTiles": [
+      126,
+      22602
+    ],
+    "SlinkTitleBandEnd": [
+      126,
+      22890
+    ],
+    "SlinkTitleTilesEnd": [
+      126,
+      22890
+    ],
+    "wSlinkMailbox": [
+      0,
+      50699
+    ],
+    "wSlinkPanelText": [
+      0,
+      50733
+    ],
+    "wSlinkMailboxEnd": [
+      0,
+      50768
+    ]
+  }
+}

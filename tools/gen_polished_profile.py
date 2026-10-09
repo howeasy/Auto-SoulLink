@@ -246,12 +246,12 @@ TRADE_STACK_PINS = (
 
 
 def trade_block(symbols: dict, provenance: dict) -> dict:
-    """C2: complete, provenance-bound description, NOT production write authority.
+    """C2: provenance-bound facilities and owner-enabled source gate; qualification remains external.
 
     Numeric DEFs are not exported by this build's sym. Read only sources whose
     bytes match the build receipt; all addresses and record sizes come from sym.
     Capabilities are keyed on the paired start/End markers of each component, never on PromptEntry (a jp
-    trampoline since C6). `responder_service` is true from C6 on (commit still disabled); `production` stays false.
+    trampoline since C6). Production needs every component plus the verified commit-enable define; test builds stay unadvertised.
     `staging` is the host payload allowlist; `snapshot` is ROM-owned and must never
     be included in the host write permit. Neither grants authority outside a lease.
     """
@@ -359,7 +359,10 @@ def trade_block(symbols: dict, provenance: dict) -> dict:
             require(left["bank"] != right["bank"] or left["addr"] + left["size"] <= right["addr"]
                     or right["addr"] + right["size"] <= left["addr"], "trade staging/snapshot/lease overlap")
     return {
-        "schema": "polished-trade-v1", "production": False,
+        "schema": "polished-trade-v1",
+        "production": (number(service, "SLINK_TRADE_COMMIT_ENABLE") == 1
+                       and all(capabilities.values()) and not provenance.get("test_only")),
+        "commit_gate": location("SlinkTradeCommitEnabled", rom=True),
         "capabilities": capabilities,
         "lease": lease, "entries": entries, "dispatcher_stack_pin_names": list(TRADE_STACK_PINS),
         "staging": staging, "snapshot": snapshot,

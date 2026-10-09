@@ -24,10 +24,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+from tools.polished_live.overlay_pin import overlay_sha1  # noqa: E402
+
+sys.path.insert(0, str(ROOT))
 from server.adapters import polished_codec as pc  # noqa: E402
 from tools.polished_live import duo, rival_gate_probe as probe  # noqa: E402
 
-SHA1 = "688945795e2656019247f5aaceb7b1d8791e900a"
+SHA1 = overlay_sha1()
 FIXTURE = Path("F:/slink-work/lanes/pol-rival-live/fixture/rival.SaveRAM")
 DISCLOSURE = Path("F:/slink-work/lanes/pol-rival-live/out/disclosure.json")
 ROUTE = Path("F:/slink-work/lanes/pol-rival-live/out/calib-68894579/synth-o562jtrj/probe/route.json")
