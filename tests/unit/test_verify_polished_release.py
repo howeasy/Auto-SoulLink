@@ -17,7 +17,7 @@ are about its RULES, not about Polished working:
   * the `required_ids` census, the unreachable jar, partial runs, the LIVE receipt census
     (scenario, expected PASS checks, provenance sha256) and the COMPUTED code digest are all
     fail-closed;
-  * an OPEN item whose Manager option now reads ok=True is a disagreement, not a completion.
+  * Manager options match the qualified capabilities; enabling one cannot close an OPEN obligation.
   * a player ZIP missing the published Polished UPS, or carrying different bytes, is red.
 
 Every RED CONTROL test below APPLIES its mutation, asserts the verifier goes red, and REVERTS.
@@ -394,22 +394,34 @@ def test_an_open_item_without_blocking_rc_is_still_red(tmp_path):
     assert not row.ok and "OPEN:" in _reasons(row)
 
 
-def test_an_open_item_bound_to_a_manager_option_that_reads_ok_is_red(tmp_path, monkeypatch):
-    """The disagreement rule: a Manager row flipped to ok while the item still reads OPEN."""
+@pytest.mark.parametrize("option", ["explode_mode", "rival_team_swap"], ids=["explode", "rival"])
+def test_enabled_manager_options_do_not_close_an_open_obligation(tmp_path, monkeypatch, option):
     import server.manager as manager
 
     root, manifest = _root(tmp_path, [_live_item()], [{
         "id": "OPEN-THING", "kind": "OPEN", "status": "OPEN", "blocking_rc": True,
-        "description": "landed", "blocker": "nope", "manager_options": ["explode_mode"]}])
+        "description": "landed", "blocker": "receipt rebind pending", "manager_options": [option]}])
     _receipt(root)
-    rows, _ = verifier.verify(root, manifest)               # the real OPTION_SUPPORT refuses it
-    row = _row(rows, "OPEN-THING/manager")
-    assert row.ok and row.detail == "OPEN-THING: still refused by explode_mode"
-
-    monkeypatch.setitem(manager.OPTION_SUPPORT["explode_mode"], "gen2_polished",
-                        {"ok": True, "why": ""})
     rows, _ = verifier.verify(root, manifest)
-    assert "reads ok=True" in _reasons(_row(rows, "OPEN-THING/manager"))
+    row = _row(rows, "OPEN-THING/manager")
+    assert row.ok and "qualified availability" in row.detail
+    assert not _row(rows, "OPEN-THING").ok
+    assert "receipt rebind pending" in _reasons(_row(rows, "OPEN-THING"))
+
+    monkeypatch.setitem(manager.OPTION_SUPPORT[option], "gen2_polished",
+                        {"ok": False, "why": "unqualified"})
+    rows, _ = verifier.verify(root, manifest)
+    assert "expected ok=True" in _reasons(_row(rows, "OPEN-THING/manager"))
+
+
+def test_unqualified_manager_option_cannot_be_enabled_while_open(tmp_path, monkeypatch):
+    import server.manager as manager
+
+    item = {"id": "OPEN-THING", "manager_options": ["phone_calls"]}
+    assert verifier.check_open_consistency([item], tmp_path)[0].ok
+    monkeypatch.setitem(manager.OPTION_SUPPORT["phone_calls"], "gen2_polished",
+                        {"ok": True, "why": "unqualified"})
+    assert "expected ok=False" in _reasons(verifier.check_open_consistency([item], tmp_path)[0])
 
 
 def test_an_open_item_bound_to_an_option_with_no_polished_row_is_red(tmp_path):

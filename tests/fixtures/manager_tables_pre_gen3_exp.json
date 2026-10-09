@@ -271,9 +271,8 @@
     "why": "Gen 3 mechanics on Polished's own dex (species, moves, Fairy-era type chart). Abilities, held-item boosts and natures are not modelled - docs/polished/CALC.md."
    },
    "explode_mode": {
-    "always": false,
-    "ok": false,
-    "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."
+    "ok": true,
+    "why": "Needs the companion patch on both players' games; includes the plain-faint fallback."
    },
    "gender_lock": {
     "ok": true,
@@ -304,9 +303,8 @@
     "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."
    },
    "rival_team_swap": {
-    "always": false,
-    "ok": false,
-    "why": "The Polished Crystal client is not written yet (its Lua composition stops at admission)."
+    "ok": true,
+    "why": "Needs the companion patch on both players' games; RIVAL0, RIVAL1 and RIVAL2 only."
    },
    "species_lock": {
     "ok": true,

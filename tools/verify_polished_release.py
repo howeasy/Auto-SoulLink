@@ -568,8 +568,10 @@ def check_open(item: dict, root: Path, live_passed: frozenset[str] = frozenset()
 
 
 def check_open_consistency(open_items: list[dict], root: Path) -> list[Row]:
-    """An OPEN item whose Manager option now reads `ok` is a disagreement, not a completion.
+    """Cross-check Manager availability against qualified Polished capabilities.
 
+    Explode and Rival Swap are enabled before receipt rebind; check_open still keeps
+    their OPEN obligation red until its closing LIVE evidence passes in this run.
     Only an item that NAMES an option is bound. Several open obligations (the write sink, the
     title splash, the panel pages) have no Manager row at all, and inventing one would make this
     check assert something the Manager never claimed.
@@ -580,12 +582,13 @@ def check_open_consistency(open_items: list[dict], root: Path) -> list[Row]:
     where = str(root)
     if where not in sys.path:
         sys.path.insert(0, where)
+    enabled = frozenset({"explode_mode", "rival_team_swap"})
     rows = []
     for item in bound:
         options = item["manager_options"]
         # a distinct id: this row is a CROSS-CHECK on the OPEN row, not the OPEN row again
         row = Row(f"{item['id']}/manager", "OPEN", "PASS",
-                  detail=f"{item['id']}: still refused by {', '.join(options)}")
+                  detail=f"{item['id']}: qualified availability for {', '.join(options)}")
         try:
             import server.manager as manager
         except Exception as exc:
@@ -600,11 +603,11 @@ def check_open_consistency(open_items: list[dict], root: Path) -> list[Row]:
             cell = rule.get("gen2_polished")
             if cell is None:
                 row.fail(f"OPTION_SUPPORT[{option!r}] has no gen2_polished row")
-            elif cell.get("ok"):
-                row.fail(f"item reads OPEN but OPTION_SUPPORT[{option!r}]['gen2_polished'] "
-                         f"reads ok=True")
+            elif cell.get("ok") is not (option in enabled):
+                row.fail(f"OPTION_SUPPORT[{option!r}]['gen2_polished'] expected ok={option in enabled}, "
+                         f"got {cell.get('ok')!r}")
             elif not cell.get("why"):
-                row.fail(f"a refused option must carry a reason: {option!r} has none")
+                row.fail(f"a bound option must carry its companion requirement or refusal reason: {option!r}")
         rows.append(row)
     return rows
 

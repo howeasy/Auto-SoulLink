@@ -34,10 +34,14 @@ POLISHED_FAMILY = "gen2_polished"
 
 
 
-# POL-SOUNDS: the ONE Polished capability that is no longer refused. Each entry says what made
+# Qualified Polished capabilities; receipt rebind remains a separate RC gate. Each entry says what made
 # it true and what still gates it, so adding a row to this list is a deliberate act, not a
 # blanket loosening of the guard below.
 POLISHED_GRANTED = {
+    "explode_mode": "Polished's companion Explosion/plain-faint path passed the pol-explodefix "
+                    "oracles after ea90b9fd3; clean artifacts remain unsupported.",
+    "rival_team_swap": "Polished's companion rival path passed pol-explode2/rival/synth-90mk5ijy; "
+                       "only RIVAL0/1/2 are allowed, and freeze receipt rebind is still required.",
     "native_sounds": "patch/polished/src/slink_sfx.asm plays the shared semantic codes through "
                      "Polished's own PlaySFX, from the DelayFrame service (POL-SOUNDS). Still "
                      "gated on the SLink companion overlay: the clean cartridge advertises no "
@@ -127,20 +131,19 @@ def _polished_option_rows() -> dict[str, dict]:
     return rows
 
 
-def test_manager_every_polished_capability_stays_refused() -> None:
-    """Guard: no capability may report `ok` for Polished while its blocker is open.
+def test_manager_polished_capabilities_match_the_qualified_grants() -> None:
+    """Guard: only qualified Polished grants may report `ok`; receipt closure is separate.
 
     battle_calc is deliberately allowed to report ok (flipped 2026-10-04 with
     calc/src/calc/data/polished.js, tools/gen_polished_calc.py): the calculator runs its gen 3
     mechanics on Polished's own species/move/type data, and what that does NOT model is enumerated
     in docs/polished/CALC.md section 4 rather than hidden. native_sounds is the other exception:
     POL-SOUNDS shipped the overlay's own sound service, so it is asserted granted in
-    POLISHED_GRANTED instead. explode_mode and rival_team_swap stay refused because the writers
-    are unwired modules (docs/polished/EXPLODE_RIVAL.md); phone_calls and pc_trade_npc keep their
-    own reasons.
+    POLISHED_GRANTED instead. Explode and Rival Swap passed their live oracles and are now
+    companion-required grants; phone_calls and pc_trade_npc keep their own reasons.
 
     RED CONTROL: in server/manager.py, change any remaining `"gen2_polished": {"ok": False, ...}`
-    to `"ok": True`, or flip battle_calc / native_sounds back to False (the grant checks fail).
+    to `"ok": True`, or refuse any qualified grant (the grant checks fail).
     """
     rows = _polished_option_rows()
     assert rows, "expected server.manager.OPTION_SUPPORT to carry gen2_polished rows"
@@ -157,9 +160,9 @@ def test_manager_every_polished_capability_stays_refused() -> None:
     assert set(POLISHED_GRANTED) <= set(rows), "a granted option has no gen2_polished row"
 
 
-def test_the_polished_grant_set_is_exactly_native_sounds() -> None:
+def test_the_polished_grant_set_names_the_qualified_companion_options() -> None:
     """The grant set is a ledger: it names what is true now, not what might become true."""
-    assert set(POLISHED_GRANTED) == {"native_sounds"}
+    assert set(POLISHED_GRANTED) == {"native_sounds", "explode_mode", "rival_team_swap"}
     for option, why in POLISHED_GRANTED.items():
         assert "polished" in why.lower() and len(why) > 40, option
 
