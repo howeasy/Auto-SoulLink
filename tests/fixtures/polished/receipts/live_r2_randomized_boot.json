@@ -324,7 +324,7 @@
     {
       "name": "the variant catch fires the capture site exactly once",
       "result": "PASS",
-      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\random\\r2b_cap\\live\\result.txt; producer PASS and hashed supporting evidence. B exactly one qualified capture-site hit: frame33974, bank03, PC652B, party_count@hit6."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\random\\r2b_cap\\live\\result.txt; producer PASS and hashed supporting evidence. B exactly one observed capture-site hit: frame33974, bank03, PC652B, party_count@hit6."
     },
     {
       "name": "the form is inside the mon key",
