@@ -3070,6 +3070,23 @@ GEN2_WAVE_C = {"gen2_whiteout": ("whiteout_oracle", "repair"), "gen2_pc_ops": ("
                "gen2_changebox": ("changebox_oracle", "box_change"), "gen2_poison": ("poison_oracle", "death"),
                "gen2_whiteout_rebuild": ("whiteout_rebuild_oracle", "rebuild")}
 
+def _gen2_gs_harden_facts(title, *, root=REPO):
+    """SYNTH setup only for the two G/S driver gaps; engine/capture/death stay native."""
+    from server.adapters import gen2_codec
+    from tools.gen2_trade_facts import trade_facts
+
+    if title not in ("gold", "silver"):
+        raise ValueError("G/S hardening requires Gold or Silver")
+    facts = trade_facts(title, root=Path(root))
+    index = json.loads((Path(root) / f"data/games/gen2_{title}/species_index.json").read_text(encoding="utf-8"))
+    level = 20
+    species = {key: {"base_stats": row["base_stats"],
+                     "exp": gen2_codec.exp_for_level(level, row["growth_rate"])}
+               for key, row in index["species"].items() if row["classification"] == "ordinary"}
+    return {"schema": "gen2-gs-harden-v1", "title": title, "overlay_sha1": facts["overlay_sha1"],
+            "level": level, "species": species, "site": facts["code"]["StartBattle"], "ram": facts["ram"]}
+
+
 
 GEN2_DEFAULT_SPEED = 300
 GEN2_FRAME_CAP = 1_000_000   # lua/scripted_inputs.lua LIMIT: the largest play bound a driver may pass
@@ -4787,6 +4804,14 @@ class DuoRun:
             # lua/scripted_inputs.lua refuses a play bound above 1,000,000 frames (its LIMIT)
             duo["timeout_frames"] = min(duo["timeout_frames"] * gen2_frame_scale(speed),
                                         max(duo["timeout_frames"], GEN2_FRAME_CAP))
+            if self.game == "gen2_gold_silver" and self.scenario in ("gen2_poison", "gen2_species_clause"):
+                duo["gs_harden"] = True
+                duo["gs_setup"] = _gen2_gs_harden_facts(self._gen2_inputs[inst]["title"], root=REPO)
+                self._pydec_note(f"SYNTH G/S setup inst={inst}: starter level/EXP/HP/stats at level 20; "
+                                 "species/DVs/OT/moves/status/names retained. Poison also conditions the linked "
+                                 "catch; species clause plants duplicate then unlike-family wild species at "
+                                 "StartBattle before native generation. All writes disclosed in SYNTH_SETUP; "
+                                 "catch, poison faint, reroll commands, memorial and saves remain native.")
             if self.scenario in GEN2_TRADE_SCENARIOS:
                 duo["trade_manifest"] = str(self._gen2_trade_manifest_path).replace("\\", "/")
                 duo["trade_manifest_sha256"] = self._gen2_trade_manifest_sha256
@@ -5067,6 +5092,8 @@ class DuoRun:
         scenario_name = self.scenario.removeprefix("gen2_")
         driver_files = [self.gcfg["main"], f"lua/tests/duo/scenario_gen2_{scenario_name}.lua",
                         "lua/tests/duo/gen2_route29_inputs.lua"]
+        if self.game == "gen2_gold_silver" and self.scenario in ("gen2_poison", "gen2_species_clause"):
+            driver_files.append("lua/tests/duo/gen2_gs_setup.lua")
         if self.scenario in GEN2_TRADE_SCENARIOS:
             driver_files += ["lua/tests/duo/gen2_trade.lua", "tools/gen2_trade_facts.py"]
         if self.scenario in GEN2_WAVE_C:

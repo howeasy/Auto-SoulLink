@@ -13,6 +13,9 @@
        the checkpoint (O-30: a B in battle would take it at the battle hold instead).
   MARKER CONTRACT: exactly scenario_gen2_faint.lua's, with A's ENGINE_FAINT {site_id "poison_faint", cause "poison"}
   and CLIENT.registered_sites holding poison_faint; RECEIPT {schema "gen2-duo-poison-v1"}.
+  Opt-in G/S hardening conditions the starter after CONTINUE and before the link catch. These harness-only
+  writes are SYNTH_SETUP disclosures, not engine evidence; the poison, propagation and native-save oracles
+  are unchanged. The receipt records SYNTH_setup_then_normal_buttons and the actual disclosed write scopes.
 --]]
 local S = {}
 S.RECEIPT_SCHEMA = "gen2-duo-poison-v1"
@@ -26,10 +29,58 @@ S.ENGINE = {site_id="poison_faint", cause="poison"}
 function S.faint(root)
     local FS = dofile(root .. "/" .. S.FAINT)
     FS.ENGINE, FS.RECEIPT_SCHEMA = S.ENGINE, S.RECEIPT_SCHEMA
+    local verdict = FS.verdict
+    function FS.verdict(lines, json, link_verdict)
+        local problems, receipt = verdict(lines, json, link_verdict)
+        if receipt == nil then return problems, nil end
+        local hardened = false
+        for _, line in ipairs(lines) do
+            local body = tostring(line):match("^DUO_GEN2 (.*)$")
+            if body then hardened = json.decode(body).gs_harden == true end
+        end
+        if not hardened then return problems, receipt end
+        local disclosures = {}
+        for _, line in ipairs(lines) do
+            local body = tostring(line):match("^SYNTH_SETUP (.*)$")
+            if body then
+                local row = json.decode(body)
+                local function hex(value)
+                    return type(value) == "string" and #value > 0 and #value % 2 == 0 and value:match("^%x+$") ~= nil
+                end
+                if type(row) ~= "table" or type(row.purpose) ~= "string" or type(row.symbol) ~= "string"
+                   or type(row.domain) ~= "string" or type(row.frame) ~= "number" or type(row.address) ~= "number"
+                   or not hex(row.bytes_before) or not hex(row.bytes_after) or #row.bytes_before ~= #row.bytes_after then
+                    problems[#problems + 1] = "incomplete SYNTH_SETUP disclosure"
+                else disclosures[#disclosures + 1] = row end
+            end
+        end
+        if #disclosures == 0 then problems[#problems + 1] = "missing SYNTH_SETUP disclosure" end
+        if #problems > 0 then return problems, nil end
+        receipt.gs_harden = true
+        receipt.input_mode = "SYNTH_setup_then_normal_buttons"
+        receipt.harness_write_scopes = json.array(disclosures)
+        receipt.synth_disclosure = json.array(disclosures)
+        return problems, receipt
+    end
     return FS
 end
 
 function S.run(h)
+    if h.gs_harden == true then
+        -- Shared faint prelude owns the arrival/catch sequence for BOTH players. Override only its
+        -- arrival seam here: conditioning before CONTINUE would be overwritten by loading the save.
+        local original = h
+        h = setmetatable({arrive=function(...)
+            local arrived, why = original.arrive(...)
+            if not arrived then return false, why end
+            if not original.gs_setup or type(original.gs_setup.condition_starter) ~= "function" then
+                return false, "G/S poison starter setup unavailable"
+            end
+            local conditioned, setup_why = original.gs_setup.condition_starter()
+            if not conditioned then return false, "G/S poison starter setup: " .. tostring(setup_why) end
+            return true
+        end}, {__index=original})
+    end
     local FS = S.faint(h.root)
     if h.player == "b" then return FS.run(h) end
     local link = dofile(h.root .. "/" .. S.LINK)

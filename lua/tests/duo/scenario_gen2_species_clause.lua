@@ -18,10 +18,11 @@
                      (state.py:1973-1977, no dead zone). The prompt is required after the RUN (a RUN with no
                      prompt = the server missed the reroll = FAIL); the cursor is taken before the encounter.
           foe != n   catch it (R.new's route, the `link` catch + native save); the link forms.
-        At most MAX_BATTLES battles; only duplicates within that budget is the game's RNG ("RNG: ..." FAIL, the
-        lane retries like Gen 1's). P(first foe is A's species) is that species' Route 29 share (gen2_clause.lua:
-        e.g. Pidgey 50% on Crystal day, Hoothoot 85% on G/S nite); a non-duplicate first encounter PASSes with
-        path "reroll_unobserved" (the lane may retry for "reroll_observed").
+        Crystal retains the MAX_BATTLES RNG hunt and may PASS "reroll_unobserved" for a first non-dupe.
+        Owner-approved G/S hardening (h.gs_harden) conditions the starter after CONTINUE and selects only the
+        native foe species before record generation: first A's duplicate, then Pidgey/Rattata of an unlike
+        family. Both encounters, the RUN, real dupes prompt, catch and saves still use the original graph.
+        SYNTH_SETUP rows disclose every setup write in the trace and receipt; these are not no-write runs.
   B's RUN needs no new engine site: BattleMenu RUN over the proven BATTLE_MENU_GRID, battle_end is proven.
 
   MARKER CONTRACT (everything `link` prints except RECEIPT; JSON after the tag):
@@ -75,9 +76,17 @@ local function hunt(h)
     if f then f:close() end
     h.jlog("A_PENDING", {frame=h.frame(), species_id=dupe})
     if not K.SPECIES[dupe] then return false, "A_PENDING carried no Route 29 species" end
-    for battle = 1, S.MAX_BATTLES do
+    local battles = h.gs_harden and 2 or S.MAX_BATTLES
+    for battle = 1, battles do
         local before = count_prompts(h)
-        local met, foe = h.encounter()
+        local met, foe
+        if h.gs_harden then
+            local wanted = battle == 1 and dupe or (dupe == 16 and 19 or 16)
+            met, foe = h.gs_setup.encounter(wanted)
+            if met and foe ~= wanted then return false, "G/S native encounter differs from selected species" end
+        else
+            met, foe = h.encounter()
+        end
         if not met then return false, "encounter: " .. tostring(foe) end
         h.jlog("ENCOUNTER", {frame=h.frame(), n=battle, species_id=foe, dupe=foe == dupe})
         if foe ~= dupe then
@@ -99,6 +108,12 @@ function S.run(h)
     h.jitter()
     local arrived, why = h.arrive()
     if not arrived then return false, "no CONTINUE arrival: " .. tostring(why) end
+    if h.gs_harden then
+        if type(h.gs_setup) ~= "table" or type(h.gs_setup.condition_starter) ~= "function"
+                or type(h.gs_setup.encounter) ~= "function" then return false, "G/S setup helper missing" end
+        local conditioned, setup_why = h.gs_setup.condition_starter()
+        if not conditioned then return false, "G/S starter setup: " .. tostring(setup_why) end
+    end
     h.party()
     if not h.wait(function() return h.sent.hello ~= nil end, S.HELLO_FRAMES) then return false, "the client never sent hello" end
     if not h.wait(h.go, S.GO_FRAMES) then return false, "no go-file" end
@@ -132,7 +147,7 @@ function S.verdict(lines, json, link_verdict)
     local problems, link_receipt = link_verdict(lines, json)
     local function need(ok, what) if not ok then problems[#problems + 1] = what end return ok end
     local TAGS = {DUO_GEN2=true, ENGINE_CAPTURE=true, SAVE_WITNESS=true, RX_TEXT=true, PENDING_CAPTURE=true, LINKED=true,
-                  A_PENDING=true, ENCOUNTER=true, REROLL=true}
+                  A_PENDING=true, ENCOUNTER=true, REROLL=true, SYNTH_SETUP=true}
     local seen, ff = {}, {}
     for index, line in ipairs(lines) do
         local tag, body = tostring(line):match("^([%u%d_]+) (.*)$")
@@ -187,6 +202,9 @@ function S.verdict(lines, json, link_verdict)
         need(K.SPECIES[dupe] ~= nil, "A_PENDING carries no Route 29 species")
         local enc, rr = rows("ENCOUNTER"), rows("REROLL")
         need(#enc >= 1, "no ENCOUNTER")
+        if head.value.gs_harden then
+            need(#enc == 2 and #rr == 1, "G/S requires one observed duplicate reroll then an unlike-family catch")
+        end
         for i, e in ipairs(enc) do
             local v, last = e.value, i == #enc
             need(v.n == i and ap ~= nil and e.at > ap.at, "ENCOUNTER out of order")
@@ -225,6 +243,14 @@ function S.verdict(lines, json, link_verdict)
     receipt.dupe_species, receipt.rerolls = dupe, rerolls
     receipt.path = role == "reroller" and (rerolls > 0 and "reroll_observed" or "reroll_unobserved") or "pending"
     receipt.linked = linked.value
+    if head.value.gs_harden then
+        local disclosure = {}
+        for _, row in ipairs(rows("SYNTH_SETUP")) do disclosure[#disclosure + 1] = row.value end
+        if #disclosure == 0 then return {"missing G/S SYNTH_SETUP disclosure"}, nil end
+        receipt.input_mode = "SYNTH_setup_then_normal_buttons"
+        receipt.harness_write_scopes = json.array(disclosure)
+        receipt.synth_disclosure = json.array(disclosure)
+    end
     return problems, receipt
 end
 
