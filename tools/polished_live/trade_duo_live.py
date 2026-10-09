@@ -50,17 +50,22 @@ def party(data):
     return rows
 
 
-def seed_server(path, saves):
-    from server.adapters.gen2_polished import Gen2PolishedAdapter
-    from server.state import LinkStatus, SoulLinkState
-    state = SoulLinkState(data_dir=str(path), adapter=Gen2PolishedAdapter(artifact_kind="overlay"), phone_calls=False)
+def seed_server(path, saves, rom_sha=SHIPPED):
+    from server.adapters.gen2_polished import _companion_abi
+    from server.server import SLinkServer
+    from server.state import LinkStatus
+    (path/"rom_contract.json").write_text(json.dumps(duo.contract_for(rom_sha)))
+    server = SLinkServer(data_dir=str(path), phone_calls=False)
+    state = server.state
     events = []
     for role in ("a", "b"):
         ident, mons = duo.fixture_identity(saves[role]), party(saves[role])
-        hello = {"event": "hello", "party": mons, "ot_id": ident["player_id"], "trainer_name": ident["name"], "has_pokeballs": True}
+        hello = {"event": "hello", "party": mons, "ot_id": ident["player_id"], "trainer_name": ident["name"], "has_pokeballs": True,
+                 "rom_type": "polished_crystal", "foundation": "gen2_polished", "artifact_kind": "overlay",
+                 "rom_sha1": rom_sha, "companion_abi": _companion_abi()}
         capture = dict(mons[0], event="capture", area_id="route_29")
         for event in (hello, capture):
-            state.handle_event(role, event)
+            server._dispatch(role, event)  # admission also commits rom_type/artifact_kind needed by journal reload
             events.append({"player": role, "msg": event})
     assert len(state.links) == 1 and state.links[0].status == LinkStatus.ALIVE, "SYNTH link setup failed"
     state._save()
@@ -159,7 +164,7 @@ def run(args):
         (run_dir/f"before-{r}.SaveRAM").write_bytes(saves[r])
     srvdir = run_dir/"server"
     srvdir.mkdir()
-    events = seed_server(srvdir, saves)
+    events = seed_server(srvdir, saves, rom_sha)
     (srvdir/"rom_contract.json").write_text(json.dumps(duo.contract_for(rom_sha)))
     manifest = {"disclosure": DISCLOSURE, "derivation": derivation, "seed_events": events,
                 "test_rom_sha1": rom_sha, "disabled_sha1": SHIPPED, "changed_offsets": diff,
