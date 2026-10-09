@@ -727,13 +727,14 @@
     {
       "id": "OPEN-PANEL-PAGES",
       "kind": "OPEN",
-      "status": "OPEN",
+      "status": "CLOSED",
       "blocking_rc": true,
       "description": "the in-game panel pages (docs/polished/PANEL.md, PANEL_SLOT.md), paged by the real SLink host",
-      "blocker": "paging live on the current overlay 688945795e (LIVE-PANEL-PAGES-ROM, LIVE-PANEL-HELLO, LIVE-PANEL-HOST-PAGING: real server link_panel -> lua panel:hold -> ROM render); still missing: rows unreadable on the 16-glyph ROM panel (wide label|field rows; Gen2PolishedAdapter inherits info_panel_width()==0). Fix 66bad891f is on claude/gen2-integration, not this tree; its real-host re-run PASS (F:/slink-work/lanes/pol-panelfix/run/oracle.json, sha256 feee691c...) is receipt-ready at the frozen RC cut, where the code digest will include it",
+      "blocker": "none: all four advertised pages and readable16-glyph server rows verified from frozen panel-host trace",
       "manager_row": null,
       "manager_row_note": "the panel pages are a client feature; battle_calc's refusal is about calculator DATA, a separate obligation",
-      "evidence": "tests/fixtures/polished/receipts/live_panel_host_paging.json not_proven[0]: page 1 renders 'RT29 Rattata 2 1' from 'RT29|Rattata|2|13/13|38||' (F:/slink-work/lanes/pol-panelhost/run/oracle.json); also live_panel_pages_rom.json, live_panel_hello.json"
+      "evidence": "tests/fixtures/polished/receipts/live_panel_host_paging.json",
+      "closed_by": "LIVE-PANEL-HOST-PAGING"
     },
     {
       "id": "OPEN-IN-GAME-TRADE",

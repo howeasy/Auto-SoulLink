@@ -1,42 +1,56 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
+  "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
+  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
   "scenario_id": "live/box-census-refresh",
-  "date": "2026-10-04",
-  "lane": "F:/slink-work/lanes/pol-phone",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy",
   "requirement_id": "LIVE-BOX-CENSUS",
-  "narrative": "docs/polished/LIVE_RESULTS.md — Run 2 STAGE A ('Box census after a native box catch, without a reboot') and 'Existing stages on the new overlay'",
-  "evidence_dir": "F:/slink-work/lanes/pol-phone/live_stageA",
-  "evidence_file": "F:/slink-work/lanes/pol-phone/live_stageA/result.txt",
-  "evidence_sha256": "4f682b5439ff7a532b4e0ebb95f47e8bc356941ecb4059a9150f85527542c146",
-  "evidence_size": 6592,
-  "earlier_measurement": {
-    "path": "F:/slink-work/lanes/pol-live2/live/result.txt",
-    "sha256": "a9e4cd4476162f4e56ea5dc6a95f6b2cb4e6bf6327e6ce23d113d92c9fba27d1",
-    "rom_sha1": "29ea04c24a46d9210c899355fe752f32d2880de8",
-    "census": "generation 7 at frame 7620, -26 frames after the battle end at 7646"
-  },
-  "rom_sha1_executed": "34942315bb3e62189a56dabbcb9cef6dd3e9a9f5",
-  "overlay_provenance_sha256": "1da613da23c41dac3ee7d36653318fb424096e361951dd3fcf0b5b899ccae0df",
-  "code_digest": "UNRECORDED",
-  "code_digest_note": "No code digest or commit in the lane evidence. docs/polished/LIVE_RESULTS.md:225 names c442a248 (census rescan, supports_box_mon) as the change that fixed run 1's frozen census.",
+  "narrative": "Freeze5f4732 fresh execution; after a native full-party catch from a declared six-mon fixture, a tick carries the caught box mon in pc_boxes without a reboot",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\box-census\\live",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\box-census\\live\\result.txt",
+  "evidence_sha256": "92907649cb698552d7c7baab5b9b22707bae4a6246b793e95aea581fed1adb0b",
+  "evidence_size": 4201,
+  "secondary_evidence": [
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\full-party-preparation\\live\\result.txt",
+      "sha256": "a1a04b9779d46a336aa6d902ac9693ecbe7c785591ee9b6a823602a7aece690c",
+      "note": "Fresh freeze supporting observation/control"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\box-census\\live\\wire\\wire_a.jsonl",
+      "sha256": "1193ab069939efdf73984f0d0bc9e362c88b62b70e82b5d0dd6768eb410c83d2",
+      "note": "Fresh freeze supporting observation/control"
+    }
+  ],
   "synth": [
-    "Same SYNTH save: the run-1 warp fixture, five SYNTH party mons so the party is full and the next catch goes to the PC natively.",
-    "The census itself reads native box bytes; the box arrival is the game's own PokeBallEffect.SendToPC, not a SYNTH box fixture."
+    "Retained SYNTH warp/scene fixture; native inputs thereafter. Phone/Pokegear/panel setup flags and scripted host/second identity remain disclosed by the lane."
   ],
   "checks": [
-    {"name": "run verdict", "result": "PASS", "observed": "RESULT: PASS polished-live (0 checks failed) frame 10766"},
-    {"name": "a wild mon reached a box", "result": "PASS", "observed": "[ok] STAGE3 a wild mon reached a box"},
-    {"name": "the census carried the box mon without a reboot", "result": "PASS", "observed": "[ok] STAGE3 a tick carried the box mon in pc_boxes without a reboot -- generation 8 frame 9270 (-24 frames after the battle end)"},
-    {"name": "the census followed the battle end, not the 1800-frame periodic rescan", "result": "PASS", "observed": "[ok] STAGE3 the box census followed the battle end (within 60 frames, periodic is 1800) -- -24"},
-    {"name": "the periodic generations before it carried no box mon", "result": "INFO", "observed": "[live] STAGE3 census generation 2 at frame 360: pc_boxes 0 ... generation 7 at frame 9000: pc_boxes 0; generation 8 at frame 9270: pc_boxes 1"},
-    {"name": "battle-end frame for the arithmetic", "result": "INFO", "observed": "[live] STAGE3 box-catch battle ended (overworld input) at frame 9294"},
-    {"name": "the native save held the game paused", "result": "INFO", "observed": "[live] STAGE3 native save: SaveGameData 9505, wGameLogicPaused nonzero on 62 sampled end-of-frames"}
+    {
+      "name": "run verdict",
+      "result": "PASS",
+      "observed": "Native preparation: six mons, native SAVE, no client/Lua writes. Reload hello party6. Native full-party catch to PC; no capture hook; pc_boxes generation4 frame3300, 22 frames after battle, before periodic1800. No reboot in catch-to-census interval."
+    },
+    {
+      "name": "a native full-party catch reached a box; the six-mon fixture was prepared by native catch and SAVE without a client or RAM party edits, hashed, and reloaded",
+      "result": "PASS",
+      "observed": "Native preparation: six mons, native SAVE, no client/Lua writes. Reload hello party6. Native full-party catch to PC; no capture hook; pc_boxes generation4 frame3300, 22 frames after battle, before periodic1800. No reboot in catch-to-census interval."
+    },
+    {
+      "name": "the census carried the box mon without a reboot",
+      "result": "PASS",
+      "observed": "Native preparation: six mons, native SAVE, no client/Lua writes. Reload hello party6. Native full-party catch to PC; no capture hook; pc_boxes generation4 frame3300, 22 frames after battle, before periodic1800. No reboot in catch-to-census interval."
+    },
+    {
+      "name": "the census followed the battle end, not the 1800-frame periodic rescan",
+      "result": "PASS",
+      "observed": "Native preparation: six mons, native SAVE, no client/Lua writes. Reload hello party6. Native full-party catch to PC; no capture hook; pc_boxes generation4 frame3300, 22 frames after battle, before periodic1800. No reboot in catch-to-census interval."
+    }
   ],
   "not_proven": [
-    "The 'native save running' refusal (docs/polished/NEWBOX.md section 7) was still not exercised live: wGameLogicPaused was nonzero for 62 sampled frames but no census scan happened inside that window, because the census fires on the battle end, not during the save.",
-    "The PC-open refusal is not observable: there is no PC-open predicate for Polished.",
-    "This receipt proves the census REFRESHES. It does not prove any box WRITE — see OPEN-WRITE-PATH."
-  ],
-  "regression_watch": "Run 1's census was frozen at generation 2 across all 269 ticks and the hello (docs/polished/LIVE_RESULTS.md STAGE 3 FAIL). Any run whose box-carrying generation is more than 1800 frames after the battle end has regressed to the frozen behaviour."
+    "DEV only; no release or PHYSICAL promotion. Scope is the named recording, not exhaustive gameplay."
+  ]
 }
