@@ -4,6 +4,8 @@ A plan, not a result or release authorisation. Run from the **single frozen inte
 
 Commands below are PowerShell. Every evidence destination is fresh under `$F`; retained input paths are explicit. Run each command block with `Reset-PolEnv` as shown: environment from a previous randomized/control case must not leak into an overlay run. Inputs outside the repo are prerequisites, not files shipped to players.
 
+**Unsafe probes:** `harness.py live/explore`, `manager_r1.py`, `run_phone_ab.py`, `writes_run.py` and `run_pol_panel.py` have no safe `--help`/`--dry-run` probe. `manager_r1.py --help` starts the Manager; the other invocations may stage/delete saves or launch EmuHawk. Inspect their entry points instead; never probe these invocations with those flags.
+
 Concurrency labels: **BUILD ALONE** means no other process may use the Polished build caches. **CLIENT SERIAL** means one client-driver job at a time in this checkout: `lua/slink.lua:19` truncates the shared root `slink_lua.log`, so private emulator/SaveRAM paths alone do not make these jobs evidence-isolated. A duo job owns two EmuHawks internally; do not split its halves. **PRIVATE** jobs may overlap one another and one CLIENT SERIAL job after the build is frozen, with distinct output lanes. Do not run tests concurrently with BUILD ALONE. Always stop only the PIDs a driver started; never kill by image name or delete through `.cache` junctions.
 
 1. **Finish fixes, then reserve and record the cut.** No active writer may change runtime, pack, assembly or provenance files after this point. Owner rulings: retire `LIVE-NO-BOX-MON`; in-battle negatives are unit/model-covered; only PHYSICAL natural in-battle faint S2n remains for `OPEN-WRITE-PATH`; S4n accepts whiteout event sent plus all partners dying through per-mon faint (`_handle_whiteout` stays unit-covered). The legacy instrument repair and Explosion echo fix are merged at this source cut. Finish memorialize, the owner-authorized shipped trade enablement (`pol-shiptrade`), capability/Manager flips and any remaining product repairs before the final runs. Retained examples are DEV, not PHYSICAL qualifications.
@@ -247,25 +249,24 @@ Concurrency labels: **BUILD ALONE** means no other process may use the Polished 
     & $PY tools/polished_live/writes_run.py
     ```
 
-    New primary evidence: `$F/writes/writes/result.txt`; secondary `trace.json`, exact recomputed party/CartRAM/allocation differences and permit bounds for (a) bench force_faint, (b) box_mon, (d) party_mon, and the pending memorialize leg below. Existing binding `F:/slink-work/lanes/pol-writes6889/writes/result.txt`. Bank-1/one-mon proof, not persistence or a natural in-battle faint.
+    New primary evidence: `$F/writes/writes/result.txt`; secondary `$F/writes/writes/trace.json`, exact recomputed party/CartRAM/allocation differences and permit bounds for (a) bench force_faint, (b) box_mon, (d) party_mon, (e) party-origin memorialize and (f) box-origin memorialize. Retained a/b/d baseline: `F:/slink-work/lanes/pol-writes6889/writes/result.txt`; retained e/f recording: `F:/slink-work/lanes/pol-memorial/writes/result.txt`. These local command legs are not persistence or natural in-battle faint proof.
 
-    **TODO — `pol-memorial`: land and inspect its writes_run memorialize leg before freeze.** At this source cut, writes_run/writes.lua have no memorialize scenario; the command above cannot satisfy OPEN-MEMORIALIZE (`tests/polished_release_requirements.json:529-537`). After that card lands, pin its actual CLI/leg selector here (do not invent a flag), run the full writes command including that leg on the shipped overlay, and bind its independent diff/control and key/census evidence. Require dead linked mons placed in memorial box 20 (index 19), source membership removed correctly, last-party refusal/retry handled, and no live survivor buried, per `docs/polished/MEMORIALIZE.md:7-24`. A single local command leg does not by itself prove both sides' server obligations; record that scope and retain server/partner evidence required by the landed oracle. Do not mark the pending replacement criteria below satisfied by the old a/b/d recording.
+    `writes_run.py` defaults `POL_MEMORIAL=1`, so the command above runs all five legs a/b/d/e/f after `Reset-PolEnv` clears overrides. Re-run them on the shipped frozen overlay; retain independent e/f diffs and failing controls, complete key/census reads, source membership removal, destination box 20 (index 19), and exactly one `memorialize_done` with no `memorialize_failed` per leg. Leg e buries the party target from (a); leg f buries the boxed (b)/(d) key. This TEST HOST recording does not establish both players' server obligations or save/reset durability. Owner ruling #7 accepts parity best-effort for RC; the stricter owed-burial/three-outcome contract is post-RC (`docs/polished/MEMORIALIZE.md`). Do not close OPEN-MEMORIALIZE using the old a/b/d-only recording.
 
-16. **PRIVATE: LIVE-PANEL-PAGES-ROM, ROM half against scripted host.** Stages the committed UPS, not a mutable cached overlay. Common SYNTH fixture plus Pokegear flags/phone-list setup; C0-C5 protocol/paging/close and bounded mailbox spans.
+16. **PRIVATE: LIVE-PANEL-PAGES-ROM, ROM half against scripted host.** Stages the committed UPS, not a mutable cached overlay. Common SYNTH fixture plus Pokegear flags/phone-list setup; C0-C5 protocol/paging/close and bounded mailbox spans. Leave `POL_FIXTURE` unset: the driver reads `$fixture` via its retained default, then copies it to `$F/panel-rom/fixture/polished_overlay_warp.SaveRAM`. Setting it makes both `FIXTURE_SRC` (`run_pol_panel.py:39-40`) and `H.FIXTURE` (`harness.py:51`) the same path.
 
     ```powershell
     Reset-PolEnv
-    $env:POL_KIND='overlay'; $env:POL_LANE="$F/panel-rom"; $env:POL_FIXTURE=$fixture
+    $env:POL_KIND='overlay'; $env:POL_LANE="$F/panel-rom"
     & $PY tools/polished_live/run_pol_panel.py
     ```
 
     New primary evidence `$F/panel-rom/run/result.txt`; secondary panel.json/screenshots. Existing binding `F:/slink-work/lanes/pol-rcproof/panel/run/result.txt`. No real server; does not substitute for host paging.
 
-17. **CLIENT SERIAL: LIVE-PANEL-HOST-PAGING.** Common SYNTH fixture; Pokegear flags/list writes; scripted TCP second identity derived from the save, normal hello/tick/capture events; one real native Route 29 catch by A; real server link_panel -> client hold/stage -> ROM pages. Include the compact/readable 16-glyph row oracle, not only equality with already-truncated text.
+17. **CLIENT SERIAL: LIVE-PANEL-HOST-PAGING.** Common SYNTH fixture; Pokegear flags/list writes; scripted TCP second identity derived from the save, normal hello/tick/capture events; one real native Route 29 catch by A; real server link_panel -> client hold/stage -> ROM pages. Include the compact/readable 16-glyph row oracle, not only equality with already-truncated text. Leave `POL_FIXTURE` unset here too: `--lane` selects the private destination `$F/panel-host/fixture/polished_overlay_warp.SaveRAM`; `panel_host_live.py:154` copies the same retained source as step 16.
 
     ```powershell
     Reset-PolEnv
-    $env:POL_FIXTURE=$fixture
     & $PY tools/polished_live/panel_host_live.py --lane "$F/panel-host" --timeout 2400
     ```
 
@@ -316,7 +317,7 @@ Concurrency labels: **BUILD ALONE** means no other process may use the Polished 
 
     This is a blocking TODO owned by `pol-shiptrade`, not a new enablement decision. Its landing may add/change LIVE IDs and closing requirements: refresh the manifest inventory before rebind. No release claim follows from the earlier private trade PASS.
 
-22. **Rebind only judged new evidence, after all jobs finish.** Receipt writer records final HEAD/source hashes, `--print-code-digest`, provenance SHA256, executed ROM SHA1 (or source-overlay binding for R1/R2/R3), the new primary path/size/SHA256, secondary evidence and exact observed PASS checks. Preserve grade DEV; PHYSICAL is an owner act. Keep failed attempts; never overwrite their evidence or promote a recording PASS over a red oracle. Apply the exact criterion cutovers below and resolve the named memorialize/shiptrade TODOs; do not silently omit rows or reuse obsolete checks. Any later digest-scoped edit revokes the cut and requires re-running affected receipts. Manifest/receipt/doc changes themselves are outside its code_digest_files.
+22. **Rebind only judged new evidence, after all jobs finish.** Receipt writer records final HEAD/source hashes, `--print-code-digest`, provenance SHA256, executed ROM SHA1 (or source-overlay binding for R1/R2/R3), the new primary path/size/SHA256, secondary evidence and exact observed PASS checks. Preserve grade DEV; PHYSICAL is an owner act. Keep failed attempts; never overwrite their evidence or promote a recording PASS over a red oracle. Apply the exact criterion cutovers below, bind fresh memorialize e/f evidence, and resolve the named shiptrade TODO; do not silently omit rows or reuse obsolete checks. Any later digest-scoped edit revokes the cut and requires re-running affected receipts. Manifest/receipt/doc changes themselves are outside its code_digest_files.
 
 23. **BUILD ALONE: final verifier, including BUILD-OVERLAY, then owner decision.** All emulators/private builds must have finished so the full gate cannot race their caches. First list confirms the LIVE census and closure ids; targeted runs are diagnostic only. Full verifier consumes every receipt and re-hashes its evidence; CLOSED needs its closing LIVE item to PASS in the same run.
 
@@ -333,7 +334,7 @@ Concurrency labels: **BUILD ALONE** means no other process may use the Polished 
 
 This is an edit specification, **not a manifest or receipt update**. The exact old strings and line numbers below are from `tests/polished_release_requirements.json` at **4f7bd2fb1** (15 LIVE items). Re-read the manifest after `pol-shiptrade` merges; compare by item ID and exact value, not shifted line numbers, and reconcile any concurrent changes with its owner. Apply the replacements to the manifest and to the matching newly judged receipt check names together. Never satisfy a replacement by renaming an old PASS.
 
-There are **18 replacement strings across 9 LIVE IDs**. The two LIVE-WRITES-OVERWORLD strings are conditional on `pol-memorial` landing and producing the required evidence; all other replacements describe the merged current behavior. Source references below are also pinned to this cut; the frozen source remains authoritative.
+There are **18 replacement strings across 9 LIVE IDs**. The memorialize producer has landed; the two LIVE-WRITES-OVERWORLD strings still require fresh e/f evidence at the freeze (step 15), not re-stamping its retained recording. All other replacements describe the merged current behavior. Source references below are pinned to the stated source cut unless updated explicitly; the frozen source remains authoritative.
 
 ### LIVE-HELLO-ADMITTED
 
@@ -399,10 +400,10 @@ Retain idle-overworld control and its decoded chain. This replaces the obsolete 
 
 | Manifest line and exact current text | Exact replacement text | Source evidence |
 |---|---|---|
-| `417`: "force_faint (bench), box_mon and party_mon through the client's own command path, each an exact-diff subset with a failing control" | "force_faint (bench), box_mon, party_mon and memorialize through the client's own command path, each an independently checked exact-diff subset with a failing control" | `tests/polished_release_requirements.json:529-537; docs/polished/MEMORIALIZE.md:7-24; pending pol-memorial producer (step 15)` |
-| `432`: "independent recompute of the three diffs equals the driver's" | "independent recompute of the force_faint, box_mon, party_mon and memorialize diffs equals the driver's" | `tests/polished_release_requirements.json:529-537; pending pol-memorial producer (step 15)` |
+| `417`: "force_faint (bench), box_mon and party_mon through the client's own command path, each an exact-diff subset with a failing control" | "force_faint (bench), box_mon, party_mon and both party-origin and box-origin memorialize through the client's own command path, each an independently checked exact-diff subset with a failing control" | `tests/polished_release_requirements.json:529-537; docs/polished/MEMORIALIZE.md; tools/polished_live/writes.lua` legs e/f (step 15) |
+| `432`: "independent recompute of the three diffs equals the driver's" | "independent recompute of the force_faint, box_mon, party_mon and both memorialize diffs equals the driver's" | `tests/polished_release_requirements.json:529-537; tools/polished_live/writes.lua` legs a/b/d/e/f (step 15) |
 
-**Pending producer; do not apply as fulfilled yet.** Add the landed memorialize oracle's exact individual checks (destination box 20, source removal, non-collateral bytes, refusal/control, and any required server reconciliation) once its names and behavior exist. Keep the existing a/b/d checks, and resolve any changed scenario/closing LIVE ID with the manifest owner. Step 15 stays blocked for OPEN-MEMORIALIZE until this is real.
+**Pending freeze evidence; do not apply as fulfilled yet.** The landed e/f producer judges destination box 20, source removal, non-collateral bytes, failing diff controls and the client's wire acknowledgements. Preserve those individual checks and the existing a/b/d checks when binding the fresh recording. Resolve the closing LIVE ID with the manifest owner; OPEN-MEMORIALIZE remains open until its frozen receipt is accepted. The RC bar is owner ruling #7's parity best-effort, not the post-RC owed-burial/three-outcome contract.
 
 ### LIVE-PANEL-HOST-PAGING
 
