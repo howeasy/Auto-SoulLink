@@ -250,7 +250,11 @@ def test_the_pinned_companion_pins_match_a_fresh_build(tmp_path, monkeypatch, cl
     key = next(k for k, (_name, sha1) in manifest.ROMS.items() if sha1 == hashlib.sha1(clean).hexdigest())
     pin = json.loads((ROOT / "patch/dist/companion_pins.json").read_text())["pins"][f"rb-{key}"]
     families = json.loads((ROOT / "patch/dist/companion_version.json").read_text())["families"]
-    assert pin["version"] == families["rb"]                                 # what tools/stamp_release.py last stamped
+    rb = families["rb"]                     # v1: the version string; v2: {"mode": "stamped", "version": ...}
+    if isinstance(rb, dict):
+        assert rb.get("mode") == "stamped", f"rb certificate entry is not stamped: {rb}"
+        rb = rb["version"]
+    assert pin["version"] == rb                                             # what tools/stamp_release.py last stamped
     _key, rom = _build_gen1(tmp_path, monkeypatch, clean, pin["version"])
     assert hashlib.md5(rom).hexdigest() == pin["patched_md5"]
     assert pin["version_slot"] == SLOT

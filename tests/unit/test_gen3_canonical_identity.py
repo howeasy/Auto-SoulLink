@@ -37,8 +37,15 @@ def manifest() -> dict:
 
 
 def published_version() -> str:
-    """The menu version tools/stamp_release.py last stamped into the Gen 3 family ('dev' when unstamped)."""
-    return json.loads((ROOT / "patch/dist/companion_version.json").read_text())["families"]["gen3"]
+    """The menu version tools/stamp_release.py last stamped into the Gen 3 family ('dev' when unstamped).
+
+    A v1 certificate stores the family's version string; a v2 certificate stores {"mode": "stamped", "version": ...}
+    (Gen 3 is never certified as-built, so a v2 entry without a stamped version is a failure here, not a skip)."""
+    entry = json.loads((ROOT / "patch/dist/companion_version.json").read_text())["families"]["gen3"]
+    if isinstance(entry, dict):
+        assert entry.get("mode") == "stamped", f"gen3 certificate entry is not stamped: {entry}"
+        return entry["version"]
+    return entry
 
 
 def owner_rom_path(game: str) -> Path:
