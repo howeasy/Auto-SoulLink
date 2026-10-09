@@ -24,7 +24,7 @@ ENTRY = ROOT / "lua/gen2/entry.lua"
 SOURCE = ENTRY.read_text(encoding="utf-8")
 
 INSTALL = r"""
-return function(root, option, fault, source)
+return function(root, option, fault, source, production)
     local original = dofile
     C4 = {trade_loads=0, permits=0, policies={}}
     dofile = function(path)
@@ -42,6 +42,7 @@ return function(root, option, fault, source)
             local load = module.load
             module.load = function(...)
                 local profile,charmap,wrapper = load(...)
+                profile.overlay.trade.production=production -- explicit disabled C4 controls vs enabled shipping case
                 if fault == 'family' then profile.overlay.trade=nil end
                 if fault == 'partial' then profile.overlay.trade.staging.ot=nil end
                 return profile,charmap,wrapper
@@ -86,8 +87,8 @@ end
 
 
 class Rig(wp.Rig):
-    def __init__(self, option=None, fault=None, mutation=None):
-        self.option, self.fault, self.mutation = option, fault, mutation
+    def __init__(self, option=None, fault=None, mutation=None, production=False):
+        self.option, self.fault, self.mutation, self.production = option, fault, mutation, production
         super().__init__(wp.party(), sources={"install": True})
 
     def _patch(self, sources):
@@ -96,11 +97,11 @@ class Rig(wp.Rig):
             before, after = self.mutation
             assert before in source
             source = source.replace(before, after)
-        self.lua.execute(INSTALL)(str(ROOT).replace("\\", "/"), self.option, self.fault, source)
+        self.lua.execute(INSTALL)(str(ROOT).replace("\\", "/"), self.option, self.fault, source, self.production)
 
     @property
     def binder(self):
-        return self.parts.dev_polished_trade
+        return self.parts.dev_polished_trade or self.parts.polished_trade
 
 
 def graph_image(rig):
@@ -325,7 +326,7 @@ def test_permit_sets_are_exact_and_overworld_is_unchanged():
 )
 def test_composition_gate_mutants_are_caught(gate):
     changes = {
-        "flag": ("if deps.polished_trade_dev == true then", "if true then"),
+        "flag": ("if deps.polished_trade_dev == true or (production_trade and deps.polished_trade_dev ~= false) then", "if true then"),
         "family": (
             'assert(profile.overlay.trade, "overlay.trade family missing")',
             "-- family check removed",
@@ -342,7 +343,17 @@ def test_composition_gate_mutants_are_caught(gate):
         mutation=changes[gate],
     )
     with pytest.raises(AssertionError):
-        if gate == "family":
+        if gate in ("family", "flag"):
             assert rig.lua.globals().C4.trade_loads == 0
         else:
             assert rig.binder is None
+
+
+def test_enabled_shipped_trade_composes_and_advertises_without_dev_option():
+    rig = Rig(production=True)
+    assert rig.parts.polished_trade is not None and rig.parts.dev_polished_trade is None
+    assert rig.binder.advertised(rig.binder) is True
+    assert rig.client.trade_live(rig.client) is True
+    assert json.loads(hello_lines(rig)[0])["trade_prepare"] is True
+    off = Rig(False, production=True)
+    assert off.binder is None and json.loads(hello_lines(off)[0])["trade_prepare"] is False

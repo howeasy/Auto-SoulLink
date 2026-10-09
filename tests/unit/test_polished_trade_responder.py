@@ -37,8 +37,6 @@ sys.path.insert(0, str(REPO / "tests" / "unit"))
 
 import build_polished_companion as pc  # noqa: E402
 import polished_sm83 as S  # noqa: E402
-from build_gen2_companion import _symbols  # noqa: E402
-from make_ups import ups_apply  # noqa: E402
 
 from tests.unit.test_polished_trade_dispatch import World  # noqa: E402
 
@@ -83,8 +81,8 @@ NATIVES = {"delay": 0x0DA8, "joy": 0x07C3, "print": 0x0E58, "yesno": 0x18E0, "op
 def env():
     if not RELEASE_ROM.is_file():
         pytest.skip(f"pinned Polished release ROM not cached at {RELEASE_ROM}")
-    rom = ups_apply(RELEASE_ROM.read_bytes(), UPS.read_bytes())
-    return Env(bytes(rom), _symbols(OVERLAY_SYM), _symbols(CLEAN_SYM))
+    from tests.unit.test_polished_trade_service import disabled_env
+    return disabled_env()
 
 
 # ------------------------------------------------------------------ the lease write patterns

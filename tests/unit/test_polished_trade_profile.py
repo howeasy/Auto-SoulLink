@@ -9,10 +9,10 @@ import re
 
 import pytest
 
-from tests.unit import test_polished_trade_binder as bt
+from tests.unit import test_polished_trade_binder as bt, test_polished_trade_service as svc
 from tools import gen_polished_profile as gp
 
-binder_env = bt.env
+binder_env = svc.shipped_env
 
 
 @pytest.fixture
@@ -22,8 +22,8 @@ def inputs():
 
 def assert_schema(trade):
     assert trade["schema"] == "polished-trade-v1"
-    assert trade["production"] is False
-    # Component presence is not authorization: both bodies exist, production stays off.
+    assert trade["production"] is True
+    # Production requires the provenance-verified enable define and every component.
     assert trade["capabilities"] == {"proposer_service": True, "responder_service": True, "commit": True}
     lease = trade["lease"]
     assert (lease["base"], lease["offset"], lease["size"], lease["bank"]) == (0xC619, 14, 16, 0)
@@ -60,7 +60,7 @@ def test_schema_and_generated_family(inputs, binder_env):
     assert_schema(trade)
     assert_disjoint(trade)
     assert json.loads(gp.OUT.read_bytes())["titles"]["polished"]["overlay"]["trade"] == trade
-    assert binder_env.rom[binder_env.flat("SlinkTradeCommitEnabled")] == 0
+    assert binder_env.rom[binder_env.flat("SlinkTradeCommitEnabled")] == 1
     for row in trade["entries"].values():
         assert (row["bank"], row["addr"]) == inputs[0][row["symbol"]]
 
@@ -70,9 +70,9 @@ def test_the_responder_pair_is_present_and_a_half_pair_is_refused(inputs, binder
     for name in ("SlinkTradeResponderService", "SlinkTradeResponderServiceEnd"):
         assert name in symbols
     trade = gp.trade_block(symbols, prov)
-    assert trade["capabilities"]["responder_service"] is True and trade["production"] is False
+    assert trade["capabilities"]["responder_service"] is True and trade["production"] is True
     assert trade["capabilities"]["commit"] is True
-    assert binder_env.rom[binder_env.flat("SlinkTradeCommitEnabled")] == 0
+    assert binder_env.rom[binder_env.flat("SlinkTradeCommitEnabled")] == 1
     assert trade["entries"]["SlinkTradeResponderService"]["addr"] == 0x5000
     del symbols["SlinkTradeResponderServiceEnd"]
     with pytest.raises(ValueError, match="incomplete component"):
@@ -103,18 +103,19 @@ def test_component_pair_flips_only_its_presence(inputs, name, cap):
     symbols[name + "End"] = symbols[name]._replace(address=symbols[name].address + 16)
     trade = gp.trade_block(symbols, prov)
     assert trade["capabilities"][cap] is True
-    assert trade["production"] is False
+    assert trade["production"] is True
     assert trade["entries"][name]["addr"] == 0x5300
     del symbols[name]
     with pytest.raises(ValueError, match="incomplete component"):
         gp.trade_block(symbols, prov)
 
 
-def test_complete_symbols_do_not_grant_production(inputs):
+def test_test_build_complete_symbols_do_not_grant_production(inputs):
     symbols, prov = inputs
     for n, name in enumerate(("SlinkTradeResponderService", "SlinkTradeCommit")):
         symbols[name] = symbols["SlinkTradeEntry"]._replace(address=0x5000 + n * 0x100)
         symbols[name + "End"] = symbols[name]._replace(address=symbols[name].address + 16)
+    prov["test_only"] = {"SLINK_TRADE_COMMIT_ENABLE": 1}
     trade = gp.trade_block(symbols, prov)
     assert all(trade["capabilities"].values())
     assert trade["production"] is False
@@ -253,7 +254,7 @@ def test_full_build_follows_sym_and_checks_digest(monkeypatch, tmp_path):
 def test_schema_oracle_rejects_mutants(inputs, mutation):
     trade = gp.trade_block(*inputs)
     if mutation == "production":
-        trade["production"] = True
+        trade["production"] = False
     elif mutation == "lease":
         trade["lease"]["fields"]["ack"] = 6
     elif mutation == "commands":
@@ -426,3 +427,20 @@ def test_source_hash_bypass_mutant_is_caught(inputs):
     result = namespace['trade_block'](*inputs)
     with pytest.raises(AssertionError):
         assert result is None
+
+
+@pytest.mark.parametrize("enabled", [0, 1], ids=["disabled-source", "enabled-source"])
+def test_production_follows_verified_source_gate(inputs, monkeypatch, tmp_path, enabled):
+    symbols, prov = inputs
+    for rel in ("patch/gb/slink_abi.inc", "patch/polished/src/trade_frame.asm", "patch/polished/src/trade_service.asm", "patch/polished/src/trade_validate.asm"):
+        raw = (gp.ROOT / rel).read_bytes()
+        if rel.endswith("trade_service.asm"):
+            raw = raw.replace(b"SLINK_TRADE_COMMIT_ENABLE EQU 1", f"SLINK_TRADE_COMMIT_ENABLE EQU {enabled}".encode())
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+        prov["overlay"]["sources_sha256"][rel] = hashlib.sha256(raw).hexdigest()
+    monkeypatch.setattr(gp, "ROOT", tmp_path)
+    block = gp.trade_block(symbols, prov)
+    assert block["production"] is bool(enabled)
+    assert (block["commit_gate"]["bank"], block["commit_gate"]["addr"]) == symbols["SlinkTradeCommitEnabled"]

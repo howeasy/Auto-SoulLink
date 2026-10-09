@@ -1,6 +1,6 @@
 {
   "schema": "polished-overlay-provenance-v1",
-  "generated": "2026-10-08T18:31:28Z",
+  "generated": "2026-10-09T00:38:32Z",
   "source": {
     "url": "https://github.com/Rangi42/polishedcrystal",
     "tag": "v3.2.3",
@@ -53,7 +53,7 @@
       "patch/polished/src/trade_items.asm": "cf5d56f62fdb0473ebe31057325c84b72a4f825702665ab3a3756abe6ebef62a",
       "patch/polished/src/trade_items_table.asm": "1e001ad1ac4727c79de013fbadbde3c99e76d5ce52eef0a24fc7cd67fb1fdde5",
       "patch/polished/src/trade_responder.asm": "5277a7459695cde111211bbb597de2ff9666f7014be10666af0472562a35c22e",
-      "patch/polished/src/trade_service.asm": "98f699bb37ecdd6e224d9acc23114d5dcce4932c1180d324a13da9911057faf0",
+      "patch/polished/src/trade_service.asm": "04ac7415964c4e9fb1d5e37db0ab4e9d6b1975dee553936d5ab851dc64e848f2",
       "patch/polished/src/trade_snapshot.asm": "c43d3796cbd3ffd6b7f7ff6ff03d36ceaac79f973daa2d18cea2af594fdf3da9",
       "patch/polished/src/trade_validate.asm": "352f88e3bb91b95f05a5330fd41beae72d0165e5d4237648f0bbba4d641ddba1",
       "patch/polished/src/version.asm": "c651a857adfc9e1004ce794d669777f498a701085054511bc3ef8e63c9399bf7",
@@ -66,14 +66,14 @@
   },
   "command": "make -j4 CFLAGS=-O2 polishedcrystal-3.2.3.gbc",
   "output": {
-    "sha1": "688945795e2656019247f5aaceb7b1d8791e900a",
-    "md5": "c50f6aa824ed384724f10d6274a30b6d",
-    "header_crc": "12FA",
-    "crc32": "65E4A469",
+    "sha1": "fe8c57e1034059331ccf25d232ff757d675363b2",
+    "md5": "a0a52f4036df13619b9daa403114af4d",
+    "header_crc": "0946",
+    "crc32": "961F854F",
     "title": "PKPCRYSTAL\u0000PKPC",
     "size": 2097152,
     "identical_to_clean": false,
-    "canonical_sha1": "1f25c0c45438bc3433fec71dbbc827c71aeca874",
+    "canonical_sha1": "c5c0fd206e1f3fdf83f8fe26cd1b0f1dc16555f7",
     "version_slot": {
       "offset": 2064752,
       "length": 20
@@ -90,12 +90,12 @@
     ],
     "ups": {
       "file": "patch/dist/SLink-Polished.ups",
-      "size": 4166,
-      "sha256": "e83548e085ba06f3a671ce01b937984bf2be64222c03fc9ee9fb1a0acdbada57"
+      "size": 4195,
+      "sha256": "1c16c1559fa85253e52b1e0592e9c727fa1f721ef5bab2cd2f92061fb6472e30"
     }
   },
   "symbols": {
-    "polished_slink.sym": "6543545169478e4bfd99460accfe0b81f179cf42f81676795f24d2103e9afd49",
-    "polished_slink.map": "d316328d8b848a87ced9ad3a22ab690a8504f2ee0ab76410ecaa9de9414e7fe5"
+    "polished_slink.sym": "2e63e163db800bec7df240f803147fd6ca550692d15cdbd61240c6991dd57dbf",
+    "polished_slink.map": "0beab9fe247a530249a2595d4151b6d35089d62d7a14a8cc4c3f109a3c4845fc"
   }
 }

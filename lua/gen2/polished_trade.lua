@@ -261,7 +261,17 @@ function PT.compose(spec)
         for i,a in ipairs(all) do for j=i+1,#all do local b=all[j]
             assert(a.addr+a.size <= b.addr or b.addr+b.size <= a.addr, 'trade span overlap')
         end end
-        assert(spec.dev == true, 'development proposer trade disabled')
+        local production = spec.dev ~= true and t.production == true
+            and t.capabilities.proposer_service == true and t.capabilities.responder_service == true
+            and t.capabilities.commit == true
+        assert(spec.dev == true or production, 'development proposer trade disabled')
+        if production then
+            local gate = t.commit_gate
+            assert(type(gate) == 'table' and gate.symbol == 'SlinkTradeCommitEnabled'
+                   and type(spec.read_rom) == 'function', 'production trade commit gate missing')
+            local bytes = spec.read_rom(gate.bank, gate.addr, 1)
+            assert(type(bytes) == 'table' and bytes[1] == 1, 'production trade commit gate disabled')
+        end
         local v
         if spec.validation ~= nil then
             v = clone(spec.validation) -- explicit override: malformed never falls back
@@ -286,7 +296,7 @@ function PT.compose(spec)
             assert(type(io[name]) == 'function','trade IO missing: '..name)
         end
         -- Optional diagnostics sink (cancel logs exactly once per cancelled visit). Production
-        -- composition passes none: the BizHawk console `print` is the default.
+        -- composition supplies a Lua log callback; standalone model callers may use print.
         local log = spec.log
         if log == nil then log = print end
         assert(type(log) == 'function', 'trade log must be a function')
@@ -390,7 +400,7 @@ function PT.compose(spec)
             if out[2] == nil then return nil,'PENDING',tostring(out[3]) end
             return table.unpack(out,2,out.n)
         end
-        function T:advertised() return false end -- H1 is dev-only, including with future component labels.
+        function T:advertised() return production end -- explicit dev probes never advertise production trade
         function T:phase() return role,phase end
         function T:poll_query() if not poisoned and not attempted and not cancelled and role ~= 'responder' then return raw:poll_query() end end
         function T:poll_offer() if not poisoned and not attempted and not cancelled and role ~= 'responder' then return raw:poll_offer() end end

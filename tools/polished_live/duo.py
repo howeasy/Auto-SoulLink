@@ -58,12 +58,15 @@ import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
+from tools.polished_live.overlay_pin import overlay_sha1  # noqa: E402
+
 LANE = Path(os.environ.get("POL_DUO_LANE", "F:/slink-work/lanes/pol-duo"))
 RELEASE = Path("F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc")
 UPS = REPO / "patch/dist/SLink-Polished.ups"
 DEFAULT_FIXTURE = "F:/slink-work/lanes/g2int-live/pol/fixture/polished_overlay_warp.SaveRAM"
 HERE = Path(__file__).resolve().parent
-INTEGRATED_SHA1 = "688945795e2656019247f5aaceb7b1d8791e900a"
+INTEGRATED_SHA1 = overlay_sha1()
 ROM_NAME = "pol_overlay.gbc"            # BizHawk names the save from the file stem, '_' -> ' '
 SAVE_NAME = "pol overlay.SaveRAM"
 ADAPTER, KIND = "gen2_polished", "overlay"

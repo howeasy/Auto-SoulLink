@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.unit import test_polished_faint_signals as fs, test_polished_write_path as wp
+from tools.polished_live.overlay_pin import overlay_sha1
 
 ROOT = Path(__file__).resolve().parents[2]
 SIGNALS = "lua/gen2/signals.lua"
@@ -110,7 +111,7 @@ def test_wrong_rom_bank_never_reports():
 
 def test_native_anchor_matches_current_overlay():
     rom = wp.overlay()[1]
-    assert hashlib.sha1(rom).hexdigest() == "688945795e2656019247f5aaceb7b1d8791e900a"
+    assert hashlib.sha1(rom).hexdigest() == overlay_sha1()
     assert rom[ROW["rom_offset"]:ROW["rom_offset"]+ROW["hex_len"]].hex().upper() == ROW["expected_hex"] == ROW["find_hex"]
 
 

@@ -955,10 +955,10 @@ local function compose_polished(deps, decision)
                         rival=rival},
                 production_admitted=false, artifact_kind=decision.kind, runtime_rom_sha1=decision.rom_sha1,
                 runtime_started=false, qualification="DEV_OVERLAY_SHA1"}
-        -- C4: dev/test access only. Do not pass this binder to client.new: its
-        -- production trade pump and hello capability remain unchanged. C3 owns
-        -- its narrow trade permit; this branch adds no permit or overworld span.
-        if deps.polished_trade_dev == true then
+        -- C4: shipped enabled profiles compose by default; explicit dev probes stay unadvertised.
+        -- C3 owns its narrow trade permit; this branch adds no permit or overworld span.
+        local production_trade = profile.overlay.trade and profile.overlay.trade.production == true
+        if deps.polished_trade_dev == true or (production_trade and deps.polished_trade_dev ~= false) then
             local composed, trade, why = pcall(function()
                 assert(profile.overlay.trade, "overlay.trade family missing")
                 local reader = io_.read_u8
@@ -967,7 +967,7 @@ local function compose_polished(deps, decision)
                 assert(io_.domain_size("ROM") == size and Admission.sha1(byte, size) == decision.rom_sha1,
                        "dev trade ROM hash mismatch")
                 local PT = load("lua/gen2/polished_trade.lua")
-                return PT.compose({profile=profile, io=io_, dev=true, log=deps.log,
+                return PT.compose({profile=profile, io=io_, dev=deps.polished_trade_dev == true, log=deps.log,
                     read_rom=function(bank, addr, n)
                         assert(type(bank) == "number" and bank % 1 == 0 and bank > 0
                                and type(addr) == "number" and addr % 1 == 0 and addr >= 0x4000
@@ -981,9 +981,9 @@ local function compose_polished(deps, decision)
                     end})
             end)
             if composed and trade then
-                parts.dev_polished_trade = trade
+                if trade:advertised() then parts.polished_trade = trade else parts.dev_polished_trade = trade end
                 -- PUMP card (672c824e): the client is constructed before the dev binder exists, so install the
-                -- dev-only trade pump late. It never changes the hello (trade_prepare stays false).
+                -- Polished pump late. The binder controls whether hello advertises trade_prepare.
                 local pumped, pump_why = pcall(client.install_dev_trade_pump, client, {binder=trade, charmap=charmap})
                 if not pumped and deps.log then deps.log("[SLink-polished] dev trade pump not installed: " .. tostring(pump_why)) end
             elseif deps.log then deps.log("[SLink-polished] dev trade unavailable: " .. tostring(composed and why or trade)) end

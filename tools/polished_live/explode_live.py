@@ -22,10 +22,13 @@ import uuid
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
+from tools.polished_live.overlay_pin import overlay_sha1  # noqa: E402
+
 WORK = Path("F:/slink-work/lanes/pol-explodelive")
 FIXTURE = Path("F:/slink-work/lanes/g2int-live/pol/fixture/polished_overlay_warp.SaveRAM")
 ROUTE = REPO / "tools/polished_live/routes/faint_f3_route.json"
-OVERLAY = "688945795e2656019247f5aaceb7b1d8791e900a"
+OVERLAY = overlay_sha1()
 FIXTURE_HASH = "75c7a5dc30126f746567202cfb39fe583dfa04eb226063560541f6cbd29f36b8"
 CASES = ("explode", "active-faint", "bench-faint")
 DISCLOSURE = "SYNTH fixture+logical link; TEST HOST handle_command; native wild route/action/faint; no partner/capability qualification"

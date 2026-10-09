@@ -36,6 +36,7 @@ class Pump(wp.Rig):
         self.deps, self.io, self.log = self.lua.execute(wp.HARNESS.replace("ROOTDIR", json.dumps(wp.ROOT)))(
             wp.overlay()[1], self.mem, self.img)
         self.deps.player = player
+        self.deps.polished_trade_dev = False  # explicit isolated manual-binder fixture, not shipped auto-composition
         if legacy_observers:  # historical client predates the default-on Polished faint interfaces
             self.deps.polished_faint_observer = False
             self.deps.polished_active_faint = False

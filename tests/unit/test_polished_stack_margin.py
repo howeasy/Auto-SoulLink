@@ -45,11 +45,7 @@ def env():
         if not path.is_file():
             pytest.skip(f"stack measurement input absent: {path}")
     # A missing/bad patch, obsolete symbol, or broken machine is a failure.
-    return proposer.Env(
-        proposer.ups_apply(proposer.RELEASE.read_bytes(), proposer.UPS.read_bytes()),
-        proposer._symbols(proposer.OVERLAY_SYM),
-        proposer._symbols(proposer.CLEAN_SYM),
-    )
+    return proposer.disabled_env()  # historical disabled MODEL budgets retained explicitly
 
 
 @dataclass
@@ -215,3 +211,17 @@ def test_native_stack_margin(path, env, monkeypatch):
         run = responder.Rig(env).run(responder.host_consent(), via_dispatch=True)
         assert run.events == "ADADC" and run.info[1]["o8"] == 0
     assert_margin(path, measurements, env)
+
+
+def test_enabled_shipped_commit_stack_margin(monkeypatch):
+    if not proposer.RELEASE.is_file():
+        pytest.skip("pinned release absent")
+    e = proposer.Env(proposer.ups_apply(proposer.RELEASE.read_bytes(), proposer.UPS.read_bytes()),
+                     proposer._symbols(proposer.OVERLAY_SYM), proposer._symbols(proposer.CLEAN_SYM))
+    assert e.rom[e.flat("SlinkTradeCommitEnabled")] == 1
+    measurements = instrument(monkeypatch, e)
+    rig = commit.Rig(e, count=6, slot=0)
+    result = rig.run()
+    assert result.a == 0
+    rig.invariant(result)
+    assert_margin("commit", measurements, e)

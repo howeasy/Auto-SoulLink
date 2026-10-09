@@ -19,6 +19,8 @@ Absent input skips (no cached release ROM); present-but-wrong input fails.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import sys
 from collections.abc import Callable
@@ -67,8 +69,36 @@ COMMIT_NATIVES = ("AddTempMonToParty", "RemoveMonFromParty", "ShiftPartySlotToEn
 def env():
     if not RELEASE.is_file():
         pytest.skip(f"pinned Polished release ROM not cached at {RELEASE}")
-    rom = ups_apply(RELEASE.read_bytes(), UPS.read_bytes())
-    return Env(bytes(rom), _symbols(OVERLAY_SYM), _symbols(CLEAN_SYM))
+    return disabled_env()
+
+
+def disabled_env():
+    """Explicit old disabled control, not a claim that the shipped overlay is disabled."""
+    fixture = REPO / "tests/fixtures/polished/disabled_trade"
+    facts = json.loads((fixture / "fixture.json").read_text())
+    patch = (fixture / "overlay.ups").read_bytes()
+    assert hashlib.sha256(patch).hexdigest() == facts["ups_sha256"]
+    assert hashlib.sha256(CLEAN_SYM.read_bytes()).hexdigest() == facts["clean_sym_sha256"]
+    rom = ups_apply(RELEASE.read_bytes(), patch)
+    assert hashlib.sha1(rom).hexdigest() == facts["overlay_sha1"]
+    clean = _symbols(CLEAN_SYM)
+    return Env(bytes(rom), clean | {k: tuple(v) for k, v in facts["overlay_symbols"].items()}, clean)
+
+
+@pytest.fixture(scope="module")
+def shipped_env():
+    if not RELEASE.is_file():
+        pytest.skip(f"pinned Polished release ROM not cached at {RELEASE}")
+    return Env(ups_apply(RELEASE.read_bytes(), UPS.read_bytes()), _symbols(OVERLAY_SYM), _symbols(CLEAN_SYM))
+
+
+def test_shipped_commit_is_enabled_with_native_tail(shipped_env):
+    e = shipped_env
+    assert e.rom[e.flat("SlinkTradeCommitEnabled")] == 1
+    jump = b"\xc3" + e.a("SlinkTradeApplyCommit").to_bytes(2, "little")
+    for begin, end in (("SlinkTradeProposerService", "SlinkTradeProposerServiceEnd"),
+                       ("SlinkTradeResponderService", "SlinkTradeResponderServiceEnd")):
+        assert jump in e.rom[e.flat(begin):e.flat(end)]
 
 
 @dataclass

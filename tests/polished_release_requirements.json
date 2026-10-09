@@ -3,7 +3,7 @@
   "title": "Polished Crystal (gen2_polished) release candidate — the SOLO lane",
   "rationale": "tools/verify_gen2_release.py is the Gen 2 release manifest and must not change: tests/unit/test_polished_release_guards.py pins its TITLES to (crystal, gold, silver) and its DUO_PAIRS to vanilla pairings. That is right — Polished Crystal is a SOLO title with no vanilla partner, so it has no duo matrix, no second fixture and no per-title live-gate set to extend. This manifest is the separate lane: one row per obligation, judged by tools/verify_polished_release.py.",
   "overlay_provenance": "data/polished/overlay_provenance.json",
-  "overlay_sha1_at_manifest": "34942315bb3e62189a56dabbcb9cef6dd3e9a9f5",
+  "overlay_sha1_at_manifest": "fe8c57e1034059331ccf25d232ff757d675363b2",
   "receipts_dir": "tests/fixtures/polished/receipts",
   "kinds": {
     "SOURCE": "a generator's own --check: the committed artifact must equal what the pinned source re-derives",
@@ -575,7 +575,7 @@
       "status": "OPEN",
       "blocking_rc": true,
       "description": "the in-game trade at the Cable Club receptionist has no hooked dispatch",
-      "blocker": "receptionist dispatch is hooked (SpecialsPointers entries into the bank-$7E held services), C6 responder and C5 commit landed with commit compile-DISABLED (7e:573B=0), host binder/pump DEV-only and never advertised; no duo trade and no enabled commit on any overlay",
+      "blocker": "Shipped overlay commit enabled by owner ruling 2026-10-09 #6; normal client composes and advertises trade. Prior enabled fe8c57e trade + cold CONTINUE PASS: F:/slink-work/lanes/pol-tradeduo/attempt-006/verdict.json. RC closure still requires the final freeze-bound live receipt; status remains OPEN.",
       "manager_options": ["pc_trade_npc"],
       "evidence": "F:/slink-work/lanes/pol-live2/x/explore_B/result.txt:10 'the native link wait ran and timed out (no cable)'; docs/polished/TRADE.md"
     }

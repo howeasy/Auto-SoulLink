@@ -50,7 +50,7 @@ def test_judge_controls_fail(fault):
     assert t.judge(wire, before, cold, state)[0] == "FAIL"
 
 
-def test_default_builder_remains_disabled_and_test_output_cannot_publish(tmp_path):
+def test_builder_test_mode_defaults_off_and_test_output_cannot_publish(tmp_path):
     from tools import build_polished_companion as build
     sig = inspect.signature(build.build)
     assert sig.parameters["test_trade_enable"].default is False

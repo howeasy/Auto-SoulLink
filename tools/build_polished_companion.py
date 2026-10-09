@@ -419,7 +419,8 @@ def moved_symbols(old: dict, new: dict) -> list[str]:
 def build(*, check: bool = False, version: str | None = None,
           rgbds_bin: pathlib.Path | None = None,
           w64devkit_bin: pathlib.Path | None = None, repo_dir: pathlib.Path | None = None,
-          test_trade_enable: bool = False, test_output: pathlib.Path | None = None) -> int:
+          test_trade_enable: bool = False, test_output: pathlib.Path | None = None,
+          cache_dir: pathlib.Path | None = None) -> int:
     if test_trade_enable and test_output is None:
         raise RuntimeError("test trade enable requires --test-output")
     if test_output is not None:
@@ -440,7 +441,7 @@ def build(*, check: bool = False, version: str | None = None,
     rgbds_bin = rgbds_bin or ensure_rgbds(lock["rgbds_version"])
     devkit_bin = w64devkit_bin or ensure_w64devkit()
     source_repo = repo_dir or work_root("cache") / "polished/src"
-    cache = test_output / "cache/polished" if test_output is not None else work_root("cache") / "polished"
+    cache = test_output / "cache/polished" if test_output is not None else (cache_dir or work_root("cache") / "polished")
 
     # 1. the clean build must reproduce the lock first (raises on a sha1 mismatch)
     clean_dir = cache / "companion-clean"
@@ -526,7 +527,7 @@ def build(*, check: bool = False, version: str | None = None,
         "symbols": {p.name: _sha256(b) for p, b in files.items() if p.parent == out_dir},
     }
     if test_output is not None:
-        provenance["test_only"] = {"SLINK_TRADE_COMMIT_ENABLE": int(test_trade_enable),
+        provenance["test_only"] = {"SLINK_TRADE_COMMIT_ENABLE": 1,
                                    "statement": "ISOLATED TEST BUILD; not a shipped pin"}
 
     print(f"[polished-companion] clean sha1 {spec['sha1']} reproduced", file=sys.stderr)
@@ -568,11 +569,12 @@ def main() -> int:
     ap.add_argument("--repo-dir", type=pathlib.Path, default=None)
     ap.add_argument("--rgbds-bin", type=pathlib.Path, default=None)
     ap.add_argument("--w64devkit-bin", type=pathlib.Path, default=None)
-    ap.add_argument("--version", default=None,
-                    help="stamp into the main-menu version line (20-byte fixed field)")
+    ap.add_argument("--version", default="0.1.0",
+                    help="stamp into the main-menu version line (default 0.1.0, 20-byte fixed field)")
     ap.add_argument("--selfcheck", action="store_true", help="run the pure-function asserts only")
     ap.add_argument("--test-trade-enable", action="store_true", help="TEST ONLY: compile native trade commit; requires isolated --test-output")
     ap.add_argument("--test-output", type=pathlib.Path, help="isolated test build/cache root, outside the repository")
+    ap.add_argument("--cache-dir", type=pathlib.Path, help="private build cache; normal shipped output paths are unchanged")
     args = ap.parse_args()
     if args.selfcheck:
         _selfcheck()
@@ -581,7 +583,7 @@ def main() -> int:
     try:
         return build(check=args.check, rgbds_bin=args.rgbds_bin, w64devkit_bin=args.w64devkit_bin,
                      repo_dir=args.repo_dir, version=args.version,
-                     test_trade_enable=args.test_trade_enable, test_output=args.test_output)
+                     test_trade_enable=args.test_trade_enable, test_output=args.test_output, cache_dir=args.cache_dir)
     except RuntimeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

@@ -26,7 +26,10 @@ from pathlib import Path
 from PIL import Image
 
 REPO = Path(__file__).resolve().parents[2]
-OVERLAY_SHA1 = "688945795e2656019247f5aaceb7b1d8791e900a"
+sys.path.insert(0, str(REPO))
+from tools.polished_live.overlay_pin import overlay_sha1  # noqa: E402
+
+OVERLAY_SHA1 = overlay_sha1()
 CLEAN_SHA1 = "6930b48af5844d373e3c9130f26d6dd1084cf4ed"
 BAND_X, BAND_Y, WIDTH = 6, 10, 9
 FIRST = 0x60

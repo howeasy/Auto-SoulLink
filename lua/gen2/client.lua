@@ -96,7 +96,7 @@ function Client.new(p)
     local panel = p.panel -- P4.1f panel: lua/gen2/panel.lua, or nil (no panel)
     local phone = p.phone -- P4.5c phone calls: lua/gen2/phone.lua, or nil (no panel)
     local trade = p.trade -- P4.3b native SLINK TRADE: lua/gen2/trade_overlay.lua, or nil (no trade build)
-    local dev_trade -- C4b: separate, explicit Polished dev interface; never aliases p.trade.
+    local dev_trade -- C4b: Polished pump (historical name); never aliases the vanilla p.trade.
     -- F2 (docs/polished/PLAIN_FAINT_F2.md): the optional Polished-only active-faint settlement interface, supplied ONLY
     -- by compose_polished (lua/gen2/entry.lua) from lua/gen2/polished_explode.lua. nil (every vanilla composition):
     -- every `settle` branch below is dead and the legacy death paths run unchanged.
@@ -706,6 +706,7 @@ function Client.new(p)
     -- Live only on a trade build (p.trade), an overlay kind, and a cartridge advertising the cap.
     local PROMPT, APPLY = 3, 5 -- gb_trade_lease commands
     function self:trade_live()
+        if dev_trade then return dev_trade.advertised() end
         return trade ~= nil and (self.artifact_kind == "overlay" or self.artifact_kind == "rand_overlay")
             and trade:advertised()
     end
@@ -955,12 +956,12 @@ function Client.new(p)
         end
     end
 
-    -- C4b (docs/polished/TRADE_PUMP.md): optional commit-disabled driver. Entry builds the
+    -- C4b (docs/polished/TRADE_PUMP.md): Polished pump, with advertisement owned by the binder. Entry builds the
     -- binder AFTER this client, so it may install {binder, charmap} once, before start().
-    -- No hooks, hello flags, lease writes or vanilla state are borrowed by this interface.
+    -- The historical install_dev name remains compatible; vanilla state is not borrowed by this interface.
     function self:install_dev_trade_pump(spec)
         assert(dev_trade == nil and trade == nil, "ambiguous trade composition")
-        assert(self.foundation == "gen2_polished" and self.artifact_kind == "overlay",
+        assert(self.foundation == "gen2_polished" and (self.artifact_kind == "overlay" or self.artifact_kind == "rand_overlay"),
                "dev trade requires admitted Polished overlay")
         local binder, charmap = assert(spec.binder), assert(spec.charmap)
         for _, name in ipairs({"poll_query", "poll_offer", "poll_done", "phase", "disposition",
@@ -972,6 +973,7 @@ function Client.new(p)
         local family = profile.overlay.trade
         local visit, serial, stopped, last_token = nil, 0, false, nil
         local D = {}
+        function D.advertised() return binder:advertised() == true end
         local function call(name, ...)
             local ok, a, b, why = pcall(binder[name], binder, ...)
             if not ok then return nil, "UNCERTAIN", tostring(a) end
