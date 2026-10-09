@@ -647,7 +647,8 @@ NATURAL_DEFECTS = [
      f"b:cartridge_hp_not_zero:{KB}"),
     ("link_survives", lambda e: e["status"].update(after=_link_status()), f"link_still_alive:{AREA}"),
     ("link_disappeared", lambda e: e["status"]["after"].update(links=[]), f"dead_link_missing:{AREA}"),
-    ("link_memorial_is_not_dead", lambda e: e["status"].update(after=_link_status("memorial")), f"link_not_dead:{AREA}"),
+    ("link_memorial_without_kill_stamp_is_not_dead", lambda e: e["status"].update(after=_link_status("memorial")),
+     f"link_not_dead:{AREA}"),
     ("wrong_hp1_target", lambda e: e["steps"]["a"]["stage"]["synth_writes"][0].update(key=B_OWN[0]),
      "a:stage_wrong_target"),
     ("wrong_hp_address", lambda e: e["steps"]["a"]["stage"]["synth_writes"][0].update(wram=100000),
@@ -747,6 +748,19 @@ def test_natural_loss_passes_only_the_native_server_path(whole_party, path):
     verdict, reasons, facts = oracle(ev)
     assert (verdict, reasons, facts["server_path"]) == ("PASS", [], path)
     assert facts["expected_partners"] == facts["b_force_faint_keys"] == [KB]
+
+
+@pytest.mark.parametrize("whole_party", [False, True], ids=["faint", "whiteout"])
+def test_natural_loss_passes_when_the_server_already_memorialized_the_killed_pair(whole_party):
+    # Live S2n (pol-duo3 s2n1): A ran away promptly after its faint report, both clients reached a safe overworld and
+    # the server advanced dead -> memorial (stamped killed_at, cause battle) before the 'after' snapshot. That is the
+    # same kill one server stage later, not a surviving link.
+    ev = natural_ev(whole_party)
+    ev["status"]["after"] = _link_status("memorial")
+    ev["status"]["after"]["links"][0].update(killed_at="2026-10-08T23:58:18+00:00")
+    oracle = duo.oracle_whiteout_natural if whole_party else duo.oracle_faint_natural
+    verdict, reasons, _facts = oracle(ev)
+    assert (verdict, reasons) == ("PASS", [])
 
 
 @pytest.mark.parametrize("whole_party", [False, True], ids=["copyback_delay", "whiteout_queue_delay"])
@@ -1188,3 +1202,40 @@ def test_natural_setup_rejects_a_lead_write_that_is_not_a_permutation():
     ev = natural_ev()
     ev['steps']['a']['stage']['lead_writes'] = [{'array':'wPartyMons','wram':0,'slot':0,'key':KA,'old':7,'new':8}]
     assert duo.oracle_faint_natural(ev)[0] == 'FAIL'
+
+
+def test_emu_health_reports_json_and_never_raises():
+    class Out:
+        returncode, stderr = 0, ""
+        stdout = '{"responding":true,"cpu_delta":0.0,"threads":22}\n'
+
+    assert duo.emu_health(123, run=lambda *a, **k: Out()) == {"responding": True, "cpu_delta": 0.0, "threads": 22}
+
+    def boom(*a, **k):
+        raise OSError("no powershell")
+
+    assert "OSError" in duo.emu_health(123, run=boom)["error"]
+
+
+def test_duo_play_step_loop_records_a_lua_error_and_keeps_the_client_running():
+    lupa = pytest.importorskip("lupa")
+    source = (REPO / "tools/polished_live/duo_play.lua").read_text(encoding="utf-8")
+    tail = source[source.index("local k, held, stopped = 0, 0, false"):source.index('L.check("stop step seen')]
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    out = lua.execute("""
+        local tail = ...
+        local logs, frames = {}, 0
+        local L = {RUN = ".", log = function(s) logs[#logs + 1] = s end}
+        L.frame = function() frames = frames + 1 if frames > 40 then error("pol-live-finished", 0) end end
+        local fake = {read = function() return '{"op":"catch"}' end, close = function() end, write = function() end}
+        local env = setmetatable({L = L, fmt = string.format, emu = {framecount = function() return frames end},
+            ROLE = "t", HOLD_CAP = 400000, client_writes = {},
+            J = {decode = function() return {op = "catch"} end, encode = function() return "{}" end},
+            op_catch = function() error("synthetic step error") end,
+            io = {open = function() return fake end}}, {__index = _G})
+        local ok, err = pcall(assert(load(tail, "tail", "t", env)))
+        return ok, tostring(err), table.concat(logs, "|"), frames
+    """, tail)
+    ok, err, logs, frames = out
+    assert ok is False and "pol-live-finished" in err             # the finish marker passes through ...
+    assert "PLAY_LUA_ERROR" in logs and "synthetic step error" in logs and frames > 0   # ... after the error was logged
