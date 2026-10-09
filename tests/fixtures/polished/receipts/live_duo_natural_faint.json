@@ -1,42 +1,86 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
-  "date": "2026-10-08",
+  "date": "2026-10-09",
   "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
   "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
-  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
+  "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9",
   "scenario_id": "duo/play-faint-natural",
-  "lane": "F:/slink-work/lanes/pol-freeze-5f4732",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze2",
   "requirement_id": "LIVE-DUO-NATURAL-FAINT",
-  "narrative": "docs/polished/FREEZE_RUNBOOK.md step 20 (S2n); command `python tools/polished_live/duo.py --scenario faint-natural --distinct-identities --fixture-a <fixture> --fixture-b <fixtureB>` with POL_DUO_LANE=<lane>/duo-s2n, POL_DUO_DEADLINE=900",
-  "evidence_dir": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s2n/play-faint-natural",
-  "evidence_file": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s2n/play-faint-natural/evidence.json",
-  "evidence_sha256": "f95da4e53fb4bd31e818bed200b541cf29ac45ec1a227caf1e3706dfbf7d4f45",
-  "evidence_size": 2669033,
-  "evidence_note": "evidence.json is the duo driver's own record: verdict/reasons, the oracle facts block, per-side wire streams with the stage mark, per-step cartridge snapshots, SYNTH disclosure and the server status before/after. The oracle (tools/polished_live/duo.py) was re-run in-process on evidence.evidence and returned PASS with a facts block equal to the recorded one.",
+  "narrative": "Frozen execution rebound from F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; previous run narrative superseded.",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json",
+  "evidence_sha256": "88599ffd7132bdeb5e35e1506cdb1573699673b329ceda8673b54e8f6bac38e2",
+  "evidence_size": 3151682,
+  "evidence_note": "Mechanical rebind after producer PASS and recorded/scoped run witness validation; DEV only.",
   "secondary_evidence": [
     {
-      "path": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s2n/play-faint-natural/server.log",
-      "sha256": "01d88717d41decd12e9db71dafdc45be51d85ec089e491af717c1a0e10014b90",
-      "note": "server log of the duo run (both clients, rules, commands)"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\server.log",
+      "note": "server log of the duo run (both clients, rules, commands)",
+      "sha256": "ce22cb1df008fe1b402e0a2e894b2e8f0788b207531ce16df54b13ae918ea74f",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\WITNESS.json",
+        "sha256": "17d9612a7901bcb4066ad836ea909a0427365192dc82dcbabca20627695e8222",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:/slink-work/lanes/pol-freeze-5f4732/duo_s2n_console.txt",
-      "sha256": "d6770b86108e0a0165e0af4df2dd51140b4d01a6e70c76465e68cd37d10e75d4",
-      "note": "driver console: scenario banner with overlay sha1, RESULT line"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo_s2n_console.txt",
+      "note": "driver console: scenario banner with overlay sha1, RESULT line",
+      "sha256": "31c13a14662a14a267aed23c277deb468237391dabe3414fc8eb6c77c6c41713",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\WITNESS.json",
+        "sha256": "17d9612a7901bcb4066ad836ea909a0427365192dc82dcbabca20627695e8222",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s2n/play-faint-natural/a/rom/pol_overlay.gbc",
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\a\\rom\\pol_overlay.gbc",
+      "note": "side a staged ROM",
       "sha256": "1145e7066617a7bc5f7296093d45e997db63ef3616713d8eb38c3e8bcc44c60f",
-      "note": "side a staged ROM"
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\WITNESS.json",
+        "sha256": "17d9612a7901bcb4066ad836ea909a0427365192dc82dcbabca20627695e8222",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s2n/play-faint-natural/b/rom/pol_overlay.gbc",
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\b\\rom\\pol_overlay.gbc",
+      "note": "side b staged ROM",
       "sha256": "1145e7066617a7bc5f7296093d45e997db63ef3616713d8eb38c3e8bcc44c60f",
-      "note": "side b staged ROM"
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\WITNESS.json",
+        "sha256": "17d9612a7901bcb4066ad836ea909a0427365192dc82dcbabca20627695e8222",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n-job\\WITNESS.json",
+      "note": "Fresh freeze2 per-job witness; root fallback scopes sibling job artifacts.",
+      "sha256": "e7b9a92e43c83ed71579ce27ef3ba1e2db39ce3abdbac9903a819af2f04511a8",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n-job\\WITNESS.json",
+        "sha256": "e7b9a92e43c83ed71579ce27ef3ba1e2db39ce3abdbac9903a819af2f04511a8",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n-job",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     }
   ],
-  "code_digest_note": "Computed, not transcribed: `python tools/verify_polished_release.py --root F:/slink-work/wt/g2-int --print-code-digest` = 5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1; the freeze cut",
   "synth": [
     "fixture a: O-33 SYNTH warp fixture sha256 75c7a5dc30126f746567202cfb39fe583dfa04eb226063560541f6cbd29f36b8 (Route 29, five SYNTH level-50 mons)",
     "fixture b: SYNTH identity derivative f5f19f5d2e3e26e343214722b5116e1aac0c71a1200882a4cc6f58259bc6ca8d (O-33, derive_save.py), player_id 53699; a is 53698",
@@ -48,52 +92,52 @@
     {
       "name": "run verdict",
       "result": "PASS",
-      "observed": "evidence.json verdict = 'PASS', reasons = []; duo_s2n_console.txt 'RESULT: PASS polished-duo-play-faint-natural'; oracle oracle_faint_natural re-run in-process on evidence.evidence returns PASS with the identical facts block"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "both sides booted the shipped overlay and were admitted",
       "result": "PASS",
-      "observed": "both sides' staged pol_overlay.gbc sha1sum = fe8c57e1034059331ccf25d232ff757d675363b2; evidence.status.start.players.a/b admission = 'admitted'; hello artifact_kind 'overlay', foundation 'gen2_polished'; server.log 'run is bound to randomized ROMs (UPR none (overlay, not randomized)'"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "two distinct identities and a native paired link on the same area",
       "result": "PASS",
-      "observed": "fixtures a player_id 53698 / b player_id 53699 (distinct); facts.area_id route_29, a_key 5CB4EA:D1C2:010:00, b_key 881A0A:D1C3:0A1:00; link status 'alive' before the stage (oracle link:* reasons empty)"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "the loss setup is a disclosed HP 1 on the linked lead only, never HP 0",
       "result": "PASS",
-      "observed": "steps.a.stage op 'synth_hp1': two WRAM bytes (wram 7416 0->0, 7417 13->1) on the linked mon at slot 0, lead permutation verified byte-exact against the symbols (48/11/11 spans), no collateral HP change (oracle a:stage_* reasons empty)"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "a native battle loss produced exactly one faint event for the linked mon and no whiteout",
       "result": "PASS",
-      "observed": "steps.a.battle op 'lose_native' ok; wire a c2s idx 437 {event:faint, key:5CB4EA:D1C2:010:00, seq:219}; no whiteout event and no other faint key after the stage mark (oracle a:native_event_missing / a:unexpected_whiteout_event / a:unexpected_faint_key empty); facts.server_path = 'faint_event'"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "the engine copyback witness shows the linked mon at HP 0 before the client report",
       "result": "PASS",
-      "observed": "facts.native_hook_frames = [9200, 9200, 9200, 9200, 9200, 9200, 9200, 9200, 9201, 9201, 9201, 9201] (qualified faint_copyback hits, battle_hp 0, staged slot), facts.native_report_frames = [9201]: the report's linked mon HP = 0 at the staged slot"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "the server sent exactly one force_faint for the linked partner to B and nothing else lethal",
       "result": "PASS",
-      "observed": "wire b s2c idx 468 force_faint key 881A0A:D1C3:0A1:00; facts.b_force_faint_keys = ['881A0A:D1C3:0A1:00'] equals expected_partners; no force_faint/force_explode before the stage mark; no other kill command (oracle b:force_faint_* reasons empty)"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "B's cartridge shows the partner at HP 0 and no other B mon changed",
       "result": "PASS",
-      "observed": "steps.b.await received force_faint 881A0A:D1C3:0A1:00 (command frame 9076); force_faint_readback hp 0 at party slot 5, frame 9076 >= command frame (seq matched); facts.b_cartridge_witness = {'881A0A:D1C3:0A1:00': 'force_faint_readback'}; b:collateral_hp_change absent"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "the server marks the link dead after the kill",
       "result": "PASS",
-      "observed": "evidence.status.after.links: the exact (area, a_key, b_key) row has status 'memorial' with killed_at '2026-10-09T01:27:47.210731+00:00' (the dead->memorial advance, kill stamp present); no row still alive"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "no reconnect or hello re-report after the stage mark",
       "result": "PASS",
-      "observed": "oracle a:poststage_reconnect / b:poststage_reconnect absent: the HP 0 reached the server through the native faint event, not a hello reconcile"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\duo\\duo-s2n\\play-faint-natural\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     }
   ],
   "not_proven": [
@@ -101,5 +145,13 @@
     "steps.a.battle.run_used is true: the harness marks that the BattleMenu_Run site was reached on the way to losing; the faint oracle does not constrain it (S4n does). The qualifying events are the native faint event and the faint_copyback witness, not the run flag.",
     "Not checked here: A's own execution of the memorialize command the server returned after the faint (wire a idx 438), or either player's box-20 burial (that is LIVE-WRITES-OVERWORLD legs e/f and post-RC owed-burial).",
     "Two-player faint of a boxed/benched linked mon, bank 2, and whiteout are other scenarios."
-  ]
+  ],
+  "run_witness": {
+    "path": "F:\\slink-work\\lanes\\pol-freeze2\\WITNESS.json",
+    "sha256": "17d9612a7901bcb4066ad836ea909a0427365192dc82dcbabca20627695e8222",
+    "scope": "F:\\slink-work\\lanes\\pol-freeze2",
+    "kind": "recorded per-job/root witness",
+    "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+    "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+  }
 }

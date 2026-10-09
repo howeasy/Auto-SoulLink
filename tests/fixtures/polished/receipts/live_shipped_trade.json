@@ -1,64 +1,123 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
-  "date": "2026-10-08",
+  "date": "2026-10-09",
   "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
   "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
-  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
+  "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9",
   "scenario_id": "trade/shipped-native-commit-cold-continue",
-  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
   "requirement_id": "LIVE-SHIPPED-TRADE",
-  "narrative": "Shipped normal launcher, two identities: native receptionist trade, both commit/trade_done, server re-key, native save and cold CONTINUE of both cartridges.",
-  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002",
-  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\verdict.json",
+  "narrative": "Frozen execution rebound from F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\verdict.json; previous run narrative superseded.",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\verdict.json",
   "evidence_sha256": "617e96cc57b930650b6a24561d060f4ab2d81612fd327b39e3cbd192b9e49ebf",
   "evidence_size": 9388,
-  "evidence_note": "Original freeze-run oracle; no live rerun or original evidence overwritten.",
+  "evidence_note": "Mechanical rebind after producer PASS and recorded/scoped run witness validation; DEV only.",
   "secondary_evidence": [
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\manifest.json",
-      "sha256": "8087e2e271d1ca388850587916684a9ce08fa7a8144523c57030cf6edd96fbda",
-      "note": "normal launcher, source and ROM binding"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\manifest.json",
+      "note": "normal launcher, source and ROM binding",
+      "sha256": "537f4f813816390a2a1a26ccc5a802194ff13137f9f28beb06f7fbc376e63926",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\WITNESS.json",
+        "sha256": "347759511eb1c22f59d91f41fb2297dace1f96153115994785b2c365808a200a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\cold-verdict.json",
-      "sha256": "61b74f6a904b04853032ac6846df93a4088ccaa446f67a48b73c6383ec658671",
-      "note": "separate offline check of recorded cold/durable evidence"
-    },
-    {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\state-after-trade.json",
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\state-after-trade.json",
+      "note": "server post-state",
       "sha256": "9550b300191324985b9403bc7c825aa71df6744354401dedbf0889a87b8ecb81",
-      "note": "server post-state"
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\WITNESS.json",
+        "sha256": "347759511eb1c22f59d91f41fb2297dace1f96153115994785b2c365808a200a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\a\\g2\\ready.json",
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\a\\g2\\ready.json",
+      "note": "cold native CONTINUE party/identity",
       "sha256": "1c88b2c5e4fe21636fce5da363052525c76536da350f71dfbf2b37a93a8b3f8f",
-      "note": "cold native CONTINUE party/identity"
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\WITNESS.json",
+        "sha256": "347759511eb1c22f59d91f41fb2297dace1f96153115994785b2c365808a200a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\b\\g2\\ready.json",
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\b\\g2\\ready.json",
+      "note": "cold native CONTINUE party/identity",
       "sha256": "12c99736fe85f645e2b7c6ee28565ffe92ea87ededddf60af35abb6c38216e59",
-      "note": "cold native CONTINUE party/identity"
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\WITNESS.json",
+        "sha256": "347759511eb1c22f59d91f41fb2297dace1f96153115994785b2c365808a200a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\durable-a.json",
-      "sha256": "102888838bceb2a83622d5addad4e242aea9859db66777aa6358e7eadd2dcf72",
-      "note": "main and backup save integrity/image"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\durable-a.json",
+      "note": "main and backup save integrity/image",
+      "sha256": "bdf2f1e5b6ab903f127651bcadd2bce68fb92c9f53bd47297dc5178228d0314a",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\WITNESS.json",
+        "sha256": "347759511eb1c22f59d91f41fb2297dace1f96153115994785b2c365808a200a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\durable-b.json",
-      "sha256": "78d6d018c8781e3b029fd1372007446d244d31e1f9eeda308645a0e134ef7d57",
-      "note": "main and backup save integrity/image"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\durable-b.json",
+      "note": "main and backup save integrity/image",
+      "sha256": "9cd269ee7f1596a44dcbd3bd24174e96a2ecc19abdb08967b72d153a02ca753b",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\WITNESS.json",
+        "sha256": "347759511eb1c22f59d91f41fb2297dace1f96153115994785b2c365808a200a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\a\\g1\\milestones.jsonl",
-      "sha256": "9ca61a19a65cad20c9df1e5a5294fc171a5c5f6187c288a68768e5f65bbba648",
-      "note": "native commit and wire reply ordering"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\a\\g1\\milestones.jsonl",
+      "note": "native commit and wire reply ordering",
+      "sha256": "8d21c5214b640487d53072aa10b0ee49bbf4fcff6069aabc61f9974e45af452c",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\WITNESS.json",
+        "sha256": "347759511eb1c22f59d91f41fb2297dace1f96153115994785b2c365808a200a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\b\\g1\\milestones.jsonl",
-      "sha256": "2e916a2555ed1d89464f7709657c012e2e57380d24f2b907c2fe8e24e3f62a01",
-      "note": "native commit and wire reply ordering"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\b\\g1\\milestones.jsonl",
+      "note": "native commit and wire reply ordering",
+      "sha256": "9e6f18156991d13fdf769c7969c5515b3afd645543162030790b62c243bf3bbb",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\WITNESS.json",
+        "sha256": "347759511eb1c22f59d91f41fb2297dace1f96153115994785b2c365808a200a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     }
   ],
   "synth": [
@@ -68,36 +127,44 @@
     {
       "name": "run verdict",
       "result": "PASS",
-      "observed": "PASS reasons=[]"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\verdict.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "shipped enabled overlay and normal launcher",
       "result": "PASS",
-      "observed": "manifest test_build=false gate7e573B=1 ROM fe8c57e1"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\verdict.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "both native commits and one trade_done each",
       "result": "PASS",
-      "observed": "milestones A commit1447 done4145; B commit1263 done3822; token t1"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\verdict.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "server re-keyed without false faint",
       "result": "PASS",
-      "observed": "state-after-trade ALIVE exchanged keys; pending_trade null; combined judge rejects faint/whiteout"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\verdict.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "cold CONTINUE preserves both received mons and identities",
       "result": "PASS",
-      "observed": "g2 ready parties retain received key at slot4; Aaaaaaa/TradeB"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\verdict.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "both native save copies valid and exchanged",
       "result": "PASS",
-      "observed": "cold-verdict independently checks main/backup markers/checksums and expected party"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\verdict.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     }
   ],
   "not_proven": [
     "One happy-path trade; no power-loss, rollback, item/evolution policy matrix or human campaign proof.",
     "shipped-001 failed from premature driver input and remains retained."
-  ]
+  ],
+  "run_witness": {
+    "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\shipped-f2\\WITNESS.json",
+    "sha256": "347759511eb1c22f59d91f41fb2297dace1f96153115994785b2c365808a200a",
+    "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade",
+    "kind": "recorded per-job/root witness",
+    "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+    "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+  }
 }

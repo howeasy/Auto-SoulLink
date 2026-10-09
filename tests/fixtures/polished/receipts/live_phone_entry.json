@@ -1,28 +1,70 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
-  "date": "2026-10-08",
+  "date": "2026-10-09",
   "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
   "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
-  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
+  "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9",
   "scenario_id": "phone/slink-contact-stage-1",
-  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone",
   "requirement_id": "LIVE-PHONE-ENTRY",
-  "narrative": "Freeze5f4732 fresh execution; the SLink row appears in the Pokegear phone list, calls into the gate and takes no Delete",
-  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\phone\\phone",
-  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\phone\\phone\\result.txt",
+  "narrative": "Frozen execution rebound from F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; previous run narrative superseded.",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt",
   "evidence_sha256": "d2e399bba8f05a2304f343347f20a6b1c8d0692dc69c691d66e878a9565c67fc",
   "evidence_size": 10494,
   "secondary_evidence": [
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\phone\\phone\\phone.json",
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\phone.json",
+      "note": "Fresh freeze supporting observation/control",
       "sha256": "adc82bdd3c8dc603594dd195b3b8bfbaea0be268f3794061501079041e058e4d",
-      "note": "Fresh freeze supporting observation/control"
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\WITNESS.json",
+        "sha256": "a517cba6eeb1e45f8951f0e6fc7fe6c6b2bea2e788234dd47e4322106ac90436",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\phone\\phone\\rom_sha1.txt",
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\rom_sha1.txt",
+      "note": "Fresh freeze supporting observation/control",
       "sha256": "2c87c692a24b0c4ee598c429b2aadb6a02c5702f98cd7a1196ec65421592aaef",
-      "note": "Fresh freeze supporting observation/control"
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\WITNESS.json",
+        "sha256": "a517cba6eeb1e45f8951f0e6fc7fe6c6b2bea2e788234dd47e4322106ac90436",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone.out",
+      "note": "Fresh freeze2 job console: invocation timing/PID/path evidence; included even where the deterministic primary repeats.",
+      "sha256": "c2cb71e601014e35c6631e6d5f8b8bd967c20ae75c08cf3c9de49969e462e69c",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\WITNESS.json",
+        "sha256": "17d9612a7901bcb4066ad836ea909a0427365192dc82dcbabca20627695e8222",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\WITNESS.json",
+      "note": "Fresh freeze2 full-cut per-job witness; primary execution tied to this immutable code cut.",
+      "sha256": "a517cba6eeb1e45f8951f0e6fc7fe6c6b2bea2e788234dd47e4322106ac90436",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\WITNESS.json",
+        "sha256": "a517cba6eeb1e45f8951f0e6fc7fe6c6b2bea2e788234dd47e4322106ac90436",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     }
   ],
   "synth": [
@@ -32,85 +74,94 @@
     {
       "name": "run verdict",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "check accounting",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "ROM booted",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "s0 row reads 'SLink:'",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "s0 row reads '   Soul Link'",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "s0 has exactly one SLink row on the first screen",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "A opens the contact submenu",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "submenu offers Call and Cancel",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "submenu offers no Delete",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "Call reaches SlinkPhone_CallGate and SlinkPanel and renders 'SOUL LINK' / 'NO CLIENT' on the no-host path",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "MakePhoneCallFromPokegear is NOT entered",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "virtual contact id is 38",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "B returns to state $0A with the cursor unchanged",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "s4 keeps the native cursor/scroll after the SLink row appears",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "s3 native delete still works and leaves one SLink row",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "a native contact still places a real call",
       "result": "PASS",
-      "observed": "PASS frame3135; s0/s1/s4/s3 list/submenu/cursor tests PASS; virtual38, no Delete for SLink; native Joey delete and Mom call remain working. phone.json hits CallGate5/SlinkPanel4; no-host entry SOUL LINK/NO CLIENT; list and caller preserved per scenario."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\phone\\result.txt; producer PASS and hashed supporting evidence. Previous observation text superseded."
     }
   ],
   "not_proven": [
     "DEV only; no release or PHYSICAL promotion. Scope is the named recording, not exhaustive gameplay."
-  ]
+  ],
+  "run_witness": {
+    "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone\\WITNESS.json",
+    "sha256": "a517cba6eeb1e45f8951f0e6fc7fe6c6b2bea2e788234dd47e4322106ac90436",
+    "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\phone",
+    "kind": "recorded per-job/root witness",
+    "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+    "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+  },
+  "evidence_note": "Mechanical rebind after producer PASS and recorded/scoped run witness validation; DEV only."
 }

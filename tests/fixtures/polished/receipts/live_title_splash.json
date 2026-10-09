@@ -1,23 +1,57 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
-  "date": "2026-10-08",
+  "date": "2026-10-09",
   "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
   "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
-  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
+  "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9",
   "scenario_id": "title/wordmark-vs-clean-control",
-  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title",
   "requirement_id": "LIVE-TITLE-SPLASH",
-  "narrative": "Freeze5f4732 fresh execution; the SoulLink wordmark on the title screen and the main-menu patch-version slice, against a clean-ROM control",
-  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\title",
-  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\title\\evidence.json",
-  "evidence_sha256": "5ba5a26598301e4e2ecdc25f2eeddafbabdf90469ef44c05e59e468e2b9b5e3f",
-  "evidence_size": 203537,
+  "narrative": "Frozen execution rebound from F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json; previous run narrative superseded.",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json",
+  "evidence_sha256": "e1247d5c8e6a9f08d96838f503f4d9fbd3ba743b21c9aecf379e544bb738be3f",
+  "evidence_size": 203501,
   "secondary_evidence": [
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\title.out",
-      "sha256": "061e1b05fa38de0fa7e35e339f1724f754adeaf7b20eff20fe704c2479632ac4",
-      "note": "Fresh freeze supporting observation/control"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title.out",
+      "note": "Fresh freeze supporting observation/control",
+      "sha256": "4cfc26bc392af29a4273cd35580b70d2cb030b043ae31df288936af33b79164f",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\WITNESS.json",
+        "sha256": "17d9612a7901bcb4066ad836ea909a0427365192dc82dcbabca20627695e8222",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title.out",
+      "note": "Fresh freeze2 job console: invocation timing/PID/path evidence; included even where the deterministic primary repeats.",
+      "sha256": "4cfc26bc392af29a4273cd35580b70d2cb030b043ae31df288936af33b79164f",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\WITNESS.json",
+        "sha256": "17d9612a7901bcb4066ad836ea909a0427365192dc82dcbabca20627695e8222",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\WITNESS.json",
+      "note": "Fresh freeze2 full-cut per-job witness; primary execution tied to this immutable code cut.",
+      "sha256": "e2e40e9be287de2a512866976429a6408b4841ea74aae060b8613404940a7278",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\WITNESS.json",
+        "sha256": "e2e40e9be287de2a512866976429a6408b4841ea74aae060b8613404940a7278",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     }
   ],
   "synth": [
@@ -27,45 +61,54 @@
     {
       "name": "overlay run verdict",
       "result": "PASS",
-      "observed": "Overlay result PASS, no reasons; identical clean-ROM judge FAIL with tile/attribute/VRAM/shear/pixel/version reasons. Recorded entrance/settled/menu snapshots bind shipped art and ROM version field."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "ROM booted is the provenance overlay",
       "result": "PASS",
-      "observed": "Overlay result PASS, no reasons; identical clean-ROM judge FAIL with tile/attribute/VRAM/shear/pixel/version reasons. Recorded entrance/settled/menu snapshots bind shipped art and ROM version field."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "wordmark band tile ids and palette-6 attributes at entrance and settled",
       "result": "PASS",
-      "observed": "Overlay result PASS, no reasons; identical clean-ROM judge FAIL with tile/attribute/VRAM/shear/pixel/version reasons. Recorded entrance/settled/menu snapshots bind shipped art and ROM version field."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "VRAM tile data equals the shipped Crystal wordmark art",
       "result": "PASS",
-      "observed": "Overlay result PASS, no reasons; identical clean-ROM judge FAIL with tile/attribute/VRAM/shear/pixel/version reasons. Recorded entrance/settled/menu snapshots bind shipped art and ROM version field."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "both wordmark rows join the interlaced logo shear",
       "result": "PASS",
-      "observed": "Overlay result PASS, no reasons; identical clean-ROM judge FAIL with tile/attribute/VRAM/shear/pixel/version reasons. Recorded entrance/settled/menu snapshots bind shipped art and ROM version field."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "the settled screen matches the wordmark pixels",
       "result": "PASS",
-      "observed": "Overlay result PASS, no reasons; identical clean-ROM judge FAIL with tile/attribute/VRAM/shear/pixel/version reasons. Recorded entrance/settled/menu snapshots bind shipped art and ROM version field."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "main-menu version slice equals the ROM field",
       "result": "PASS",
-      "observed": "Overlay result PASS, no reasons; identical clean-ROM judge FAIL with tile/attribute/VRAM/shear/pixel/version reasons. Recorded entrance/settled/menu snapshots bind shipped art and ROM version field."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "clean-ROM control FAILS the identical judge",
       "result": "PASS",
-      "observed": "Overlay result PASS, no reasons; identical clean-ROM judge FAIL with tile/attribute/VRAM/shear/pixel/version reasons. Recorded entrance/settled/menu snapshots bind shipped art and ROM version field."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\evidence.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     }
   ],
   "not_proven": [
     "DEV only; no release or PHYSICAL promotion. Scope is the named recording, not exhaustive gameplay."
-  ]
+  ],
+  "run_witness": {
+    "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title\\WITNESS.json",
+    "sha256": "e2e40e9be287de2a512866976429a6408b4841ea74aae060b8613404940a7278",
+    "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\title",
+    "kind": "recorded per-job/root witness",
+    "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+    "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+  },
+  "evidence_note": "Mechanical rebind after producer PASS and recorded/scoped run witness validation; DEV only."
 }
