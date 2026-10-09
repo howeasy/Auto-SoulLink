@@ -83,6 +83,8 @@ Concurrency labels: **BUILD ALONE** means no other process may use the Polished 
    & $PY tools/polished_live/harness.py live
    ```
 
+   Preflight ownership: the zero-write assertion and current quarantine/full-party setup repair are **owned by g2p-legacy** (Codex Polished-2, worktree `pol-legacy`). The command above is the current invocation, not permission to repeat the unchanged incompatible run.
+
    New primary evidence for both: `$F/capture/live_stageA/result.txt`; retain `server.log`, `sent.jsonl`, wire and census records. Existing binding for both is `F:/slink-work/lanes/pol-phone/live_stageA/result.txt`. **Pre-freeze driver blocker:** `live.lua:444` still requires zero Lua-originated writes. Current box quarantine may legitimately write/deposit the first catch, which also changes the full-party catch setup. The capture/census driver must be adapted to current product behavior before this invocation can qualify these rows; do not disable box capability or suppress the failure merely to rebind an old receipt.
 
 7. **LIVE-R1-MANAGER-PAIR: Manager HTTP proof, no emulator.** Run its three modes sequentially; isolate the Manager's data directory. The current fork jar is `F:/slink-work/cache/polished/jar/PokeRandoZX.jar`; the old trusted-jar control is hardcoded by the driver to `E:/Google Drive/SLink/.cache/slink-upr/PokeRandoZX.jar` (must still be the older non-Polished jar, not silently replaced).
@@ -114,6 +116,8 @@ Concurrency labels: **BUILD ALONE** means no other process may use the Polished 
    ```
 
    Native intro/CONTINUE/save surrounds SYNTH party, balls and engine warp; retain both setup `synth.json` files and fixture hashes. Own private SaveRAM directories allow the two setups to run concurrently in separate shells after R1; the block above is the simpler serial schedule.
+
+   R2 fixture regeneration/variant-target selection and the capture zero-write incompatibility are **owned by g2p-legacy** (Codex Polished-2, worktree `pol-legacy`). The retained/current invocations below stay visible until that card supplies the compatible freeze inputs.
 
 9. **CLIENT SERIAL: LIVE-R2-RANDOMIZED-BOOT, two legs.** R2a observes adoption and five fled encounters. R2b catches a variant and proves its key/form and server presentation. The shown historical target `53,2` (Alolan Persian) is executable **only if the freshly generated ROM a's Route 30 encounter table contains it**. R1 uses new random seeds; inspect that cartridge's table and choose a present variant/map before freezing this input specification. Do not run an unchanged 30-encounter hunt for an absent target.
 
@@ -174,6 +178,8 @@ Concurrency labels: **BUILD ALONE** means no other process may use the Polished 
     New primary evidence: `$F/random/r3_swap.out`; bind all three control transcripts, `input/mutants.json` and wire/log files as secondary evidence. Existing binding: `F:/slink-work/lanes/pol-rand/r3_swap.out`. Clean overlay must admit; swapped contract must server-refuse; altered beacons must client-refuse with no hello. Harness FAIL on an intentionally refused boot is expected recording, not automatically a failed refusal oracle or a PASS. Manual judgment of the four outcomes is still required; no tree-owned all-cases oracle currently completes this receipt by itself.
 
 11. **LIVE-PHONE-ENTRY: historical driver exists, but no current qualifying driver. Do not execute unchanged.** Its reproducible historical invocation is below for the owning repair card. `run_phone_ab.py:17-18` ignores caller POL_LANE and always uses `F:/slink-work/lanes/pol-panel2`; `phone.lua:111` asserts the removed `SLink is linked.` text. This receipt's expectation also names that removed text. It needs an owner-approved obligation/driver cutover, not re-pinning or a fake current PASS.
+    Phone text-oracle and fixed-POL_LANE repairs are **owned by g2p-legacy** (Codex Polished-2, worktree `pol-legacy`). Preserve the current invocation below for that owner; this card changes neither driver.
+
 
     ```powershell
     Reset-PolEnv
