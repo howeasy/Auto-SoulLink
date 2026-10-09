@@ -7,6 +7,7 @@ The four cases the card names: PASS on a faithful zip, FAIL on a modified member
 dev-only member, FAIL on a missing closure file. Plus the two invariants that keep the gate
 honest over time: the closure list must stay a subset of make_release's manifest, and the one
 allowance (a launcher rewritten by patch_launcher) must not hide a real difference.
+Gen 3 companion members are optional, but present members must still match their committed bytes.
 """
 from __future__ import annotations
 
@@ -93,6 +94,27 @@ def test_the_closure_list_is_a_subset_of_the_release_manifest():
     assert set(gate.GEN3_FRLG_CLOSURE) <= known, sorted(set(gate.GEN3_FRLG_CLOSURE) - known)
     # ...and the DLL the closure needs is optional-by-construction, not missing from the manifest.
     assert "lua/x64/socket-windows-5-4.dll" in expected
+
+
+def test_gen3_companions_are_allowed_optional_and_still_byte_checked(tmp_path, closure_bytes):
+    manifest = gate.load_manifest(_REPO)
+    companions = {
+        f"companion/{name}": _blob(f"patch/dist/{name}")
+        for name in manifest._GEN3_COMPANION_FILES
+    }
+    members = {**_faithful(closure_bytes), **companions}
+    failures, _, _ = gate.check_zip(_zip(tmp_path, members), repo=_REPO, require_manifest=False)
+    assert failures == [], failures
+
+    member = next(iter(companions))
+    members[member] += b"\nmodified companion"
+    failures, _, _ = gate.check_zip(_zip(tmp_path, members), repo=_REPO, require_manifest=False)
+    assert any(f.startswith(f"{member}: content differs") for f in failures), failures
+
+    absent = _zip(tmp_path, _faithful(closure_bytes))
+    failures, _, _ = gate.check_zip(absent, repo=_REPO, require_manifest=True)
+    assert not any(f"missing member: {member}" in failures for member in companions), failures
+
 
 
 def test_the_launcher_allowance_hides_only_the_slink_lines(tmp_path, closure_bytes):
