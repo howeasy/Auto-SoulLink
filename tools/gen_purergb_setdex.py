@@ -58,6 +58,8 @@ tests/unit/test_calc_purergb.py).
 Usage:
     python tools/gen_purergb_setdex.py           # write calc/src/js/data/sets/games/PureRGB.js
     python tools/gen_purergb_setdex.py --check    # exit 1 if the file would change
+
+The check ignores LF/CRLF checkout differences, but still rejects generated content drift.
 """
 from __future__ import annotations
 
@@ -331,7 +333,8 @@ def main() -> int:
         if OUT_PATH.is_file():
             with open(OUT_PATH, encoding="utf-8", newline="") as f:
                 current = f.read()
-        if current != generated:
+        # Git's LF blob and a Windows CRLF checkout contain the same generated sets.
+        if current is None or current.replace("\r\n", "\n") != generated.replace("\r\n", "\n"):
             print(f"{OUT_PATH} is stale; run tools/gen_purergb_setdex.py", file=sys.stderr)
             return 1
         print("PureRGB.js is up to date")
