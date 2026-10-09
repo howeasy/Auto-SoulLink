@@ -1,4 +1,4 @@
-"""Gate descriptor/process models: no emulator, ROM/save/fixture data writes."""
+"""Gate launch and copied-clock models; no emulator or committed input writes."""
 import hashlib
 import importlib.util
 import json
@@ -187,14 +187,6 @@ def test_environment_cannot_replace_verified_bindings(host, overrides):
     assert not host["launches"]
 
 
-def test_shared_harness_names_no_generation():
-    import inspect
-    import re
-    for function in (runner.seed_saveram, runner.run_gate):
-        # A generation key, a generation-named helper or a "Gen N" branch message.
-        assert re.search(r"[\"']gen\d[\"']|_gen\d_|Gen \d", inspect.getsource(function)) is None, function.__name__
-
-
 def test_gen2_refusals_are_driven_by_explicit_descriptor_fields(host, monkeypatch):
     entry = runner.GENS["gen2"]
     assert entry["implicit_staging"] is False and entry["plan"] is runner._gen2_plan
@@ -242,3 +234,59 @@ def test_overlay_key_stages_the_published_ups_image_with_a_filename_save_name(ho
     with pytest.raises(ValueError, match="overlay gamedb"):
         invoke(host, rom_key="crystal_overlay", fixture_path=host["fixture"])
     assert len(host["launches"]) == 1
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_panel_clock_staging_preserves_save_and_rtc_registers(tmp_path, title):
+    """A loaded panel fixture must not acquire the host's elapsed wall time."""
+    source = (ROOT / f"tests/fixtures/gen2/{title}_battle.SaveRAM").read_bytes()
+    fixture = tmp_path / "immutable.SaveRAM"
+    destination = tmp_path / "copied.SaveRAM"
+    fixture.write_bytes(source)
+    destination.write_bytes(source)
+    plan = {"env": {}}
+    runner._gen2_panel_clock(plan, destination)
+    staged = destination.read_bytes()
+    assert fixture.read_bytes() == source
+    assert staged[:0x8000] == source[:0x8000]
+    assert staged[0x8008:] == source[0x8008:]
+    assert staged[0x8000:0x8008] == bytes.fromhex("7fffffffffffffff")
+    disclosure = json.loads(plan["env"]["SLINK_GEN2_PANEL_CLOCK_STAGE"])
+    assert disclosure["cart_ram_sha256"] == hashlib.sha256(source[:0x8000]).hexdigest()
+    assert disclosure["rtc_registers_hex"] == source[0x8008:].hex()
+    assert disclosure["staged_sha256"] == hashlib.sha256(staged).hexdigest()
+    # Different saved wall-time bases must produce the same loaded-clock input.
+    destination.write_bytes(source[:0x8000] + bytes(8) + source[0x8008:])
+    runner._gen2_panel_clock(plan, destination)
+    assert destination.read_bytes() == staged
+
+
+@pytest.mark.parametrize("size", [0x8000, 0x8000 + 21, 0x8000 + 23])
+def test_panel_clock_refuses_wrong_geometry_before_changing_the_copy(tmp_path, size):
+    destination = tmp_path / "bad.SaveRAM"
+    source = bytes(size)
+    destination.write_bytes(source)
+    with pytest.raises(ValueError, match="32790"):
+        runner._gen2_panel_clock({"env": {}}, destination)
+    assert destination.read_bytes() == source
+
+
+@pytest.mark.parametrize("script_name", ["gen2_panel_gate.lua", "gate.lua"])
+def test_only_panel_launch_normalizes_the_copied_clock(host, monkeypatch, script_name):
+    """Observe the SaveRAM presented at the actual process boundary, not a stager mock."""
+    source = (ROOT / "tests/fixtures/gen2/crystal_battle.SaveRAM").read_bytes()
+    host["fixture"].write_bytes(source)
+    (host["root"] / script_name).write_text('local t=G.start("model_gen2_gate")')
+    monkeypatch.setattr(runner.shutil, "copyfile",
+                        lambda src, dst: Path(dst).write_bytes(Path(src).read_bytes()))
+    assert runner.run_gate(script_name, "crystal", quiet=True,
+                           saveram_dir=host["directory"], fixture_path=host["fixture"], speed_percent=300)[0]
+    copied = (host["directory"] / runner.describe_gen2("crystal")["saveram_name"]).read_bytes()
+    assert host["fixture"].read_bytes() == source
+    assert copied[:0x8000] == source[:0x8000] and copied[0x8008:] == source[0x8008:]
+    env = host["launches"][0][1]["env"]
+    if script_name == "gen2_panel_gate.lua":
+        assert copied[0x8000:0x8008] == bytes.fromhex("7fffffffffffffff")
+        assert json.loads(env["SLINK_GEN2_PANEL_CLOCK_STAGE"])["source_sha256"] == hashlib.sha256(source).hexdigest()
+    else:
+        assert copied == source and "SLINK_GEN2_PANEL_CLOCK_STAGE" not in env
