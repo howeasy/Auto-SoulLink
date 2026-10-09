@@ -1202,3 +1202,40 @@ def test_natural_setup_rejects_a_lead_write_that_is_not_a_permutation():
     ev = natural_ev()
     ev['steps']['a']['stage']['lead_writes'] = [{'array':'wPartyMons','wram':0,'slot':0,'key':KA,'old':7,'new':8}]
     assert duo.oracle_faint_natural(ev)[0] == 'FAIL'
+
+
+def test_emu_health_reports_json_and_never_raises():
+    class Out:
+        returncode, stderr = 0, ""
+        stdout = '{"responding":true,"cpu_delta":0.0,"threads":22}\n'
+
+    assert duo.emu_health(123, run=lambda *a, **k: Out()) == {"responding": True, "cpu_delta": 0.0, "threads": 22}
+
+    def boom(*a, **k):
+        raise OSError("no powershell")
+
+    assert "OSError" in duo.emu_health(123, run=boom)["error"]
+
+
+def test_duo_play_step_loop_records_a_lua_error_and_keeps_the_client_running():
+    lupa = pytest.importorskip("lupa")
+    source = (REPO / "tools/polished_live/duo_play.lua").read_text(encoding="utf-8")
+    tail = source[source.index("local k, held, stopped = 0, 0, false"):source.index('L.check("stop step seen')]
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    out = lua.execute("""
+        local tail = ...
+        local logs, frames = {}, 0
+        local L = {RUN = ".", log = function(s) logs[#logs + 1] = s end}
+        L.frame = function() frames = frames + 1 if frames > 40 then error("pol-live-finished", 0) end end
+        local fake = {read = function() return '{"op":"catch"}' end, close = function() end, write = function() end}
+        local env = setmetatable({L = L, fmt = string.format, emu = {framecount = function() return frames end},
+            ROLE = "t", HOLD_CAP = 400000, client_writes = {},
+            J = {decode = function() return {op = "catch"} end, encode = function() return "{}" end},
+            op_catch = function() error("synthetic step error") end,
+            io = {open = function() return fake end}}, {__index = _G})
+        local ok, err = pcall(assert(load(tail, "tail", "t", env)))
+        return ok, tostring(err), table.concat(logs, "|"), frames
+    """, tail)
+    ok, err, logs, frames = out
+    assert ok is False and "pol-live-finished" in err             # the finish marker passes through ...
+    assert "PLAY_LUA_ERROR" in logs and "synthetic step error" in logs and frames > 0   # ... after the error was logged

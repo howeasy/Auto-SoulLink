@@ -573,35 +573,50 @@ L.idle(300)
 L.log("PLAY_READY " .. J.encode({role = ROLE, frame = emu.framecount(), hellos = #hellos}))
 
 local k, held, stopped = 0, 0, false
-while held < HOLD_CAP do
-    if held % 30 == 0 then
-        local path = fmt("%s/step_%d.json", L.RUN, k + 1)
-        local fh = io.open(path, "rb")
-        if fh then
-            local text = fh:read("*a")
-            fh:close()
-            local okd, step = pcall(J.decode, text)
-            k = k + 1
-            local res
-            if not okd or type(step) ~= "table" then res = {ok = false, why = "unreadable step file"}
-            elseif step.op == "stop" then stopped = true res = {ok = true}
-            elseif step.op == "catch" then res = op_catch(step)
-            elseif step.op == "snapshot" then res = {ok = true, snapshot = snapshot()}
-            elseif step.op == "await_cmd" then res = op_await(step)
-            elseif step.op == "synth_hp0" then res = op_synth_hp0(step)
-            elseif step.op == "synth_hp1" then res = op_synth_hp1(step)
-            elseif step.op == "lose_native" then res = op_lose_native(step)
-            elseif step.op == "idle" then L.idle(tonumber(step.frames) or 60) res = {ok = true}
-            else res = {ok = false, why = "unknown op " .. tostring(step.op)} end
-            res.k, res.op, res.label, res.frame = k, okd and step.op or "?", okd and step.label or nil, emu.framecount()
-            res.client_writes = #client_writes
-            local oke, line = pcall(J.encode, res)
-            L.log("PLAY_STEP " .. (oke and line or J.encode({k = k, op = res.op, ok = false, why = "encode: " .. tostring(line)})))
-            if stopped then break end
+-- Diagnostics (pol-duo3): a Lua error in this loop would otherwise only reach the BizHawk console and silence the
+-- client. Record it, then keep the emulator + client running so a script death is distinguishable from a hang.
+local function beat()
+    local fh = io.open(fmt("%s/beat_%s.txt", L.RUN, ROLE), "wb")
+    if fh then fh:write(fmt("frame %d held %d k %d stopped %s", emu.framecount(), held, k, tostring(stopped))) fh:close() end
+end
+local function step_loop()
+    while held < HOLD_CAP do
+        if held % 30 == 0 then
+            beat()
+            local path = fmt("%s/step_%d.json", L.RUN, k + 1)
+            local fh = io.open(path, "rb")
+            if fh then
+                local text = fh:read("*a")
+                fh:close()
+                local okd, step = pcall(J.decode, text)
+                k = k + 1
+                local res
+                if not okd or type(step) ~= "table" then res = {ok = false, why = "unreadable step file"}
+                elseif step.op == "stop" then stopped = true res = {ok = true}
+                elseif step.op == "catch" then res = op_catch(step)
+                elseif step.op == "snapshot" then res = {ok = true, snapshot = snapshot()}
+                elseif step.op == "await_cmd" then res = op_await(step)
+                elseif step.op == "synth_hp0" then res = op_synth_hp0(step)
+                elseif step.op == "synth_hp1" then res = op_synth_hp1(step)
+                elseif step.op == "lose_native" then res = op_lose_native(step)
+                elseif step.op == "idle" then L.idle(tonumber(step.frames) or 60) res = {ok = true}
+                else res = {ok = false, why = "unknown op " .. tostring(step.op)} end
+                res.k, res.op, res.label, res.frame = k, okd and step.op or "?", okd and step.label or nil, emu.framecount()
+                res.client_writes = #client_writes
+                local oke, line = pcall(J.encode, res)
+                L.log("PLAY_STEP " .. (oke and line or J.encode({k = k, op = res.op, ok = false, why = "encode: " .. tostring(line)})))
+                if stopped then break end
+            end
         end
+        L.frame()
+        held = held + 1
     end
-    L.frame()
-    held = held + 1
+end
+local looped, lerr = xpcall(step_loop, debug.traceback)
+if not looped then
+    if tostring(lerr):find("pol-live-finished", 1, true) then error(lerr, 0) end
+    L.log(fmt("PLAY_LUA_ERROR frame %d held %d k %d: %s", emu.framecount(), held, k, tostring(lerr)))
+    while true do L.frame() end
 end
 L.check("stop step seen (not the hold cap)", stopped, held)
 L.log("PLAY_FINAL " .. J.encode({role = ROLE, frame = emu.framecount(), client_writes = #client_writes,

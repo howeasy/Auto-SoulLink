@@ -928,6 +928,20 @@ def play_step_lines(text: str) -> dict:
 
 
 # ── live runner ────────────────────────────────────────────────────────────────────────────────────
+def emu_health(pid: int, run=subprocess.run) -> dict:
+    """Diagnostic for a side that went silent: is the EmuHawk window responding, and is the process still burning CPU?
+    (A Lua script death leaves a responsive, CPU-active emulator; a hang does not.) Never raises."""
+    script = (f"$p=Get-Process -Id {int(pid)} -ErrorAction Stop; $c1=$p.CPU; Start-Sleep -Milliseconds 1500; $p.Refresh(); "
+              "[pscustomobject]@{responding=$p.Responding; cpu_delta=[math]::Round($p.CPU-$c1,2); threads=$p.Threads.Count} "
+              "| ConvertTo-Json -Compress")
+    try:
+        out = run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, timeout=30)
+        return json.loads(out.stdout) if out.returncode == 0 and out.stdout.strip() else {
+            "error": (out.stderr or out.stdout or "no output").strip()[:300]}
+    except Exception as exc:  # noqa: BLE001 - a diagnostic must never mask the failure it describes
+        return {"error": f"{type(exc).__name__}: {exc}"[:300]}
+
+
 def kill_pid(proc: subprocess.Popen, label: str) -> None:
     if proc.poll() is None:
         subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
@@ -1319,6 +1333,12 @@ def play_run(args, name: str, fixtures: dict, ident: dict, box_capable: bool) ->
     except Exception as exc:  # noqa: BLE001 - any harness failure is a FAIL with the reason, never a silent pass
         reasons = [f"driver_error: {exc}"]
         ev["driver_error"] = str(exc)
+        if "timeout waiting for" in str(exc):
+            ev["emu_health"] = {r: emu_health(pr.pid) if pr.poll() is None else {"exited": pr.returncode}
+                                for r, pr in procs.items()}
+            ev["lua_beat"] = {r: (Path(paths[r]["run"]) / f"beat_{r}.txt").read_text(encoding="utf-8", errors="replace")
+                              if (Path(paths[r]["run"]) / f"beat_{r}.txt").is_file() else None for r in procs}
+            print(f"[play] DIAG emu_health {ev['emu_health']} lua_beat {ev['lua_beat']}", flush=True)
     finally:
         for role, pr in procs.items():
             kill_pid(pr, f"EmuHawk {role}")
