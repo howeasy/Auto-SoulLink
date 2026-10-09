@@ -1354,6 +1354,16 @@ function Client.new(p)
 
     function FS.complete(ob, mon)
         ob.state = "done"
+        -- Selfdestruct copies HP0 before its later native faint. Retire the write obligation,
+        -- but keep this one echo receipt for the same identity/epoch/battle visit.
+        if ob.kind == "explode" and ob.suppress and FS.in_battle then
+            local echoes = FS.explode_echoes
+            if not echoes or echoes.gen ~= FS.gen or echoes.epoch ~= self.epoch or echoes.visit ~= FS.visit then
+                echoes = {gen=FS.gen, epoch=self.epoch, visit=FS.visit, keys={}}
+                FS.explode_echoes = echoes
+            end
+            echoes.keys[ob.suppress.phys] = ob.identity
+        end
         ob.suppress = nil
         FS.remove(ob)
         mark_dead(ob.key, mon)
@@ -1464,6 +1474,7 @@ function Client.new(p)
         local now = battle ~= nil and battle.mode ~= 0
         if now and not FS.in_battle then FS.visit = FS.visit + 1 end
         if battle then FS.in_battle = now end
+        if battle and not now then FS.explode_echoes = nil end
     end
 
     -- witnessed survival of an Explosion attempt (a LATER turn's hold finds the same mon alive and active)
@@ -1680,6 +1691,16 @@ function Client.new(p)
     end
     -- a commanded death's native faint echo: scoped to the exact physical identity, identity generation and epoch
     function FS.echo(key)
+        local echoes = FS.explode_echoes
+        if echoes and echoes.keys[key] then
+            local battle = reads.read_battle()
+            if echoes.gen == FS.gen and echoes.epoch == self.epoch and echoes.visit == FS.visit
+               and echoes.keys[key] == FS.last_identity and battle and battle.mode ~= 0 and FS.check_identity() then
+                echoes.keys[key] = nil
+                log("[SLink-gen2] faint echo of a completed Explosion dropped " .. key)
+                return true
+            end
+        end
         for _, ob in ipairs(FS.owed) do
             local s = ob.suppress
             if s and s.phys == key and s.gen == FS.gen and s.epoch == self.epoch then

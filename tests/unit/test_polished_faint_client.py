@@ -820,3 +820,21 @@ def test_the_explicitly_disabled_composition_has_no_settlement_and_the_facade_st
     at_hold(rig)
     assert rig.writes() == [] and len(rig.client.pending_battle_writes) == 1
     assert lines(rig, "not composed on Polished")
+
+
+def test_completed_explosion_still_suppresses_its_delayed_native_faint():
+    """Live replay: selfdestruct HP0 tick settles before the native faint about600 frames later."""
+    rig, _, key, ob = explode_flow()
+    for at in (HP_AT, HP_AT + 1):
+        rig.mem[at] = 0  # engine selfdestruct copyback, before the native faint animation
+    rig.put("wBattleMonHP", 0)
+    rig.put("wBattleMonHP", 0, 1)
+    tick(rig)
+    assert ob.state == "done" and len(ko(rig)) == 1
+    assert rig.sent("faint") == [] and len(rig.writes()) == 5
+    rig.frame(600)
+    rig.client.on_event(rig.client, event(rig, kind="faint", cause="battle",
+                                        mon={"key": key, "is_egg": False}))
+    tick(rig)
+    assert rig.sent("faint") == [], "completed commanded Explosion echoed as a new natural faint"
+    assert len(ko(rig)) == 1 and len(rig.writes()) == 5
