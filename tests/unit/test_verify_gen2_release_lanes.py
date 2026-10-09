@@ -36,15 +36,19 @@ def _git_show(rev, rel):
     return proc.stdout
 
 
-def test_overlay_matrix_cells_have_an_independent_artifact_identity():
+def test_overlay_matrix_cells_have_an_independent_artifact_identity(tmp_path):
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text())
     rows = [row for row in doc["requirements"] if row.get("stage") == "live-duos"]
     identities = {(row["axes"].get("artifact_kind"), row["axes"]["initiator"], row["axes"]["partner"])
                   for row in rows}
     assert identities == {(kind, *pair) for kind in ("clean", "overlay") for pair in gate.DUO_PAIRS}
-    errors = gate.duo_pairs_errors()
-    assert any(".overlay" in error and "no receipt" in error for error in errors)
-    assert not any("release matrix pairs" in error for error in errors)
+    isolated = _green_tree(tmp_path)
+    assert gate.duo_matrix_errors(tmp_path, _fake_duo()) == []
+    _row(isolated, "duo.gold.silver.overlay")["proofs"] = []
+    _write_doc(tmp_path, isolated)
+    assert gate.duo_matrix_errors(tmp_path, _fake_duo()) == [
+        "duo.gold.silver.overlay/link: no receipt registered (an empty proof is a release blocker)"
+    ]
 
 
 def test_required_phase_lanes_and_every_title_are_declared():
@@ -2248,11 +2252,13 @@ def test_trade_gates_red_on_missing_or_stale_receipts(tmp_path, mutation):
     assert gate.trade_gates_errors(tmp_path, _trade_duo()) != []
 
 
-def test_committed_trade_gates_are_red_until_trade_duos_are_receipted():
+def test_committed_overlay_trade_gates_are_fully_receipted():
+    """Missing/stale trade controls remain isolated in test_trade_gates_red_on_missing_or_stale_receipts."""
     rows = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))["requirements"]
     receipted = {(row["id"], proof["scenario"]) for row in rows for proof in row["proofs"]}
-    if not all((f"duo.{a}.{b}", case) in receipted for a, b in gate.DUO_PAIRS for case in gate.TRADE_END_STATUS):
-        assert gate.trade_gates_errors() != []
+    required = {(f"duo.{a}.{b}.overlay", case) for a, b in gate.DUO_PAIRS for case in gate.TRADE_END_STATUS}
+    assert required <= receipted
+    assert gate.trade_gates_errors() == []
 
 
 def test_c_g_owes_every_trade_case_under_o34(tmp_path):

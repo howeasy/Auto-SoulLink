@@ -338,8 +338,6 @@ def test_the_installer_pins_lf_bytes_the_way_the_verifier_hashes_them(tmp_path):
     assert [e for e in gate.c5_gate_errors(root=root, head=HEAD) if "installed receipt tampered" in e]
 
 
-def test_the_committed_tree_has_no_installed_c5_packet_yet(tmp_path):
-    """Documents the red the coordinator will see at freeze, and pins the fact that the gate really
-    is wired (a green here would mean the packet is installed, which is not true until it is)."""
-    assert not (REPO / DEST).exists()
-    assert gate.C5_NOT_INSTALLED in gate.c5_gate_errors(root=REPO, head=HEAD)
+def test_the_committed_tree_has_a_valid_installed_c5_packet():
+    """The installed packet must remain complete, untampered and bound to the current code digest."""
+    assert gate.c5_gate_errors(root=REPO) == []

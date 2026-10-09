@@ -1,11 +1,14 @@
 """Gen 2 candidate graph and production admission over actual P1 ROMs (O-22: Crystal only)."""
 
+import copy
 import json
 import sys
 from pathlib import Path
 
 import pytest
 from lupa.lua54 import LuaRuntime
+
+from tests.unit.test_gen2_physical_receipts import validate
 
 ROOT = Path(__file__).resolve().parents[2]
 PACK_FILES = {
@@ -151,31 +154,82 @@ def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lu
         assert normal(python(to_python(json_codec, text))) == normal(json.loads(text)), rel
 
 
-def _without_digest(path):
-    return {k: v for k, v in json.loads(path.read_text(encoding="utf-8")).items() if k != "code_digest"}
+def _overlay_structure(receipt, kind):
+    """Stable artifact/fixture identity and authority coordinates, not measured run values."""
+    top = {key: value for key, value in receipt.items() if key not in {"runs", "code_digest"}}
+    identity = (
+        "schema", "title", "artifact_kind", "rom_sha1", "binding_sha256", "pack_commit",
+        "fixture", "attempt_id", "qualification_attempt_id", "evidence_level", "result",
+        "core_mode", "input_mode", "harness_write_scopes",
+    )
+    if kind == "engine_sites":
+        return top, [
+            {
+                "identity": {key: run.get(key) for key in (
+                    *identity, "pack_specs_sha256", "fixture_sha256", "proven", "negatives", "bank_check",
+                )},
+                "sites": {
+                    name: {key: site.get(key) for key in ("bank", "addr", "pc", "expected_hex")}
+                    for name, site in run["sites"].items()
+                },
+            }
+            for run in receipt["runs"]
+        ]
+    # Reset/reload fixtures are run-generated saves; their hashes must bind within each
+    # complete proof, not equal another capture's independently generated save.
+    return top, {mode: {key: run.get(key) for key in identity}
+                 for mode, run in receipt["runs"].items()}
 
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
-def test_shipped_overlay_receipts_equal_the_captured_ones(title):
-    """D6 step 3, the analogue of the clean check above: qualifications and O-33 disclosures are byte-equal,
-    engine_sites / write_window equal modulo the top-level code_digest (the shipped copy is digest-free)."""
-    # the overlay rows are ADMITTED: absent receipts mean the launcher refuses the title (wrong, not absent input)
-    assert (ROOT / f"data/games/gen2_{title}/receipts/overlay").is_dir(),         f"gen2_{title} overlay receipts not shipped (tools/gen2_ship_overlay_receipts.py --write)"
+def test_shipped_overlay_proofs_preserve_the_post_freeze_authority(title):
+    """OVERLAY_ADMISSION_NEXT.md §2: after the sweep compare semantic coverage;
+    never refresh production copies merely to fix equality. Both full raw proofs must
+    qualify and bind before comparing their authority; qualifications/disclosures stay exact.
+    """
     entry = LuaRuntime(unpack_returned_tuples=True).eval("dofile")((ROOT / "lua/gen2/entry.lua").as_posix())
     overlay = entry.RECEIPT_FILES[f"gen2_{title}"].overlay
-    paths = [overlay.engine_sites, overlay.write_window, *dict(overlay.qualifications.items()).values()]
-    assert len(paths) in (7, 8)
-    for rel in paths:
+    for rel in overlay.qualifications.values():
         shipped = ROOT / rel
-        name = shipped.name
-        captured = ROOT / "tests/fixtures/gen2" / ("" if name.endswith(".synth.json") else "receipts/overlay") / name
-        assert shipped.is_file(), f"{rel}: overlay namespace present but this receipt is not shipped"
-        assert captured.is_file(), f"{rel}: captured source {captured.relative_to(ROOT).as_posix()} missing"
-        if name.endswith((".engine_sites.json", ".write_window.json")):
-            assert "code_digest" not in json.loads(shipped.read_text(encoding="utf-8")), rel
-            assert _without_digest(shipped) == _without_digest(captured), rel
-        else:
-            assert shipped.read_bytes() == captured.read_bytes(), rel
+        captured = ROOT / "tests/fixtures/gen2" / (
+            "" if shipped.name.endswith(".synth.json") else "receipts/overlay"
+        ) / shipped.name
+        assert shipped.read_bytes() == captured.read_bytes(), rel
+    for kind in ("engine_sites", "write_window"):
+        shipped_path = ROOT / overlay[kind]
+        captured_path = ROOT / "tests/fixtures/gen2/receipts/overlay" / shipped_path.name
+        shipped = json.loads(shipped_path.read_text(encoding="utf-8"))
+        captured = json.loads(captured_path.read_text(encoding="utf-8"))
+        assert "code_digest" not in shipped, shipped_path
+        shipped_authority, why = validate(kind, title, shipped, artifact="overlay")
+        assert shipped_authority is not None, f"{shipped_path}: {why}"
+        captured_authority, why = validate(kind, title, captured, artifact="overlay")
+        assert captured_authority is not None, f"{captured_path}: {why}"
+        assert shipped_authority == captured_authority, kind
+        assert _overlay_structure(shipped, kind) == _overlay_structure(captured, kind), kind
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("kind,reason", [
+    ("engine_sites", "wrong-bank decoy did not fire raw and reject every hit by bank"),
+    ("write_window", "no accepted checkpoint hold"),
+])
+def test_tampered_shipped_overlay_measurements_cannot_authorize_runtime(title, kind, reason):
+    """Equal coordinates cannot excuse a failed raw negative control or checkpoint witness."""
+    path = ROOT / f"data/games/gen2_{title}/receipts/overlay/{title}.{kind}.json"
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    authority, why = validate(kind, title, receipt, artifact="overlay")
+    assert authority is not None, why
+    tampered = copy.deepcopy(receipt)
+    if kind == "engine_sites":
+        decoy = tampered["runs"][0]["decoy"]
+        decoy["bank_rejects"] = decoy["raw"] - 1
+    else:
+        tampered["runs"]["town"]["liveness"]["accepted"] = 0
+    assert _overlay_structure(tampered, kind) == _overlay_structure(receipt, kind)
+    authority, why = validate(kind, title, tampered, artifact="overlay")
+    assert authority is None
+    assert reason in why
 
 
 def test_crystal_revision11_remains_build_only():
