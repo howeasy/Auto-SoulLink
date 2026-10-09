@@ -30,7 +30,7 @@ local ok,why=pcall(function()
 console.log("[trade-duo] global print type="..type(print))
 client.speedmode(300)
 for _,name in ipairs({"OWPlayerInput","SetInitialOptions.joypad_loop","YesNoBox","NoYesBox"}) do L.hook(name) end
-for _,name in ipairs({"SlinkTradeCommit","SlinkTradeApplyCommit","SlinkTradePublishDone","SlinkTradeExit","SlinkTradeResponderExit"}) do
+for _,name in ipairs({"SlinkTradeCommit","SlinkTradeApplyCommit","SlinkTradePublishDone","SlinkTradeExit","SlinkTradeResponderService","SlinkTradeResponderExit"}) do
     L.hook(name,function(matched) if matched then milestone("native",name) end end)
 end
 -- Explicit dev option, through the existing Entry.build seam. Private root
@@ -64,6 +64,7 @@ C.send=function(line,...)
         if queries>1 then abort_reason="native QUERY repeated without completing the first visit" end
     end
     if msg.event=="trade_done" then
+        prompt=false
         done=msg
         L.log("TRADE_DONE "..line)
         dump("done.json",msg)
@@ -106,7 +107,11 @@ end
             for _=1,3 do L.frame({Down=true}) end
             L.idle(8)
             for _=1,3 do L.frame({A=true}) end
-        elseif role=="a" or prompt then L.pulse("A") else L.frame() end
+        -- A wire offer is not native UI: pressing A here can start the receptionist
+        -- before the idle dispatcher picks up PROMPT. Wait for its native entry.
+        elseif role=="a" or (prompt and (L.hits.SlinkTradeResponderService or 0)>0) then
+            L.pulse("A")
+        else L.frame() end
         if queries>0 and not done and binder:closed() and binder:disposition()~="COMPLETE" then
             abort_reason="native trade visit closed before completion"
         end

@@ -38,7 +38,7 @@ def probe_symbols(syms):
     from tools.polished_live import harness
     # The full ~70k-label SYM exceeds json_codec's 100k-value bound (each row is an array).
     return {name: syms[name] for name in (*harness.SYMBOLS, "NoYesBox", "SlinkTradeCommit", "SlinkTradeApplyCommit",
-                                         "SlinkTradePublishDone", "SlinkTradeExit", "SlinkTradeResponderExit")}
+                                         "SlinkTradePublishDone", "SlinkTradeExit", "SlinkTradeResponderService", "SlinkTradeResponderExit")}
 
 
 def party(data):
@@ -164,7 +164,8 @@ def run(args):
         assert rom_sha == overlay_sha1(), "shipped overlay differs from provenance"
     gate_bank, gate_addr = syms["SlinkTradeCommitEnabled"]
     assert rom[gate_bank*0x4000+gate_addr-0x4000] == 1
-    run_dir = LANE/args.name
+    run_dir = args.lane/args.name
+    args.lane.mkdir(parents=True, exist_ok=True)
     run_dir.mkdir(exist_ok=False)
     a = args.fixture.read_bytes()
     b, derivation = duo._derive_save().derive_identity(a, name="TradeB", player_id=53699)
@@ -272,6 +273,7 @@ def run(args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--lane", type=Path, default=LANE, help="private attempt output root")
     p.add_argument("--fixture", type=Path, default=FIXTURE)
     p.add_argument("--name", required=True, help="new private attempt name; never overwrite a receipt")
     p.add_argument("--timeout", type=int, default=600)
