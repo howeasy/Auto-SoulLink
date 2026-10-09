@@ -240,7 +240,7 @@ local function battle(action, label)
     -- the battle is over once the overworld takes input again (wBattleMode is not a reliable end marker)
     while not L.after("OWPlayerInput", f_start) do
         local f = emu.framecount()
-        if f - f_start > 9000 then
+        if f - f_start > tonumber(os.getenv("POL_BATTLE_FRAMES") or "9000") then
             client.screenshot(L.RUN .. "/stuck_" .. label .. ".png")
             L.log(fmt("[live] %s STUCK: battle mode %d, last LoadBattleMenu %s Run %s Ball %s Pack %s Blink %s YesNo %s ExitBattle %s, menu cursor %d pocket %d",
                       label, L.rw("wBattleMode"), tostring(L.hit.LoadBattleMenu), tostring(L.hit.BattleMenu_Run),
