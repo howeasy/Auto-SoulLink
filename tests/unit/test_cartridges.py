@@ -592,7 +592,7 @@ def test_polished_randomize_stays_refused_while_the_flag_is_off(tmp_path, monkey
     _polished_ready(monkeypatch)
     monkeypatch.setattr(upr_pipeline, "POLISHED_RANDOMIZER_ENABLED", False)
     monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on a held Polished randomize"))
-    with pytest.raises(cartridges.CartridgeError, match="Polished Crystal randomizer support is coming"):
+    with pytest.raises(cartridges.CartridgeError, match="Polished Crystal randomizing is not enabled"):
         cartridges.provision(str(tmp_path), sources, companion=True, randomize={"settings_path": "s.rnqs"}, jar="fork.jar")
     assert not (tmp_path / "roms").exists()
 

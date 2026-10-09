@@ -69,7 +69,7 @@ Already present on this branch:
 | game row | `:74` | `("gen2_polished", "Polished Crystal", ["polished_crystal"])` |
 | `GAME_FAMILY` | `:94` | `"gen2_polished": "gen2_polished"` |
 | `FAMILY_WORDS` | `:96` | `"gen2_polished": "Polished Crystal"` |
-| Randomize refusal | `:113` | *"Polished Crystal randomizer support is coming via the UPR fork; turn Randomize off"* |
+| Randomize refusal | none in `manager.py` now | the switch is `upr_pipeline.POLISHED_RANDOMIZER_ENABLED = True` (`:274`), read by `cartridges.py:133` and `manager.py` `handle_cartridges`; while it is False the refusal is *"Polished Crystal randomizing is not enabled in this build; turn Randomize off"*. Randomizer is enabled; allowed options are `upr_settings.POLISHED_OPTION_KEYS` (wild, starters, statics, trainers, trades) |
 | explode clause | `:190` | `ok: False` — client not written yet |
 | rival clause | `:200` | `ok: False` — needs a rewritten writer |
 | picker/caps | `:210`, `:215` | `ok: False` |

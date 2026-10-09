@@ -272,7 +272,7 @@ GEN2_RANDOMIZER_REFUSAL = (
 # the /api/cartridges handler refuse while it is False). The jar must be the pinned fork cut with patches 0016-0021.
 POLISHED_VARIANT = "Polished Crystal"
 POLISHED_RANDOMIZER_ENABLED = True
-POLISHED_RANDOMIZER_REFUSAL = "Polished Crystal randomizer support is coming via the UPR fork; turn Randomize off"
+POLISHED_RANDOMIZER_REFUSAL = "Polished Crystal randomizing is not enabled in this build; turn Randomize off"
 POLISHED_JAR_REFUSAL = (
     "Polished Crystal randomization needs SLink's UPR fork jar with a Polished Crystal entry for this "
     "cartridge's header checksum (tools/build_upr_fork.py, patch/upr)")
