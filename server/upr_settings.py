@@ -755,7 +755,7 @@ def summarize(spec: dict) -> str:
     """One line for the run record: what differs from a run that randomizes nothing."""
     parts = []
     for key, opt in ALL_OPTIONS.items():
-        if key not in spec:             # a family without the option (Polished has no starters)
+        if key not in spec:             # a family without the option (Polished has starters too, UPR patch 0018)
             continue
         val = spec[key]
         if opt["kind"] == "choice":
