@@ -40,7 +40,7 @@ HUD_NEW = ("local hud = {show=function(t) log.hud = log.hud or {} log.hud[#log.h
 DEPS_OLD = 'local deps = {root=ROOTDIR, title="polished", io=io, net=net, hud=hud, player="a", rom_size=#rom,'
 
 
-def build(*, interface=True, initial_identity_unavailable=False, **kwargs):
+def build(*, interface=True, trade_interface=True, initial_identity_unavailable=False, **kwargs):
     """pf.setup() (an F1-ready battle image) over a harness that records HUD text and opts in to the interface."""
     harness = battle_rig.HARNESS_HOOKS
     assert harness.count(HUD_OLD) == 1 and harness.count(DEPS_OLD) == 1
@@ -49,6 +49,8 @@ def build(*, interface=True, initial_identity_unavailable=False, **kwargs):
         harness = harness.replace(DEPS_OLD, DEPS_OLD + " polished_active_faint=true, polished_faint_observer=false,")
     else:
         harness = harness.replace(DEPS_OLD, DEPS_OLD + " polished_active_faint=false, polished_faint_observer=false,")
+    if not trade_interface:
+        harness = harness.replace(DEPS_OLD, DEPS_OLD + " polished_trade_dev=false,")
     if initial_identity_unavailable:
         harness = harness.replace("function io.read_u8(a, d)",
                                   "function io.read_u8(a, d)\n"
@@ -753,8 +755,13 @@ def baseline_client():
 
 
 def legacy_trace(overrides=None):
-    rig, mons = build(interface=False, overrides=overrides)
+    # The pre-F2 client predates the shipped Polished trade pump (2e53f2958).
+    # Disable both optional interfaces for this legacy-faint comparison; do not
+    # normalize wire flags or discard logs from either trace.
+    rig, mons = build(interface=False, trade_interface=False, overrides=overrides)
     assert rig.client.faint_settle is None, "the interface leaked into a composition without it"
+    assert rig.parts.polished_trade is None and rig.parts.dev_polished_trade is None
+    assert rig.client.trade_live(rig.client) is False
     snaps = []
 
     def snap(tag):
@@ -801,6 +808,13 @@ def test_vanilla_paths_are_byte_for_byte_the_pre_f2_client_with_the_interface_ab
     assert now[0] == before[0], "emitted messages diverged"
     assert now[2] == before[2] and now[3] == before[3], "log / HUD diverged"
     assert now[1], "the scenario wrote nothing: it proves nothing"
+
+
+def test_nil_settlement_does_not_disable_default_shipped_trade():
+    rig, _ = build(interface=False)
+    assert rig.client.faint_settle is None
+    assert rig.parts.polished_trade is not None
+    assert rig.client.trade_live(rig.client) is True
 
 
 def test_red_control_a_branch_that_ignores_the_missing_interface_diverges():

@@ -102,7 +102,10 @@ TRADE_SERVER_FIELDS = frozenset(("pending_trade", "trade_token", "ambiguous_keys
 # KEY-SCOPE-5 4bd32cec: the key_change replay ledger. A clean native trade carries its new key on
 # trade_done, never key_change, so the ledger must not move across the visit: compared like the
 # stable fields, but not required, since pre-KS5 baselines lack it.
-OPTIONAL_STABLE_SERVER_FIELDS = frozenset(("key_migration_ledger",))
+# 089ab11bc: queued_sync persists undelivered partner storage commands. A native
+# trade must not consume or change them; older baselines lack this field, so its
+# presence/value is compared as optional stable gameplay state (never volatile).
+OPTIONAL_STABLE_SERVER_FIELDS = frozenset(("key_migration_ledger", "queued_sync"))
 
 
 class TradeStatus(StrEnum):

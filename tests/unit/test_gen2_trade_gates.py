@@ -631,7 +631,8 @@ def test_continuous_registration_is_proved_beyond_boolean_claims(tmp_path, sourc
 
 @pytest.mark.parametrize("field", ["rules", "area_states", "pending_captures", "pokeballs_obtained",
                                    "trainer_names", "pending_memorials", "retry_areas", "bonus_keys",
-                                   "pending_bonus", "run_over", "attempts_count", "rebuild_pending", "game_id"])
+                                   "pending_bonus", "run_over", "attempts_count", "rebuild_pending", "game_id",
+                                   "queued_sync"])
 def test_trade_cannot_corrupt_other_durable_server_gameplay(tmp_path, sources, field):
     case = make_case(tmp_path, sources)
     path = tmp_path / "links.json"

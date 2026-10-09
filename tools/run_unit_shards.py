@@ -72,8 +72,10 @@ def run(root, shards, out, extra):
     for k, group in enumerate(groups, start=1):
         (out / f"s{k}.files").write_text("\n".join(group) + "\n", encoding="utf-8")
         basetemp = f"--basetemp={out / f'bt{k}'}"
+        # Keep failure/error node IDs even when inherited PYTEST_ADDOPTS or extra
+        # arguments select a different report summary (for example -rs).
         cmd = [sys.executable, "-B", "-m", "pytest", "-q", "-p", "no:cacheprovider",
-               basetemp, *group, *extra]
+               basetemp, *group, *extra, "-rfE"]
         log = open(out / f"s{k}.log", "wb")  # noqa: SIM115 -- closed after wait
         proc = subprocess.Popen(cmd, cwd=root, stdout=log, stderr=subprocess.STDOUT, env=env)
         running.append((k, group, log, proc))

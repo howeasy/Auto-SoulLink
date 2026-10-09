@@ -30,7 +30,8 @@ def test_split_round_robin_and_env_forcing(monkeypatch):
     assert env["PYTEST_DEBUG_TEMPROOT"] == "F:/slink-work/tmp"  # unset value defaulted
 
 
-def test_failing_shard_gives_exit_1_and_failures_file(tmp_path):
+def test_failing_shard_gives_exit_1_and_failures_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTEST_ADDOPTS", "-rs")
     root = _make_root(tmp_path / "repo", second_passes=False)
     out = tmp_path / "out"
     rc = rus.run(root, 2, out, [])

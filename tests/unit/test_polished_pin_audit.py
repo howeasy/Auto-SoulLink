@@ -29,16 +29,20 @@ def old_sha():
 
 
 def test_old_sha_in_scratch_scanned_file_fails_cli(tmp_path):
-    relative = Path("tools/polished_live/duo.py")
+    # Overlay pins now use overlay_pin; this scanned file still pins the base-ROM control.
+    relative = Path("tools/polished_live/title_check.py")
     destination = tmp_path / relative
     destination.parent.mkdir(parents=True)
-    current = json.loads((ROOT / audit.PROVENANCE).read_text())["output"]["sha1"]
+    current = json.loads((ROOT / audit.PROVENANCE).read_text())["base_sha1"]
     source = (ROOT / relative).read_text(encoding="utf-8")
     assert current in source
+    destination.write_text(source, encoding="utf-8")
+    command = [sys.executable, str(ROOT / "tools/polished_pin_audit.py"),
+               "--root", str(ROOT), "--scan-root", str(tmp_path)]
+    control = subprocess.run(command, capture_output=True, text=True)
+    assert control.returncode == 0, control.stdout + control.stderr
     destination.write_text(source.replace(current, old_sha()), encoding="utf-8")
-    run = subprocess.run([sys.executable, str(ROOT / "tools/polished_pin_audit.py"),
-                          "--root", str(ROOT), "--scan-root", str(tmp_path)],
-                         capture_output=True, text=True)
+    run = subprocess.run(command, capture_output=True, text=True)
     assert run.returncode == 1, run.stdout + run.stderr
     line = source[:source.index(current)].count("\n") + 1
     assert f"STALE | {relative.as_posix()}:{line} | hash | {old_sha()}" in run.stdout
