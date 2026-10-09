@@ -437,6 +437,11 @@ function PI.driver(F, facts, opts)
             if point.ball_cursor == "cancel" then return nil, "no Poke Ball left in the pocket" end
             return {}, self.phase
         end
+        -- G/S duo poison only: a refused trainer Ball spends a turn, but first its native USE/QUIT
+        -- submenu must select USE. Keep legacy callers' rejection and all other item paths unchanged.
+        if opts.gs_harden == true and trainer and mine and no_passive[active] and ui.kind == "item_submenu" then
+            return choose(ui, "USE", 1)
+        end
         if ui.kind == "yes_no" and ui.prompt == "switch" then return choose(ui, "NO", 1) end
         if ui.kind == "battle_party" then
             local want = relief(point, low) or (trainer and any_other(point) or nil)
@@ -594,7 +599,7 @@ end
 -- ctx.u1.poison (gen2_faint_active_trainer's walk to a Route 30 trainer, duo_gen2_main.lua h.to_trainer).
 function PI.new(ctx, SG, F, FI, opts)
     local facts = opts.facts or assert(ctx.u1.poison, "SLINK_GEN2_U1_FACTS lacks poison")
-    local driver = PI.driver(F, facts, {moves=FI.PASSIVE_MOVES, target=opts.target})
+    local driver = PI.driver(F, facts, {moves=FI.PASSIVE_MOVES, target=opts.target, gs_harden=opts.gs_harden})
     local base = SG.qualify_observer(ctx)
     local sting = facts.moves.POISON_STING
     local hunt = PI.hunt_diagnostics(sting, function(row)

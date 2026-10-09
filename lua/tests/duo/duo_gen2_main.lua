@@ -240,7 +240,7 @@ if not ok then finish(false, "bad environment: " .. tostring(ctx)) end
 ctx.log = log
 jlog("DUO_GEN2", {player=D.player, scenario=D.scenario, attempt=D.attempt or 1, case=ctx.case.name,
                   title=ctx.env.title, rom_sha1=ctx.env.exec_sha1, artifact_kind=ctx.env.kind, binding_sha256=ctx.env.binding_sha256, fixture_sha256=ctx.qualify.stage_fingerprint,
-                  synth=ctx.case.synth})
+                  synth=ctx.case.synth, gs_harden=D.gs_harden or nil})
 
 local started, gen2, parts = pcall(TR and function() return TR.start_production(ROOT, SG, json) end or start_production)
 if not started or type(gen2) ~= "table" or type(parts) ~= "table" then
@@ -526,7 +526,7 @@ local host = ctx.Host.new({step=step, frame=api.framecount, idle=idle})
 
 local h = {lines=lines, json=json, sent=sent, log=log, jlog=jlog, player=D.player, rec=rec, registered=registered,
            root=ROOT, client=gen2, parts=parts, phase=D.phase, expected_key=D.expected_key, go_file=D.go_file,
-           file_has=file_has, frame=api.framecount, sym=ctx.sym}
+           file_has=file_has, frame=api.framecount, sym=ctx.sym, gs_harden=D.gs_harden}
 function h.frames(n)
     for _ = 1, n do
         if api.framecount() > timeout then error("scenario timeout after " .. timeout .. " frames", 0) end
@@ -807,7 +807,17 @@ end
 -- The overworld poison leg (gen2_poison_inputs.lua): opts.target (party slot) is poisoned and faints to
 -- DoPoisonStep once opts.fainted(); the leg ends on the park tile (phase "park"), never back in the grass.
 function h.poison(opts)
-    local driver, observe, spec = PI.new(ctx, SG, F, FI, {target=opts.target, fainted=opts.fainted,
+    if h.gs_harden then
+        local party = ctx.reads.read_party()
+        local key
+        for _, mon in ipairs(party and party.mons or {}) do
+            if mon.slot == opts.target then key = wire.mon_key(mon) end
+        end
+        if not key then return false, "SYNTH poison target missing" end
+        local ok, why = h.gs_setup.condition_linked(key)
+        if not ok then return false, why end
+    end
+    local driver, observe, spec = PI.new(ctx, SG, F, FI, {target=opts.target, fainted=opts.fainted, gs_harden=h.gs_harden,
         max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=F.POISON_BUDGET.max_phase_frames})
     local step = driver.step
     function driver.step(point)
@@ -815,6 +825,12 @@ function h.poison(opts)
         return step(point)
     end
     return play(spec, driver, observe)
+end
+
+if D.gs_harden then
+    assert((D.scenario == "gen2_poison" or D.scenario == "gen2_species_clause")
+           and (ctx.env.title == "gold" or ctx.env.title == "silver"), "unleased G/S setup scenario")
+    h.gs_setup = dofile(ROOT .. "/lua/tests/duo/gen2_gs_setup.lua").new(h, ctx, SG, assert(D.gs_setup))
 end
 
 if TR then
