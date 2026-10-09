@@ -1157,7 +1157,10 @@ function Client.new(p)
                 local done, kind, why = call("poll_done")
                 local role, phase = call("phase")
                 if kind == "UNCERTAIN" or (done and done.disposition == "UNCERTAIN") then
-                    finish(why or (done and done.reason) or kind, v.attempted); v.retired = true; return
+                    -- MAJOR-5 parity (trade_uncertain): after APPLY a native result 2 / poison holds until a
+                    -- reset and its RAM party was never saved; evidence comes only from the post-reset hello.
+                    if v.attempted then hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600) end
+                    finish(why or (done and done.reason) or kind, v.attempted, v.attempted); v.retired = true; return
                 end
                 if done and v.phase == "prompt" and role == "responder"
                    and (phase == "consented" or phase == "declined") then

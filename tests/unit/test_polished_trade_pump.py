@@ -346,6 +346,25 @@ def test_apply_done_is_never_consent_or_success(result):
         assert p.writes() == before
 
 
+def test_apply_done_result_two_is_uncertain_after_reset_with_the_vanilla_hud_line():
+    # MAJOR-5 parity: a native result 2 holds in .Hold until a reset (trade_commit.asm), so the
+    # server must take evidence only from the post-reset hello, and the player sees vanilla's line.
+    p = Pump()
+    shown = []
+    p.lua.execute("return function(hud, rec) hud.show = function(text) rec(text) end end")(p.deps.hud, shown.append)
+    p.accepted(p.apply_command())
+    p.frame()
+    assert p.arm_trace[-1][0] == 5  # APPLY was attempted
+    gen = p.mem[p.parts.profile.overlay.trade.lease.base + 6]
+    p.put(5, 7)
+    p.put(7, gen)
+    p.put(8, 2)
+    p.frame(3)
+    done = p.sent("trade_done")
+    assert len(done) == 1 and done[0]["uncertain"] is True and done[0].get("after_reset") is True
+    assert shown.count("TRADE UNCERTAIN - CHECK PARTY") == 1
+
+
 @pytest.mark.parametrize("offset", [0, 4, 5, 6, 7, 9, 12, 8],
                          ids=["magic", "version", "command", "generation", "ack", "slot", "token4", "result"])
 def test_prepare_revalidates_live_lease_before_readiness(offset):
