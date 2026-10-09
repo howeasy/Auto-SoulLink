@@ -474,13 +474,14 @@ def test_box_mon_refuses_when_every_box_is_full():
     assert rig.sent("box_mon_failed")[0]["reason"] == "no free box slot"
 
 
-def test_party_mon_and_memorialize_refuse_by_name():
+def test_party_mon_and_memorialize_refuse_an_absent_key_by_name():
     rig = Rig(party())
     # party_mon is composed (card POL-WDEXEC): with an empty box census the key is genuinely not there
     assert _pair(rig.overworld().boxes.withdraw())[0] is None
     assert "key not boxed" in _pair(rig.overworld().boxes.withdraw())[1]
+    # memorialize is composed (owner ruling 2026-10-09, docs/polished/MEMORIALIZE.md): absent everywhere refuses
     assert _pair(rig.overworld().boxes.memorialize())[0] is None
-    assert "not composed" in _pair(rig.overworld().boxes.memorialize())[1]
+    assert _pair(rig.overworld().boxes.memorialize())[1] == "key not in party or boxes"
 
 
 # ── the permit ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -949,3 +950,167 @@ def test_red_control_without_the_contest_flag_the_explicitly_legacy_death_is_dro
     dropped = [line for line in rig.log["lines"].values() if "dropped at the checkpoint" in line]
     assert dropped and "key not in party" in dropped[0]
     assert rig.hp(0) == 300
+
+
+# ── memorialize (owner ruling 2026-10-09; design of record docs/polished/MEMORIALIZE.md) ───────────────────
+#
+# Driven through the real client command path (client.lua run_box): a success must reach memorialize_done exactly once
+# with no settle queued (a truthy second return would raise or queue one), a refusal memorialize_failed, and
+# `last party mon` the client's deferred retry. Every byte is judged on the image, never on a return value.
+
+def _party_arrays(rig):
+    out = {"count": rig.mem[PARTY_COUNT] or 0}
+    for name, width in (("wPartyMons", RECORD), ("wPartyMonOTs", NAME), ("wPartyMonNicknames", MON_NAME)):
+        base = SYM[name][1]
+        out[name] = [bytes((rig.mem[base + slot * width + i] or 0) for i in range(width)) for slot in range(6)]
+    return out
+
+
+def _burials(rig):
+    return [m["key"] for m in rig.sent("memorialize_done")], [m["reason"] for m in rig.sent("memorialize_failed")]
+
+
+def _changed(before, after):
+    return {i for i in range(len(before)) if before[i] != after[i]}
+
+
+def test_memorialize_party_origin_buries_into_the_first_hole_of_box_20_with_a_fresh_entry():
+    img = seal_save(Image())
+    plant(img, MEMORIAL_BOX, 1, 1, 1, entry_for(live_mon(random.Random(501), 60, nick="OLD1")))
+    plant(img, MEMORIAL_BOX, 3, 1, 2, entry_for(live_mon(random.Random(503), 61, nick="OLD3")))
+    mons = party(4)
+    key = key_of(mons[1])
+    rig = Rig(mons, img=img)
+    before, cart0, wram0 = _party_arrays(rig), bytes(rig.img.mem["CartRAM"]), bytes(rig.img.mem["WRAM"])
+    rig.send_command({"cmd": "memorialize", "key": key, "nickname": "MON1"})
+    assert _burials(rig) == ([key], [])
+    assert len(rig.client.settle) == 0, "a bare true never queues a settle"
+    # the party: RemoveMonFromParty's compaction, exactly
+    after = _party_arrays(rig)
+    assert after["count"] == 3
+    for name in ("wPartyMons", "wPartyMonOTs", "wPartyMonNicknames"):
+        for slot in range(3):
+            assert after[name][slot] == before[name][slot if slot < 1 else slot + 1], (name, slot)
+    # box 20: the FIRST EMPTY slot (the hole at 2), a FRESH entry (1 and 2 are taken: bank 1 entry 3)
+    mem = box_flat(MEMORIAL_BOX)
+    cart = rig.img.mem["CartRAM"]
+    assert cart[mem + 1] == 3 and cart[mem + 0x14] & 0b10 == 0
+    assert bytes(cart[entry_flat(1, 3):entry_flat(1, 3) + SECTION_SIZE]) == entry_for(mons[1])
+    assert rig.img.mem["WRAM"][FLAG_FLAT[1]] & 0b100
+    # nothing else in CartRAM/WRAM moved: the slot pointer, its Banks byte, the entry, its flag byte
+    assert _changed(cart0, cart) <= {mem + 1, mem + 0x14} | set(range(entry_flat(1, 3), entry_flat(1, 3) + 49))
+    assert _changed(wram0, rig.img.mem["WRAM"]) == {FLAG_FLAT[1]}
+    boxes, why = rig.census_keys()
+    assert boxes is not None, why
+    assert boxes[MEMORIAL_BOX].count(key) == 1 and all(key not in boxes[b] for b in range(1, MEMORIAL_BOX))
+    for w in rig.writes():
+        assert not outside(w["addr"], w["domain"]), w
+
+
+@pytest.mark.parametrize("bank", [1, 2], ids=["bank1", "bank2"])
+def test_memorialize_box_origin_reuses_the_same_entry_and_moves_only_pointers(bank):
+    """BOX-origin: the same (bank, entry) is published in box 20, THEN the source pointer is cleared. No allocation,
+    no re-encode, no flag change (a fresh allocation, the party-origin path, would move a flag byte here)."""
+    target = live_mon(random.Random(611), 70, nick="BOXD")
+    img = seal_save(Image())
+    plant(img, 3, 5, bank, 9, entry_for(target))
+    rig = Rig(party(3), img=img)
+    cart0, wram0 = bytes(rig.img.mem["CartRAM"]), bytes(rig.img.mem["WRAM"])
+    rig.send_command({"cmd": "memorialize", "key": key_of(target)})
+    assert _burials(rig) == ([key_of(target)], [])
+    cart, mem, src = rig.img.mem["CartRAM"], box_flat(MEMORIAL_BOX), box_flat(3) + 4
+    assert cart[mem] == 9 and (cart[mem + 0x14] & 1) == bank - 1
+    assert cart[src] == 0
+    assert _changed(cart0, cart) <= {mem, mem + 0x14, src} and {mem, src} <= _changed(cart0, cart)
+    assert bytes(rig.img.mem["WRAM"]) == wram0, "a box-origin burial never touches an allocation flag"
+    assert rig.count() == 3
+    boxes, _ = rig.census_keys()
+    assert boxes[MEMORIAL_BOX] == [key_of(target)] and key_of(target) not in boxes[3]
+
+
+def test_memorialize_box_origin_never_clears_the_source_when_the_destination_did_not_land():
+    """Publication safety: a silently dropped destination Entries write is caught by its read-back BEFORE the source is
+    cleared (move_to_memorial does both in one batch; the executor must not)."""
+    from tests.unit.test_polished_withdraw_path import build, flaky_io
+    target = live_mon(random.Random(611), 70, nick="BOXD")
+    img = seal_save(Image())
+    plant(img, 3, 5, 2, 9, entry_for(target))
+    rig = Rig(party(3), img=img)
+    rig.arm_writes()
+    io = flaky_io(rig)
+    io.flaky.swallow = box_flat(MEMORIAL_BOX)
+    raw = build(rig, io=io)
+    done, why = _pair(rig.lua.eval("function(b, k) return b.memorialize(k) end")(raw, key_of(target)))
+    assert done is None and "read-back" in why
+    assert rig.img.mem["CartRAM"][box_flat(3) + 4] == 9, "the source was cleared without a published destination"
+
+
+def test_memorialize_refuses_the_last_party_mon_before_any_write_and_retries():
+    mons = party(1)
+    rig = Rig(mons)
+    rig.send_command({"cmd": "memorialize", "key": key_of(mons[0])})
+    assert rig.writes() == [] and rig.count() == 1
+    assert _burials(rig) == ([], []), "last party mon is the client's deferred retry, never a memorialize_failed"
+    assert any(c["cmd"] == "memorialize" for c in rig.client.deferred.values())
+
+
+def test_memorialize_refuses_mail_in_the_removed_or_a_later_slot():
+    mons = party()
+    mons[2]["held_item"] = 0xF5                       # FIRST_MAIL
+    rig = Rig(mons)
+    rig.send_command({"cmd": "memorialize", "key": key_of(mons[1])})
+    assert rig.writes() == [] and rig.count() == 3
+    done, failed = _burials(rig)
+    assert done == [] and len(failed) == 1 and "sPartyMail is never shifted" in failed[0]
+
+
+def test_memorialize_refuses_an_ambiguous_key_in_the_party_and_a_box():
+    mons = party()
+    img = seal_save(Image())
+    plant(img, 2, 1, 1, 1, entry_for(mons[1]))
+    rig = Rig(mons, img=img)
+    rig.send_command({"cmd": "memorialize", "key": key_of(mons[1])})
+    assert rig.writes() == [] and rig.count() == 3
+    done, failed = _burials(rig)
+    assert done == [] and len(failed) == 1 and "ambiguous" in failed[0]
+
+
+def test_memorialize_reconciles_an_interrupted_burial_by_exact_content():
+    """A published memorial copy byte-identical to the party mon (an attempt cut after its box half): only the party is
+    compacted; no second entry is allocated."""
+    mons = party()
+    img = seal_save(Image())
+    plant(img, MEMORIAL_BOX, 1, 1, 1, entry_for(mons[1]))
+    rig = Rig(mons, img=img)
+    cart0, wram0 = bytes(rig.img.mem["CartRAM"]), bytes(rig.img.mem["WRAM"])
+    rig.send_command({"cmd": "memorialize", "key": key_of(mons[1])})
+    assert _burials(rig) == ([key_of(mons[1])], [])
+    assert rig.count() == 2
+    assert bytes(rig.img.mem["CartRAM"]) == cart0 and bytes(rig.img.mem["WRAM"]) == wram0
+    boxes, _ = rig.census_keys()
+    assert boxes[MEMORIAL_BOX] == [key_of(mons[1])]
+
+
+def test_red_control_a_key_only_memorial_match_is_not_reconciled():
+    """RED: the same KEY with different bytes (another nickname) in box 20 is not this mon's interrupted burial."""
+    mons = party()
+    twin = dict(mons[1], nickname="OTHER", nickname_raw_hex=pc.encode_text("OTHER", 11).hex())
+    assert key_of(twin) == key_of(mons[1]) and entry_for(twin) != entry_for(mons[1])
+    img = seal_save(Image())
+    plant(img, MEMORIAL_BOX, 1, 1, 1, entry_for(twin))
+    rig = Rig(mons, img=img)
+    rig.send_command({"cmd": "memorialize", "key": key_of(mons[1])})
+    assert rig.writes() == [] and rig.count() == 3
+    done, failed = _burials(rig)
+    assert done == [] and len(failed) == 1 and "differs" in failed[0]
+
+
+def test_memorialize_of_a_mon_already_only_in_box_20_is_a_verified_no_op():
+    """Already buried: a bare done with no write, even with box 20 full."""
+    target = live_mon(random.Random(611), 70, nick="BOXD")
+    img = seal_save(Image())
+    entry = fill(img, MEMORIAL_BOX, 1, count=19)
+    plant(img, MEMORIAL_BOX, 20, 1, entry, entry_for(target))
+    rig = Rig(party(), img=img)
+    rig.send_command({"cmd": "memorialize", "key": key_of(target)})
+    assert _burials(rig) == ([key_of(target)], []) and rig.writes() == []

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Run card POL-LIVE-WRITES on the INTEGRATED Polished overlay (tools/polished_live/writes.lua).
+"""Run card POL-LIVE-WRITES on the INTEGRATED Polished overlay (tools/polished_live/writes.lua):
+legs (a) force_faint, (b) box_mon, (d) party_mon, and (e)/(f) memorialize from the party and from a box
+(POL_MEMORIAL=1, the default here; docs/polished/MEMORIALIZE.md).
 
     python tools/polished_live/writes_run.py
 
@@ -111,8 +113,10 @@ def main() -> int:
     time.sleep(1.5)
     pid = None
     try:
+        # POL_MEMORIAL=1 runs legs (e) party-origin and (f) box-origin memorialize after (a)/(b)/(d)
         text, pid = harness.launch("tools/polished_live/writes.lua", run,
-                                   {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port)}, 300)
+                                   {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port),
+                                    "POL_MEMORIAL": os.environ.get("POL_MEMORIAL", "1")}, 420)
     finally:
         # only our own PIDs: the emulator harness.kill_own handles, this is the server
         if srv.poll() is None:
