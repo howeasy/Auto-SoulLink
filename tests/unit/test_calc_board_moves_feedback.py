@@ -5,6 +5,7 @@ replays; they do not stage game data or claim emulator qualification.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import shutil
@@ -178,6 +179,29 @@ def test_battle_exit_hides_and_reentry_refreshes_all_move_rows():
     assert out[0]["display"] == "" and out[1]["display"] == "none"
     assert out[2]["display"] == ""
     assert [r[0] for r in Rows(out[2]["html"]).rows] == cases[2]["player_moves"]
+
+
+@pytest.mark.asyncio
+async def test_populate_rejects_a_timed_out_reply_instead_of_returning_partial_state(tmp_path, monkeypatch):
+    """A missed reply must not let a late injector tick overwrite the board's setup."""
+    from server.server import SLinkServer
+    from tests.unit.populated_server import populate
+
+    read_reply = asyncio.StreamReader.readline
+    first_reply = True
+
+    async def timeout_once(reader):
+        nonlocal first_reply
+        if first_reply:
+            first_reply = False
+            raise TimeoutError("injector reply deadline expired")
+        return await read_reply(reader)
+
+    monkeypatch.setattr(asyncio.StreamReader, "readline", timeout_once)
+    srv = SLinkServer(data_dir=str(tmp_path))
+    with pytest.raises(TimeoutError, match="injector reply deadline expired"):
+        close = await populate(srv, "gen1")
+        await close()
 
 
 @pytest.mark.asyncio

@@ -42,8 +42,11 @@ def _load_injector():
 
 
 async def populate(srv: SLinkServer, game: str):
-    """Run the injector's whole script against `srv` over a real socket. Returns the open
-    writer so the caller decides when the players go offline."""
+    """Wait for every injected event's TCP reply, then return the socket cleanup callback.
+
+    A missed reply must fail setup: otherwise later reads consume earlier replies and
+    populate can return before a final tick overwrites the caller's board-test changes.
+    """
     tcp = await asyncio.start_server(srv.handle_client, "127.0.0.1", 0, limit=4 * 1024 * 1024)
     port = tcp.sockets[0].getsockname()[1]
     mod = _load_injector()
@@ -62,8 +65,11 @@ async def populate(srv: SLinkServer, game: str):
                 m = patched(m)
             w.write((json.dumps(m) + "\n").encode())
             await w.drain()
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(r.readline(), timeout=2)
+            # Shards share CPU/disk, so allow a slow setup reply, but never silently
+            # skip one: the reply is the witness that this event has been dispatched.
+            reply = await asyncio.wait_for(r.readline(), timeout=30)
+            if not reply:
+                raise EOFError(f"injector TCP closed before replying to {m['event']}")
 
     def http_post(path, body):
         if path == "/api/attempts":
@@ -71,15 +77,21 @@ async def populate(srv: SLinkServer, game: str):
             srv.state._save()
         return {"ok": True}
 
-    mod.send_tcp, mod.http_post = send_tcp, http_post
-    mod.print = lambda *a, **k: None
-    await mod.main()
-
     async def close():
         if held:
             held[0].close()
+            with contextlib.suppress(ConnectionError):
+                await held[0].wait_closed()
         tcp.close()
         await tcp.wait_closed()
+
+    mod.send_tcp, mod.http_post = send_tcp, http_post
+    mod.print = lambda *a, **k: None
+    try:
+        await mod.main()
+    except BaseException:
+        await close()
+        raise
     return close
 
 
