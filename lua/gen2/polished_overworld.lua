@@ -32,7 +32,7 @@
 -- repointing the slot (UpdateStorageBoxMonFromTemp, engine/pc/bills_pc.asm:495-531), and removes a party mon
 -- by shifting its slot to the end and decrementing wPartyCount (RemoveMonFromParty -> ShiftPartySlotToEnd ->
 -- SwapPartyMons, bills_pc.asm:539-623). This module runs the box half first, so a reset between the halves
--- leaves a duplicate, never a loss. withdraw() and memorialize() are refused by name, not stubbed: see below.
+-- leaves a duplicate, never a loss. withdraw() and memorialize() reuse the same writer, permit and hold (see below).
 local O = {}
 
 -- The composed write kinds. "party_hp" is the name lua/gen2/client.lua asks for before it runs ANY deferred
@@ -422,6 +422,7 @@ function O.boxes(deps)
     assert(type(reader) == "table" and type(reader.insert_mon) == "function", "a polished_boxes.lua reader required")
     assert(type(writes) == "table" and type(writes.arm) == "function", "the overworld writer required")
     local mail = deps.mail or {}
+    local log = deps.log
     -- party_mon (withdraw) dependencies. NOT asserted here: a graph composed without them still runs box_mon, and
     -- withdraw refuses by name (its own contract: nothing defaulted, a missing table is a refusal).
     local STATS, BASE, VARIANT, MOVE_PP = deps.stats, deps.base_stats, deps.variant_record, deps.move_pp
@@ -896,10 +897,223 @@ function O.boxes(deps)
         return nil, tostring(result)
     end
 
-    -- Not composed, refused by name rather than stubbed:
-    --  * memorialize targets the memorial box, and NEWBOX §6.2 leaves that choice an OPEN owner ruling.
-    function self.memorialize()
-        return nil, "Polished memorialize is not composed: the memorial box choice is an open owner ruling (NEWBOX 6.2)"
+    -- ── memorialize — docs/polished/MEMORIALIZE.md (design of record; owner ruling 2026-10-09: in RC 1) ──────────
+    -- The memorial box is box 20 (Boxes.MEMORIAL_BOX; gen2_polished.py memorial_box_index() = 19), settled by NEWBOX
+    -- §6.2 "Set M = 20". Ordinary deposit never uses it. Two origins, the SAME writer/permit/hold as deposit/withdraw:
+    --   PARTY  the deposit's own halves into box 20: stage a FRESH pokedb entry (bank 1 then 2, unflagged and
+    --          unreferenced by the gameplay AND backup records), verify it, publish flag/Banks/Entries into the FIRST
+    --          EMPTY slot of box 20 (holes included), verify, then compact the party (count last), verify. The entry is
+    --          entry_from_party: no status, no HP. Refused before any write: an egg, the last party mon (count-based,
+    --          as vanilla boxes.lua; no healthy-survivor rule), Mail on the removed or a later slot, a key also in boxes
+    --          1-19. An interrupted attempt whose memorial copy is PUBLISHED is finished (party compaction only) when that
+    --          copy is byte-for-byte the entry this mon encodes to and carries its key - never on the key alone.
+    --   BOX    a key in boxes 1-19: the SAME (bank, entry) is published in box 20 (Banks bit, then Entries byte) and
+    --          READ BACK, and only then is the source's Entries byte cleared and read back. No allocation, no re-encode,
+    --          no flag change. (Banks/move_to_memorial does both in one batch, so a silently dropped destination write
+    --          could be followed by the source delete; this does not use it.) The source's Banks bit is left as junk on
+    --          an empty slot (NEWBOX §1.1: an empty slot's bit is never read, and a deposit rewrites it before its
+    --          Entries byte), which also avoids the bank-2 redirect hazard withdraw documents.
+    -- A key already ONLY in box 20 is a verified no-op success (even with box 20 full). Client contract (client.lua
+    -- run_box): success is a bare `true` (a truthy second value would be concatenated or queued as a settle); the only
+    -- retry is `last party mon`; `memorial box full` and `no free pokedb entry: native save required` verbatim.
+    local function box_io(what)
+        if type(io_) ~= "table" or type(io_.read_u8) ~= "function" then
+            refuse(what .. " is not composed: no live io for the box record")
+        end
+        if type(coords) ~= "table" or type(coords.sNewBox1) ~= "table" then
+            refuse(what .. " is not composed: no newbox coordinates for the box record")
+        end
+        BOX1 = coords.sNewBox1[1] * 0x2000 + coords.sNewBox1[2] - 0xA000
+    end
+    local function cart_byte(at)
+        local v = io_.read_u8(at, "CartRAM")
+        if not integer(v, 0, 255) then refuse("box record byte unreadable") end
+        return v
+    end
+    local function one_byte(at, value, why)
+        writes:arm("box_deposit", function(domain, addr, n) return domain == "CartRAM" and n == 1 and addr == at end)
+        local ok, err = pcall(function() writes:write_batch({{domain = "CartRAM", addr = at, bytes = {value}}}) end)
+        writes:disarm()
+        if not ok then refuse(why .. " refused: " .. tostring(err)) end
+        if cart_byte(at) ~= value then refuse(why .. " read-back refused") end
+    end
+    local function memorial_from_party(key, party, raw, pmon, buried)
+        if party.count <= 1 then refuse("last party mon") end
+        for _, later in ipairs(party.mons) do
+            if later.slot >= pmon.slot and mail[later.held_item] then
+                refuse("party mail in the party (slot " .. later.slot .. " holds item "
+                       .. tostring(later.held_item) .. "; sPartyMail is never shifted, T-3)")
+            end
+        end
+        local blob = blob_of(raw, pmon.slot)
+        local want = Boxes.entry_from_party(blob)
+        local placed
+        if buried then
+            -- INTERRUPTED ATTEMPT: the published copy must be exactly this mon's encoding (the census already matched
+            -- the key); otherwise it is another mon under the same key and both are kept.
+            local have = from_hex(buried.raw_hex)
+            for i = 1, #want do
+                if have[i] ~= want[i] then
+                    refuse("memorial reconcile refused: the box " .. MEMORIAL .. " copy differs from the party mon (both kept)")
+                end
+            end
+            placed = {slot = buried.slot + 1, bank = buried.bank, entry = buried.entry}
+        else
+            writes:arm("box_deposit")
+            local staged_ok, staged, swhy = pcall(function() return reader.stage_entry(writes, MEMORIAL, blob) end)
+            writes:disarm()
+            if not staged_ok then refuse("box write refused: " .. tostring(staged)) end
+            if not staged then
+                swhy = tostring(swhy)
+                refuse(swhy == "box full" and "memorial box full" or swhy)
+            end
+            local have = reader.entry_bytes(staged.bank, staged.entry)
+            local bad = not Boxes.verify(have) and "entry checksum fails" or nil
+            for i = 1, #want do
+                if have[i] ~= want[i] then bad = bad or "entry bytes differ from the sealed entry" end
+            end
+            if bad then
+                refuse("memorial read-back refused: " .. bad .. " (nothing published: the entry is in an unallocated,"
+                       .. " unreferenced pokedb slot; party untouched)")
+            end
+            local banks_before = reader.banks_byte(MEMORIAL, staged.slot)
+            writes:arm("box_deposit")
+            local pub_ok, pub, pwhy = pcall(function() return reader.publish_entry(writes, staged) end)
+            writes:disarm()
+            local PUBLISHED = " (the entry may be partly published; party untouched)"
+            if not pub_ok then refuse("box publish refused: " .. tostring(pub) .. PUBLISHED) end
+            if not pub then refuse("box " .. MEMORIAL .. " refused the publish: " .. tostring(pwhy) .. PUBLISHED) end
+            local snap = reader.read_boxes("gameplay")
+            local got
+            for _, w in ipairs((snap and snap.mons) or {}) do
+                if w.box == MEMORIAL and w.slot == pub.slot then got = w end
+            end
+            bad = nil
+            if not snap or not snap.complete then bad = "the box census is incomplete"
+            elseif not got then bad = "box " .. MEMORIAL .. " does not read the entry back (flag, Banks or Entries)"
+            elseif got.entry ~= pub.entry or got.bank ~= pub.bank then bad = "Entries pointer / Banks bit"
+            else
+                local back = from_hex(got.raw_hex)
+                for i = 1, #want do if back[i] ~= want[i] then bad = "entry bytes differ from the sealed entry" end end
+            end
+            local mask = 1 << ((pub.slot - 1) & 7)
+            if not bad and ((banks_before ~ reader.banks_byte(MEMORIAL, pub.slot)) & ~mask & 0xFF) ~= 0 then
+                bad = "neighbouring Banks bits changed"
+            end
+            if bad then refuse("memorial read-back refused: " .. bad .. PUBLISHED) end
+            placed = pub
+        end
+        writes:arm("party_collection")
+        local dropped, dwhy = pcall(function() return writes:write_party_block(removed(raw, pmon.slot)) end)
+        writes:disarm()
+        if not dropped then refuse("party compaction refused: " .. tostring(dwhy)) end
+        local after = reads.read_party()
+        if not after then refuse("read-back refused: the party became unreadable") end
+        if after.count ~= party.count - 1 then
+            refuse("read-back refused: party count " .. party.count .. " -> " .. tostring(after.count))
+        end
+        for _, m in ipairs(after.mons) do
+            if m.key == key then refuse("read-back refused: the mon is still in the party") end
+        end
+        local after_boxes, cwhy = scan()
+        if not after_boxes then refuse("read-back refused: the census no longer completes (" .. tostring(cwhy) .. ")") end
+        local found = find_key(after_boxes[MEMORIAL], key)
+        if not found or found.slot + 1 ~= placed.slot or found.bank ~= placed.bank or found.entry ~= placed.entry then
+            refuse("read-back refused: box " .. MEMORIAL .. " does not read the buried mon at the written slot")
+        end
+        if log then
+            log("[SLink-gen2] memorialize " .. tostring(key) .. ": party -> box " .. MEMORIAL .. " slot " .. placed.slot
+                .. " entry " .. placed.bank .. "/" .. placed.entry .. (buried and " (reconciled)" or ""))
+        end
+        return true
+    end
+    local function memorial_from_box(key, source, buried, boxes)
+        box_io("memorialize")
+        if buried then
+            -- INTERRUPTED box-origin attempt (destination published, source not yet cleared): both slots must point at
+            -- the SAME pokedb entry; anything else is two mons under one key.
+            if buried.bank ~= source.bank or buried.entry ~= source.entry then
+                refuse("ambiguous: key in box " .. source.box .. " and box " .. MEMORIAL .. " at different entries")
+            end
+        elseif #(boxes[MEMORIAL] or {}) >= PER_BOX then
+            refuse("memorial box full")
+        end
+        local mem = record_flat(MEMORIAL)
+        local slot = buried and (buried.slot + 1)
+        if not slot then
+            for s_ = 1, PER_BOX do
+                if cart_byte(mem + s_ - 1) == 0 then slot = s_; break end
+            end
+            if not slot then refuse("memorial box full") end
+            -- DESTINATION: the Banks bit (only this slot's), then the Entries byte; each read back BEFORE the source moves
+            local bits_at, mask = mem + 0x14 + ((slot - 1) >> 3), 1 << ((slot - 1) & 7)
+            local before = cart_byte(bits_at)
+            local want = source.bank == 2 and (before | mask) or (before & ~mask & 0xFF)
+            if want ~= before then one_byte(bits_at, want, "memorial Banks bit") end
+            one_byte(mem + slot - 1, source.entry, "memorial Entries byte")
+            local snap = reader.read_boxes("gameplay")
+            local got
+            for _, w in ipairs((snap and snap.mons) or {}) do
+                if w.box == MEMORIAL and w.slot == slot then got = w end
+            end
+            if not snap or not snap.complete or not got or got.bank ~= source.bank or got.entry ~= source.entry
+               or got.raw_hex ~= source.raw_hex then
+                refuse("memorial read-back refused: box " .. MEMORIAL .. " slot " .. slot
+                       .. " does not read the source entry (source untouched)")
+            end
+        end
+        -- SOURCE: its Entries byte only, read back
+        one_byte(record_flat(source.box) + source.slot, 0, "memorial source Entries byte")
+        local after_boxes, cwhy = scan()
+        if not after_boxes then refuse("read-back refused: the census no longer completes (" .. tostring(cwhy) .. ")") end
+        local found = find_key(after_boxes[MEMORIAL], key)
+        if not found or found.slot + 1 ~= slot or found.entry ~= source.entry or found.bank ~= source.bank then
+            refuse("read-back refused: box " .. MEMORIAL .. " does not read the buried mon at the written slot")
+        end
+        if find_key(after_boxes[source.box], key) then refuse("read-back refused: box " .. source.box .. " still reads the mon") end
+        if log then
+            log("[SLink-gen2] memorialize " .. tostring(key) .. ": box " .. source.box .. " slot " .. (source.slot + 1)
+                .. " -> box " .. MEMORIAL .. " slot " .. slot .. " entry " .. source.bank .. "/" .. source.entry
+                .. (buried and " (reconciled)" or ""))
+        end
+        return true
+    end
+
+    --- memorialize. Bare true on success (or a verified already-buried no-op); nil, why on refusal. Never raises.
+    function self.memorialize(key)
+        local okr, result = pcall(function()
+            local boxes, why = scan()
+            if not boxes then refuse("box census incomplete: " .. tostring(why)) end
+            local party, raw = party_block()
+            local pmon, pwhy = find_key(party.mons, key)
+            if pwhy then refuse(pwhy .. " in the party") end
+            local buried, bwhy = find_key(boxes[MEMORIAL] or {}, key)
+            if bwhy then refuse(bwhy .. " in box " .. MEMORIAL) end
+            local source, sbox
+            for index = 1, c.NUM_BOXES do
+                if index ~= MEMORIAL then
+                    for _, m in ipairs(boxes[index] or {}) do
+                        if m.key == key then
+                            if source then refuse("ambiguous duplicate boxed key") end
+                            source, sbox = m, index
+                        end
+                    end
+                end
+            end
+            if pmon then
+                if pmon.is_egg then refuse("egg in the party") end
+                if source then refuse("ambiguous: key in the party and box " .. sbox) end
+                return memorial_from_party(key, party, raw, pmon, buried)
+            end
+            if source then
+                source.box = sbox
+                return memorial_from_box(key, source, buried, boxes)
+            end
+            if buried then return true end                -- already buried, verified by this census
+            refuse("key not in party or boxes")
+        end)
+        if okr then return result end
+        return nil, tostring(result)
     end
     -- A settle only exists after a native save witness; Polished composes no save site, so there is never one.
     function self.settle() return true end
@@ -1034,8 +1248,10 @@ function O.boxes(deps)
                 return plan
             end
             if cmd == "memorialize" then
+                -- memorialize runs on the LEGACY client contract only (self.memorialize, bare true / nil, why); its
+                -- three-outcome postimage is not planned here, so this explicit-only seam proves a no-write negative.
                 plan.source_valid = not (pmon and found)
-                return guard("Polished memorialize is not composed")
+                return guard("memorialize has no three-outcome plan (legacy client contract only)")
             end
             if cmd == "box_mon" then
                 if not pmon or found then plan.reason = "deposit source inconsistent"; return plan end

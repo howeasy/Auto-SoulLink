@@ -93,6 +93,22 @@ L.log(fmt("[writes] parts: pack %s kind %s sha1 %s; overworld writer=%s boxes=%s
           tostring(P.pack), tostring(P.artifact_kind), tostring(P.runtime_rom_sha1),
           tostring(P.overworld ~= nil and P.overworld.writes ~= nil),
           tostring(P.overworld ~= nil and P.overworld.boxes ~= nil)))
+-- every event the client sends after the build (net = the connector module, looked up per send): (e)/(f) judge
+-- memorialize_done / memorialize_failed on the wire the server sees, not on an executor return.
+local sent_events = {}
+do
+    local C = package.loaded["connector"]
+    if C and type(C.send) == "function" then
+        local orig = C.send
+        C.send = function(line, ...)
+            local ok, msg = pcall(J.decode, line)
+            if ok and type(msg) == "table" and type(msg.event) == "string" then
+                sent_events[#sent_events + 1] = {event = msg.event, key = msg.key, reason = msg.reason}
+            end
+            return orig(line, ...)
+        end
+    end
+end
 L.check("the composition has the overworld write path", P.overworld ~= nil and P.overworld.writes ~= nil)
 L.check("the composition has the box executor", P.overworld ~= nil and P.overworld.boxes ~= nil)
 
@@ -607,6 +623,185 @@ if os.getenv("POL_STOP_AFTER_D") == "1" or true then
     local wrong_ok = is_subset(diff_d, wrong_d)
     L.check("(d5c) CONTROL: the same diff against a one-slot-shifted expected set FAILS", wrong_ok == false,
             fmt("subset reported %s", tostring(wrong_ok)))
+end
+
+-- ── (e)/(f) MEMORIALIZE (docs/polished/MEMORIALIZE.md; owner ruling 2026-10-09: in RC 1) ───────────────
+-- The same strict-subset byte-diff judging as (a)/(b)/(d), and the client's own wire reply (memorialize_done once,
+-- no memorialize_failed). Opt-in (POL_MEMORIAL=1, which writes_run.py sets) so the synthetic driver test in
+-- tests/unit/test_polished_live_writes.py, whose fake client knows only force_faint/box_mon/party_mon, is unchanged.
+if os.getenv("POL_MEMORIAL") ~= "1" then
+    L.log("[writes] (e)/(f) memorialize: NOT RUN (POL_MEMORIAL ~= 1)")
+else
+    local Boxes = dofile(L.ROOT .. "/lua/gen2/polished_boxes.lua")
+    local MEM_REC = cart_flat("sNewBox20")
+    local function first_empty(cart)
+        for s = 1, 20 do if cart[MEM_REC + s - 1] == 0 then return s end end
+    end
+    local function pokedb_at(bank, entry)
+        for _, section in ipairs({{"A", 1, 167}, {"B", 168, 195}, {"C", 196, 207}}) do
+            if entry >= section[2] and entry <= section[3] then
+                return cart_flat("sBoxMons" .. bank .. section[1]) + (entry - section[2]) * 49
+            end
+        end
+    end
+    -- every box slot the composed census reads `k` in: {box, slot (1-based), bank, entry}, and whether all 20 read
+    local function where(k)
+        local hits, complete = {}, true
+        for i = 0, 19 do
+            local bx = P.overworld.census.read_storage_box(i)
+            if not bx then complete = false end
+            for _, m in ipairs((bx and bx.mons) or {}) do
+                if m.key == k then hits[#hits + 1] = {box = i + 1, slot = m.slot + 1, bank = m.bank, entry = m.entry} end
+            end
+        end
+        return hits, complete
+    end
+    local function party_keys()
+        local r = P.reads:read_party()
+        local out = {}
+        for i, m in ipairs((r and r.mons) or {}) do out[i] = m.key end
+        return out
+    end
+    local function has(list, k) for _, v in ipairs(list) do if v == k then return true end end return false end
+    local function wire(event, k, since)
+        local n = 0
+        for i = since + 1, #sent_events do
+            if sent_events[i].event == event and sent_events[i].key == k then n = n + 1 end
+        end
+        return n
+    end
+    local function undeclared(since, label)
+        local others, listing = {}, {}
+        for i = since + 1, #writes do
+            local w = writes[i]
+            local kind = classify(w)
+            listing[#listing + 1] = fmt("%s@%s[%s]=%s", w.op, tostring(w.addr), tostring(w.domain), kind)
+            if kind == "other" then others[#others + 1] = listing[#listing] end
+        end
+        L.log(fmt("[writes] (%s) %d write(s)", label, #listing))
+        return others, #listing
+    end
+
+    -- (e) PARTY origin: the mon fainted in (a), into the FIRST EMPTY slot of box 20 with a FRESH pokedb entry
+    local ekey, eslot = key, nil
+    for i, k in ipairs(party_keys()) do if k == ekey then eslot = i - 1 end end
+    L.check("(e0) the (a) target is still in the party", eslot ~= nil, fmt("%s slot %s", tostring(ekey), tostring(eslot)))
+    local e_cart, e_party, e_alloc = snapshot()
+    local e_mslot = first_empty(e_cart)
+    L.check("(e0b) box 20 has an empty slot before the burial", e_mslot ~= nil, tostring(e_mslot))
+    -- the entry this mon must encode to, built HERE from the party bytes before the burial (record + OT + nickname)
+    local blob = {}
+    if eslot then
+        for i = 0, STRIDE - 1 do blob[#blob + 1] = e_party[SB_BASE + eslot * STRIDE + i] end
+        for i = 0, 10 do blob[#blob + 1] = e_party[SB_BASE + PARTY_OT_OFF + eslot * 11 + i] end
+        for i = 0, 10 do blob[#blob + 1] = e_party[SB_BASE + PARTY_NICK_OFF + eslot * 11 + i] end
+    end
+    local want_entry = #blob == 70 and Boxes.entry_from_party(blob) or nil
+    local count_e, we, se = L.rw("wPartyCount"), #writes, #sent_events
+    SLINK_GEN2_CLIENT:handle_command({ cmd = "memorialize", key = ekey })
+    L.check("(e0a) memorialize was queued into the client's command path", true, tostring(ekey))
+    L.idle(150)
+    local x_cart, x_party, x_alloc = snapshot()
+    local diff_e = changed({ e_cart, e_party, e_alloc }, { x_cart, x_party, x_alloc })
+    L.log(fmt("[writes] (e) changed set: %s", fmt_changed(diff_e)))
+    L.check("(e1) the client sent memorialize_done exactly once and no memorialize_failed",
+            wire("memorialize_done", ekey, se) == 1 and wire("memorialize_failed", ekey, se) == 0,
+            fmt("done %d failed %d", wire("memorialize_done", ekey, se), wire("memorialize_failed", ekey, se)))
+    local count_x = L.rw("wPartyCount")
+    L.check("(e2) wPartyCount went down by one and the key left the party",
+            count_x == count_e - 1 and not has(party_keys(), ekey), fmt("%d -> %d", count_e, count_x))
+    local hits, complete = where(ekey)
+    local h = hits[1] or {}
+    L.check("(e3) the census is complete and reads the key ONLY in box 20, at the first empty slot",
+            complete and #hits == 1 and h.box == 20 and h.slot == e_mslot, J.encode(hits))
+    local e_entry_at = h.bank and h.entry and pokedb_at(h.bank, h.entry) or nil
+    local e_flag_at = h.bank and h.entry and (wram_flat("wPokeDB" .. h.bank .. "UsedEntries") + ((h.entry - 1) >> 3)) or nil
+    local e_mask = h.entry and (1 << ((h.entry - 1) & 7)) or 0
+    L.check("(e4) a FRESH entry: its allocation flag was clear before and set after; the box-20 slot was empty",
+            e_flag_at ~= nil and (e_alloc[e_flag_at] & e_mask) == 0 and x_alloc[e_flag_at] == (e_alloc[e_flag_at] | e_mask)
+                and e_cart[MEM_REC + e_mslot - 1] == 0 and x_cart[MEM_REC + e_mslot - 1] == h.entry,
+            fmt("bank %s entry %s flag@%s", tostring(h.bank), tostring(h.entry), tostring(e_flag_at)))
+    local stored, same = {}, want_entry ~= nil and e_entry_at ~= nil
+    for i = 1, 49 do
+        stored[i] = e_entry_at and x_cart[e_entry_at + i - 1] or -1
+        if want_entry == nil or stored[i] ~= want_entry[i] then same = false end
+    end
+    L.check("(e5) the stored entry is byte-for-byte the party mon's own encoding (entry_from_party: no status/HP) and verifies",
+            same and Boxes.verify(stored) == true, tostring(e_entry_at))
+    local expect_e = {["party@" .. PARTY_COUNT_AT] = true}
+    if e_mslot then
+        expect_e["cart@" .. (MEM_REC + e_mslot - 1)] = true
+        expect_e["cart@" .. (MEM_REC + 0x14 + ((e_mslot - 1) >> 3))] = true
+    end
+    if e_flag_at then expect_e["alloc@" .. e_flag_at] = true end
+    if e_entry_at then for i = 0, 48 do expect_e["cart@" .. (e_entry_at + i)] = true end end
+    for _, array in ipairs({{SB_BASE, STRIDE}, {SB_BASE + PARTY_OT_OFF, 11}, {SB_BASE + PARTY_NICK_OFF, 11}}) do
+        for slot = eslot or 6, 4 do
+            for i = 0, array[2] - 1 do expect_e["party@" .. (array[1] + slot * array[2] + i)] = true end
+        end
+    end
+    local eok, eextra = is_subset(diff_e, expect_e)
+    L.check("(e6) EXACT diff subset: the box-20 Entries/Banks bytes, the fresh 49-byte entry, its flag byte, party compaction only",
+            eok and #diff_e > 0, #eextra == 0 and fmt("%d byte(s), all expected", #diff_e) or ("unexpected: " .. table.concat(eextra, ",")))
+    record_diff("e", {e_cart, e_party, e_alloc}, {x_cart, x_party, x_alloc}, diff_e, expect_e)
+    L.check("(e6c) CONTROL: the same diff against a party-only expected set FAILS (the box-20 bytes are real)",
+            not is_subset(diff_e, {["party@" .. PARTY_COUNT_AT] = true}))
+    local e_others, e_n = undeclared(we, "e")
+    L.check("(e7) every (e) write is inside a declared range", #e_others == 0 and e_n > 0,
+            #e_others == 0 and fmt("%d write(s)", e_n) or ("UNDECLARED: " .. table.concat(e_others, ", ")))
+
+    -- (f) BOX origin: deposit the (b)/(d) mon again (the (b) path, judged there), then bury it FROM its box: the same
+    -- (bank, entry) is published in box 20, then the source pointer cleared. No allocation, no party change.
+    local fkey = bkey
+    L.check("(f0) the (b)/(d) key is in the party to deposit", fkey ~= nil and has(party_keys(), fkey), tostring(fkey))
+    SLINK_GEN2_CLIENT:handle_command({ cmd = "box_mon", key = fkey })
+    L.idle(150)
+    local src_hits, src_complete = where(fkey)
+    local src = src_hits[1] or {}
+    L.check("(f0a) the deposit put it in exactly one ordinary box", src_complete and #src_hits == 1 and src.box ~= 20,
+            J.encode(src_hits))
+    local f_cart, f_party, f_alloc = snapshot()
+    local f_mslot = first_empty(f_cart)
+    local src_at = src.box and (cart_flat("sNewBox" .. src.box) + src.slot - 1) or nil
+    local dst_at = f_mslot and (MEM_REC + f_mslot - 1) or nil
+    local dst_banks = f_mslot and (MEM_REC + 0x14 + ((f_mslot - 1) >> 3)) or nil
+    local wf, sf = #writes, #sent_events
+    SLINK_GEN2_CLIENT:handle_command({ cmd = "memorialize", key = fkey })
+    L.check("(f0b) memorialize was queued into the client's command path", true, tostring(fkey))
+    L.idle(150)
+    local y_cart, y_party, y_alloc = snapshot()
+    local diff_f = changed({ f_cart, f_party, f_alloc }, { y_cart, y_party, y_alloc })
+    L.log(fmt("[writes] (f) changed set: %s", fmt_changed(diff_f)))
+    L.check("(f1) the client sent memorialize_done exactly once and no memorialize_failed",
+            wire("memorialize_done", fkey, sf) == 1 and wire("memorialize_failed", fkey, sf) == 0,
+            fmt("done %d failed %d", wire("memorialize_done", fkey, sf), wire("memorialize_failed", fkey, sf)))
+    local now, now_complete = where(fkey)
+    local n1 = now[1] or {}
+    L.check("(f2) the census reads the key ONLY in box 20, at the first empty slot, at the SAME (bank, entry)",
+            now_complete and #now == 1 and n1.box == 20 and n1.slot == f_mslot and n1.bank == src.bank and n1.entry == src.entry,
+            fmt("%s (source %s)", J.encode(now), J.encode(src)))
+    L.check(fmt("(f3) the source Entries byte went $%02X -> $00 and the box-20 Entries byte $00 -> $%02X",
+                src.entry or 0, src.entry or 0),
+            src_at ~= nil and f_cart[src_at] == src.entry and y_cart[src_at] == 0
+                and dst_at ~= nil and f_cart[dst_at] == 0 and y_cart[dst_at] == src.entry,
+            fmt("source $%02X -> $%02X, box 20 $%02X -> $%02X", f_cart[src_at or 0] or 0, y_cart[src_at or 0] or 0,
+                f_cart[dst_at or 0] or 0, y_cart[dst_at or 0] or 0))
+    L.check("(f3b) the box-20 slot's Banks bit selects the source's pokedb bank",
+            dst_banks ~= nil and src.bank ~= nil and ((y_cart[dst_banks] >> ((f_mslot - 1) & 7)) & 1) == src.bank - 1,
+            fmt("Banks $%02X -> $%02X bank %s", f_cart[dst_banks or 0] or 0, y_cart[dst_banks or 0] or 0, tostring(src.bank)))
+    local expect_f = {}
+    for _, at in ipairs({src_at, dst_at, dst_banks}) do expect_f["cart@" .. at] = true end
+    local fok, fextra = is_subset(diff_f, expect_f)
+    L.check("(f4) EXACT diff subset: the box-20 Entries/Banks bytes and the source Entries byte ONLY (no allocation, no "
+            .. "pokedb byte, no party byte)", fok and #diff_f >= 2,
+            #fextra == 0 and fmt("%d byte(s), all expected", #diff_f) or ("unexpected: " .. table.concat(fextra, ",")))
+    record_diff("f", {f_cart, f_party, f_alloc}, {y_cart, y_party, y_alloc}, diff_f, expect_f)
+    trace.operations.f.source, trace.operations.f.destination = src, {box = 20, slot = f_mslot}
+    L.check("(f4c) CONTROL: the same diff against the destination-only set FAILS (the source byte really moved)",
+            not is_subset(diff_f, {["cart@" .. tostring(dst_at)] = true, ["cart@" .. tostring(dst_banks)] = true}))
+    local f_others, f_n = undeclared(wf, "f")
+    L.check("(f5) every (f) write is inside a declared range", #f_others == 0 and f_n > 0,
+            #f_others == 0 and fmt("%d write(s)", f_n) or ("UNDECLARED: " .. table.concat(f_others, ", ")))
 end
 
 -- ── (c) NEGATIVES: NOT RUN in this card ────────────────────────────────────────────────────────
