@@ -746,6 +746,65 @@ def test_a_corrupt_stamp_record_is_red_and_never_builds(tmp_path, monkeypatch):
     assert not row.ok and not called
 
 
+def _as_built_release_stamp(root):
+    import stamp_release
+    dist = root / "patch/dist"
+    dist.mkdir(parents=True, exist_ok=True)
+    bodies = {name: name.encode() for name in stamp_release.SHIPPED}
+    bodies["SLink-Polished.ups"] = b"Polished as built"
+    for name, body in bodies.items():
+        (dist / name).write_bytes(body)
+    pins = {name: hashlib.sha256(body).hexdigest() for name, body in bodies.items()}
+    rel = "data/polished/overlay_provenance.json"
+    (root / rel).parent.mkdir(parents=True, exist_ok=True)
+    _put(root / rel, {"schema": "polished-overlay-provenance-v1", "output": {"ups": {
+        "file": "patch/dist/SLink-Polished.ups", "sha256": pins["SLink-Polished.ups"]}}})
+    doc = {"schema": "slink-companion-version-v2", "version": "v0.4.0", "files": pins,
+           "families": {family: {"mode": "stamped", "version": "v0.4.0"}
+                        for family in ("rb", "pure", "gen2", "gen3")}}
+    doc["families"]["polished"] = {"mode": "as-built", "provenance": rel,
+        "provenance_sha256": hashlib.sha256((root / rel).read_bytes()).hexdigest(),
+        "files": {"SLink-Polished.ups": pins["SLink-Polished.ups"]}}
+    _put(dist / "companion_version.json", doc)
+    return dist, doc
+
+
+def test_stamped_release_accepts_the_provenance_bound_as_built_polished_certificate(tmp_path):
+    _as_built_release_stamp(tmp_path)
+    assert verifier._stamped_release(tmp_path) == ("v0.4.0", "")
+
+
+@pytest.mark.parametrize("fault", ["provenance", "ups", "policy", "unknown-schema"],
+                         ids=["changed-provenance", "changed-ups", "uncovered-family", "schema"])
+def test_stamped_release_refuses_an_invalid_as_built_certificate(tmp_path, fault):
+    dist, doc = _as_built_release_stamp(tmp_path)
+    if fault == "provenance":
+        path = tmp_path / "data/polished/overlay_provenance.json"
+        path.write_text(path.read_text() + "\n")
+    elif fault == "ups":
+        (dist / "SLink-Polished.ups").write_bytes(b"changed")
+    elif fault == "policy":
+        del doc["families"]["polished"]
+    else:
+        doc["schema"] = "unknown"
+    _put(dist / "companion_version.json", doc)
+    version, why = verifier._stamped_release(tmp_path)
+    assert version is None and why
+
+
+@pytest.mark.parametrize("stdout,stderr,expected", [(b"partial", None, "partial"),
+                         (None, b"refusal", "refusal"), (b"out", b"err", "outerr")],
+                         ids=["stdout-bytes", "stderr-bytes", "both-bytes"])
+def test_timeout_bytes_are_a_failed_result_with_the_captured_reason(tmp_path, monkeypatch, stdout, stderr, expected):
+    import subprocess
+
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired("checker", 1, output=stdout, stderr=stderr)
+
+    monkeypatch.setattr(verifier.subprocess, "run", timeout)
+    assert verifier._run(["checker"], tmp_path, 1) == (None, expected, True)
+
+
 @pytest.mark.parametrize("companion", ["matching", "missing", "mismatched"])
 def test_player_zip_requires_the_published_polished_companion(tmp_path, monkeypatch, companion):
     item = {"id": "REL-PLAYER-ZIP", "kind": "RELEASE", "description": "player ZIP"}

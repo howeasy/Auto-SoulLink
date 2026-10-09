@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stamp a release version into every SLink companion and regenerate everything that names the exact bytes.
+"""Stamp selected companion families and certify explicitly declared as-built companions.
 
 Every companion prints "SoulLink <version>" on its main menu from a fixed-width field (patch/tools/rom_identity.py), so a stamp
 changes only that field (and the cartridge checksums). The owner's ruling (2026-10-02, "Version-masked identity"): qualification
@@ -9,9 +9,13 @@ version (canonical identities unchanged, else it stops: that is a real code chan
 refreshes the exact pins, UPS files, admission rows, jar entries and md5 tables. It ends by writing patch/dist/companion_version.json
 (version + the sha256 of every shipped companion file) which tools/make_release.py checks before it packages anything.
 
+Owner ruling 2026-10-09: the RC stamps rb/pure/gen3; vanilla Gen 2 and Polished ship as built, with their UPS bytes pinned to
+published provenance. --as-built declares this exception per family; it is not an unstamped packaging bypass.
+
     python tools/stamp_release.py --version v0.3.0 --plan        # print the steps, run nothing
     python tools/stamp_release.py --version v0.3.0               # stamp every family
     python tools/stamp_release.py --version dev --only rb,pure   # restore the committed 'dev' builds of some families
+    python tools/stamp_release.py --version v0.4.0 --only rb,pure,gen3 --as-built gen2,polished
 
 Needs the clean ROMs and toolchains the individual builders need (see patch/README.md). Run on a clean tree; the result is the
 release commit's artifact set (commit it, then tag).
@@ -41,7 +45,14 @@ PURE_PROVENANCE = ROOT / "data" / "purergb" / "overlay_provenance.json"
 GEN2_PROVENANCE = ROOT / "data" / "gen2" / "overlay_provenance.json"
 VERSION_FILE = DIST / "companion_version.json"
 SCHEMA = "slink-companion-version-v1"
+SCHEMA_V2 = "slink-companion-version-v2"
 FAMILIES = ("rb", "pure", "gen2", "gen3")
+AS_BUILT = {
+    "gen2": ("data/gen2/overlay_provenance.json", "gen2-overlay-provenance-v1",
+             ("SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups")),
+    "polished": ("data/polished/overlay_provenance.json", "polished-overlay-provenance-v1",
+                 ("SLink-Polished.ups",)),
+}
 VERSION_RE = re.compile(r"dev|v\d+\.\d+\.\d+(?:-dev)?")
 SHIPPED = ("SLink-RR.ups", "SLink-RB-Red.ups", "SLink-RB-Blue.ups", "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
            "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups", "SLink-FireRed.ups", "SLink-LeafGreen.ups", "SLink-Emerald.ups",
@@ -80,17 +91,19 @@ def rom_dir_for(name: str, rom_dirs: list[pathlib.Path]) -> pathlib.Path:
 
 
 def gen2_overlays_admitted() -> bool:
-    """True when the Gen 2 overlay rows are ADMITTED (a stamp must then re-issue the grant for the new exact bytes)."""
+    """Any ADMITTED overlay forbids stamping until a separate grant workflow is supplied."""
     rows = []
     for title in ("crystal", "gold", "silver"):
         doc = _json(ROOT / "data" / "games" / f"gen2_{title}" / "admission.json")
         rows += [r for r in doc.get("artifacts", []) if r.get("kind") == "overlay"]
-    return bool(rows) and all(r.get("status") == "ADMITTED" for r in rows)
+    return any(r.get("status") == "ADMITTED" for r in rows)
 
 
 def plan(version: str, families: tuple[str, ...], rom_dirs: list[pathlib.Path], *, promote: bool | None = None,
          gen2_args: tuple[str, ...] = (), jar: bool = True) -> list[Step]:
     """The ordered steps. Pure: builds argv lists only, so the plan is testable without a toolchain."""
+    if "gen2" in families and gen2_overlays_admitted():
+        raise SystemExit("Gen 2 overlays are ADMITTED: stamping needs a separate grant workflow; use --as-built gen2")
     steps: list[Step] = []
     if "rb" in families:
         steps.append(Step("rb", "build Red/Blue", (PY, "patch/gen1/tools/build.py", "--version", version)))
@@ -184,8 +197,136 @@ def pinned_md5s() -> dict[str, str]:
     return {slug: pin["patched_md5"] for slug, pin in (_json(PINS).get("pins") or {}).items() if pin.get("patched_md5")}
 
 
-def write_version_file(version: str, families: tuple[str, ...]) -> dict:
+def as_built_record(family: str, root: pathlib.Path, dist: pathlib.Path) -> dict:
+    """Bind fixed shipped paths to the unchanged, published provenance and UPS bytes."""
+    rel, schema, names = AS_BUILT[family]
+    raw = (root / rel).read_bytes()
+    provenance = json.loads(raw)
+    if not isinstance(provenance, dict) or provenance.get("schema") != schema:
+        raise ValueError(f"{rel}: wrong provenance schema")
+    if family == "gen2":
+        outputs = provenance.get("outputs")
+        if not isinstance(outputs, dict):
+            raise ValueError(f"{rel}: missing outputs")
+        rows = list(outputs.values())
+    else:
+        rows = [provenance.get("output")]
+    pins = {}
+    for row in rows:
+        ups = row.get("ups") if isinstance(row, dict) else None
+        if not isinstance(ups, dict):
+            raise ValueError(f"{rel}: missing UPS record")
+        name = next((n for n in names if ups.get("file") == f"patch/dist/{n}"), None)
+        digest = ups.get("sha256")
+        if name is None or name in pins or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError(f"{rel}: invalid, duplicate or unexpected UPS pin")
+        if hashlib.sha256((dist / name).read_bytes()).hexdigest() != digest:
+            raise ValueError(f"{name}: as-built bytes differ from {rel}")
+        pins[name] = digest
+    if set(pins) != set(names):
+        raise ValueError(f"{rel}: missing shipped UPS pins")
+    return {"mode": "as-built", "provenance": rel,
+            "provenance_sha256": hashlib.sha256(raw).hexdigest(), "files": pins}
+
+
+def certificate_errors(version: str, root: pathlib.Path, dist: pathlib.Path, *,
+                       polished: bool = False, doc: dict | None = None) -> list[str]:
+    """One fail-closed reader for legacy stamped and provenance-bound as-built certificates."""
+    record = dist / "companion_version.json"
+    want = "dev" if version == "dev" else "v" + version.lstrip("v")
+    hint = f"run: python tools/stamp_release.py --version {want}"
+    if doc is None:
+        try:
+            doc = json.loads(record.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            return [f"{record.name} is missing or unreadable: {exc} ({hint})"]
+    if not isinstance(doc, dict):
+        return [f"{record.name}: certificate must be an object"]
+    schema = doc.get("schema")
+    if schema not in (SCHEMA, SCHEMA_V2):
+        return [f"{record.name}: unknown schema {schema!r}"]
+    errors = []
+    if doc.get("version") != want:
+        errors.append(f"companions are stamped {doc.get('version')!r}, the release is {want!r} ({hint})")
+    families = doc.get("families")
+    if not isinstance(families, dict):
+        errors.append(f"{record.name}: missing family policies")
+        families = {}
+    required = {*FAMILIES, *(("polished",) if polished else ())}
+    for family in sorted(required - families.keys()):
+        errors.append(f"{family}: missing stamped or as-built family policy")
+    for family, entry in families.items():
+        if family not in (*FAMILIES, "polished"):
+            errors.append(f"unknown companion family {family!r}")
+        elif schema == SCHEMA:
+            if entry != want:
+                errors.append(f"{family}: stamped {entry!r}, expected {want!r}")
+        elif isinstance(entry, dict) and entry.get("mode") == "stamped":
+            if set(entry) != {"mode", "version"} or entry.get("version") != want:
+                errors.append(f"{family}: stamped family must equal {want!r}")
+        elif isinstance(entry, dict) and entry.get("mode") == "as-built" and family in AS_BUILT:
+            try:
+                expected = as_built_record(family, root, dist)
+                if entry != expected:
+                    errors.append(f"{family}: as-built provenance binding differs from the certificate")
+            except (OSError, ValueError) as exc:
+                errors.append(f"{family}: as-built provenance refused: {exc}")
+        else:
+            errors.append(f"{family}: invalid stamped/as-built policy")
+    files = doc.get("files")
+    if not isinstance(files, dict):
+        return [*errors, f"{record.name}: missing file pins"]
+    names = (*SHIPPED, *(("SLink-Polished.ups",) if polished or "polished" in families else ()))
+    for name in names:
+        path = dist / name
+        if name not in files:
+            errors.append(f"{name} is not covered by {record.name}")
+        try:
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            errors.append(f"{name} is missing or unreadable in {dist}")
+            continue
+        if name in files and files[name] != digest:
+            errors.append(f"{name} changed after it was stamped ({hint})")
+    return errors
+
+
+def check_scope(families: tuple[str, ...], as_built: tuple[str, ...]) -> None:
+    if not families or any(f not in FAMILIES for f in families) or len(set(families)) != len(families):
+        raise SystemExit(f"--only must name distinct families from {FAMILIES}")
+    if any(f not in AS_BUILT for f in as_built) or len(set(as_built)) != len(as_built):
+        raise SystemExit(f"--as-built must name distinct families from {tuple(AS_BUILT)}")
+    if set(families) & set(as_built):
+        raise SystemExit("a family cannot be both stamped and as-built")
+    if as_built and not set(FAMILIES) <= set(families) | set(as_built):
+        raise SystemExit("an as-built release certificate must declare every companion family")
+
+
+def check_previous_policy(as_built: tuple[str, ...]) -> dict:
     previous = _json(VERSION_FILE)
+    if previous.get("schema") == SCHEMA_V2 and not as_built:
+        raise SystemExit("a v2 certificate requires explicit --as-built scope; refusing before any rebuild")
+    return previous
+
+
+def write_version_file(version: str, families: tuple[str, ...], *, as_built: tuple[str, ...] = ()) -> dict:
+    check_scope(families, as_built)
+    previous = check_previous_policy(as_built)
+    if as_built:
+        entries = {f: {"mode": "stamped", "version": version} for f in families}
+        try:
+            entries.update({f: as_built_record(f, ROOT, DIST) for f in as_built})
+        except (OSError, ValueError, KeyError) as exc:
+            raise SystemExit(f"as-built certificate refused: {exc}") from exc
+        names = (*SHIPPED, *(n for f in as_built for n in AS_BUILT[f][2] if n not in SHIPPED))
+        files = {n: hashlib.sha256((DIST / n).read_bytes()).hexdigest() for n in names}
+        doc = {"schema": SCHEMA_V2, "version": version, "families": entries,
+               "stamped": datetime.date.today().isoformat(), "files": files}
+        errors = certificate_errors(version, ROOT, DIST, doc=doc, polished="polished" in as_built)
+        if errors:
+            raise SystemExit("certificate refused: " + "; ".join(errors))
+        VERSION_FILE.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+        return doc
     stamped = dict(previous.get("families") or {})
     stamped.update(dict.fromkeys(families, version))
     files = {name: hashlib.sha256((DIST / name).read_bytes()).hexdigest() for name in SHIPPED if (DIST / name).is_file()}
@@ -207,6 +348,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", required=True)
     ap.add_argument("--only", default=",".join(FAMILIES), help=f"comma list of {FAMILIES}")
+    ap.add_argument("--as-built", default="", help="provenance-bound, unchanged families: gen2,polished")
     ap.add_argument("--plan", action="store_true", help="print the steps and exit")
     ap.add_argument("--promote-overlays", action="store_true", dest="promote",
                     help="Gen 2: run --promote-overlays even if the rows are not ADMITTED yet (owner G4 signature + green release evidence)")
@@ -220,8 +362,13 @@ def main() -> int:
     args = ap.parse_args()
     version = check_version(args.version)
     families = tuple(f.strip() for f in args.only.split(",") if f.strip())
-    if not families or any(f not in FAMILIES for f in families):
-        raise SystemExit(f"--only must name some of {FAMILIES}")
+    as_built = tuple(f.strip() for f in args.as_built.split(",") if f.strip())
+    check_scope(families, as_built)
+    check_previous_policy(as_built)
+    try:
+        unchanged = {f: as_built_record(f, ROOT, DIST) for f in as_built}
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"as-built preflight refused: {exc}") from exc
     main_checkout = pathlib.Path(subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, capture_output=True,
                                                 text=True, check=True).stdout.strip()).resolve().parent
     rom_dirs = [] if args.plan else [*args.rom_dir, ROOT, main_checkout]
@@ -230,6 +377,8 @@ def main() -> int:
     if args.plan:
         for s in steps:
             print(f"[{s.family}] {s.name}: {s.shown()}")
+        if as_built:
+            print(f"[as-built] certify {', '.join(as_built)} against published provenance; do not rebuild")
         return 0
     before, md5_before = identities(), pinned_md5s()
     seen: set[str] = set()
@@ -244,8 +393,13 @@ def main() -> int:
         print("\nSTOP: the canonical identity moved, so this was not a version-only change. Restore the artifacts and qualify the\n"
               "change as code:\n  " + "\n  ".join(drift), file=sys.stderr)
         return 2
+    try:
+        if unchanged != {f: as_built_record(f, ROOT, DIST) for f in as_built}:
+            raise ValueError("as-built provenance changed during the stamp")
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"as-built final validation refused: {exc}") from exc
     touched = update_md5_tables(md5_before, pinned_md5s())
-    doc = write_version_file(version, families)
+    doc = write_version_file(version, families, as_built=as_built)
     identity = "regenerated (--accept-new-identity)" if args.accept_new_identity else "unchanged"
     print(f"\nstamped {sorted(seen)} as {version}; canonical identities {identity} ({len(before)} records);"
           f" md5 tables updated in {touched or 'no file'}; wrote {VERSION_FILE.relative_to(ROOT)} ({len(doc['files'])} files)")

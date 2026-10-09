@@ -542,11 +542,12 @@ def _stamp_record(dist, version, files):
 
     import stamp_release
     dist.mkdir(parents=True, exist_ok=True)
-    files = {**{name: name.encode() for name in stamp_release.SHIPPED}, **files}        # a release ships every companion
+    files = {**{name: name.encode() for name in (*stamp_release.SHIPPED, "SLink-Polished.ups")}, **files}
     for name, body in files.items():
         (dist / name).write_bytes(body)
     (dist / "companion_version.json").write_text(json.dumps({
-        "schema": stamp_release.SCHEMA, "version": version, "families": {"rb": version},
+        "schema": stamp_release.SCHEMA, "version": version,
+        "families": dict.fromkeys((*stamp_release.FAMILIES, "polished"), version),
         "files": {n: hashlib.sha256(b).hexdigest() for n, b in files.items()}}), encoding="utf-8")
 
 
@@ -587,3 +588,86 @@ def test_a_shipped_companion_missing_from_dist_is_refused_even_if_the_record_vou
     (tmp_path / "SLink-Emerald.ups").unlink()
     errors = make_release.companion_stamp_errors("1.2.3", tmp_path)
     assert any("SLink-Emerald.ups is missing" in e for e in errors)
+
+
+def _as_built_stamp(root):
+    import hashlib
+    from pathlib import Path
+
+    import stamp_release
+    dist = root / "patch/dist"
+    _stamp_record(dist, "v0.4.0", {"SLink-Polished.ups": b"Polished as built"})
+    doc = json.loads((dist / "companion_version.json").read_text())
+    doc["schema"] = "slink-companion-version-v2"
+    doc["families"] = {f: {"mode": "stamped", "version": "v0.4.0"} for f in ("rb", "pure", "gen3")}
+    for family, names in (("gen2", ("SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups")),
+                          ("polished", ("SLink-Polished.ups",))):
+        pins = {n: doc["files"][n] for n in names}
+        ups = [{"ups": {"file": f"patch/dist/{n}", "sha256": pins[n]}} for n in names]
+        prov = {"schema": f"{family}-overlay-provenance-v1"}
+        if family == "gen2":
+            prov["outputs"] = dict(zip(("pokecrystal", "pokegold", "pokesilver"), ups, strict=True))
+        else:
+            prov["output"] = ups[0]
+        rel = f"data/{family}/overlay_provenance.json"
+        path = root / rel
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(prov))
+        doc["families"][family] = {"mode": "as-built", "provenance": rel,
+            "provenance_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "files": pins}
+    (dist / "companion_version.json").write_text(json.dumps(doc))
+    assert Path(dist).is_dir() and stamp_release.SCHEMA == "slink-companion-version-v1"
+    return dist, doc
+
+
+def test_release_accepts_as_built_gen2_and_polished_without_an_unstamped_bypass(tmp_path, monkeypatch):
+    dist, _doc = _as_built_stamp(tmp_path)
+    monkeypatch.setattr(make_release, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(make_release, "_polished_overlay_admitted", lambda root: True)
+    assert make_release.companion_stamp_errors("v0.4.0", dist) == []
+
+
+@pytest.mark.parametrize("fault", ["missing-coverage", "ups-changed", "provenance-changed", "wrong-stamped-family"],
+                         ids=["polished-uncovered", "as-built-bytes", "provenance-binding", "family-version"])
+def test_as_built_release_refuses_coverage_and_identity_faults(tmp_path, monkeypatch, fault):
+    dist, doc = _as_built_stamp(tmp_path)
+    monkeypatch.setattr(make_release, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(make_release, "_polished_overlay_admitted", lambda root: True)
+    if fault == "missing-coverage":
+        del doc["files"]["SLink-Polished.ups"]
+    elif fault == "ups-changed":
+        (dist / "SLink-Polished.ups").write_bytes(b"changed")
+    elif fault == "provenance-changed":
+        path = tmp_path / "data/polished/overlay_provenance.json"
+        path.write_text(path.read_text() + "\n")
+    else:
+        doc["families"]["gen3"]["version"] = "v0.3.1"
+    (dist / "companion_version.json").write_text(json.dumps(doc))
+    errors = make_release.companion_stamp_errors("v0.4.0", dist)
+    expected = {"missing-coverage": "SLink-Polished.ups is not covered",
+                "ups-changed": "as-built bytes differ", "provenance-changed": "provenance",
+                "wrong-stamped-family": "gen3"}[fault]
+    assert any(expected in error for error in errors), errors
+
+
+def test_a_v1_stamp_still_requires_polished_coverage_when_it_ships(tmp_path, monkeypatch):
+    _stamp_record(tmp_path, "v1.2.3", {})
+    path = tmp_path / "companion_version.json"
+    doc = json.loads(path.read_text())
+    del doc["files"]["SLink-Polished.ups"]
+    del doc["families"]["polished"]
+    path.write_text(json.dumps(doc))
+    monkeypatch.setattr(make_release, "_polished_overlay_admitted", lambda root: True)
+    errors = make_release.companion_stamp_errors("v1.2.3", tmp_path)
+    assert any("SLink-Polished.ups" in error for error in errors), errors
+
+
+def test_a_complete_v1_certificate_remains_compatible_when_polished_is_not_shipped(tmp_path, monkeypatch):
+    _stamp_record(tmp_path, "v1.2.3", {})
+    path = tmp_path / "companion_version.json"
+    doc = json.loads(path.read_text())
+    del doc["files"]["SLink-Polished.ups"]
+    del doc["families"]["polished"]
+    path.write_text(json.dumps(doc))
+    monkeypatch.setattr(make_release, "_polished_overlay_admitted", lambda root: False)
+    assert make_release.companion_stamp_errors("v1.2.3", tmp_path) == []

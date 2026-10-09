@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -11,6 +12,123 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 import stamp_release as sr  # noqa: E402
+
+
+def _as_built_repo(root):
+    dist = root / "patch/dist"
+    dist.mkdir(parents=True)
+    for name in sr.SHIPPED:
+        (dist / name).write_bytes(name.encode())
+    (dist / "SLink-Polished.ups").write_bytes(b"Polished as built")
+    gen2 = {"schema": "gen2-overlay-provenance-v1", "outputs": {}}
+    for key, title in (("pokecrystal", "Crystal"), ("pokegold", "Gold"), ("pokesilver", "Silver")):
+        name = f"SLink-{title}.ups"
+        gen2["outputs"][key] = {"ups": {"file": f"patch/dist/{name}",
+                                           "sha256": hashlib.sha256(name.encode()).hexdigest()}}
+    polished = {"schema": "polished-overlay-provenance-v1", "output": {"ups": {
+        "file": "patch/dist/SLink-Polished.ups", "sha256": hashlib.sha256(b"Polished as built").hexdigest()}}}
+    for family, doc in (("gen2", gen2), ("polished", polished)):
+        path = root / f"data/{family}/overlay_provenance.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(doc), encoding="utf-8")
+    return dist
+
+
+def test_release_certificate_declares_both_as_built_families(tmp_path, monkeypatch):
+    dist = _as_built_repo(tmp_path)
+    monkeypatch.setattr(sr, "ROOT", tmp_path)
+    monkeypatch.setattr(sr, "DIST", dist)
+    monkeypatch.setattr(sr, "VERSION_FILE", dist / "companion_version.json")
+    doc = sr.write_version_file("v0.4.0", ("rb", "pure", "gen3"), as_built=("gen2", "polished"))
+    assert doc["schema"] == "slink-companion-version-v2"
+    assert doc["version"] == "v0.4.0"
+    assert doc["families"]["rb"] == {"mode": "stamped", "version": "v0.4.0"}
+    for family in ("gen2", "polished"):
+        entry = doc["families"][family]
+        assert entry["mode"] == "as-built" and "version" not in entry
+        assert entry["provenance"] == f"data/{family}/overlay_provenance.json"
+        assert entry["provenance_sha256"] == hashlib.sha256(
+            (tmp_path / entry["provenance"]).read_bytes()).hexdigest()
+    assert doc["families"]["polished"]["files"] == {
+        "SLink-Polished.ups": hashlib.sha256(b"Polished as built").hexdigest()}
+    assert doc["files"]["SLink-Polished.ups"] == doc["families"]["polished"]["files"]["SLink-Polished.ups"]
+
+
+def test_an_admitted_gen2_stamp_refuses_before_any_step_is_run(monkeypatch):
+    monkeypatch.setattr(sr, "gen2_overlays_admitted", lambda: True)
+    with pytest.raises(SystemExit, match="ADMITTED.*as-built"):
+        sr.plan("v0.4.0", ("gen2",), [])
+
+
+def test_cli_declares_as_built_scope_and_writes_only_after_validation(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    dist = _as_built_repo(tmp_path)
+    monkeypatch.setattr(sr, "ROOT", tmp_path)
+    monkeypatch.setattr(sr, "DIST", dist)
+    monkeypatch.setattr(sr, "VERSION_FILE", dist / "companion_version.json")
+    monkeypatch.setattr(sr, "identities", lambda: {})
+    monkeypatch.setattr(sr, "pinned_md5s", lambda: {})
+    monkeypatch.setattr(sr, "update_md5_tables", lambda *args: [])
+    monkeypatch.setattr(sr.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(stdout=str(tmp_path / ".git")))
+    selected = []
+    monkeypatch.setattr(sr, "plan", lambda version, families, *args, **kw: selected.extend(families) or [])
+    monkeypatch.setattr(sys, "argv", ["stamp_release", "--version", "v0.4.0", "--only", "rb,pure,gen3",
+                                    "--as-built", "gen2,polished"])
+    assert sr.main() == 0
+    assert selected == ["rb", "pure", "gen3"]
+    assert json.loads(sr.VERSION_FILE.read_text())["families"]["gen2"]["mode"] == "as-built"
+    sr.VERSION_FILE.unlink()
+    selected.clear()
+    (dist / "SLink-Crystal.ups").write_bytes(b"wrong")
+    with pytest.raises(SystemExit, match="as-built.*differ"):
+        sr.main()
+    assert not selected and not sr.VERSION_FILE.exists()
+
+
+def test_as_built_policy_cannot_override_a_selected_stamped_family(tmp_path, monkeypatch):
+    dist = _as_built_repo(tmp_path)
+    monkeypatch.setattr(sr, "ROOT", tmp_path)
+    monkeypatch.setattr(sr, "DIST", dist)
+    monkeypatch.setattr(sr, "VERSION_FILE", dist / "companion_version.json")
+    with pytest.raises(SystemExit, match="both stamped and as-built"):
+        sr.write_version_file("v0.4.0", sr.FAMILIES, as_built=("gen2", "polished"))
+    assert not sr.VERSION_FILE.exists()
+
+
+@pytest.mark.parametrize("family", ["gen2", "polished"], ids=["vanilla-gen2", "polished"])
+def test_as_built_certificate_rechecks_provenance_before_publication(tmp_path, monkeypatch, family):
+    dist = _as_built_repo(tmp_path)
+    monkeypatch.setattr(sr, "ROOT", tmp_path)
+    monkeypatch.setattr(sr, "DIST", dist)
+    monkeypatch.setattr(sr, "VERSION_FILE", dist / "companion_version.json")
+    name = "SLink-Crystal.ups" if family == "gen2" else "SLink-Polished.ups"
+    (dist / name).write_bytes(b"wrong")
+    with pytest.raises(SystemExit, match="as-built.*differ"):
+        sr.write_version_file("v0.4.0", ("rb", "pure", "gen3"), as_built=("gen2", "polished"))
+    assert not sr.VERSION_FILE.exists()
+
+
+def test_v2_certificate_requires_explicit_as_built_scope_before_a_partial_restamp(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    dist = _as_built_repo(tmp_path)
+    monkeypatch.setattr(sr, "ROOT", tmp_path)
+    monkeypatch.setattr(sr, "DIST", dist)
+    monkeypatch.setattr(sr, "VERSION_FILE", dist / "companion_version.json")
+    sr.write_version_file("v0.4.0", ("rb", "pure", "gen3"), as_built=("gen2", "polished"))
+    before = sr.VERSION_FILE.read_bytes()
+    selected = []
+    monkeypatch.setattr(sr.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(stdout=str(tmp_path / ".git")))
+    monkeypatch.setattr(sr, "identities", lambda: {})
+    monkeypatch.setattr(sr, "pinned_md5s", lambda: {})
+    monkeypatch.setattr(sr, "update_md5_tables", lambda *args: [])
+    monkeypatch.setattr(sr, "plan", lambda *args, **kw: selected.append(args) or [])
+    monkeypatch.setattr(sys, "argv", ["stamp_release", "--version", "dev", "--only", "rb,pure"])
+    with pytest.raises(SystemExit, match="v2 certificate.*explicit --as-built"):
+        sr.main()
+    assert not selected and sr.VERSION_FILE.read_bytes() == before
+    with pytest.raises(SystemExit, match="v2 certificate.*explicit --as-built"):
+        sr.write_version_file("dev", ("rb", "pure"))
+    assert sr.VERSION_FILE.read_bytes() == before
 
 
 @pytest.fixture
@@ -31,7 +149,8 @@ def test_bad_versions_stop_the_tool(bad):
         sr.check_version(bad)
 
 
-def test_every_family_is_stamped_with_the_version_and_in_dependency_order(roms):
+def test_every_unadmitted_family_is_stamped_with_the_version_and_in_dependency_order(roms, monkeypatch):
+    monkeypatch.setattr(sr, "gen2_overlays_admitted", lambda: False)
     steps = sr.plan("v0.3.0", sr.FAMILIES, roms, promote=True)
     by_family = {f: [s for s in steps if s.family == f] for f in sr.FAMILIES}
     assert all(by_family[f] for f in sr.FAMILIES)
@@ -52,8 +171,9 @@ def test_gen2_promotion_follows_the_rows_and_families_can_be_selected(roms, monk
     assert {s.family for s in steps} == {"gen2"} and not any("--promote-overlays" in s.argv for s in steps)     # rows BUILT: nothing to re-issue
     assert any("--promote-overlays" in s.argv for s in sr.plan("dev", ("gen2",), roms, promote=True))
     monkeypatch.setattr(sr, "gen2_overlays_admitted", lambda: True)
-    assert any("--promote-overlays" in s.argv for s in sr.plan("dev", ("gen2",), roms))                      # rows ADMITTED: the grant is re-issued
-    assert not any("--promote-overlays" in s.argv for s in sr.plan("dev", ("gen2",), roms, promote=False))
+    for promote in (None, False, True):
+        with pytest.raises(SystemExit, match="ADMITTED"):
+            sr.plan("dev", ("gen2",), roms, promote=promote)
 
 
 def test_a_missing_clean_rom_is_named(tmp_path):
@@ -106,7 +226,8 @@ def test_the_shared_jar_is_only_installed_when_asked(roms):
     assert "randomizer jar entries" not in [s.name for s in sr.plan("dev", ("pure",), roms, jar=False)]
 
 
-def test_plan_needs_no_clean_roms():
+def test_plan_needs_no_clean_roms(monkeypatch):
+    monkeypatch.setattr(sr, "gen2_overlays_admitted", lambda: False)
     steps = sr.plan("dev", sr.FAMILIES, [])
     assert any("<rom-dir>" in a for s in steps for a in s.argv)
 
