@@ -155,8 +155,11 @@ Concurrency labels: **BUILD ALONE** means no other process may use the Polished 
    }
    $env:POL_PLAYER=$variantPlayer; $env:POL_TARGET=$variantTarget
    $env:POL_LANE="$F/random/r2b"; $env:POL_STAGES='56'; $env:POL_HUNT='30'
+   $env:POL_BATTLE_FRAMES='40000'
    & $PY tools/polished_live/harness.py live
    ```
+
+   `POL_BATTLE_FRAMES` raises the catch-battle guard in `live.lua` (default 9000). At freeze #2 a full-HP variant survived about eight native Poke Balls and both 9000-frame attempts aborted mid-battle with no product hold; the 40000-frame rerun passed. Set it on the first attempt.
 
    Primary `$F/random/r2b/live/result.txt`; secondary r2a result, both encounters.jsonl, actual ROM tables, server adoption/presentation and wire. Compare native species/form/level tuples against the executed cartridge, and compare the caught variant's capture-time bytes/key/dex id against the codec. Capture-time party growth precedes quarantine; do not read a removed slot afterward (`live.lua:37,453-456`). R2a keeps zero-write checks; R2b records expected quarantine writes without claiming writer qualification. Bind the **source overlay** and also record each executed randomized SHA1; they must not be made equal.
 
