@@ -1,33 +1,83 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
-  "date": "2026-10-08",
+  "date": "2026-10-09",
   "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
   "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
-  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
+  "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9",
   "scenario_id": "panel/real-host-paging",
-  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host",
   "requirement_id": "LIVE-PANEL-HOST-PAGING",
-  "narrative": "Freeze5f4732 fresh execution; the real server's link_panel, held by the real client, is paged by the ROM after a native catch forms a pair",
-  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run",
-  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run\\oracle.json",
+  "narrative": "Frozen execution rebound from F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; previous run narrative superseded.",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json",
   "evidence_sha256": "7d6fc9d769fb31a70234dad6874a647fa22b5837050a205c81bc45264dd62060",
   "evidence_size": 15048,
   "secondary_evidence": [
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run\\panel_host.json",
-      "sha256": "5d507e35cfaf272906309c155de84195984df4d968e0e6c9dd00878a724fc744",
-      "note": "Fresh freeze supporting observation/control"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\panel_host.json",
+      "note": "Fresh freeze supporting observation/control",
+      "sha256": "a8e19165f9c9433a9ae86bf75d6a8070facd1933d6e675d8f128dd90d6a10e8f",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\WITNESS.json",
+        "sha256": "d6e0215fd91efa836b0f823d2ea67442b78c4f367c0f756b47b18e06a4c5b7ce",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run\\result.txt",
-      "sha256": "de4062672518b8bdaf6cf6f714e6ce820000f2f98f72fee53204a427fcd6b8e3",
-      "note": "Fresh freeze supporting observation/control"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\result.txt",
+      "note": "Fresh freeze supporting observation/control",
+      "sha256": "65b11f9d8a020c6a6cf0c1955a921ae52d8344dd0bd867784d297cc9774ca39c",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\WITNESS.json",
+        "sha256": "d6e0215fd91efa836b0f823d2ea67442b78c4f367c0f756b47b18e06a4c5b7ce",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run\\links_final.json",
-      "sha256": "93cba5c3048c74a7cab0f2f570765d7b709cf9f785be084851a3c8b815f0c945",
-      "note": "Fresh freeze supporting observation/control"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\links_final.json",
+      "note": "Fresh freeze supporting observation/control",
+      "sha256": "c349d67885a858664c70e56a133f55f68480a6005a1cf7857f70bc4204326736",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\WITNESS.json",
+        "sha256": "d6e0215fd91efa836b0f823d2ea67442b78c4f367c0f756b47b18e06a4c5b7ce",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host.out",
+      "note": "Fresh freeze2 job console: invocation timing/PID/path evidence; included even where the deterministic primary repeats.",
+      "sha256": "a3810efeb98ded744dcd248aa5b76f429995c80ad373691fe677465b37de42af",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\WITNESS.json",
+        "sha256": "17d9612a7901bcb4066ad836ea909a0427365192dc82dcbabca20627695e8222",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\WITNESS.json",
+      "note": "Fresh freeze2 full-cut per-job witness; primary execution tied to this immutable code cut.",
+      "sha256": "d6e0215fd91efa836b0f823d2ea67442b78c4f367c0f756b47b18e06a4c5b7ce",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\WITNESS.json",
+        "sha256": "d6e0215fd91efa836b0f823d2ea67442b78c4f367c0f756b47b18e06a4c5b7ce",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     }
   ],
   "synth": [
@@ -37,50 +87,59 @@
     {
       "name": "run verdict",
       "result": "PASS",
-      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "ROM booted is the provenance overlay",
       "result": "PASS",
-      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "hello advertises panel true, panel_abi 3 on the overlay",
       "result": "PASS",
-      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "a native catch formed a linked pair on the real server",
       "result": "PASS",
-      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "the real server published link_panel and the wire log carries what the client held",
       "result": "PASS",
-      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "the pair, pairs-alive, dead-zone and badge rows match the server's own state",
       "result": "PASS",
-      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "all advertised pages rendered, each line equal to the staged row and every server row fits the 16-glyph panel without unsupported separators",
       "result": "PASS",
-      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "the client's own permit wrote the mailbox, all writes inside its span",
       "result": "PASS",
-      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "B closes to the Phone list with no call placed and PANEL_STATE cleared",
       "result": "PASS",
-      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\run\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     }
   ],
   "not_proven": [
     "DEV only; no release or PHYSICAL promotion. Scope is the named recording, not exhaustive gameplay."
-  ]
+  ],
+  "run_witness": {
+    "path": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host\\WITNESS.json",
+    "sha256": "d6e0215fd91efa836b0f823d2ea67442b78c4f367c0f756b47b18e06a4c5b7ce",
+    "scope": "F:\\slink-work\\lanes\\pol-freeze2\\legacy\\panel-host",
+    "kind": "recorded per-job/root witness",
+    "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+    "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+  },
+  "evidence_note": "Mechanical rebind after producer PASS and recorded/scoped run witness validation; DEV only."
 }

@@ -1,29 +1,58 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
-  "date": "2026-10-08",
+  "date": "2026-10-09",
   "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
   "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
-  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
+  "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9",
   "scenario_id": "explode-live/active-faint",
-  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode",
   "requirement_id": "LIVE-EXPLODE-ACTIVE-FAINT",
-  "narrative": "SYNTH/Test Host active-faint: native route and one bound command, exact writer diff and commanded-death echo suppression.",
-  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\explode\\active-faint-e6c588c4f822\\probe",
-  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\explode\\active-faint-e6c588c4f822\\probe\\oracle.json",
-  "evidence_sha256": "88c9d06c890405d4f89059fb887c17568fd4c9a0dc3da92d6408b0fab5cca081",
+  "narrative": "Frozen execution rebound from F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe\\oracle.json; previous run narrative superseded.",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe\\oracle.json",
+  "evidence_sha256": "b44f30476c1a61d8c9771b7eba7d5724c845fa5dfef8e23794cb71bac723468e",
   "evidence_size": 73326,
-  "evidence_note": "Original freeze-run oracle; no live rerun or original evidence overwritten.",
+  "evidence_note": "Mechanical rebind after producer PASS and recorded/scoped run witness validation; DEV only.",
   "secondary_evidence": [
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\explode\\active-faint-e6c588c4f822\\probe\\trace.json",
-      "sha256": "307a98237e990e22468207afd7acdb26ad52b9e2364217cb0ae3bcaacf406eda",
-      "note": "full images, writes and native markers"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe\\trace.json",
+      "note": "full images, writes and native markers",
+      "sha256": "9628172972e7c32daf2817873e561d4ec5fc0c4988299186977a0c9bd41e0713",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\WITNESS.json",
+        "sha256": "2d3e74da398eb4c6978f5d18abe6fb0ab05c8b1d902b64ea11a7d27052ca933a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     },
     {
-      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\explode\\active-faint-e6c588c4f822\\probe\\result.txt",
-      "sha256": "81f493e7de606368dc04033c4fb99dc2f3031509b87485e4f0eb8c5dc1a4a6f7",
-      "note": "recorder result"
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe\\result.txt",
+      "note": "recorder result",
+      "sha256": "692415e32b1146d60508cfb97bf46266ee80f80bf29f16b8c180d56540c42a6c",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\WITNESS.json",
+        "sha256": "2d3e74da398eb4c6978f5d18abe6fb0ab05c8b1d902b64ea11a7d27052ca933a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\WITNESS-active-faint.json",
+      "note": "Case-specific freeze2 cut/digest/overlay witness.",
+      "sha256": "e8f778d10b0d2f47fdff2aef1e7723b7ef1cb2b278d7b778115fa18b92de6daa",
+      "run_witness": {
+        "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\WITNESS.json",
+        "sha256": "2d3e74da398eb4c6978f5d18abe6fb0ab05c8b1d902b64ea11a7d27052ca933a",
+        "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode",
+        "kind": "recorded per-job/root witness",
+        "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+        "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+      }
     }
   ],
   "synth": [
@@ -33,31 +62,39 @@
     {
       "name": "run verdict",
       "result": "PASS",
-      "observed": "ok=true reasons=[]; oracle recomputed"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "ROM and input binding",
       "result": "PASS",
-      "observed": "config provenance ROM fe8c57e1"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "one bound command and exact write plan",
       "result": "PASS",
-      "observed": "oracle validates command/key/order and exact address/value list"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "full-memory diff confined to expected write set",
       "result": "PASS",
-      "observed": "oracle checks WRAM/CartRAM/VRAM/OAM/HRAM before/after"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     },
     {
       "name": "native completion and commanded faint not echoed",
       "result": "PASS",
-      "observed": "complete oracle checks consumption and wire"
+      "observed": "Mapped frozen execution: F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\active-faint-f3d425937a41\\probe\\oracle.json; producer PASS and hashed supporting evidence. Previous observation text superseded."
     }
   ],
   "not_proven": [
     "Not real partner/server capability qualification.",
     "One happy-path native battle; not all refusal cases."
-  ]
+  ],
+  "run_witness": {
+    "path": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode\\WITNESS.json",
+    "sha256": "2d3e74da398eb4c6978f5d18abe6fb0ab05c8b1d902b64ea11a7d27052ca933a",
+    "scope": "F:\\slink-work\\lanes\\pol-freeze2\\trade\\explode",
+    "kind": "recorded per-job/root witness",
+    "source_head": "d9876fb9d9d1656ee16db9bab2e6228622483605",
+    "code_digest": "856f3995f0bdfc87a1bc080d2249a1e33afcea28627c811a012cb1c8b90c32f9"
+  }
 }
