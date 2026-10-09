@@ -41,6 +41,7 @@ FIXTURE_SHA256_PREFIX = "75c7a5dc"
 
 import harness  # noqa: E402
 from patch.tools.make_ups import ups_apply  # noqa: E402
+from tools.polished_live.overlay_pin import overlay_sha1  # noqa: E402
 
 LANE = harness.LANE
 RELEASE = Path("F:/slink-work/cache/polished/release/polishedcrystal-3.2.3.gbc")
@@ -52,7 +53,7 @@ UPS = REPO / "patch/dist/SLink-Polished.ups"
 # Stage under the harness's own name.
 STAGED = LANE / "rom" / "pol_overlay.gbc"
 # The rebuilt C5 overlay; symbol presence does not enable its commit call sites.
-INTEGRATED_SHA1 = "688945795e2656019247f5aaceb7b1d8791e900a"
+INTEGRATED_SHA1 = overlay_sha1()
 
 
 def stage() -> str:
