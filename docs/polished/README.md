@@ -1,4 +1,114 @@
-# docs/polished — index
+# Playing a Polished Crystal Soul Link
+
+A two-player Soul Link Nuzlocke on **Polished Crystal v3.2.3**, run through the SLink Manager. Both
+players play Polished Crystal; it does not link with vanilla Crystal, Gold or Silver. This page is
+for players. The developer index is further down.
+
+## What you need
+
+- The **Polished Crystal v3.2.3** release ROM (`polishedcrystal-3.2.3.gbc`), one copy per player.
+  Other versions and hacked or already-modified ROMs are not accepted.
+- BizHawk, one instance per player, and Python for the SLink server. Randomizing also needs Java.
+- You do not need to patch anything by hand. The Manager applies the SLink companion patch to each
+  cartridge it prepares. A clean, unpatched Polished ROM is refused when it connects. If you would
+  rather patch yourself, the Manager's `/patcher` page has a "Polished Crystal" target.
+
+## Starting a run
+
+1. Open the Manager and choose **New run**.
+2. Give the run a name and pick the game **Polished Crystal**.
+3. Tick the options you want (see Options below).
+4. In **Cartridges**, pick each player's Polished Crystal ROM. The Manager lists the ROMs it finds in
+   the SLink folder and lets you add a file.
+5. Optionally turn on **Randomize** (see Randomizer below).
+6. Press **Create and prepare cartridges** (or **Create run** if you are not randomizing). The run's
+   server starts and the Manager makes each player a patched cartridge.
+7. Each player downloads their cartridge and their launcher script from the run page. Load the
+   cartridge in BizHawk, then load the launcher script in the Lua console. It connects to the run.
+8. Play. Rules switch on once you have Poke Balls. Your first catch in an area, and your partner's
+   first catch in the same area, become a pair.
+
+## What the game does for you
+
+- **Encounter linking.** The first Pokemon each of you catches in an area is permanently paired with
+  the other player's. Gifts, hatched eggs, roaming legendary beasts and Bug-Catching Contest catches
+  link under their own special areas rather than the route you happened to be on.
+- **Dead zones.** If either of you fails to catch in an area, that area is closed for both of you.
+- **Faint propagation.** When one half of a pair faints, the other half is fainted too. This is always
+  on; there is no switch for it. A faint during the Bug-Catching Contest is held until the contest
+  ends.
+- **Whiteout.** If a player's whole party is wiped, the partners of everything still in their party
+  are fainted too.
+- **Party sync and box moves.** Linked Pokemon must be together: both in the party or both in a box.
+  When one player deposits or withdraws a Pokemon, the other player's partner is moved to match.
+  A move can be refused for a boxed egg or a Pokemon holding Mail.
+- **Memorial box.** When a pair has died and both games are in a safe spot, both Pokemon are moved to
+  Box 20. This is best-effort: if a burial is refused (for example the party has Mail on a later
+  Pokemon, or Box 20 is full) the Pokemon stays where it is.
+- **Optional clauses.** Species, Gender and Type clauses reject a link when the two Pokemon share an
+  evolution family, a gender or a type.
+- **Shiny pairs.** A shiny catch earns the partner an extra slot.
+
+## Options in the Manager
+
+- **Species / Gender / Type Clause.** The link clauses above.
+- **Explode Mode.** When a partner dies, the linked Pokemon is made to use Explosion instead of just
+  fainting. Needs the companion patch on both games. The plain faint rule is the fallback
+  when the Explosion cannot be forced.
+- **Rival Swap.** In rival battles you fight your partner's real team instead of the stock one.
+  Works for the three Rival battles (RIVAL0, RIVAL1 and RIVAL2) only. Needs the companion on both
+  games.
+- **Native Sounds.** Short in-game notification sounds for Soul Link events, played through the
+  game's own audio. Off by default.
+- **Battle Calc.** A built-in damage calculator on the run's web page. For Polished it uses Gen 3
+  mechanics on Polished's own Pokedex and type chart; abilities, held-item boosts and natures are
+  not modelled, so treat results as an estimate. On by default.
+- **Phone Calls, Native Messages, Overworld Presence** are not available for Polished Crystal.
+
+## Randomizer
+
+Polished Crystal can be randomized from the New run page. The Manager runs the SLink randomizer on
+your ROM and gives each player a different randomized, patched cartridge. It can change: wild
+encounters (with the usual restriction, legendary-blocking, minimum-catch-rate and level options),
+starters, static and gift Pokemon, trainer teams (with similar-strength, rival-starter, no-legendary
+and type-matching options) and in-game NPC trades. It does not change trainer levels, trainer or
+class names, or trade nicknames, items, IVs and OTs, and it applies no misc tweaks.
+
+## In-game features
+
+- **Trade.** Trade at the Cable Club receptionist in a Pokemon Center. The patched game turns the
+  counter into an SLink trade: pick the Pokemon you offer; your partner does the same at their own
+  Pokemon Center; the swap happens in-game. There is nothing to switch on.
+- **The "SLink" phone contact.** Open the Pokegear, go to the Phone tab, and pick the contact
+  **SLink / Soul Link**. Choose **Call** and an in-game panel opens (it never rings). Press **A** for
+  the next page and **B** to close. Each page is two short lines. The pages show: SOUL LINK, PAIRS
+  (alive out of total), BADGES (out of 8), DEAD ZONES (a count, then each area by name), and then one
+  line per pair, `yours-theirs`, with an X in front of a dead pair. With no server connected the panel
+  says NO CLIENT.
+- **Title screen.** The title screen carries a SoulLink wordmark, and the New Game / Continue menu
+  shows the SoulLink patch version.
+- **Sounds.** With Native Sounds on, Soul Link notifications play one of four short sounds (success,
+  failure, a bad-news sound and a notification chime) through the game's own audio.
+
+## Known limitations
+
+- **Memorializing is best-effort** (see above). If a Pokemon stays put, move it yourself. Do not take
+  Pokemon out of Box 20: the game revives a withdrawn Pokemon at full HP.
+- **Trade has one tested path.** Trading one Pokemon each way in the normal case has been run. Odd
+  cases (full boxes, interrupted connections, resets mid-trade) have not. Save before you trade.
+- **Release stamping is pending.** The patch version shown on the menu is a development version
+  until the first official release.
+- **Not a finished release.** Polished Crystal support is a release candidate. Playthrough coverage
+  is narrow, and it has been tested with a two-player Polished pair only.
+- **Phone calls are not supported.** The SLink contact is a panel you open yourself; it does not ring
+  when something happens.
+- **Calculator limits** as above.
+- **Native text boxes are small.** The panel shows 16 characters per line, so long Pokemon or area
+  names are cut.
+
+---
+
+# docs/polished — developer index
 
 Polished Crystal **v3.2.3** support: the SLink companion overlay, the pack, the ROM tables, and
 the reverse-engineering record behind them.
