@@ -66,7 +66,9 @@
     "LIVE-EXPLODE-EXPLODE",
     "LIVE-EXPLODE-ACTIVE-FAINT",
     "LIVE-EXPLODE-BENCH-FAINT",
-    "LIVE-SHIPPED-TRADE"
+    "LIVE-SHIPPED-TRADE",
+    "LIVE-DUO-NATURAL-FAINT",
+    "LIVE-DUO-NATURAL-WHITEOUT"
   ],
   "code_digest_files": [
     "lua/gen2/polished*.lua",
@@ -472,6 +474,13 @@
         "party_mon: party 4 -> 5, the key at the last slot, healed",
         "party_mon: the box slot is cleared and the pokedb entry is never freed",
         "party_mon: exact diff subset, and its control fails",
+        "memorialize (party origin): memorialize_done exactly once, no memorialize_failed, and the key leaves the party",
+        "memorialize (party origin): the census reads the key only in box 20 at the first empty slot",
+        "memorialize (party origin): a fresh pokedb entry equal to the party mon's own encoding, and it verifies",
+        "memorialize (party origin): exact diff subset, and its control fails",
+        "memorialize (box origin): memorialize_done exactly once, no memorialize_failed, from a boxed key",
+        "memorialize (box origin): the census reads the key only in box 20 at the same (bank, entry), and the source membership is removed",
+        "memorialize (box origin): exact diff subset, and its control fails",
         "independent recompute of the force_faint, box_mon, party_mon and both memorialize diffs equals the driver's"
       ]
     },
@@ -624,30 +633,70 @@
         "cold CONTINUE preserves both received mons and identities",
         "both native save copies valid and exchanged"
       ]
+    },
+    {
+      "id": "LIVE-DUO-NATURAL-FAINT",
+      "kind": "LIVE",
+      "description": "S2n: a native in-battle faint of a linked mon (SYNTH HP 1 setup, disclosed) sends one faint event and the server force_faints exactly the linked partner on the second cartridge, which reads back HP 0",
+      "receipt": "tests/fixtures/polished/receipts/live_duo_natural_faint.json",
+      "expect_scenario": "duo/play-faint-natural",
+      "expect_checks": [
+        "run verdict",
+        "both sides booted the shipped overlay and were admitted",
+        "two distinct identities and a native paired link on the same area",
+        "the loss setup is a disclosed HP 1 on the linked lead only, never HP 0",
+        "a native battle loss produced exactly one faint event for the linked mon and no whiteout",
+        "the engine copyback witness shows the linked mon at HP 0 before the client report",
+        "the server sent exactly one force_faint for the linked partner to B and nothing else lethal",
+        "B's cartridge shows the partner at HP 0 and no other B mon changed",
+        "the server marks the link dead after the kill",
+        "no reconnect or hello re-report after the stage mark"
+      ]
+    },
+    {
+      "id": "LIVE-DUO-NATURAL-WHITEOUT",
+      "kind": "LIVE",
+      "description": "S4n: a native whiteout (SYNTH HP 1 on every record, disclosed) sends the whiteout event and the linked partner dies through per-mon faint propagation; the whiteout handler itself is NOT proved (owner bar accepted)",
+      "receipt": "tests/fixtures/polished/receipts/live_duo_natural_whiteout.json",
+      "expect_scenario": "duo/play-whiteout-natural",
+      "expect_checks": [
+        "run verdict",
+        "both sides booted the shipped overlay and were admitted",
+        "two distinct identities and a native paired link on the same area",
+        "the loss setup is a disclosed HP 1 on every non-egg record, never HP 0",
+        "a native battle loss without Run produced a whiteout event after every party mon fainted",
+        "the whiteout is reported with the entire party at HP 0 and before any heal",
+        "the server sent exactly one force_faint for the linked partner to B via the per-mon faint of the linked mon",
+        "B's cartridge shows the partner at HP 0 and no other B mon changed",
+        "the server marks the link dead after the kill",
+        "no reconnect or hello re-report after the stage mark"
+      ]
     }
   ],
   "open": [
     {
       "id": "OPEN-WRITE-PATH",
       "kind": "OPEN",
-      "status": "OPEN",
+      "status": "CLOSED",
       "blocking_rc": true,
       "description": "force_faint and box_mon: a linked mon must be killable and depositable through the armed Polished write sink",
-      "blocker": "S2n PASS as lane evidence; receipt at the freeze",
+      "blocker": "none: closed by LIVE-DUO-NATURAL-FAINT (S2n native faint at the freeze, SYNTH HP 1 conditioned, DEV); supported by LIVE-WRITES-OVERWORLD (a/b/d/e/f) and LIVE-DUO-NATURAL-WHITEOUT (whiteout event sent + per-mon faint propagation; handler unproven). In-battle negatives remain unit/model-covered per owner 2026-10-09",
       "manager_row": null,
       "manager_row_note": "no Manager option governs the write sink; the consistency check binds only named options",
-      "evidence": "F:/slink-work/lanes/pol-duo3/s2n3/play-faint-natural/evidence.json (PASS, server_path=faint_event); F:/slink-work/lanes/pol-duo3/s4n2/play-whiteout-natural/evidence.json (PASS, whiteout event sent + all partners die via per-mon faint, whiteout_handler_proved=false). SYNTH-conditioned lane evidence only, no new receipt or grade promotion. Also tests/fixtures/polished/receipts/live_writes_overworld.json; in-battle negatives remain unit/model-covered per owner 2026-10-09"
+      "evidence": "tests/fixtures/polished/receipts/live_duo_natural_faint.json (F:/slink-work/lanes/pol-freeze-5f4732/duo-s2n/play-faint-natural/evidence.json); tests/fixtures/polished/receipts/live_duo_natural_whiteout.json (F:/slink-work/lanes/pol-freeze-5f4732/duo-s4n/play-whiteout-natural/evidence.json, whiteout_handler_proved=false); tests/fixtures/polished/receipts/live_writes_overworld.json",
+      "closed_by": "LIVE-DUO-NATURAL-FAINT"
     },
     {
       "id": "OPEN-MEMORIALIZE",
       "kind": "OPEN",
-      "status": "OPEN",
+      "status": "CLOSED",
       "blocking_rc": true,
       "description": "RC 1 requires both mons of a dead linked pair to be moved to memorial box 20 (index 19), per owner ruling 2026-10-09",
-      "blocker": "client refuses memorialize (lua/gen2/polished_overworld.lua:902/:1038); executor per docs/polished/MEMORIALIZE.md in flight (pol-memorial); needs a live writes_run memorialize leg receipt at the freeze",
+      "blocker": "none: closed by LIVE-WRITES-OVERWORLD legs e (party-origin) and f (box-origin) memorialize at the freeze (box 20 / index 19, source membership removed, memorialize_done once, no memorialize_failed, exact diffs with failing controls). Local command-path recording only: no save/reset durability and no owed-burial/three-outcome contract (post-RC, owner ruling #7)",
       "manager_row": null,
       "manager_row_note": "no Manager option governs dead-pair memorialization; this is a required Soul Link lifecycle action, not an augmentation",
-      "evidence": "docs/polished/MEMORIALIZE.md"
+      "evidence": "tests/fixtures/polished/receipts/live_writes_overworld.json (F:/slink-work/lanes/pol-freeze-5f4732/writes/writes/result.txt:69-93); docs/polished/MEMORIALIZE.md",
+      "closed_by": "LIVE-WRITES-OVERWORLD"
     },
     {
       "id": "OPEN-EXPLODE-RIVAL",
