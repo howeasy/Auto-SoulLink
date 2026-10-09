@@ -30,17 +30,22 @@ Env overrides (skip download, use an existing install as-is):
     SLINK_RGBDS_BIN      — dir already containing rgbasm/rgblink/rgbfix
     SLINK_W64DEVKIT_BIN  — dir already containing make/busybox (or sh)
     SLINK_JDK_BIN        — dir already containing javac + jar
+
+Windows RGBDS/w64devkit paths with spaces are copied intact to the space-free
+$SLINK_WORK_ROOT/cache/build-tools cache; the original install is never changed.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import pathlib
 import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import zipfile
 
@@ -98,6 +103,51 @@ def _check_existing_path(binary: str) -> pathlib.Path | None:
     """Return path to `binary` on PATH if found and executable, else None."""
     found = shutil.which(binary)
     return pathlib.Path(found) if found else None
+
+
+def _tool_files(root: pathlib.Path) -> dict[str, str]:
+    return {p.relative_to(root).as_posix(): _sha256(p)
+            for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+def space_free_toolchain(bin_dir: pathlib.Path, name: str) -> pathlib.Path:
+    """Copy a spaced Windows install once, including sibling GCC libraries, without changing its source."""
+    if platform.system() != "Windows":
+        return bin_dir
+    resolved = bin_dir.resolve()
+    if " " not in str(resolved):
+        return resolved
+    if __package__:
+        from .slink_space import work_root
+    else:
+        from slink_space import work_root
+
+    cache = (work_root("cache") / "build-tools").resolve()
+    if " " in str(cache):
+        raise RuntimeError(f"SLINK_WORK_ROOT must resolve to a space-free path for make toolchains: {cache}")
+    source = resolved.parent if resolved.name.casefold() == "bin" else resolved
+    files = _tool_files(source)
+    digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
+    target = (cache / f"{name}-{digest[:20]}").resolve()
+    if not target.is_relative_to(cache) or " " in str(target):
+        raise RuntimeError(f"space-free toolchain cache escapes {cache}: {target}")
+    if not target.exists():
+        cache.mkdir(parents=True, exist_ok=True)
+        print(f"[bootstrap] Copying spaced toolchain {source} -> {target}", file=sys.stderr)
+        with tempfile.TemporaryDirectory(prefix="toolchain-", dir=cache) as temporary:
+            staged = pathlib.Path(temporary) / "install"
+            shutil.copytree(source, staged)
+            if _tool_files(staged) != files:
+                raise RuntimeError(f"toolchain changed while copying {source}; refusing the partial copy")
+            try:
+                staged.rename(target)
+            except OSError:
+                if not target.is_dir():
+                    raise
+                # Another installer may have published the same copy; verify it below.
+    if _tool_files(target) != files:
+        raise RuntimeError(f"space-free toolchain cache is incomplete or changed: {target}")
+    return target / resolved.relative_to(source)
 
 
 def _verify_rgbds_version(rgbasm: pathlib.Path, version: str) -> bool:
@@ -223,14 +273,14 @@ def ensure_rgbds(version: str = RGBDS_VERSION) -> pathlib.Path:
     if override:
         override_dir = pathlib.Path(override)
         if all((override_dir / _binary_name(b)).exists() for b in REQUIRED_BINARIES):
-            return override_dir
+            return space_free_toolchain(override_dir, f"rgbds-{version}")
         raise RuntimeError(f"SLINK_RGBDS_BIN={override} is missing {REQUIRED_BINARIES}")
 
     cache_dir = REPO_ROOT / ".cache" / "build-tools" / f"rgbds-{version}"
     for installed in (cache_dir / "bin", cache_dir):
         if all((installed / _binary_name(b)).exists() for b in REQUIRED_BINARIES):
             if _verify_rgbds_version(installed / _binary_name("rgbasm"), version):
-                return installed
+                return space_free_toolchain(installed, f"rgbds-{version}")
             # Cache exists but wrong version — refresh
             shutil.rmtree(cache_dir)
             break
@@ -241,10 +291,10 @@ def ensure_rgbds(version: str = RGBDS_VERSION) -> pathlib.Path:
             f"[bootstrap] Using system RGBDS at {rgbasm_on_path.parent}",
             file=sys.stderr,
         )
-        return rgbasm_on_path.parent
+        return space_free_toolchain(rgbasm_on_path.parent, f"rgbds-{version}")
 
     if platform.system() == "Windows":
-        return _install_rgbds_windows(version)
+        return space_free_toolchain(_install_rgbds_windows(version), f"rgbds-{version}")
 
     if rgbasm_on_path:
         actual_version = subprocess.run(
@@ -341,7 +391,7 @@ def ensure_w64devkit() -> pathlib.Path:
     if override:
         override_dir = pathlib.Path(override)
         if (override_dir / _binary_name("make")).exists() and _verify_devkit(override_dir):
-            return override_dir
+            return space_free_toolchain(override_dir, f"w64devkit-{W64DEVKIT_VERSION}")
         raise RuntimeError(f"SLINK_W64DEVKIT_BIN={override} has no working make")
 
     if platform.system() != "Windows":
@@ -350,7 +400,7 @@ def ensure_w64devkit() -> pathlib.Path:
             "system package manager and set SLINK_W64DEVKIT_BIN to its bin dir."
         )
 
-    return _install_w64devkit_windows()
+    return space_free_toolchain(_install_w64devkit_windows(), f"w64devkit-{W64DEVKIT_VERSION}")
 
 
 def _find_jdk_bin(root: pathlib.Path) -> pathlib.Path | None:

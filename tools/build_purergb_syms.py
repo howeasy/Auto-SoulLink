@@ -39,7 +39,7 @@ import sys
 import zlib
 from datetime import UTC, datetime
 
-from _build_tools_bootstrap import ensure_rgbds, ensure_w64devkit
+from _build_tools_bootstrap import ensure_rgbds, ensure_w64devkit, space_free_toolchain
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
@@ -146,6 +146,32 @@ def _rom_facts(data: bytes, sha1: str) -> dict:
     }
 
 
+def make_roms(checkout: pathlib.Path, rgbds_bin: pathlib.Path, devkit_bin: pathlib.Path, lock: dict) -> str:
+    """Build pureRGB's host utilities first, then its ROMs, using the pinned toolchain PATH."""
+    rgbds_bin = space_free_toolchain(rgbds_bin, f"rgbds-{lock['rgbds_version']}")
+    devkit_bin = space_free_toolchain(devkit_bin, f"w64devkit-{lock['w64devkit_version']}")
+    env = os.environ.copy()
+    env["PATH"] = os.pathsep.join([str(rgbds_bin), str(devkit_bin), env.get("PATH", "")])
+    make_exe = str(devkit_bin / _binary_name("make"))
+    # These linker side effects are not make targets: a retained .gbc can otherwise
+    # look current after a partial clean deleted its .sym/.map and build intermediates.
+    force = any(not (checkout / f"{key}.{ext}").is_file()
+                for key in lock["outputs"] for ext in ("sym", "map"))
+    commands = [[make_exe, "-C", "tools", "-j4", "CC=gcc"],
+                [make_exe, "-j4", *(["-B"] if force else []), *lock["make_targets"]]]
+    for cmd in commands:
+        print(f"[purergb] {' '.join(cmd)}  (cwd={checkout})", file=sys.stderr)
+        result = subprocess.run(cmd, cwd=str(checkout), env=env, capture_output=True, text=True)
+        if result.returncode != 0:
+            sys.stderr.write(result.stdout)
+            sys.stderr.write(result.stderr)
+            raise RuntimeError(f"make {'tools' if '-C' in cmd else 'ROMs'} failed with exit code {result.returncode}")
+    # Published provenance names the canonical ROM recipe. Host-tool preparation
+    # and conditional recovery flags repair ignored intermediates and are logged
+    # above; they must not create drift in an otherwise identical --check build.
+    return " ".join(["make", "-j4", *lock["make_targets"]])
+
+
 def build_rom_syms(
     *,
     repo_dir: pathlib.Path | None = None,
@@ -156,23 +182,12 @@ def build_rom_syms(
     lock = load_lock()
     repo = verify_source(repo_dir, lock)
 
-    rgbds_bin = rgbds_bin or ensure_rgbds(lock["rgbds_version"])
-    devkit_bin = w64devkit_bin or ensure_w64devkit()
+    rgbds_bin = space_free_toolchain(rgbds_bin or ensure_rgbds(lock["rgbds_version"]),
+                                    f"rgbds-{lock['rgbds_version']}")
+    devkit_bin = space_free_toolchain(w64devkit_bin or ensure_w64devkit(),
+                                     f"w64devkit-{lock['w64devkit_version']}")
 
-    env = os.environ.copy()
-    env["PATH"] = os.pathsep.join([str(rgbds_bin), str(devkit_bin), env.get("PATH", "")])
-
-    # Windows CreateProcess does not do a PATH search + PATHEXT resolution the way a
-    # shell does, so argv[0] needs the exact binary path; everything make shells out
-    # to (rgbasm, rgblink, sh, gcc, ...) still resolves through `env["PATH"]` above.
-    make_exe = str(devkit_bin / _binary_name("make"))
-    cmd = [make_exe, "-j4", *lock["make_targets"]]
-    print(f"[purergb] {' '.join(cmd)}  (cwd={repo})", file=sys.stderr)
-    result = subprocess.run(cmd, cwd=str(repo), env=env, capture_output=True, text=True)
-    if result.returncode != 0:
-        sys.stderr.write(result.stdout)
-        sys.stderr.write(result.stderr)
-        raise RuntimeError(f"make failed with exit code {result.returncode}")
+    make_command = make_roms(repo, rgbds_bin, devkit_bin, lock)
 
     mismatches: list[str] = []
     rom_facts: dict[str, dict] = {}
@@ -227,7 +242,7 @@ def build_rom_syms(
         "generated": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source": lock["source"],
         "toolchain": _toolchain_record(rgbds_bin, devkit_bin, lock),
-        "command": " ".join(["make", "-j4", *lock["make_targets"]]),
+        "command": make_command,
         "roms": rom_facts,
         "symbols": symbol_hashes,
     }
