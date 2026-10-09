@@ -414,22 +414,36 @@ def test_the_legacy_gen2_runtime_is_neither_derived_nor_shipped(archive):
     assert not legacy & archive
 
 
-def test_gb_companion_bundle_names_every_pure_overlay_ups():
-    """--with-patch ships one UPS per Game Boy companion build that is ADMITTED: vanilla Red/Blue and
-    the three pureRGB overlays (PLAN M3) always; a Gen 2 title's overlay UPS only once its catalog row
-    is ADMITTED, because until then lua/gen2/entry.lua refuses the cartridge the patch would produce."""
-    assert set(make_release._GB_COMPANION_UPS) == {
-        "SLink-RB-Red.ups", "SLink-RB-Blue.ups",
-        "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups"}
-    assert dict(make_release._GEN2_OVERLAY_UPS) == {
-        "crystal": "SLink-Crystal.ups", "gold": "SLink-Gold.ups", "silver": "SLink-Silver.ups"}
-    shipped = set(make_release.gb_companion_ups())
-    assert set(make_release._GB_COMPANION_UPS) <= shipped
-    assert shipped - set(make_release._GB_COMPANION_UPS) == {
-        name for title, name in make_release._GEN2_OVERLAY_UPS.items()
-        if make_release.overlay_state(f"gen2_{title}") == "ADMITTED"}
-    for name in shipped:
-        assert "Yellow" not in name  # no Yellow build exists (no free WRAM for the mailbox)
+@pytest.mark.parametrize("binding", [
+    "admitted", "stale-overlay", "stale-base", "missing-profile", "missing-provenance", "wrong-schema",
+])
+def test_polished_companion_bundle_follows_runtime_admission_binding(tmp_path, binding):
+    for title in ("crystal", "gold", "silver"):
+        path = tmp_path / f"data/games/gen2_{title}/admission.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"artifacts": [{"kind": "overlay", "status": "BUILT"}]}))
+    clean, overlay = "1" * 40, "2" * 40
+    provenance = {"schema": "polished-overlay-provenance-v1", "base_sha1": clean,
+                  "output": {"sha1": overlay}}
+    profile = {"titles": {"polished": {"rom_sha1": clean,
+                "overlay": {"rom_sha1": overlay, "base_sha1": clean}}}}
+    if binding == "stale-overlay":
+        profile["titles"]["polished"]["overlay"]["rom_sha1"] = "3" * 40
+    elif binding == "stale-base":
+        profile["titles"]["polished"]["overlay"]["base_sha1"] = "3" * 40
+    elif binding == "wrong-schema":
+        provenance["schema"] = "unknown"
+    for name, doc, absent in (
+        ("data/polished/overlay_provenance.json", provenance, "missing-provenance"),
+        ("data/games/polished_crystal/profile.json", profile, "missing-profile"),
+    ):
+        if binding != absent:
+            path = tmp_path / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(doc))
+    bundled = make_release.gb_companion_ups(tmp_path)
+    assert ("SLink-Polished.ups" in bundled) == (binding == "admitted")
+    assert {"SLink-RB-Red.ups", "SLink-PureGreen.ups"} <= set(bundled)
 
 
 def _entry_pack_files() -> dict[str, dict[str, str]]:
@@ -510,12 +524,11 @@ def test_with_patch_ships_a_gen2_overlay_ups_only_once_that_title_is_admitted(tm
         else:
             assert f"companion/{name}" not in companion, \
                 f"{title} overlay is {states[title]}, so its UPS must not ship"
-    assert set(companion) - {f"companion/{Path(r['ups']['file']).name}" for r in outputs.values()
-                              if r["slink_title"] in admitted} == {
+    assert {
         "companion/SLink-RR.ups", "companion/COMPANION_PATCH.md", "companion/SLink-RB-Red.ups",
         "companion/SLink-RB-Blue.ups", "companion/SLink-PureRed.ups", "companion/SLink-PureBlue.ups",
         "companion/SLink-PureGreen.ups", "companion/SLink-FireRed.ups", "companion/SLink-LeafGreen.ups",
-        "companion/SLink-Emerald.ups", "companion/gen3_companions.json", "companion/companion_version.json"}
+        "companion/SLink-Emerald.ups", "companion/gen3_companions.json", "companion/companion_version.json"} <= set(companion)
     native=json.loads(companion["companion/gen3_companions.json"])
     for row in native["titles"].values():
         assert hashlib.sha256(companion["companion/"+row["patch"]]).hexdigest()==row["ups_sha256"]

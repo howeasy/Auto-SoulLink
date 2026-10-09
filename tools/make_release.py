@@ -497,11 +497,12 @@ _LICENSE_FILES = ["LICENSE", "NOTICE.md"]
 # playgroup that already owns the base ROM.
 _COMPANION_UPS = "patch/dist/SLink-RR.ups"
 _COMPANION_README = "patch/README.md"
-# The Game Boy companion UPS files bundled with --with-patch.
-# Gen 1 vanilla Red/Blue (patch/gen1) and the pureRGB overlay per pure title (patch/gen1/purergb, PLAN M3)
-# are always shipped: their launchers admit the companion. No Yellow (no free WRAM).
+# Declared Game Boy companion UPS files; gb_companion_ups selects what --with-patch ships.
+# Gen 1 vanilla Red/Blue and pureRGB are always shipped. Polished uses its runtime admission
+# binding below, not a vanilla Gen 2 catalog. No Yellow (no free WRAM).
 _GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
-                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups")
+                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
+                     "SLink-Polished.ups")
 # Gen 2: the companion overlay per title (tools/build_gen2_companion.py, data/gen2/overlay_provenance.json).
 # NOT unconditional: lua/gen2/entry.lua admits ONLY an activated overlay row (a clean cartridge is refused,
 # owner 2026-10-02), so until the overlay row is promoted a release that shipped these UPS would hand the
@@ -526,11 +527,30 @@ def overlay_state(pack: str, root: Path | None = None) -> str:
     return rows[0]["status"]
 
 
+def _polished_overlay_admitted(root: Path) -> bool:
+    """Mirror P.admit's published profile/provenance binding (lua/gen2/polished.lua).
+
+    Polished has no BUILT/ADMITTED catalog: its exact published overlay is admitted
+    when these generated pins agree. Missing or stale inputs must not ship its UPS.
+    """
+    try:
+        provenance = json.loads((root / "data/polished/overlay_provenance.json").read_text(encoding="utf-8"))
+        profile = json.loads((root / "data/games/polished_crystal/profile.json").read_text(encoding="utf-8"))
+        title = profile["titles"]["polished"]
+        overlay = title["overlay"]
+        return (provenance["schema"] == "polished-overlay-provenance-v1"
+                and provenance["output"]["sha1"] == overlay["rom_sha1"]
+                and provenance["base_sha1"] == overlay["base_sha1"] == title["rom_sha1"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 def gb_companion_ups(root: Path | None = None) -> tuple[str, ...]:
-    """The Game Boy companion UPS set this release would ship: always Gen 1/pureRGB, plus each Gen 2
-    title's overlay UPS only once that overlay row is ADMITTED (overlay_state)."""
+    """Ship admitted companions: Gen 1/pureRGB, catalog-activated Gen 2, and
+    Polished only while its generated runtime admission binding agrees."""
     root = REPO_ROOT if root is None else root
-    return _GB_COMPANION_UPS + tuple(
+    return tuple(name for name in _GB_COMPANION_UPS
+                 if name != "SLink-Polished.ups" or _polished_overlay_admitted(root)) + tuple(
         name for title, name in _GEN2_OVERLAY_UPS.items()
         if overlay_state(f"gen2_{title}", root) == "ADMITTED")
 
