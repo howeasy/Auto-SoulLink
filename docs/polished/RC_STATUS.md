@@ -10,34 +10,36 @@ Code digest: `5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1`.
 
 | ID | Result | Detail |
 |---|---|---|
+| LIVE-BOX-CENSUS | PASS | live/box-census-refresh 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-CAPTURE-PARTY-ONLY | PASS | live/capture-party-only 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-DUO-NATURAL-FAINT | PASS | duo/play-faint-natural 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-DUO-NATURAL-WHITEOUT | PASS | duo/play-whiteout-natural 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-EXPLODE-ACTIVE-FAINT | PASS | explode-live/active-faint 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-EXPLODE-BENCH-FAINT | PASS | explode-live/bench-faint 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-EXPLODE-EXPLODE | PASS | explode-live/explode 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
 | LIVE-HELLO-ADMITTED | PASS | live/hello-admitted 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
 | LIVE-HELLO-GATE-FRAME | PASS | live/hello-gate-frame 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-CAPTURE-PARTY-ONLY | PASS | live/capture-party-only 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-BOX-CENSUS | PASS | live/box-census-refresh 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-PANEL-HELLO | PASS | live/hello-panel-true 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-PANEL-HOST-PAGING | PASS | panel/real-host-paging 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-PANEL-PAGES-ROM | PASS | panel/c0-c5-scripted-host 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-PHONE-ENTRY | PASS | phone/slink-contact-stage-1 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-POKEGEAR-MEASUREMENT | PASS | explore/C-pokegear-icon-strip 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
 | LIVE-R1-MANAGER-PAIR | PASS | r1/manager-randomized-pair 2026-10-08 grade=DEV rom=8af3b5a0 src=fe8c57e1 digest=5f4732503c4a |
 | LIVE-R2-RANDOMIZED-BOOT | FAIL | STALE: overlay the cartridge was derived from 29ea04c24a46d9210c899355fe752f32d2880de8 but data/polished/overlay_provenance.json publishes fe8c57e1034059331ccf25d232ff757d675363b2 — re-run this scenario on the current overlay; overlay_provenance_sha256 is 'UNRECORDED': a receipt must record the sha256 of the provenance it was written against; STALE: code_digest UNRECORDED is not the 5f4732503c4a computed from the current code_digest_files — re-run this scenario; expected check "the server presents the executed player's own cartridge table" is not recorded as PASS; expected check 'native party grew by exactly one at the variant capture hook, before client quarantine' is not recorded as PASS; expected check 'observation-only leg has zero Lua writes; variant-catch quarantine writes are retained separately and do not count as write-path qualification' is not recorded as PASS |
 | LIVE-R3-REFUSALS | PASS | r3/refusals 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-PHONE-ENTRY | PASS | phone/slink-contact-stage-1 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
 | LIVE-RECEPTIONIST-STACK | PASS | explore/B-trade-receptionist-stack 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-POKEGEAR-MEASUREMENT | PASS | explore/C-pokegear-icon-strip 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-RIVAL-SWAP | PASS | rival/client-server-native-gate 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
+| LIVE-SHIPPED-TRADE | PASS | trade/shipped-native-commit-cold-continue 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
 | LIVE-TITLE-SPLASH | PASS | title/wordmark-vs-clean-control 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
 | LIVE-WRITES-OVERWORLD | PASS | writes/overworld-faint-deposit-withdraw 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-PANEL-PAGES-ROM | PASS | panel/c0-c5-scripted-host 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-PANEL-HELLO | PASS | live/hello-panel-true 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-PANEL-HOST-PAGING | PASS | panel/real-host-paging 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-RIVAL-SWAP | PASS | rival/client-server-native-gate 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-EXPLODE-EXPLODE | PASS | explode-live/explode 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-EXPLODE-ACTIVE-FAINT | PASS | explode-live/active-faint 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-EXPLODE-BENCH-FAINT | PASS | explode-live/bench-faint 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-SHIPPED-TRADE | PASS | trade/shipped-native-commit-cold-continue 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-DUO-NATURAL-FAINT | PASS | duo/play-faint-natural 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| LIVE-DUO-NATURAL-WHITEOUT | PASS | duo/play-whiteout-natural 2026-10-08 grade=DEV rom=fe8c57e1 src=fe8c57e1 digest=5f4732503c4a |
-| OPEN-WRITE-PATH | FAIL | closed_by 'LIVE-DUO-NATURAL-FAINT' is not a LIVE item that PASSes in this run: closing needs a real receipt |
-| OPEN-MEMORIALIZE | FAIL | closed_by 'LIVE-WRITES-OVERWORLD' is not a LIVE item that PASSes in this run: closing needs a real receipt |
-| OPEN-EXPLODE-RIVAL | FAIL | closed_by 'LIVE-RIVAL-SWAP' is not a LIVE item that PASSes in this run: closing needs a real receipt |
-| OPEN-TITLE-SPLASH | FAIL | closed_by 'LIVE-TITLE-SPLASH' is not a LIVE item that PASSes in this run: closing needs a real receipt |
-| OPEN-PANEL-PAGES | FAIL | closed_by 'LIVE-PANEL-HOST-PAGING' is not a LIVE item that PASSes in this run: closing needs a real receipt |
-| OPEN-IN-GAME-TRADE | FAIL | closed_by 'LIVE-SHIPPED-TRADE' is not a LIVE item that PASSes in this run: closing needs a real receipt |
+| OPEN-EXPLODE-RIVAL | PASS | status=CLOSED by LIVE-RIVAL-SWAP |
+| OPEN-EXPLODE-RIVAL/manager | PASS | OPEN-EXPLODE-RIVAL: qualified availability for explode_mode, rival_team_swap |
+| OPEN-IN-GAME-TRADE | PASS | status=CLOSED by LIVE-SHIPPED-TRADE |
+| OPEN-IN-GAME-TRADE/manager | PASS | OPEN-IN-GAME-TRADE: qualified availability for pc_trade_npc |
+| OPEN-MEMORIALIZE | PASS | status=CLOSED by LIVE-WRITES-OVERWORLD |
+| OPEN-PANEL-PAGES | PASS | status=CLOSED by LIVE-PANEL-HOST-PAGING |
+| OPEN-TITLE-SPLASH | PASS | status=CLOSED by LIVE-TITLE-SPLASH |
+| OPEN-WRITE-PATH | PASS | status=CLOSED by LIVE-DUO-NATURAL-FAINT |
 
 ## Source, build, model and release
 
