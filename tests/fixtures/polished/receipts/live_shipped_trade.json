@@ -1,0 +1,103 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
+  "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
+  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
+  "scenario_id": "trade/shipped-native-commit-cold-continue",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade",
+  "requirement_id": "LIVE-SHIPPED-TRADE",
+  "narrative": "Shipped normal launcher, two identities: native receptionist trade, both commit/trade_done, server re-key, native save and cold CONTINUE of both cartridges.",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\verdict.json",
+  "evidence_sha256": "617e96cc57b930650b6a24561d060f4ab2d81612fd327b39e3cbd192b9e49ebf",
+  "evidence_size": 9388,
+  "evidence_note": "Original freeze-run oracle; no live rerun or original evidence overwritten.",
+  "secondary_evidence": [
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\manifest.json",
+      "sha256": "8087e2e271d1ca388850587916684a9ce08fa7a8144523c57030cf6edd96fbda",
+      "note": "normal launcher, source and ROM binding"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\cold-verdict.json",
+      "sha256": "61b74f6a904b04853032ac6846df93a4088ccaa446f67a48b73c6383ec658671",
+      "note": "separate offline check of recorded cold/durable evidence"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\state-after-trade.json",
+      "sha256": "9550b300191324985b9403bc7c825aa71df6744354401dedbf0889a87b8ecb81",
+      "note": "server post-state"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\a\\g2\\ready.json",
+      "sha256": "1c88b2c5e4fe21636fce5da363052525c76536da350f71dfbf2b37a93a8b3f8f",
+      "note": "cold native CONTINUE party/identity"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\b\\g2\\ready.json",
+      "sha256": "12c99736fe85f645e2b7c6ee28565ffe92ea87ededddf60af35abb6c38216e59",
+      "note": "cold native CONTINUE party/identity"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\durable-a.json",
+      "sha256": "102888838bceb2a83622d5addad4e242aea9859db66777aa6358e7eadd2dcf72",
+      "note": "main and backup save integrity/image"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\durable-b.json",
+      "sha256": "78d6d018c8781e3b029fd1372007446d244d31e1f9eeda308645a0e134ef7d57",
+      "note": "main and backup save integrity/image"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\a\\g1\\milestones.jsonl",
+      "sha256": "9ca61a19a65cad20c9df1e5a5294fc171a5c5f6187c288a68768e5f65bbba648",
+      "note": "native commit and wire reply ordering"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\trade\\shipped-002\\b\\g1\\milestones.jsonl",
+      "sha256": "2e916a2555ed1d89464f7709657c012e2e57380d24f2b907c2fe8e24e3f62a01",
+      "note": "native commit and wire reply ordering"
+    }
+  ],
+  "synth": [
+    "SYNTH retained receptionist fixture; derived TradeB identity; one link seeded through real server events; native menus/commit/save thereafter."
+  ],
+  "checks": [
+    {
+      "name": "run verdict",
+      "result": "PASS",
+      "observed": "PASS reasons=[]"
+    },
+    {
+      "name": "shipped enabled overlay and normal launcher",
+      "result": "PASS",
+      "observed": "manifest test_build=false gate7e573B=1 ROM fe8c57e1"
+    },
+    {
+      "name": "both native commits and one trade_done each",
+      "result": "PASS",
+      "observed": "milestones A commit1447 done4145; B commit1263 done3822; token t1"
+    },
+    {
+      "name": "server re-keyed without false faint",
+      "result": "PASS",
+      "observed": "state-after-trade ALIVE exchanged keys; pending_trade null; combined judge rejects faint/whiteout"
+    },
+    {
+      "name": "cold CONTINUE preserves both received mons and identities",
+      "result": "PASS",
+      "observed": "g2 ready parties retain received key at slot4; Aaaaaaa/TradeB"
+    },
+    {
+      "name": "both native save copies valid and exchanged",
+      "result": "PASS",
+      "observed": "cold-verdict independently checks main/backup markers/checksums and expected party"
+    }
+  ],
+  "not_proven": [
+    "One happy-path trade; no power-loss, rollback, item/evolution policy matrix or human campaign proof.",
+    "shipped-001 failed from premature driver input and remains retained."
+  ]
+}

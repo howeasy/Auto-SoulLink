@@ -1,59 +1,98 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "8af3b5a0c0fca2c3c141f3f01b71a65f654c8129",
+  "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
+  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
   "scenario_id": "r1/manager-randomized-pair",
-  "date": "2026-10-04",
-  "lane": "F:/slink-work/lanes/pol-rand",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy",
   "requirement_id": "LIVE-R1-MANAGER-PAIR",
-  "narrative": "docs/polished/LIVE_RESULTS.md — Run 3 STAGE R1 'the Manager path. PASS'; driver tools/polished_live/manager_r1.py jar|nojar|oldjar",
-  "evidence_dir": "F:/slink-work/lanes/pol-rand/r1_jar",
-  "evidence_file": "F:/slink-work/lanes/pol-rand/r1_jar/summary.json",
-  "evidence_sha256": "010d859ce735babc2b9f5622cd646c7d177f505810c49c875aa2d37d29f81d79",
-  "evidence_size": 18701,
-  "evidence_note": "summary.json is the binding artefact: it is the Manager's own responses, recorded field by field. No cartridge was booted in R1 — the cell is about the HTTP API.",
+  "narrative": "Freeze5f4732 fresh execution; the Manager randomizes a Polished pair from the pinned fork jar and pins both cartridge sha1s",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r1_jar",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r1_jar\\summary.json",
+  "evidence_sha256": "37045003ee4639eb74a4b65197c20352e044cc81a7d7a79d9aa5916343287720",
+  "evidence_size": 19015,
   "secondary_evidence": [
-    {"path": "F:/slink-work/lanes/pol-rand/r1_jar/calls.jsonl",
-     "sha256": "782d455e020dbe39d003a5984139697791a80c9a9bf1044bcd767693e3d22e24",
-     "note": "the eight HTTP calls and their raw responses"},
-    {"path": "F:/slink-work/lanes/pol-rand/r1_nojar/summary.json",
-     "sha256": "7e318a05f0f17f97fa3ba6c4c012252816067a621fa110cc0b83bbd87ee6083c"},
-    {"path": "F:/slink-work/lanes/pol-rand/r1_oldjar/summary.json",
-     "sha256": "73b81c09612a1ef6afb9a091d2f5dd64a7345c93052a99dffc5d5c5f55f6afc2"}
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r1_nojar\\summary.json",
+      "sha256": "3a2978eff3f00e24be1a062321fe605329432e872680befde95a83f10f0b3b90",
+      "note": "Fresh freeze supporting observation/control"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r1_oldjar\\summary.json",
+      "sha256": "5ce03b73b03e76d69766078dc31a44b690b57f6ef9595b057d880be14b8072d0",
+      "note": "Fresh freeze supporting observation/control"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\manager_r1_jar.out",
+      "sha256": "53aba248ec3f0a9f4cec14d8d66d59d16c97f0bf2e4e789810277a2526d42298",
+      "note": "Fresh freeze supporting observation/control"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r1_jar\\mgr\\run_20261009_012843\\roms\\b.gbc",
+      "sha256": "d62aaad85a0a9363590cdad54ee8d43c8e3690b3dcfd37b8ce677b74b608aa11",
+      "note": "Downloaded randomized b cartridge; sha1 c4af80829fb1c6fa58f1fe969c008fa2f48da9a9 matches summary/contract. Independently decoded via scan_randomized: Route29 [24,3] includes level3 species101 form4."
+    }
   ],
-  "rom_sha1_executed": "29ea04c24a46d9210c899355fe752f32d2880de8",
-  "rom_sha1_executed_note": "No ROM was booted. This is the overlay the pipeline consumed: summary.json records players.a.source_sha1 = players.b.source_sha1 = 29ea04c2 (cartridges.py applied the UPS to the release first, base_kind 'overlay'). The cartridges it produced were 0d75313f... and 21ed1c1c....",
-  "source_overlay_sha1": "29ea04c24a46d9210c899355fe752f32d2880de8",
-  "overlay_provenance_sha256": "UNRECORDED",
-  "code_digest": "UNRECORDED",
-  "code_digest_note": "No code digest or commit in the lane evidence. docs/polished/LIVE_RESULTS.md:444 names e0fd92dd; the evidence does not.",
-  "jar": {
-    "path": "F:/slink-work/cache/polished/jar/PokeRandoZX.jar",
-    "sha256": "f3a10dd744ff0ecb5834a0559c4e165c5eab9802bf8eda6521ce66c6c71f08ab",
-    "pin": "data/upr_jars.json — 'SLink fork, built 2026-10-04 (patches 0001-0021; PokeRandoZX.jar)'",
-    "manager_pid": 56412
-  },
   "synth": [
-    "None. R1 is a Manager HTTP API run: no emulator, no cartridge, no SYNTH save."
+    "Retained SYNTH warp/scene fixture; native inputs thereafter. Phone/Pokegear/panel setup flags and scripted host/second identity remain disclosed by the lane."
   ],
   "checks": [
-    {"name": "the picker lists the Polished release dump", "result": "PASS", "observed": "picker_polished = [{'name': 'polishedcrystal-3.2.3.gbc', 'clean': True, 'title': 'Polished Crystal 3.2.3 · clean dump', 'sha1': '6930b48af5844d373e3c9130f26d6dd1084cf4ed', 'family': 'gen2_polished', 'kind': 'clean', 'variant': 'Polished Crystal'}]"},
-    {"name": "randomizer status is ok with the pinned fork jar", "result": "PASS", "observed": "status/ok=True status/jar_found=True status/jar_trusted=True status/jar_fork=True status/jar_polished=True"},
-    {"name": "a run was created for gen2_polished", "result": "PASS", "observed": "run_id = 'run_20261004_211320'; runs.runs[0].name = 'pol-rand jar'"},
-    {"name": "the randomizer page served", "result": "PASS", "observed": "GET /runs/{id}/randomizer returned 200 (randomizer_page.html) — docs/polished/LIVE_RESULTS.md:476"},
-    {"name": "cartridges provisioned with companion + randomize", "result": "PASS", "observed": "cartridges_status=200; cartridges/ok=True; cartridges/cartridges/family='gen2_polished'; companion=True; randomizer.upr_version='4.6.1-slink3'"},
-    {"name": "both cartridges downloaded with the sha1s the contract pins", "result": "PASS", "observed": "rom_a_sha1='0d75313f20ec83ad1827b9cf66a6b7202793db86' rom_b_sha1='21ed1c1cf86c14ec9f496ce119874ae9569b32fc'; contract_matches_downloads=True"},
-    {"name": "the contract records upr_version, categories, seeds and per-player sha1s", "result": "PASS", "observed": "contract/upr_version='4.6.1-slink3' categories=['starters','statics','trainers','wild'] players.a.seed='4246104770686' players.b.seed='178042112491888'; fingerprint '' on both"},
-    {"name": "the randomizer summary is what the form asked for", "result": "PASS", "observed": "'wild encounters random, starters random, static encounters random, trainer teams random, rival keeps their starter, in-game trades random given and requested'"},
-    {"name": "forms stay in the pool", "result": "PASS", "observed": "spec.trades='given_and_requested' — docs/polished/LIVE_RESULTS.md:477 'forms are always in the pool'"},
-    {"name": "the write domain is recorded", "result": "PASS", "observed": "players.a.write_domain = {'changed': 8629, 'ups_bytes': 107}; players.b.write_domain = {'changed': 8706, 'ups_bytes': 107}"}
+    {
+      "name": "the picker lists the Polished release dump",
+      "result": "PASS",
+      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+    },
+    {
+      "name": "randomizer status is ok with the pinned fork jar",
+      "result": "PASS",
+      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+    },
+    {
+      "name": "a run was created for gen2_polished",
+      "result": "PASS",
+      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+    },
+    {
+      "name": "the randomizer page served",
+      "result": "PASS",
+      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+    },
+    {
+      "name": "cartridges provisioned with companion + randomize",
+      "result": "PASS",
+      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+    },
+    {
+      "name": "both cartridges downloaded with the sha1s the contract pins",
+      "result": "PASS",
+      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+    },
+    {
+      "name": "the contract records upr_version, categories, seeds and per-player sha1s",
+      "result": "PASS",
+      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+    },
+    {
+      "name": "the randomizer summary is what the form asked for",
+      "result": "PASS",
+      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+    },
+    {
+      "name": "forms stay in the pool",
+      "result": "PASS",
+      "observed": "Independent scan_randomized of hash-bound b.gbc: JohtoGrass map[24,3] has [level3,species101,form4] in morning/day/night slots. Forms are present in generated encounter output; not inferred from the old receipt or SpeciesNNN log names."
+    },
+    {
+      "name": "the write domain is recorded",
+      "result": "PASS",
+      "observed": "Manager picker/status/run/cartridges and contract_matches_downloads recorded; fork4.6.1-slink3. Independent players a/b sha1 in contract and downloaded outputs; requested wild/starters/statics/trainers and trades settings; write_domain changed8630/8588. Nojar/oldjar negative refusal controls retained."
+    }
   ],
-  "refusals": [
-    {"case": "no jar", "manager_pid": 49968, "observed": "status/jar = '' jar_found=False ok=False; POST /api/runs/{id}/cartridges returns 400 'missing: jar'. The picker is unchanged."},
-    {"case": "older trusted fork jar (.cache/slink-upr/PokeRandoZX.jar, patches 0001-0015, sha256 db4bc65c3a0c1761ffc70db6a5c0f495635ab3e0e3c8a99640f34fbb1fb833ac)", "manager_pid": 4744, "observed": "jar_trusted, jar_fork and ok are all True while jar_polished is False; POST cartridges returns 400 with POLISHED_JAR_REFUSAL — \"Polished Crystal randomization needs SLink's UPR fork jar with a Polished Crystal entry for this cartridge's header checksum\""}
-  ],
-  "presentation_note": "docs/polished/LIVE_RESULTS.md:506-511 records a status-page string mismatch: any fork jar is described as \"SLink fork jar (vanilla + pureRGB + FireRed / LeafGreen + Emerald + Polished Crystal)\" (server/static/randomizer.js:117), which includes the 0015 jar that cannot randomize Polished, while the refusal line does name the current cut (randomizer.js:377-379, on jar_polished). The strings and the API fields are the evidence; it was not rendered in a browser.",
   "not_proven": [
-    "R1 proves the Manager's API path only. No randomized cartridge was booted here — that is R2.",
-    "The 'using this cartridge's own encounter tables' behaviour is R2's cell."
-  ]
+    "DEV only; no release or PHYSICAL promotion. Scope is the named recording, not exhaustive gameplay.",
+    "Manager output/cartridge download proof, not randomized cartridge boot proof; R2 is separate."
+  ],
+  "source_overlay_sha1": "fe8c57e1034059331ccf25d232ff757d675363b2"
 }

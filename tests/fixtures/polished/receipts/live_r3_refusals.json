@@ -1,82 +1,87 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
+  "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
+  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
   "scenario_id": "r3/refusals",
-  "date": "2026-10-04",
-  "lane": "F:/slink-work/lanes/pol-rand",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy",
   "requirement_id": "LIVE-R3-REFUSALS",
-  "narrative": "docs/polished/LIVE_RESULTS.md — Run 3 STAGE R3 'refusals. PASS'",
-  "evidence_dir": "F:/slink-work/lanes/pol-rand",
-  "evidence_file": "F:/slink-work/lanes/pol-rand/r3_swap.out",
-  "evidence_sha256": "3a2d8fe5222f950c5a45fd0e94cd8b7eda5d3455b0fe63f7e64400b21c12873c",
-  "evidence_size": 2828,
-  "evidence_note": "The swap case is the binding file because it is the only one where a REFUSAL was expected from the server while the client still ran and connected. The two client refusals and the clean case are pinned below.",
+  "narrative": "Freeze5f4732 fresh execution; a swapped contract and a global-checksum mutation are refused by the server; an overlay-beacon mutation is refused by the client",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r3_clean.out",
+  "evidence_sha256": "7253829befe9f54d31855177350f02afc6031ee201d0d04c5a84d2dc3d6b17ff",
+  "evidence_size": 2938,
   "secondary_evidence": [
-    {"path": "F:/slink-work/lanes/pol-rand/r3_flip14e.out",
-     "sha256": "3d9dacc9ea7d66cecc0d9a432b76329b28566f87a51fac16426754b88dfa4001",
-     "note": "byte 0x14E flipped $72 -> $73; the client refuses on the beacon"},
-    {"path": "F:/slink-work/lanes/pol-rand/r3_flip1f8028.out",
-     "sha256": "f7846737a66e5136db4c0f2621881013cba1ba0abb56f00c6948a1fed029fb11",
-     "note": "byte $1F8028 flipped $C6 -> $C7; the same refusal"},
-    {"path": "F:/slink-work/lanes/pol-rand/r3_clean.out",
-     "sha256": "1c3d4d5ff840769fb999bc3b7d73a9f1d268b0e97dbef9638ed0352beb4e1d55",
-     "note": "the control: a clean overlay against an overlay contract is admitted"}
-  ],
-  "rom_sha1_executed": "29ea04c24a46d9210c899355fe752f32d2880de8",
-  "rom_sha1_executed_note": "The clean case booted the overlay 29ea04c2. The swap case booted the randomized cartridge 0d75313f; the two flipped cases were temp copies of it with sha1 87f75ccd... and 26d62ad1.... All four derive from the 29ea04c2 overlay.",
-  "source_overlay_sha1": "29ea04c24a46d9210c899355fe752f32d2880de8",
-  "overlay_provenance_sha256": "UNRECORDED",
-  "code_digest": "UNRECORDED",
-  "code_digest_note": "No code digest or commit in the lane evidence.",
-  "synth": [
-    "All four cases use stage 1 only. The fixture is run 1's overlay fixture (clean) or s29 (the rest), so the same SYNTH save as R2.",
-    "The two flipped ROMs were temp copies made under r3/ and deleted after the runs; the Manager's roms/a.gbc was never touched."
-  ],
-  "cases": [
     {
-      "id": "clean",
-      "client": "overlay PRODUCTION (DEV_OVERLAY_SHA1) ... (rom 29ea04c2), hello at frame 343",
-      "server": "admission: admitted — cartridge sha1 matches the contract",
-      "expected": "admit",
-      "result": "PASS"
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r3_swap.out",
+      "sha256": "13014110cc28200d6c6e9d3acb30aa58273d58b4cb006e5f26b795b861b851e5",
+      "note": "Fresh freeze supporting observation/control"
     },
     {
-      "id": "swap",
-      "how": "ROM a with the pair's contract pins swapped (POL_SWAP=1)",
-      "client": "admits rand_overlay and sends its hello — the client cannot know the contract, so it has nothing to compare against",
-      "server": "admission: rejected — this is not the ROM built for player a (sha1 0d75313f20ec, expected 21ed1c1cf86c); every reply is {\"cmd\": \"noop\", \"refused\": \"admission\"}",
-      "expected": "server refuses",
-      "result": "PASS"
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r3_flip14e.out",
+      "sha256": "4328151f4200bfeaca495a214ab7e8eb9f0b8374aab9a8f74fd8160c5cbcbfb9",
+      "note": "Fresh freeze supporting observation/control"
     },
     {
-      "id": "flip-0x14E",
-      "how": "ROM a with byte 0x14E flipped ($72 -> $73), sha1 87f75ccd...",
-      "client": "polished cartridge refused (production admission): unknown artifact SHA-1 87f75ccd...: its Polished SLink companion overlay is modified or incomplete (overlay beacon mismatch); prepare it through the Manager or /patcher",
-      "server": "no hello at all — the client never connects",
-      "expected": "client refuses on the beacon",
-      "result": "PASS"
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r3_flip1f8028.out",
+      "sha256": "ee2c3d5cba047834315b1c30e2c99ea74d8bcf34aed95c5f4ce73924125fd356",
+      "note": "Fresh freeze supporting observation/control"
     },
     {
-      "id": "flip-0x1F8028",
-      "how": "ROM a with byte $1F8028 flipped ($C6 -> $C7), sha1 26d62ad1...",
-      "client": "the same refusal, overlay beacon mismatch",
-      "server": "no hello",
-      "expected": "client refuses on the beacon",
-      "result": "PASS"
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r3\\swap\\live\\recv.jsonl",
+      "sha256": "fbe6fcb9a9ba543ae7a96dd6f5669cbb8f4951e96498e529185a3fcf29b8d879",
+      "note": "Fresh freeze supporting observation/control"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r3\\flip14e\\live\\recv.jsonl",
+      "sha256": "21b082be99d0a17808b34c5fa36ac3e0b1d9b881585e09099c3fe663d432ead4",
+      "note": "Fresh freeze supporting observation/control"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\random\\r3\\flip1f8028\\live\\slink_lua.log",
+      "sha256": "5ac0d3b2ee48a43a6c7f11f2cfb30f0f18d68b83caed6a43430b8b61334e60fe",
+      "note": "Fresh freeze supporting observation/control"
     }
   ],
-  "checks": [
-    {"name": "a clean overlay against an overlay contract is admitted", "result": "PASS", "observed": "r3_clean.out; docs/polished/LIVE_RESULTS.md:593"},
-    {"name": "a swapped contract is refused by the server", "result": "PASS", "observed": "r3_swap.out; docs/polished/LIVE_RESULTS.md:594"},
-    {"name": "every reply after the refusal is noop", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:594 'every reply is {\"cmd\": \"noop\", \"refused\": \"admission\"}'"},
-    {"name": "a flipped byte 0x14E is refused by the client", "result": "PASS", "observed": "r3_flip14e.out; refusal string quoted in cases[2].client"},
-    {"name": "a flipped byte $1F8028 is refused by the client", "result": "PASS", "observed": "r3_flip1f8028.out; same refusal string"},
-    {"name": "the refusal names the fix", "result": "PASS", "observed": "'prepare it through the Manager or /patcher' — the two paths a player actually has"},
-    {"name": "the flipped ROMs were temp copies and are gone", "result": "INFO", "observed": "docs/polished/LIVE_RESULTS.md:598-599; the Manager's roms/a.gbc was never touched"}
+  "synth": [
+    "Retained SYNTH warp/scene fixture; native inputs thereafter. Phone/Pokegear/panel setup flags and scripted host/second identity remain disclosed by the lane."
   ],
-  "why_two_layers": "The two refusals are at different layers and that is the point: the server can only compare a cartridge against the contract it was launched with (swap), while the client compares the cartridge against the beacon the overlay itself published (both flips). A cartridge with a valid contract but a modified overlay is stopped by the client, not the server.",
+  "checks": [
+    {
+      "name": "a clean overlay against an overlay contract is admitted",
+      "result": "PASS",
+      "observed": "Clean admitted. Swap and flipped0x14E clients send hello but all server replies are noop/refused admission. 0x14E is rand_overlay f3a38d3a. Beacon flip0x1F8028 client refuses at frame1: overlay beacon mismatch; prepare through Manager or /patcher; no client/hello. Expected intentional-refusal recorder FAIL retained."
+    },
+    {
+      "name": "a swapped contract is refused by the server",
+      "result": "PASS",
+      "observed": "Clean admitted. Swap and flipped0x14E clients send hello but all server replies are noop/refused admission. 0x14E is rand_overlay f3a38d3a. Beacon flip0x1F8028 client refuses at frame1: overlay beacon mismatch; prepare through Manager or /patcher; no client/hello. Expected intentional-refusal recorder FAIL retained."
+    },
+    {
+      "name": "every reply after the refusal is noop",
+      "result": "PASS",
+      "observed": "Clean admitted. Swap and flipped0x14E clients send hello but all server replies are noop/refused admission. 0x14E is rand_overlay f3a38d3a. Beacon flip0x1F8028 client refuses at frame1: overlay beacon mismatch; prepare through Manager or /patcher; no client/hello. Expected intentional-refusal recorder FAIL retained."
+    },
+    {
+      "name": "a flipped byte 0x14E is admitted as rand_overlay by the client and refused by the server against the original full-ROM contract SHA1",
+      "result": "PASS",
+      "observed": "Clean admitted. Swap and flipped0x14E clients send hello but all server replies are noop/refused admission. 0x14E is rand_overlay f3a38d3a. Beacon flip0x1F8028 client refuses at frame1: overlay beacon mismatch; prepare through Manager or /patcher; no client/hello. Expected intentional-refusal recorder FAIL retained."
+    },
+    {
+      "name": "a flipped byte $1F8028 is refused by the client",
+      "result": "PASS",
+      "observed": "Clean admitted. Swap and flipped0x14E clients send hello but all server replies are noop/refused admission. 0x14E is rand_overlay f3a38d3a. Beacon flip0x1F8028 client refuses at frame1: overlay beacon mismatch; prepare through Manager or /patcher; no client/hello. Expected intentional-refusal recorder FAIL retained."
+    },
+    {
+      "name": "the refusal names the fix",
+      "result": "PASS",
+      "observed": "Clean admitted. Swap and flipped0x14E clients send hello but all server replies are noop/refused admission. 0x14E is rand_overlay f3a38d3a. Beacon flip0x1F8028 client refuses at frame1: overlay beacon mismatch; prepare through Manager or /patcher; no client/hello. Expected intentional-refusal recorder FAIL retained."
+    }
+  ],
   "not_proven": [
-    "A cartridge that is both contract-valid and beacon-valid but semantically wrong (e.g. randomized without the Manager) is out of scope here.",
-    "The refusals were observed against the 29ea04c2 overlay; the beacon bytes changed with the phone-card commit."
-  ]
+    "DEV only; no release or PHYSICAL promotion. Scope is the named recording, not exhaustive gameplay."
+  ],
+  "source_overlay_sha1": "fe8c57e1034059331ccf25d232ff757d675363b2"
 }

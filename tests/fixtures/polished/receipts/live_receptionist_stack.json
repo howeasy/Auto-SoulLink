@@ -1,50 +1,71 @@
 {
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
+  "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
+  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
   "scenario_id": "explore/B-trade-receptionist-stack",
-  "date": "2026-10-04",
-  "lane": "F:/slink-work/lanes/pol-live2",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy",
   "requirement_id": "LIVE-RECEPTIONIST-STACK",
-  "narrative": "docs/polished/LIVE_RESULTS.md — Run 2 STAGE B ('trade receptionist stack. MEASURED (read-only)')",
-  "evidence_dir": "F:/slink-work/lanes/pol-live2/x/explore_B",
-  "evidence_file": "F:/slink-work/lanes/pol-live2/x/explore_B/result.txt",
-  "evidence_sha256": "66fa602c08e132c23b56bf3232d694f0df4a297d91fcc2226dc0dbaacabf30e1",
-  "evidence_size": 21463,
+  "narrative": "Freeze5f4732 fresh execution; the trade receptionist's bank-qualified frame-wait stack, measured through the overlay service and its return",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\explore\\explore_B",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\explore\\explore_B\\result.txt",
+  "evidence_sha256": "22e94bcc5d461c858899715cde878c073cc40472c0e5ce2cad0bf1e3c057269f",
+  "evidence_size": 61381,
   "secondary_evidence": [
-    {"path": "F:/slink-work/lanes/pol-live2/x/explore_B/stacks.json",
-     "sha256": "4d55371779278605b8ccaaa26419ffec625345d36f2c656358c3f5c50c48ac66",
-     "note": "raw sp+0..31 per phase"},
-    {"path": "F:/slink-work/lanes/pol-live2/x/explore_B/resolved.txt",
-     "sha256": "5e3c70af884e95177156934d3825fcf5557de0c94b315e994362a5880ac26dc0",
-     "note": "resolve() names every stack word from the sym and checks the ROM bytes before it are a call/rst"}
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\explore\\explore_B\\stacks.json",
+      "sha256": "daa3ef9287549e239fc6ebc47d50e4a4a186268590a9d54f37fab3c83a3981ec",
+      "note": "Fresh freeze supporting observation/control"
+    },
+    {
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\explore\\explore_B\\syms.json",
+      "sha256": "0aa6076f40bdec3d41f5b36509500cc9c4af3dab86f01bf9a12e1a1707b728e6",
+      "note": "Fresh freeze supporting observation/control"
+    }
   ],
-  "rom_sha1_executed": "29ea04c24a46d9210c899355fe752f32d2880de8",
-  "overlay_provenance_sha256": "UNRECORDED",
-  "code_digest": "UNRECORDED",
-  "code_digest_note": "No code digest or commit in the lane evidence. docs/polished/LIVE_RESULTS.md:225 names 78dddd8b for this run; the evidence does not.",
-  "staleness": "This run booted the PREVIOUS overlay (29ea04c2). The phone-card commit republished the overlay as 34942315, so the measurement has not been re-taken and this cell is STALE until it is.",
-  "probe": "read-only exec probe on SlinkDelayFrameBridge (ROM0 $0070, called from DelayFrame's 7-byte lead-in), sampled on frames where OWPlayerInput ran",
   "synth": [
-    "SYNTH (disclosed, result.txt:3): wEventFlags+4 $00 -> $02, which sets EVENT_GAVE_MYSTERY_EGG_TO_ELM. Without it the receptionist only says Script_TradeCenterClosed.",
-    "SYNTH (disclosed, result.txt:4): the engine warp to POKECENTER_2F 20:1 at (5,3) with the Script_warp bytes (wDefaultSpawnpoint $FF, hMapEntryMethod $F1, wMapStatus 1); MAPSETUP_WARP landed natively at frame 477.",
-    "NOT SYNTH: everything after the warp is native input — Up to face the receptionist, then A presses; A answered YES at the trade prompt; no other button."
+    "Retained SYNTH warp/scene fixture; native inputs thereafter. Phone/Pokegear/panel setup flags and scripted host/second identity remain disclosed by the lane."
   ],
   "checks": [
-    {"name": "POKECENTER_2F header loaded (8x4)", "result": "PASS", "observed": "[ok] POKECENTER_2F header loaded (8x4) — tileset 14 width 8 height 4"},
-    {"name": "the trade prompt was answered YES", "result": "PASS", "observed": "[ok] the trade prompt was answered YES (CheckPartyForMail ran) — milestones: FixPlayerEVsAndStats 819 CheckPartyForMail 1024 WaitForLinkedFriend 1039 .done 1552 TryQuickSave nil YesNoBox 1003"},
-    {"name": "the native link wait ran and timed out (no cable)", "result": "PASS", "observed": "[ok] the native link wait ran and timed out (no cable) — WaitForLinkedFriend 1039 to .done 1552, 513 frames"},
-    {"name": "idle Pokemon Center overworld control", "result": "PASS", "observed": "[explore] STAGEB stack overworld|C0DE|ab0dc25100fe86d6444622d16b51e2501400018a611400120f00584314000177|b25|s1 x297 (and one variant x3); SP $C0DE, hROMBank $25"},
-    {"name": "idle overworld chain", "result": "PASS", "observed": "$0DAB DelayFrame+3 / $51C2 (bank $25) NextOverworldFrame.gfx_done+6 / pushed registers / $516B HandleMap+0x15 / $50E2 OverworldLoop.loop+9 / $0014 FarCall+4 — docs/polished/LIVE_RESULTS.md:331-334"},
-    {"name": "native link wait chain", "result": "PASS", "observed": "$0DAB / $4D5F (x298) Special_WaitForLinkedFriend.not_done+0xf / $2698 _ReturnFarCall / FarCall-saved registers 1403 2500 000F / $62B5 ScriptEvents.loop+9 / $515F HandleMap+9 / $50E2 OverworldLoop.loop+9 / $0014 FarCall+4; SP $C0DC, hROMBank $0A — docs/polished/LIVE_RESULTS.md:335-349"},
-    {"name": "only sp+2 varies in the link wait", "result": "PASS", "observed": "docs/polished/LIVE_RESULTS.md:336 'Only sp+2 varies.'"},
-    {"name": "text printing inside the script is not fingerprintable", "result": "INFO", "observed": "docs/polished/LIVE_RESULTS.md:358-361 — 249 samples, 167 distinct stacks, SP $C0C2..$C0DE across banks $01/$05/$09/$0A/$21/$24/$25"}
+    {
+      "name": "POKECENTER_2F header loaded (8x4)",
+      "result": "PASS",
+      "observed": "PASS frame1881; 8x4 POKECENTER_2F, YES/CheckPartyForMail; overlay proposer entered/returned without host, native cable wait skipped. stacks.json records bank-qualified phase/stack bytes with frozen syms; idle and overlay samples retained, no old sp+2-only invariant asserted."
+    },
+    {
+      "name": "the trade prompt was answered YES",
+      "result": "PASS",
+      "observed": "PASS frame1881; 8x4 POKECENTER_2F, YES/CheckPartyForMail; overlay proposer entered/returned without host, native cable wait skipped. stacks.json records bank-qualified phase/stack bytes with frozen syms; idle and overlay samples retained, no old sp+2-only invariant asserted."
+    },
+    {
+      "name": "the overlay proposer service entered and returned without a host; the trade gate skipped the native cable wait",
+      "result": "PASS",
+      "observed": "PASS frame1881; 8x4 POKECENTER_2F, YES/CheckPartyForMail; overlay proposer entered/returned without host, native cable wait skipped. stacks.json records bank-qualified phase/stack bytes with frozen syms; idle and overlay samples retained, no old sp+2-only invariant asserted."
+    },
+    {
+      "name": "idle Pokemon Center overworld control",
+      "result": "PASS",
+      "observed": "PASS frame1881; 8x4 POKECENTER_2F, YES/CheckPartyForMail; overlay proposer entered/returned without host, native cable wait skipped. stacks.json records bank-qualified phase/stack bytes with frozen syms; idle and overlay samples retained, no old sp+2-only invariant asserted."
+    },
+    {
+      "name": "idle overworld chain",
+      "result": "PASS",
+      "observed": "PASS frame1881; 8x4 POKECENTER_2F, YES/CheckPartyForMail; overlay proposer entered/returned without host, native cable wait skipped. stacks.json records bank-qualified phase/stack bytes with frozen syms; idle and overlay samples retained, no old sp+2-only invariant asserted."
+    },
+    {
+      "name": "overlay host-wait stack samples decoded against the frozen symbols with bank and phase recorded",
+      "result": "PASS",
+      "observed": "PASS frame1881; 8x4 POKECENTER_2F, YES/CheckPartyForMail; overlay proposer entered/returned without host, native cable wait skipped. stacks.json records bank-qualified phase/stack bytes with frozen syms; idle and overlay samples retained, no old sp+2-only invariant asserted."
+    },
+    {
+      "name": "stack variation is recorded per overlay phase; no historical native-link-wait offset invariant is assumed",
+      "result": "PASS",
+      "observed": "PASS frame1881; 8x4 POKECENTER_2F, YES/CheckPartyForMail; overlay proposer entered/returned without host, native cable wait skipped. stacks.json records bank-qualified phase/stack bytes with frozen syms; idle and overlay samples retained, no old sp+2-only invariant asserted."
+    }
   ],
-  "finding": {
-    "correction": "The idle-overworld constant $516B at sp+12 does NOT hold inside the receptionist script. Polished's idle chain is OverworldLoop -> HandleMap -> NextOverworldFrame -> DelayFrame -> bridge; there is no DelayFrames link. docs/polished/TRADE.md 8.3 scanned only for 'call DelayFrames' and missed that NextOverworldFrame reaches DelayFrame directly through a 'call z'.",
-    "consequence": "A SlinkTradeDispatch would see _ReturnFarCall plus the $62B5/$515F/$50E2 tail at a fixed offset under its own frame."
-  },
   "not_proven": [
-    "This is a MEASUREMENT, not a hook: no dispatch is armed. See OPEN-IN-GAME-TRADE.",
-    "TryQuickSave never ran (no save was written), so TRADE.md's branch point at :99-101 is still unmeasured."
+    "DEV only; no release or PHYSICAL promotion. Scope is the named recording, not exhaustive gameplay."
   ]
 }

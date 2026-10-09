@@ -1,0 +1,104 @@
+{
+  "schema": "polished-live-receipt-v1",
+  "grade": "DEV",
+  "date": "2026-10-08",
+  "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
+  "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
+  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
+  "scenario_id": "duo/play-whiteout-natural",
+  "lane": "F:/slink-work/lanes/pol-freeze-5f4732",
+  "requirement_id": "LIVE-DUO-NATURAL-WHITEOUT",
+  "narrative": "docs/polished/FREEZE_RUNBOOK.md step 20 (S4n); command `python tools/polished_live/duo.py --scenario whiteout-natural --distinct-identities --fixture-a <fixture> --fixture-b <fixtureB>` with POL_DUO_LANE=<lane>/duo-s4n, POL_DUO_DEADLINE=900",
+  "evidence_dir": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s4n/play-whiteout-natural",
+  "evidence_file": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s4n/play-whiteout-natural/evidence.json",
+  "evidence_sha256": "6d6cbf95f37d57859fb03c248d7b8a4ae3136df2a605f6a2a98398429b7c6a6e",
+  "evidence_size": 3815220,
+  "evidence_note": "evidence.json is the duo driver's own record: verdict/reasons, the oracle facts block, per-side wire streams with the stage mark, per-step cartridge snapshots, SYNTH disclosure and the server status before/after. The oracle (tools/polished_live/duo.py) was re-run in-process on evidence.evidence and returned PASS with a facts block equal to the recorded one.",
+  "secondary_evidence": [
+    {
+      "path": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s4n/play-whiteout-natural/server.log",
+      "sha256": "1fb66d877d2eefc7800fab3f6e57c47f09bdf3732c9588b3812161df4932b8db",
+      "note": "server log of the duo run (both clients, rules, commands)"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-freeze-5f4732/duo_s4n_console.txt",
+      "sha256": "01fc83f77030c571a95e90578f7f52ade895c88ab7502c95a1db8502b8c7c71e",
+      "note": "driver console: scenario banner with overlay sha1, RESULT line"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s4n/play-whiteout-natural/a/rom/pol_overlay.gbc",
+      "sha256": "1145e7066617a7bc5f7296093d45e997db63ef3616713d8eb38c3e8bcc44c60f",
+      "note": "side a staged ROM"
+    },
+    {
+      "path": "F:/slink-work/lanes/pol-freeze-5f4732/duo-s4n/play-whiteout-natural/b/rom/pol_overlay.gbc",
+      "sha256": "1145e7066617a7bc5f7296093d45e997db63ef3616713d8eb38c3e8bcc44c60f",
+      "note": "side b staged ROM"
+    }
+  ],
+  "code_digest_note": "Computed, not transcribed: `python tools/verify_polished_release.py --root F:/slink-work/wt/g2-int --print-code-digest` = 5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1; the freeze cut",
+  "synth": [
+    "fixture a: O-33 SYNTH warp fixture sha256 75c7a5dc30126f746567202cfb39fe583dfa04eb226063560541f6cbd29f36b8 (Route 29, five SYNTH level-50 mons)",
+    "fixture b: SYNTH identity derivative f5f19f5d2e3e26e343214722b5116e1aac0c71a1200882a4cc6f58259bc6ca8d (O-33, derive_save.py), player_id 53699; a is 53698",
+    "A: current HP of EVERY non-egg party record set to 1 (two disclosed WRAM bytes each, never HP0)",
+    "A: linked mon moved to lead by a separately disclosed party-record/OT/nickname swap",
+    "Native, not SYNTH: wild catches (walk, Bag -> Ball, throw) firing the capture_party site, the client capture/hello lines, every server rule and command, the receiving client's own write at its overworld hold, and the cartridge read-backs."
+  ],
+  "checks": [
+    {
+      "name": "run verdict",
+      "result": "PASS",
+      "observed": "evidence.json verdict = 'PASS', reasons = []; duo_s4n_console.txt 'RESULT: PASS polished-duo-play-whiteout-natural'; oracle oracle_whiteout_natural re-run in-process on evidence.evidence returns PASS with the identical facts block"
+    },
+    {
+      "name": "both sides booted the shipped overlay and were admitted",
+      "result": "PASS",
+      "observed": "both sides' staged pol_overlay.gbc sha1sum = fe8c57e1034059331ccf25d232ff757d675363b2; evidence.status.start.players.a/b admission = 'admitted'; hello artifact_kind 'overlay', foundation 'gen2_polished'; server.log 'run is bound to randomized ROMs (UPR none (overlay, not randomized)'"
+    },
+    {
+      "name": "two distinct identities and a native paired link on the same area",
+      "result": "PASS",
+      "observed": "fixtures a player_id 53698 / b player_id 53699 (distinct); facts.area_id route_29, a_key 53301A:D1C2:010:00, b_key 1693A7:D1C3:010:40; link status 'alive' before the stage (oracle link:* reasons empty)"
+    },
+    {
+      "name": "the loss setup is a disclosed HP 1 on every non-egg record, never HP 0",
+      "result": "PASS",
+      "observed": "steps.a.stage op 'synth_hp1': two WRAM bytes per mon (HP high 0->0, low old->1) for all six party records incl. the linked lead; lead permutation byte-exact; no HP 0 injection (oracle a:stage_hp_zero_injection / a:stage_hp1_write_invalid / a:stage_wrong_target empty)"
+    },
+    {
+      "name": "a native battle loss without Run produced a whiteout event after every party mon fainted",
+      "result": "PASS",
+      "observed": "steps.a.battle op 'lose_native' ok, run_used false; wire a c2s faint idx 375, 417, 461, 511, 557, 593 (six distinct party keys incl. linked 53301A:D1C2:010:00) then idx 595 {event:whiteout, seq:298}; facts.server_path = 'whiteout_event_and_faint_propagation'"
+    },
+    {
+      "name": "the whiteout is reported with the entire party at HP 0 and before any heal",
+      "result": "PASS",
+      "observed": "facts.native_hook_frames = [12051] (qualified LoseMoney whiteout witness, all six at HP 0), native_report_frames = [12052]; site_hits.heal_party present and empty, so no heal reached the report (a:whiteout_report_party_not_all_zero / a:whiteout_healed_before_report / a:whiteout_preheal_hook_missing empty)"
+    },
+    {
+      "name": "the server sent exactly one force_faint for the linked partner to B via the per-mon faint of the linked mon",
+      "result": "PASS",
+      "observed": "wire a c2s faint 53301A:D1C2:010:00 idx 593 seq 297 -> wire b s2c idx 658 force_faint key 1693A7:D1C3:010:40; facts.b_force_faint_keys = ['1693A7:D1C3:010:40'] equals expected_partners; no force_explode/other kill command"
+    },
+    {
+      "name": "B's cartridge shows the partner at HP 0 and no other B mon changed",
+      "result": "PASS",
+      "observed": "steps.b.await received force_faint 1693A7:D1C3:010:40 (command frame 11552); force_faint_readback hp 0 at party slot 5, seq matched; facts.b_cartridge_witness = {'1693A7:D1C3:010:40': 'force_faint_readback'}; b:collateral_hp_change absent"
+    },
+    {
+      "name": "the server marks the link dead after the kill",
+      "result": "PASS",
+      "observed": "evidence.status.after.links: the exact (area, a_key, b_key) row has status 'dead' with killed_at stamped '2026-10-09T01:29:51.588170+00:00'"
+    },
+    {
+      "name": "no reconnect or hello re-report after the stage mark",
+      "result": "PASS",
+      "observed": "oracle a:poststage_reconnect / b:poststage_reconnect absent"
+    }
+  ],
+  "not_proven": [
+    "WHITEOUT HANDLER UNPROVEN (facts.whiteout_handler_proved = false, proof_claim 'native whiteout event sent + faint propagation; whiteout handler UNPROVEN'): the owner bar is whiteout event sent plus the linked partner dying through per-mon faint; the server's _handle_whiteout is unit-covered and is not shown to have caused B's death here (the linked mon's own faint event, idx 593, preceded the whiteout event, idx 595).",
+    "Only one linked pair exists in this run, so 'all partners' means that one partner; the five SYNTH-fixture mons are unlinked.",
+    "SYNTH-conditioned: the HP 1 on every record and the lead swap are disclosed driver writes; not PHYSICAL qualification (owner act)."
+  ]
+}

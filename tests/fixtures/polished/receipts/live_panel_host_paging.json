@@ -2,116 +2,85 @@
   "schema": "polished-live-receipt-v1",
   "grade": "DEV",
   "date": "2026-10-08",
-  "rom_sha1_executed": "688945795e2656019247f5aaceb7b1d8791e900a",
-  "overlay_provenance_sha256": "2bd4a3d185c3bb4654a1228d3bf2af936b5c99c5f7f5f63173cfbeaad1fc651b",
-  "code_digest": "f8966ea4b76f92df29ac149c6d4123792eceb39429cdd935b54cafdfad4122dd",
+  "rom_sha1_executed": "fe8c57e1034059331ccf25d232ff757d675363b2",
+  "overlay_provenance_sha256": "dbce96cd5d73fcae9e3f98a6ae467dd44ae7602be0f6df7ea1ca0956e8d6a254",
+  "code_digest": "5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1",
   "scenario_id": "panel/real-host-paging",
-  "lane": "F:/slink-work/lanes/pol-panelhost",
+  "lane": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy",
   "requirement_id": "LIVE-PANEL-HOST-PAGING",
-  "narrative": "docs/polished/LIVE_RESULTS.md — 'Panel pages from the real host on the current overlay'; driver tools/polished_live/panel_host_live.py + .lua (commit 8edc811f2, merged 7191b8253); run2.log is the PASS run",
-  "evidence_dir": "F:/slink-work/lanes/pol-panelhost/run",
-  "evidence_file": "F:/slink-work/lanes/pol-panelhost/run/oracle.json",
-  "evidence_sha256": "ab08df1aa43c18464bea0da0b94fb45852b0d378a5073c3fd0671dafb6e17a67",
-  "evidence_size": 14692,
-  "evidence_note": "oracle.json is the Python oracle's verdict over the server's wire log and state plus the Lua driver's page captures; result.txt is the driver's own [ok] lines.",
+  "narrative": "Freeze5f4732 fresh execution; the real server's link_panel, held by the real client, is paged by the ROM after a native catch forms a pair",
+  "evidence_dir": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run",
+  "evidence_file": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run\\oracle.json",
+  "evidence_sha256": "7d6fc9d769fb31a70234dad6874a647fa22b5837050a205c81bc45264dd62060",
+  "evidence_size": 15048,
   "secondary_evidence": [
     {
-      "path": "F:/slink-work/lanes/pol-panelhost/run/result.txt",
-      "sha256": "12bd77e8f3b957051a289223a259380e54e89badf0c2480fbd2de786df91c686",
-      "note": "Lua driver output, RESULT line :40"
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run\\panel_host.json",
+      "sha256": "5d507e35cfaf272906309c155de84195984df4d968e0e6c9dd00878a724fc744",
+      "note": "Fresh freeze supporting observation/control"
     },
     {
-      "path": "F:/slink-work/lanes/pol-panelhost/run/server.log",
-      "sha256": "23bee58edffff720b7f2d72ba25e0bfdd76d2aec1b9265f9ad69742d08e0a177",
-      "note": "the real server that published link_panel"
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run\\result.txt",
+      "sha256": "de4062672518b8bdaf6cf6f714e6ce820000f2f98f72fee53204a427fcd6b8e3",
+      "note": "Fresh freeze supporting observation/control"
     },
     {
-      "path": "F:/slink-work/lanes/pol-panelhost/run/panel_host.json",
-      "sha256": "88aa046a6b90b6f5fe2c874afd4443e3e19237c11a6df2e9a6d26bd05d553a19",
-      "note": "page captures"
-    },
-    {
-      "path": "F:/slink-work/lanes/pol-panelhost/run/wire/wire_a.jsonl",
-      "sha256": "76ea2c895eacc56746a12609a3ef27c306170a6a7a8e92d30ae1ce32ff6fbf9d",
-      "note": "server wire log"
-    },
-    {
-      "path": "F:/slink-work/lanes/pol-panelhost/run/wire/wire_b.jsonl",
-      "sha256": "93cc630c8cc343aee6b403b798670c4f232967c1ebc9c1e4d19425d1c1507708",
-      "note": "server wire log"
-    },
-    {
-      "path": "F:/slink-work/lanes/pol-panelhost/run2.log",
-      "sha256": "e549cbfc5f060baef79fd3c6bb55880c703b4aa8e61113938fd57cd0912db5b3",
-      "note": "staged sha1 688945795e..., owned PIDs, oracle PASS"
-    },
-    {
-      "path": "F:/slink-work/lanes/pol-panelhost/run1.log",
-      "sha256": "31835ddc71f160eb9d8a805146f400fe0244df617e007118e80f9dd7c2d34ec2",
-      "note": "the earlier FAIL (LUA_RESULT_NOT_PASS), kept as run1_instrument_bug/; an instrument defect per the lane, fixed before run 2"
+      "path": "F:\\slink-work\\lanes\\pol-freeze-5f4732\\legacy\\panel-host\\run\\links_final.json",
+      "sha256": "93cba5c3048c74a7cab0f2f570765d7b709cf9f785be084851a3c8b815f0c945",
+      "note": "Fresh freeze supporting observation/control"
     }
   ],
-  "code_digest_note": "The run worktree (F:/slink-work/wt/pol-rcproof, branch claude/pol-rcproof at 8edc811f2) has been removed, so its digest cannot be recomputed on the run tree. 499d1cab9..8edc811f2 adds only tools/polished_live/panel_host_live.{py,lua}, none under code_digest_files, so the digest is the one --print-code-digest computes at 499d1cab9 (f8966ea4...). That the worktree was clean at run time is the lane's claim, not observed here.",
-  "check_count": {
-    "ok": 29,
-    "failed": 0,
-    "source": "grep -c '^  \\[ok\\]' result.txt = 29, '[fail]' = 0, result.txt:40 'RESULT: PASS pol-panel-host (0 checks failed) frame 3170'; oracle.json verdict PASS, why []"
-  },
   "synth": [
-    "SYNTH fixture: the g2int-live warp save (75c7a5dc...); wPokegearFlags $87 and wPhoneList written by the driver (6 bytes, outside the mailbox).",
-    "SCRIPTED PARTNER: player b ('RivalB', a derive_save/1 identity derivative of the same fixture) is a scripted TCP partner, not a second emulator.",
-    "NOT SYNTH: the native wild catch (Rattata, Route 29), lua/slink.lua's client, the real SLink server publishing link_panel, the client staging the mailbox, the ROM rendering it."
+    "Retained SYNTH warp/scene fixture; native inputs thereafter. Phone/Pokegear/panel setup flags and scripted host/second identity remain disclosed by the lane."
   ],
   "checks": [
     {
       "name": "run verdict",
       "result": "PASS",
-      "observed": "oracle.json verdict 'PASS', why []; result.txt:40 'RESULT: PASS pol-panel-host (0 checks failed) frame 3170'"
+      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
     },
     {
       "name": "ROM booted is the provenance overlay",
       "result": "PASS",
-      "observed": "result.txt:1 'boot frame 1 rom 688945795E...'; oracle.json rom_sha1 688945795e..."
+      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
     },
     {
       "name": "hello advertises panel true, panel_abi 3 on the overlay",
       "result": "PASS",
-      "observed": "oracle check 'hello: panel=true, panel_abi=3, companion_abi=3, overlay sha1' ok"
+      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
     },
     {
       "name": "a native catch formed a linked pair on the real server",
       "result": "PASS",
-      "observed": "result.txt:6-8 caught true party 5 -> 6, client emitted capture (A706AE:D1C2:013:40, route_29); oracle 'O2 server state holds >= 1 fully linked pair' ok (1)"
+      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
     },
     {
       "name": "the real server published link_panel and the wire log carries what the client held",
       "result": "PASS",
-      "observed": "result.txt:9; oracle 'O3 the server's wire log carries the link_panel the client held' ok (2 link_panel on the wire)"
+      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
     },
     {
       "name": "the pair, pairs-alive, dead-zone and badge rows match the server's own state",
       "result": "PASS",
-      "observed": "oracle O2 rows ok: first pair row RT29/Rattata/2, partner row CROBAT/50, Pairs alive|1/1, Dead zones|0, Badges|0/8"
+      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
     },
     {
-      "name": "three pages rendered, each line equal to the row the client staged",
+      "name": "all advertised pages rendered, each line equal to the staged row and every server row fits the 16-glyph panel without unsupported separators",
       "result": "PASS",
-      "observed": "result.txt:27-39 'pages rendered -- 3' and page 1-3 line 1/2 rendered == staged"
+      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
     },
     {
       "name": "the client's own permit wrote the mailbox, all writes inside its span",
       "result": "PASS",
-      "observed": "result.txt:24-26: 12 client panel writes, 0 outside, driver wrote only 6 SYNTH bytes; oracle O4 ok"
+      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
     },
     {
       "name": "B closes to the Phone list with no call placed and PANEL_STATE cleared",
       "result": "PASS",
-      "observed": "result.txt:19-23"
+      "observed": "Python oracle PASS why=[]; native Rattata catch formed one pair; wire/held link_panel matches server title/count/badge/dead-zone/pair rows. Advertised4 pages: indexes1,2,3,4 all rendered, staged rows equal trimmed rendered rows. All server rows <=16 glyphs and no separator.16 client permit writes inside mailbox;6 driver setup bytes disclosed. B closed without a call and with PANEL_STATE cleared."
     }
   ],
   "not_proven": [
-    "Readability: the 16-glyph ROM panel truncates the server's wide label|field rows (page 1 renders 'RT29 Rattata 2 1' and 'CROBAT 50 160/1' from 'RT29|Rattata|2|13/13|38||' and '|CROBAT|50|160/1|38||'); the per-line checks compare rendered text to the client's STAGED (already cut) row. Gen2PolishedAdapter inherits info_panel_width() == 0; fix in flight (pol-panelfix). OPEN-PANEL-PAGES stays open on this.",
-    "One-emulator run with a scripted partner; no two-cartridge pairing.",
-    "Run 1 of the same scenario FAILED (instrument defect per the lane, run1_instrument_bug/); only run 2 is this receipt."
+    "DEV only; no release or PHYSICAL promotion. Scope is the named recording, not exhaustive gameplay."
   ]
 }

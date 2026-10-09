@@ -824,3 +824,43 @@ Card `pol-rcproof`. Lane-local wrapper `F:/slink-work/lanes/pol-rcproof/hello_ru
 ## Panel pages from the real host on the current overlay (2026-10-08, SYNTH fixture + scripted partner, DEV). PASS, rows truncated
 
 Card `pol-panelhost` (driver `tools/polished_live/panel_host_live.{py,lua}`, `8edc811f2`, merged `7191b8253`). Overlay `688945795e...` staged from the committed UPS. Run 2: `RESULT: PASS pol-panel-host (0 checks failed) frame 3170`, 29 `[ok]`, Python oracle `PASS`, `why []`. A native Route 29 catch (Rattata) linked against a scripted partner B on the real server; the server's `link_panel` (`RT29|Rattata|2|13/13|38||`, `|CROBAT|50|160/1|38||`, `Pairs alive|1/1`, `Dead zones|0`, `Badges|0/8`) was held by the client, staged through its own permit (12 writes, 0 outside the mailbox) and rendered as three pages; B closes cleanly. Run 1 FAILED on an instrument defect (`run1_instrument_bug/`). **The rows are cut to the 16-glyph panel**: page 1 shows `RT29 Rattata 2 1` / `CROBAT 50 160/1` (HP and the trailing field lost), because `Gen2PolishedAdapter` inherits `info_panel_width() == 0`; the per-line check compares against the staged, already cut, row. Evidence `F:/slink-work/lanes/pol-panelhost/run/oracle.json` (+ `result.txt`, `wire/`). Receipt `LIVE-PANEL-HOST-PAGING`. `OPEN-PANEL-PAGES` stays open on readability (`pol-panelfix`).
+
+
+## RC freeze 5f4732 — 2026-10-08
+
+This section records the frozen product digest
+`5f4732503c4ae4820b253fef3b7fc0870a3edf11b62be70868dffba874aa95f1`, product cut
+`e0dc44314`, shipped overlay `fe8c57e1034059331ccf25d232ff757d675363b2` and
+subsequent driver-only consent fix `d51f3e9c3`. All installed receipts are **DEV**.
+The receipt JSON contains the full evidence path, current hashes, checks and limitations;
+`RC_STATUS.md` records the final verifier result. No older PASS was restamped.
+
+| Run | Frozen result and receipt |
+|---|---|
+| Rival `synth-vrpd4rcz` | PASS, frame10775; `live_rival_swap.json`. Native 0F:47DD enemy send-in, one server-requested partner-party swap, exact write/image oracle and continuation. SYNTH scene, scripted second identity; only RIVAL0/id3. |
+| Explosion `explode-615a97985038` | PASS, frame3307; `live_explode_explode.json`. Native action and exact write/diff/echo checks; TEST HOST command. |
+| Active faint `active-faint-e6c588c4f822` | PASS, frame2022; `live_explode_active_faint.json`. Native consumption with commanded echo suppression; TEST HOST command. |
+| Bench faint `bench-faint-8b4ca079ca7d` | PASS, frame2022; `live_explode_bench_faint.json`. No bench mutation in battle, then overworld checkpoint write. |
+| Shipped trade `shipped-001` | Retained FAIL before APPLY; premature driver A input after wire show_menu entered the receptionist proposer script before responder pickup. No completed trade/cold proof. |
+| Shipped trade `shipped-002` | PASS; `live_shipped_trade.json`. Driver now waits for native responder entry. B entry1052, consent1248, commit1263, trade_done3822; A commit1447, trade_done4145. Both token t1. Server ALIVE link re-keyed, pending_trade null; both cold CONTINUE parties and main/backup native-save copies retain exchanged keys. |
+
+Evidence root: `F:/slink-work/lanes/pol-freeze-5f4732/trade`. The separate
+`shipped-002/cold-verdict.json` is an explicitly labeled offline check of the recorded
+cold/native-save evidence; it does not replace the original combined verdict.
+The shipped build uses its normal launcher with no `--test-build`. The fixture, derived
+TradeB identity and seeded link are disclosed SYNTH setup; subsequent menus, commits and
+saves are native. This happy path does not prove power-loss handling, general rollback,
+all item/evolution cases or a human campaign.
+
+
+The same freeze now binds `LIVE-WRITES-OVERWORLD` to fresh legs a/b/d/e/f and adds
+`LIVE-DUO-NATURAL-FAINT` / `LIVE-DUO-NATURAL-WHITEOUT`. The writes receipt covers party-origin
+and box-origin memorialize to box20/index19, source removal, one completion acknowledgement,
+independently recomputed exact diffs and failing controls. It is local command-path evidence,
+not save/reset durability or a persistent owed-burial contract.
+
+S2n closes `OPEN-WRITE-PATH` at the owner's RC bar. S4n reports a whiteout and the linked
+partner dies through per-mon faint propagation; `whiteout_handler_proved=false` remains
+explicit. Only one linked pair was present. Both duo receipts disclose HP=1 conditioning,
+identity derivation and lead permutation; native death/capture and real client/server
+propagation are observed, without promotion of SYNTH-conditioned DEV to PHYSICAL.
