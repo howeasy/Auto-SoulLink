@@ -10,13 +10,13 @@ local L = dofile(os.getenv("SLINK_ROOT") .. "/tools/polished_live/pol_lib.lua")
 local fmt = string.format
 local J = L.json
 local WHICH = os.getenv("POL_EXPLORE") or "B"
-client.speedmode(400)
+client.speedmode(300)
 L.log(fmt("[explore] %s boot frame %d rom %s", WHICH, emu.framecount(), gameinfo.getromhash()))
 
 for _, name in ipairs({"OWPlayerInput", "StartMenu", "BlinkCursor", "YesNoBox", "TitleScreenMain", "MainMenu",
                        "SetInitialOptions.joypad_loop", "PokeGear", "InitPokegearTilemap", "FixPlayerEVsAndStats",
                        "CheckPartyForMail", "Special_WaitForLinkedFriend", "Special_WaitForLinkedFriend.done",
-                       "Special_TryQuickSave"}) do
+                       "Special_TryQuickSave", "SlinkTradeWaitGate", "SlinkTradeTimeoutGate", "SlinkTradeProposerService", "SlinkTradeExit"}) do
     L.hook(name)
 end
 local function write(path, s) local f = assert(io.open(path, "w")) f:write(s) f:close() end
@@ -46,7 +46,8 @@ if WHICH == "B" then
     -- bridge samples, tagged by phase; at most 300 per phase
     local phase = "overworld"
     local stacks, order, counts = {}, {}, {}
-    L.hook("SlinkDelayFrameBridge", function()
+    L.hook("SlinkDelayFrameBridge", function(right_bank)
+        if not right_bank then return end
         local n = counts[phase] or 0
         if n >= 300 then return end
         counts[phase] = n + 1
@@ -74,25 +75,27 @@ if WHICH == "B" then
     while true do
         local f = emu.framecount()
         if f - f1 > 6000 then L.die("receptionist script did not finish") end
-        local w, d = L.hit.Special_WaitForLinkedFriend, L.hit["Special_WaitForLinkedFriend.done"]
+        local w, d = L.hit.SlinkTradeProposerService, L.hit.SlinkTradeExit
         local in_wait = w ~= nil and w > f1 and (d == nil or d < w)
-        if in_wait then phase = "wait_friend"
+        if in_wait then phase = "overlay_host_wait"
         elseif L.recent("YesNoBox", 2) or (L.hit.YesNoBox and not L.after("CheckPartyForMail", f1) and L.after("YesNoBox", f1)) then
             phase = "yesno" seen_yesno = true
         elseif L.rw("wScriptRunning") ~= 0 then
-            phase = L.after("Special_WaitForLinkedFriend.done", f1) and "after_wait" or "script"
+            phase = L.after("SlinkTradeExit", f1) and "after_wait" or "script"
         else phase = "overworld_after" end
-        if phase == "overworld_after" and L.ow_idle() and L.after("Special_WaitForLinkedFriend.done", f1) then break end
-        if phase == "wait_friend" then L.frame() else L.pulse("A") end   -- A = YES on the prompt, A closes text
-        if phase == "wait_friend" and not L.wait_shot then L.wait_shot = true client.screenshot(L.RUN .. "/please_wait.png") end
+        if phase == "overworld_after" and L.ow_idle() and L.after("SlinkTradeExit", f1) then break end
+        if phase == "overlay_host_wait" then L.frame() else L.pulse("A") end   -- A = YES on the prompt, A closes text
+        if phase == "overlay_host_wait" and not L.wait_shot then L.wait_shot = true client.screenshot(L.RUN .. "/please_wait.png") end
     end
     L.idle(60)
     L.unhook("SlinkDelayFrameBridge")
     L.log(fmt("[explore] milestones: FixPlayerEVsAndStats %s CheckPartyForMail %s WaitForLinkedFriend %s .done %s TryQuickSave %s YesNoBox %s",
               tostring(L.hit.FixPlayerEVsAndStats), tostring(L.hit.CheckPartyForMail), tostring(L.hit.Special_WaitForLinkedFriend),
               tostring(L.hit["Special_WaitForLinkedFriend.done"]), tostring(L.hit.Special_TryQuickSave), tostring(L.hit.YesNoBox)))
+    L.log(fmt("[explore] overlay milestones: wait_gate %s service %s exit %s", tostring(L.hit.SlinkTradeWaitGate), tostring(L.hit.SlinkTradeProposerService), tostring(L.hit.SlinkTradeExit)))
     L.check("the trade prompt was answered YES (CheckPartyForMail ran)", L.hits.CheckPartyForMail > 0)
-    L.check("the native link wait ran and timed out (no cable)", L.hits["Special_WaitForLinkedFriend.done"] > 0)
+    L.check("overlay trade service entered and returned without a host", L.hits.SlinkTradeProposerService > 0 and L.hits.SlinkTradeExit > 0)
+    L.check("trade gate skipped the native cable wait", L.hits.SlinkTradeWaitGate > 0 and L.hits.Special_WaitForLinkedFriend == 0)
     local out = {}
     for _, key in ipairs(order) do
         local ph, sp, hex, bank, svbk = key:match("^(.-)|(%x+)|(%x+)|b(%x+)|s(%d)$")

@@ -6,7 +6,7 @@
 
 Everything runs under F:/slink-work/lanes/pol-live (short, non-Drive: BizHawk SaveRAM fails near MAX_PATH).
 Only the EmuHawk PID this script starts is ever killed (taskkill /T /F /PID); never an image-name kill.
-The ROM is the overlay the Manager hands out: the cached companion build, refused unless its sha1 equals
+The ROM is the overlay the Manager hands out: the committed UPS applied to the pinned release, refused unless its sha1 equals
 data/polished/overlay_provenance.json. Facts come from data/polished/polished_slink.sym and the pinned
 source (data/polished_sources.lock.json); nothing is derived from screenshots.
 """
@@ -66,6 +66,7 @@ SYMBOLS = (
     "wLinkMode", "wScriptMode", "wEventFlags", "wPokegearFlags", "wTilemap", "wAttrmap", "wPokegearCard",
     "wJumptableIndex", "wSpriteAnim1", "wShadowOAM", "PokeGear", "InitPokegearTilemap", "PokegearClock_Joypad",
     "PokegearMap_JohtoMap", "PokegearPhone_Joypad", "PokegearRadio_Joypad", "LinkReceptionistScript_Trade",
+    "SlinkTradeWaitGate", "SlinkTradeTimeoutGate", "SlinkTradeProposerService", "SlinkTradeExit",
     "Script_TradeCenterClosed", "Special_WaitForLinkedFriend", "Special_WaitForLinkedFriend.done", "CheckPartyForMail",
     "FixPlayerEVsAndStats", "Special_TryQuickSave",
     # randomized-cartridge run (R2): the battle mon's form byte (form | extspecies bit 5 | gender/egg) and level
@@ -130,7 +131,13 @@ def stage_rom() -> str:
     if KIND == "rand":   # the Manager's per-player pin (or the explicit sha1 of a deliberately altered copy)
         want = os.environ.get("POL_ROM_SHA1") or json.loads(
             (MGR_RUN / "rom_contract.json").read_text(encoding="utf-8"))["players"][PLAYER]["rom_sha1"]
-    data = ROM_SRC.read_bytes()
+    if KIND == "overlay" and ROM_SRC == CACHE / "companion-overlay/polishedcrystal-3.2.3.gbc":
+        # Same committed-UPS staging used by hello_live.py; no mutable build-cache input.
+        from patch.tools.make_ups import ups_apply
+        data = ups_apply((CACHE / "release/polishedcrystal-3.2.3.gbc").read_bytes(),
+                         (REPO / "patch/dist/SLink-Polished.ups").read_bytes())
+    else:
+        data = ROM_SRC.read_bytes()
     sha1 = hashlib.sha1(data).hexdigest()
     if sha1 != want:
         raise SystemExit(f"{KIND} ROM sha1 {sha1} != provenance {want}")
@@ -264,7 +271,7 @@ def cmd_live() -> int:
     time.sleep(3)
     try:
         text, pid = launch("tools/polished_live/live.lua", run,
-                           {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port), "SLINK_PLAYER": "a",
+                           {"SLINK_HOST": "127.0.0.1", "SLINK_PORT": str(port), "SLINK_PLAYER": PLAYER,
                             "POL_STAGES": os.environ.get("POL_STAGES", "1234")}, 2400, poll)
         last["t"] = 0
         poll()

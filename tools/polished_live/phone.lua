@@ -7,13 +7,13 @@ local fmt = string.format
 local J = L.json
 local CM = dofile(L.ROOT .. "/data/games/polished_crystal/charmap.lua").glyphs
 local ARROW = 240   -- charmap glyph for the filled cursor arrow (charmap.lua glyphs[240])
-client.speedmode(400)
+client.speedmode(300)
 L.log(fmt("[phone] boot frame %d rom %s", emu.framecount(), gameinfo.getromhash()))
 
 for _, n in ipairs({"OWPlayerInput", "StartMenu", "SetInitialOptions.joypad_loop", "PokeGear",
                     "PokegearPhoneContactSubmenu", "PokegearPhoneContactSubmenu.Delete", "MakePhoneCallFromPokegear",
                     "SlinkPhone_CallGate", "SlinkPhone_CallerName", "SlinkPhone_CanDelete", "SlinkPhone_CountSetBits",
-                    "YesNoBox"}) do
+                    "YesNoBox", "SlinkPanel"}) do
     L.hook(n)
 end
 local function write(path, s) local f = assert(io.open(path, "w")) f:write(s) f:close() end
@@ -104,11 +104,11 @@ local function open_slink(tag, index)
     L.check(tag .. ": wPokegearPhoneSubmenuCursor on Call", L.rw("wPokegearPhoneSubmenuCursor") == 0)
     press("A", 10)
     wait(function() return L.hits.SlinkPhone_CallGate > gate0 end, 300, tag .. ": Call never reached SlinkPhone_CallGate")
-    L.idle(40)
+    L.idle(120) -- native no-host panel closes its lease after 90 frames
     local box = table.concat(rows(12, 17), "\n")
     shot(tag .. "_entry")
     local sel = L.rw("wPokegearPhoneSelectedPerson")
-    L.check(tag .. ": the SLink entry text box shows", box:find("SLink is linked.", 1, true) ~= nil, box)
+    L.check(tag .. ": the SLink entry text box shows", box:find("SOUL LINK", 1, true) and box:find("NO CLIENT", 1, true) and L.hits.SlinkPanel > 0, box)
     L.check(tag .. ": no phone call placed (MakePhoneCallFromPokegear not entered)", L.hits.MakePhoneCallFromPokegear == calls0)
     L.check(tag .. ": wCurCaller untouched", L.rw("wCurCaller") == caller0, fmt("%02X", L.rw("wCurCaller")))
     L.check(tag .. ": selected person is the virtual id 38", sel == 38, sel)
