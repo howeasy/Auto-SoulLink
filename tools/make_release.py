@@ -38,7 +38,6 @@ status page instead.
 """
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
@@ -768,36 +767,13 @@ def data_game_files(root: Path | None = None) -> dict[str, list[str]]:
 
 
 def companion_stamp_errors(version: str, dist: Path | None = None) -> list[str]:
-    """Problems that make the bundled companions the wrong build for release `version` (owner ruling 2026-10-02: a release
-    carries its own version on the game menus). tools/stamp_release.py rebuilds every companion with the version and records
-    it, with the sha256 of each shipped file, in patch/dist/companion_version.json; this refuses to package anything that
-    record does not vouch for."""
+    """Validate every shipped companion's stamped version or explicit as-built provenance policy."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import stamp_release
 
     dist = dist or REPO_ROOT / "patch" / "dist"
-    record = dist / "companion_version.json"
-    hint = f"run: python tools/stamp_release.py --version {version if version == 'dev' else 'v' + version.lstrip('v')}"
-    if not record.is_file():
-        return [f"{record} is missing ({hint})"]
-    doc = json.loads(record.read_text(encoding="utf-8"))
-    want = "dev" if version == "dev" else "v" + version.lstrip("v")
-    errors = []
-    if doc.get("schema") != stamp_release.SCHEMA:
-        errors.append(f"{record.name}: unknown schema {doc.get('schema')!r}")
-    if doc.get("version") != want:
-        errors.append(f"companions are stamped {doc.get('version')!r} (per family {doc.get('families')}), the release is {want!r} ({hint})")
-    files = doc.get("files") or {}
-    for name in stamp_release.SHIPPED:
-        path = dist / name
-        if not path.is_file():
-            errors.append(f"{name} is missing from {dist} (a release ships every companion the record vouches for)")
-            continue
-        if name not in files:
-            errors.append(f"{name} is not covered by {record.name}")
-        elif hashlib.sha256(path.read_bytes()).hexdigest() != files[name]:
-            errors.append(f"{name} changed after it was stamped ({hint})")
-    return errors
+    return stamp_release.certificate_errors(version, REPO_ROOT, dist,
+                                            polished=_polished_overlay_admitted(REPO_ROOT))
 
 
 def build_release(

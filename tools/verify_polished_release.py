@@ -178,8 +178,9 @@ def _run(argv: list[str], cwd: Path, timeout: int) -> tuple[int | None, str, boo
         proc = subprocess.run([str(a) for a in argv], cwd=str(cwd), capture_output=True,
                               text=True, timeout=timeout)
     except subprocess.TimeoutExpired as exc:
-        out = (exc.stdout or "") + (exc.stderr or "")
-        return None, out if isinstance(out, str) else "", True
+        parts = [p.decode("utf-8", errors="replace") if isinstance(p, bytes) else (p or "")
+                 for p in (exc.stdout, exc.stderr)]
+        return None, "".join(parts), True
     except OSError as exc:
         return None, str(exc), False
     return proc.returncode, (proc.stdout or "") + (proc.stderr or ""), False
@@ -514,6 +515,13 @@ def _stamped_release(root: Path) -> tuple[str | None, str]:
         return None, f"companions not stamped for a release: {_RELEASE_STAMP.as_posix()} is unusable ({type(exc).__name__}: {exc}); {hint}"
     if not isinstance(version, str) or not _STAMPED_RELEASE.fullmatch(version):
         return None, f"companions not stamped for a release: {_RELEASE_STAMP.as_posix()} says {version!r}; {hint}"
+    import stamp_release
+    if doc.get("schema") not in (stamp_release.SCHEMA, stamp_release.SCHEMA_V2):
+        return None, f"companions not stamped for a release: unknown certificate schema; {hint}"
+    if doc["schema"] == stamp_release.SCHEMA_V2:
+        errors = stamp_release.certificate_errors(version, root, path.parent, polished=True, doc=doc)
+        if errors:
+            return None, "companion certificate refused: " + "; ".join(errors)
     return version, ""
 
 
