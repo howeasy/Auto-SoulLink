@@ -154,6 +154,9 @@ def main() -> int:
     if args.worker:
         return worker(args.worker, args.out, args.title, args.cycles, args.phase,
                       args.load_elapsed_seconds, not args.no_normalize)
+    # The worker runs with cwd=<lane> and the lane is dropped afterwards: resolve against the caller first,
+    # or a relative --out sends the worker's evidence into the lane and it is deleted with it.
+    args.out, args.lane = args.out.resolve(), args.lane.resolve()
     sys.path[:0] = [str(ROOT / "tools"), str(ROOT)]
     from tools import gen2_final_sweep as sweep
 

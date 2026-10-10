@@ -2543,7 +2543,10 @@ def rival_swap_real_problems(text, source_party, rival_ids, native_lo, native_hi
 # driver makes (lua/gen3/native.lua arms reason "native" with an allow predicate inside the mailbox/control
 # blocks): the config (CONTROL epoch/enable, TN_ENABLE) and link_panel (INFO) classes among them.
 GEN3_NATIVE_ARENA_SIZE = 0x1000
-GEN3_STATE_COMMAND_RE = r"(?m)^RX (?:force_\w+|box_mon|party_mon|memorialize|replace_rival_team)\b"
+# apply_prepare/apply_trade are listed too: the native trade's writes are reason "native" inside the arena, but they
+# start game script state (the save prompt), so the arena alone does not make them harmless on an idle peer.
+GEN3_STATE_COMMAND_RE = (r"(?m)^RX (?:force_\w+|box_mon|party_mon|memorialize|replace_rival_team"
+                         r"|apply_prepare|apply_trade)\b")
 
 
 def gen3_idle_peer_write_problems(label, text, native_lo, native_hi):
