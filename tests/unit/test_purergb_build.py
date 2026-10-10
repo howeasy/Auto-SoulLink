@@ -120,15 +120,18 @@ def test_pure_build_compiles_host_tools_before_rom_targets(tmp_path, monkeypatch
 def test_existing_pure_rom_is_relinked_when_a_sidecar_is_missing(tmp_path, monkeypatch, builder, missing):
     import build_purergb_overlay as overlay
     pure, repo, published, lock = _mock_pure_build(tmp_path, monkeypatch)
+    roms = {key: (repo / spec["filename"]).read_bytes() for key, spec in lock["outputs"].items()}
     (repo / f"pokered.{missing}").unlink()
     commands = []
 
     def fake_make(argv, **kwargs):
         commands.append(argv)
-        if "-C" not in argv and "-B" in argv:
+        if "-C" not in argv:
             for key in lock["outputs"]:
-                for ext in ("sym", "map"):
-                    (repo / f"{key}.{ext}").write_bytes((published / f"{key}.{ext}").read_bytes())
+                if not (repo / f"{key}.gbc").exists():
+                    (repo / f"{key}.gbc").write_bytes(roms[key])
+                    for ext in ("sym", "map"):
+                        (repo / f"{key}.{ext}").write_bytes((published / f"{key}.{ext}").read_bytes())
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(pure.subprocess, "run", fake_make)
@@ -137,7 +140,7 @@ def test_existing_pure_rom_is_relinked_when_a_sidecar_is_missing(tmp_path, monke
     else:
         overlay.make(repo, tmp_path / "rgbds", tmp_path / "devkit", lock)
     assert (repo / f"pokered.{missing}").is_file(), "a retained up-to-date ROM must not hide lost linker outputs"
-    assert "-B" in commands[-1]
+    assert "-B" not in commands[-1]
     assert not pure.PROVENANCE_PATH.exists(), "--check must not publish provenance"
 
 
@@ -161,6 +164,7 @@ def test_recovered_pure_build_still_refuses_a_wrong_rom_sha1(tmp_path, monkeypat
 def test_host_tools_failure_stops_before_any_rom_make(tmp_path, monkeypatch, builder):
     import build_purergb_overlay as overlay
     pure, repo, _published, lock = _mock_pure_build(tmp_path, monkeypatch)
+    (repo / "pokered.sym").unlink()
     commands = []
 
     def fake_make(argv, **kwargs):
@@ -174,6 +178,7 @@ def test_host_tools_failure_stops_before_any_rom_make(tmp_path, monkeypatch, bui
         else:
             overlay.make(repo, tmp_path / "rgbds", tmp_path / "devkit", lock)
     assert len(commands) == 1 and commands[0][1:3] == ["-C", "tools"]
+    assert (repo / "pokered.gbc").is_file(), "a host-tools failure must leave the stale ROM intact"
 
 
 @pytest.mark.parametrize("missing", [None, "sym", "map"], ids=["warm", "repair-sym", "repair-map"])
@@ -191,6 +196,57 @@ def test_overlay_provenance_keeps_its_canonical_rom_recipe_after_recovery(tmp_pa
     monkeypatch.setattr(pure.subprocess, "run", fake_make)
     command = overlay.make(repo, tmp_path / "rgbds", tmp_path / "devkit", lock)
     committed = json.loads((REPO_ROOT / "data/purergb/overlay_provenance.json").read_text())["command"]
-    assert command == committed, "host-tool preparation and recovery flags must not create artifact provenance drift"
+    assert command == committed, "host-tool preparation and link recovery must not create artifact provenance drift"
     assert calls[0][1:3] == ["-C", "tools"]
-    assert ("-B" in calls[1]) == bool(missing)
+    assert "-B" not in calls[1]
+
+
+@pytest.mark.parametrize("missing", ["sym", "map"], ids=["lost-sym", "lost-map"])
+def test_relink_recovery_preserves_prebuilt_assets_without_png_sources(tmp_path, monkeypatch, missing):
+    import build_purergb_overlay as overlay
+    pure, repo, published, lock = _mock_pure_build(tmp_path, monkeypatch)
+    (repo / f"pokered.{missing}").unlink()
+    assets = {}
+    for name in ("title_logo", "title_line"):
+        path = repo / f"engine/slink/{name}.2bpp"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(f"prebuilt {name}".encode())
+        assets[path] = path.read_bytes()
+        assert not path.with_suffix(".png").exists()
+    original_roms = {key: (repo / spec["filename"]).read_bytes() for key, spec in lock["outputs"].items()}
+    calls = []
+
+    def fake_make(argv, **kwargs):
+        calls.append(argv)
+        assert "-B" not in argv, "blanket forcing would regenerate prebuilt assets from missing PNGs"
+        if "-C" in argv:
+            assert all((repo / spec["filename"]).is_file() for spec in lock["outputs"].values())
+        else:
+            assert not (repo / "pokered.gbc").exists(), "invalidate only the stale link target"
+            assert (repo / "pokeblue.gbc").read_bytes() == original_roms["pokeblue"]
+            assert (repo / "pokegreen.gbc").read_bytes() == original_roms["pokegreen"]
+            (repo / "pokered.gbc").write_bytes(original_roms["pokered"])
+            for ext in ("sym", "map"):
+                (repo / f"pokered.{ext}").write_bytes((published / f"pokered.{ext}").read_bytes())
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pure.subprocess, "run", fake_make)
+    command = overlay.make(repo, tmp_path / "rgbds", tmp_path / "devkit", lock)
+    assert len(calls) == 2 and calls[0][1:3] == ["-C", "tools"]
+    assert (repo / f"pokered.{missing}").read_bytes() == (published / f"pokered.{missing}").read_bytes()
+    assert {path: path.read_bytes() for path in assets} == assets
+    assert command == "make -j4 pokered.gbc pokeblue.gbc pokegreen.gbc"
+
+
+@pytest.mark.parametrize("invalid", ["outside", "prebuilt-asset"], ids=["outside-checkout", "non-rom"])
+def test_relink_refuses_invalid_targets_before_touching_any_file(tmp_path, monkeypatch, invalid):
+    pure, repo, _published, lock = _mock_pure_build(tmp_path, monkeypatch)
+    (repo / "pokered.sym").unlink()
+    target = tmp_path / "outside.gbc" if invalid == "outside" else repo / "engine/slink/title_logo.2bpp"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"must stay untouched")
+    lock["outputs"]["pokered"]["filename"] = str(target)
+    monkeypatch.setattr(pure.subprocess, "run", lambda *args, **kw: pytest.fail("invalid target must fail before make"))
+    with pytest.raises(RuntimeError, match="refusing to invalidate"):
+        pure.make_roms(repo, tmp_path / "rgbds", tmp_path / "devkit", lock)
+    assert target.read_bytes() == b"must stay untouched" and (repo / "pokered.gbc").is_file()

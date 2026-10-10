@@ -155,11 +155,21 @@ def make_roms(checkout: pathlib.Path, rgbds_bin: pathlib.Path, devkit_bin: pathl
     make_exe = str(devkit_bin / _binary_name("make"))
     # These linker side effects are not make targets: a retained .gbc can otherwise
     # look current after a partial clean deleted its .sym/.map and build intermediates.
-    force = any(not (checkout / f"{key}.{ext}").is_file()
-                for key in lock["outputs"] for ext in ("sym", "map"))
+    relink = [checkout / spec["filename"] for key, spec in lock["outputs"].items()
+              if any(not (checkout / f"{key}.{ext}").is_file() for ext in ("sym", "map"))]
+    root = checkout.resolve()
+    if any(path.suffix.lower() != ".gbc" or path.resolve() == root
+           or not path.resolve().is_relative_to(root) for path in relink):
+        raise RuntimeError("refusing to invalidate an unexpected ROM path outside the build outputs")
     commands = [[make_exe, "-C", "tools", "-j4", "CC=gcc"],
-                [make_exe, "-j4", *(["-B"] if force else []), *lock["make_targets"]]]
-    for cmd in commands:
+                [make_exe, "-j4", *lock["make_targets"]]]
+    for index, cmd in enumerate(commands):
+        if index == 1:
+            # Invalidate only stale link outputs, after host tools succeeded.
+            # -B would also regenerate prebuilt .2bpp assets that have no .png.
+            for path in relink:
+                print(f"[purergb] missing linker sidecar: relink {path.name}", file=sys.stderr)
+                path.unlink(missing_ok=True)
         print(f"[purergb] {' '.join(cmd)}  (cwd={checkout})", file=sys.stderr)
         result = subprocess.run(cmd, cwd=str(checkout), env=env, capture_output=True, text=True)
         if result.returncode != 0:
@@ -167,7 +177,7 @@ def make_roms(checkout: pathlib.Path, rgbds_bin: pathlib.Path, devkit_bin: pathl
             sys.stderr.write(result.stderr)
             raise RuntimeError(f"make {'tools' if '-C' in cmd else 'ROMs'} failed with exit code {result.returncode}")
     # Published provenance names the canonical ROM recipe. Host-tool preparation
-    # and conditional recovery flags repair ignored intermediates and are logged
+    # and stale link-output removal repair ignored intermediates and are logged
     # above; they must not create drift in an otherwise identical --check build.
     return " ".join(["make", "-j4", *lock["make_targets"]])
 
