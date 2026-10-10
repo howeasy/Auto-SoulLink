@@ -4699,7 +4699,8 @@ def test_active_end_oracle_reads_the_engine_written_hp0(ph, monkeypatch, tmp_pat
         with pytest.raises(RuntimeError, match="idle peer wrote"):
             run.assert_active_end_gen3_saved(dict(receipts, b=idle(*native, bad)))
     # red: B was handed a state command (the partner's death, a party/box/memorial order)
-    for cmd in ("force_faint", "force_explode", "box_mon", "party_mon", "memorialize"):
+    # (apply_prepare/apply_trade drive the native trade: in-arena reason-native writes, yet they start game script state)
+    for cmd in ("force_faint", "force_explode", "box_mon", "party_mon", "memorialize", "apply_prepare", "apply_trade"):
         with pytest.raises(RuntimeError, match="forbidden"):
             run.assert_active_end_gen3_saved(dict(receipts, b=idle(*native, f"RX {cmd} key=B0")))
     # red: the driver's WRITES total disagrees with the lines it logged, or is missing

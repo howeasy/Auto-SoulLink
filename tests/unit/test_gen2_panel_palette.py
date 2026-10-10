@@ -23,6 +23,40 @@ def snapshot(lua):
     }, recursive=True)
 
 
+def test_probe_forwards_caller_resolved_paths_to_the_lane_worker(tmp_path, monkeypatch):
+    """The worker runs with cwd=<lane> and the lane is dropped afterwards, so a relative --out must be resolved
+    against the CALLER before it crosses the subprocess boundary, or its evidence is written inside the lane."""
+    import subprocess
+    import sys
+
+    sys.path[:0] = [str(ROOT / "tools"), str(ROOT)]
+    import probe_gen2_panel_palette as probe
+
+    from tools import gen2_final_sweep as sweep
+
+    lane = tmp_path / "lane"
+    (lane / "tools").mkdir(parents=True)
+    (lane / Path(probe.GATE)).parent.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(sweep, "make_lane", lambda n, sha: lane)
+    monkeypatch.setattr(sweep, "drop_lane", lambda path: None)
+    seen = {}
+
+    def fake_run(argv, **kwargs):
+        seen["argv"], seen["cwd"] = argv, kwargs["cwd"]
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(probe.subprocess, "run", fake_run)
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    monkeypatch.chdir(caller)
+    monkeypatch.setattr(sys, "argv", ["probe", "--lane", "lanes", "--out", "evidence/run1"])
+    assert probe.main() == 0
+    out = Path(seen["argv"][seen["argv"].index("--out") + 1])
+    assert out.is_absolute() and out == (caller / "evidence/run1").resolve()
+    assert Path(seen["argv"][seen["argv"].index("--lane") + 1]).is_absolute()
+    assert (caller / "evidence/run1/driver.log").is_file()
+
+
 @pytest.mark.parametrize("field,index", [("bgp1", 1), ("bgp1", 64), ("bgp2", 1), ("attr", 2048)])
 def test_native_restoration_rejects_corruption_at_buffer_boundaries(oracle, field, index):
     lua, panel = oracle
